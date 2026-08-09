@@ -214,6 +214,11 @@ public class TextCoverageTests
         // that is the whole point of discovering by reflection, and UsersViewText is the first such case.
         Assert.Contains(all, k => k.Key == UsersViewText.TeamsTab.Key);
         Assert.All(all, k => Assert.False(string.IsNullOrWhiteSpace(k.Default)));
+
+        // Every key of a newly added catalogue must arrive here, not just a sample of it: this is the list a
+        // consumer generates their translation table from, so a key reflection misses is invisible to them
+        // in exactly the way a literal string is.
+        Assert.All(AuditLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()
