@@ -15,6 +15,34 @@ public record ThargaBlazorOptions : BlazorOptions
     internal Type _iconStoreType;
     internal Type _emailSenderType;
     internal readonly List<Type> _iconSourceTypes = [];
+    internal readonly List<TeamMenuItem> _menuItems = [];
+
+    /// <summary>
+    /// Adds an entry to the profile menu, after the built-in ones and above Logout.
+    /// </summary>
+    /// <remarks>
+    /// The label is a key plus an English default, so it resolves through <see cref="IThargaTextProvider"/>
+    /// exactly like the built-in entries — a host that registered a text provider gets this translated with no
+    /// further work.
+    /// <para>
+    /// <b><paramref name="requiredScope"/> and <paramref name="requiredRole"/> control rendering, not
+    /// access.</b> They hide a link the caller cannot use; the page behind it must still gate itself.
+    /// </para>
+    /// </remarks>
+    /// <param name="icon">Material icon name, e.g. <c>help</c>.</param>
+    /// <param name="textKey">Stable lookup key, e.g. <c>myapp.menu.help</c>.</param>
+    /// <param name="defaultText">English text used when no translation is registered for the key.</param>
+    /// <param name="href">Where the item navigates.</param>
+    /// <param name="requiredScope">Optional scope the caller must hold for the item to render.</param>
+    /// <param name="requiredRole">Optional role the caller must be in for the item to render.</param>
+    public void AddMenuItem(string icon, string textKey, string defaultText, string href, string requiredScope = null, string requiredRole = null)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(icon);
+        ArgumentException.ThrowIfNullOrWhiteSpace(textKey);
+        ArgumentException.ThrowIfNullOrWhiteSpace(href);
+
+        _menuItems.Add(new TeamMenuItem(icon, new TextKey(textKey, defaultText), href, requiredScope, requiredRole));
+    }
 
     /// <summary>
     /// Icon upload limits — maximum bytes and permitted content types.

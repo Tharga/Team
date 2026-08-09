@@ -281,6 +281,31 @@ builder.AddThargaTeam(o => o.Blazor.AddTextProvider<MyMenuText>());
 
 Without a provider the English defaults are used, so this is non-breaking for existing apps.
 
+### Adding your own profile-menu items
+
+Register extra entries on the `LoginDisplay` profile menu. They render after the built-in items and above
+**Logout**, in registration order:
+
+```csharp
+builder.AddThargaTeam(o =>
+{
+    o.Blazor.AddMenuItem("help", "myapp.menu.help", "Help", "/help");
+    o.Blazor.AddMenuItem("receipt_long", "myapp.menu.audit", "Audit log", "/audit",
+        requiredScope: AuditScopes.Read);
+});
+```
+
+The label is a **key plus an English default**, not a string — so it resolves through the same
+`IThargaTextProvider` as the built-in entries. A host that registered a provider gets its own menu items
+translated with **no further work**, in every language the provider covers.
+
+`requiredScope` and `requiredRole` are optional; set both and both must hold. A scope is satisfied by either a
+team scope or a system scope, so a cross-team administrator is not hidden from a link merely because the grant
+arrived by the other provenance.
+
+> **These gates control rendering, not access.** They hide a link the caller cannot use — the page behind it
+> must still gate itself. A hidden menu item is a courtesy, never a protection.
+
 ### Version notes
 
 - `UseThargaAuth()` requires **>= 2.0.1-pre.1** for correct async login behavior. Version 2.0.0 used `Results.Challenge` (synchronous) which caused DNS errors with some Azure AD configurations.

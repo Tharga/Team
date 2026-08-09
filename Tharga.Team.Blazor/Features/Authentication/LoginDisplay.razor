@@ -20,6 +20,12 @@
                 <ChildContent>
                     <RadzenProfileMenuItem Text="@_userText" Icon="account_circle" />
                     <RadzenProfileMenuItem Text="@_teamText" Icon="group" Visible="@GetShowTeam()" />
+                    @* Host-supplied items, between the built-ins and Logout. Value carries the href, because
+                       ClickAction keys the built-ins off Icon and a host is free to reuse one of those icons. *@
+                    @foreach (var item in _menuItems)
+                    {
+                        <RadzenProfileMenuItem Text="@item.Text" Icon="@item.Icon" Value="@item.Href" />
+                    }
                     <hr style="margin: 0;" />
                     <RadzenProfileMenuItem Text="@_logoutText" Icon="logout" />
                 </ChildContent>
@@ -69,6 +75,14 @@
         _hasTeamMenuRoleRestriction = teamMenuRoles.Length > 0;
         _userInTeamMenuRole = teamMenuRoles.Any(authState.User.IsInRole);
 
+        // Resolved once here rather than per render: the provider is async and may reach an external content
+        // source, and a host's items are fixed for the life of the circuit.
+        foreach (var item in ThargaBlazorOptions.Value._menuItems)
+        {
+            if (!TeamMenuItemVisibility.IsVisible(authState.User, item)) continue;
+            _menuItems.Add((await TextProvider.GetAsync(item.Text), item.Icon, item.Href));
+        }
+
         _userText = await TextProvider.GetAsync(TeamMenuText.User);
         _teamText = await TextProvider.GetAsync(TeamMenuText.Team);
         _logoutText = await TextProvider.GetAsync(TeamMenuText.Logout);
@@ -77,8 +91,18 @@
         await base.OnInitializedAsync();
     }
 
+    private readonly List<(string Text, string Icon, string Href)> _menuItems = [];
+
     private async Task ClickAction(RadzenProfileMenuItem args)
     {
+        // Host items first, and matched on Value rather than Icon: the built-in cases below key off Icon, so a
+        // host reusing "group" or "logout" would otherwise trigger the wrong action instead of its own link.
+        if (args.Value is string href && _menuItems.Any(x => x.Href == href))
+        {
+            NavigationManager.NavigateTo(href);
+            return;
+        }
+
         switch (args.Icon)
         {
             case "account_circle":
