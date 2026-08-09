@@ -7,6 +7,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Identity.Web;
 
+using Microsoft.Extensions.Logging;
+using Tharga.Team.Service.Audit;
 namespace Tharga.Team.Blazor.Features.Authentication;
 
 /// <summary>
@@ -42,6 +44,38 @@ public static class ThargaAuthRegistration
                 o.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
             })
             .AddMicrosoftIdentityWebApp(azureAdSection);
+
+        // Audit the interactive sign-in. OnTokenValidated fires once per sign-in, unlike the claims
+        // transformation which runs on every authenticating request -- so this records arrival, not traffic.
+        // Tharga/Team#142 names "user logs on" as its first event and nothing raised it before.
+        builder.Services.Configure<OpenIdConnectOptions>(
+            OpenIdConnectDefaults.AuthenticationScheme,
+            oidc =>
+            {
+                oidc.Events ??= new OpenIdConnectEvents();
+
+                var inner = oidc.Events.OnTokenValidated;
+                oidc.Events.OnTokenValidated = async context =>
+                {
+                    // A failure here must never cost anyone their sign-in: an audit entry observes something
+                    // that already happened, so it cannot be allowed to undo it.
+                    try
+                    {
+                        context.HttpContext.RequestServices
+                            .GetService<CompositeAuditLogger>()
+                            ?.Log(AuthAuditEntries.SignIn(context.Principal));
+                    }
+                    catch (Exception ex)
+                    {
+                        context.HttpContext.RequestServices
+                            .GetService<ILoggerFactory>()?
+                            .CreateLogger(typeof(ThargaAuthRegistration))
+                            .LogWarning(ex, "Failed to audit an interactive sign-in.");
+                    }
+
+                    if (inner != null) await inner(context);
+                };
+            });
 
         builder.Services.AddAuthorization();
         builder.Services.AddCascadingAuthenticationState();

@@ -62,6 +62,33 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
         return claimsPrincipal ?? await CircuitPrincipal.GetUserOrNullAsync(_authenticationStateProvider);
     }
 
+    /// <summary>
+    /// Raised when a user record is created as a side effect of someone signing in for the first time.
+    /// </summary>
+    /// <remarks>
+    /// <b>An event rather than a constructor dependency, on purpose.</b> The creation happens in the storage
+    /// base (<c>Tharga.Team.MongoDB</c>), which cannot see the audit types - they live in
+    /// <c>Tharga.Team.Service</c>. An optional constructor parameter would also be one more thing a host's own
+    /// service must remember to forward, which is the hazard <c>TeamCacheWiringCheck</c> exists to catch.
+    /// <para>
+    /// <b>Not the same as an administrator creating a user.</b> That path is already audited by
+    /// <c>AuditingUserManagementServiceDecorator</c>. This one has no actor but the new user themselves.
+    /// </para>
+    /// </remarks>
+    public event EventHandler<UserCreatedEventArgs> UserCreatedEvent;
+
+    /// <summary>
+    /// Announces a first-sign-in creation. Call only after the record is durably stored, and <b>only</b> for
+    /// the caller that actually created it - a store losing the insert race re-reads the winner and must not
+    /// report a creation it did not perform.
+    /// </summary>
+    protected void RaiseUserCreated(IUser user, ClaimsPrincipal claimsPrincipal)
+    {
+        if (user == null) return;
+
+        UserCreatedEvent?.Invoke(this, new UserCreatedEventArgs(user, claimsPrincipal));
+    }
+
     protected abstract Task<IUser> GetUserAsync(ClaimsPrincipal claimsPrincipal);
     protected abstract IAsyncEnumerable<IUser> GetAllAsync();
 

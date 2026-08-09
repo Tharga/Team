@@ -68,10 +68,18 @@ ways. A `*` route alongside a specific one therefore posts twice.
 Anything the toolkit audits, which is every mutation on teams, members, users and API keys —
 `team:create`, `team:invite`, `team:set-consent`, `user:delete`, and so on — plus your own events.
 
-**Not yet: user sign-in and user creation.** Neither is an audited event today. The toolkit audits
-API-key authentication (`auth:*`) but not an interactive logon, and users are created as a side effect
-of first sign-in rather than through an audited call. When those events are raised they become routable
-here with no change to this package.
+**Now routable: user sign-in and user creation.** Both were missing - the toolkit audited API-key
+authentication but not an interactive logon, and users are created as a side effect of first sign-in
+rather than through an audited call. Both are raised as of the release carrying this note, and route here
+with no change to this package:
+
+```csharp
+new() { Event = "auth:signin", Channel = "#activity", Template = "{actor} signed in." },
+new() { Event = "auth:user-created", Channel = "#activity", Template = "New user {user.email}." },
+```
+
+`auth:signin` is an auth event, so `AuditOptions.EventFilter` must admit `AuthEvents` for it to reach
+routing at all. `auth:user-created` is a data change and carries `{user.key}` and `{user.email}`.
 
 ### Template placeholders
 
