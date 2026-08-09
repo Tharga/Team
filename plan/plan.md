@@ -49,13 +49,24 @@ strings. It did not fix **file** coverage, so the number still read as more comp
       - Expect `UsersView` to *leave* `Migrated` in spirit — the wrapper stays at zero, but its tabs enter
         the record as pending.
 
-- [ ] **3. `AuditLogView` (43 + 9 code-behind).** Smaller than the team surface and settles the shape for
-      C#-block strings — notifications and dialog titles — before the 1,329-line component.
-      **The CSV/JSON export header row is data, not display text** — an interchange format whose column
-      names a consumer parses. Leave it literal and say so in the catalogue, or a translated header breaks
-      every downstream import.
+- [x] **3. `AuditLogView` (52 → 0).** Done, commit `82c1777`. New `AuditLogViewText` with 57 keys; the
+      component resolves them **before** the not-configured early return, or the one message a misconfigured
+      host ever sees would stay English. `BuildFailureDetail` took an optional `TextSet` defaulting to null
+      so its existing static tests keep compiling and fall back to the English defaults.
+      **Three scan corrections fell out of doing it, all false positives rather than tuning:**
+      - **Razor comment blocks are stripped.** They routinely quote the strings a component renders while
+        explaining a past defect — this file's own header quotes *"Access denied."* — so they counted as
+        work that did not exist. Same category as the XML docs already skipped.
+      - **Plain `//` comments are skipped**, as `///` already was. Missed until now only because the earlier
+        components kept their C# in the `.razor`, where such comments are rarer.
+      - **A PascalCase identifier written as a call** (`AddThargaAuditLogging()`) is an identifier.
+      **The CSV/JSON export headers stay literal by design** — an interchange format a downstream import
+      parses by name; translating them would break every consumer's import on a language switch. The scan
+      excludes comma-separated field lists as data.
+      Net effect on the record: 376 → **319 across 22 components**, of which 52 was real migration and 5 was
+      the scan no longer asking for strings nobody renders.
 
-- [ ] **4. The `UsersView` surface (103).** `UsersListView` 51, `TeamsListView` 30,
+- [ ] **4. The `UsersView` surface (~101).** `UsersListView` 51, `TeamsListView` 30,
       `DirectoryOnlyUsersView` 6, `DeleteUserDialog` 6, `UserIconDialog` 8, `AssignOwnerDialog` 2.
       This is the half that was invisible, and the tenant noun in plural lives here.
 
@@ -102,4 +113,11 @@ strings. It did not fix **file** coverage, so the number still read as more comp
 ## Last session
 
 2026-08-09 — branch created, packages applied (`73544d1`), commits re-authored to `daniel.bohlin@live.se`,
-scope corrected upward from 104 to ~238 after scanning the whole library. Next: step 2, the scan fix.
+scope corrected upward from 104 to ~238 after scanning the whole library. Scan fixed and re-baselined
+(`ce0f99d`), `AuditLogView` migrated (`82c1777`). Full suite green at **1,906 tests**.
+
+**Remaining for this feature: 213 strings** — `UsersListView` 50, `TeamsListView` 30,
+`DirectoryOnlyUsersView` 6, `DeleteUserDialog` 6, `UserIconDialog` 8, `AssignOwnerDialog` 2 (step 4);
+`TeamComponent` 60 (step 5); `TeamIconDialog` 7, `InviteUserDialog` 4, `TeamInviteView` 3, `RoleEditor` 3,
+`SuspendedTeamNotice` 2, `ScopeOverrideEditor` 2, `TeamDialog` 1 (step 6). Then steps 7–10.
+**Next: step 4, `UsersListView`** — the largest single file left and the one carrying the tenant noun.
