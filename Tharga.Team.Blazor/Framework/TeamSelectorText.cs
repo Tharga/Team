@@ -7,6 +7,10 @@ public static class TeamSelectorText
 {
     public static readonly TextKey Suspended = new("team.selector.suspended", "Suspended");
     public static readonly TextKey AccessLevelTooltip = new("team.selector.accessLevelTooltip", "Your access level on the selected team");
+    public static readonly TextKey SuspendedTitle = new("team.selector.suspendedTitle", "Your access to this team is suspended. Select it to see what that means.");
+
+    /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
+    public static readonly TextKey[] All = [Suspended, AccessLevelTooltip, SuspendedTitle];
 }
 
 /// <summary>

@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Tharga.Team.Blazor.Framework;
 
 namespace Tharga.Team.Blazor.Tests;
@@ -38,13 +37,9 @@ public class TextCoverageTests
     /// <summary>Not yet migrated, with the count as it stands. These may only go down.</summary>
     private static readonly Dictionary<string, int> Pending = new()
     {
-        ["Features/Team/TeamComponent.razor"] = 24,
-        ["Features/Audit/AuditLogView.razor"] = 47,
+        ["Features/Team/TeamComponent.razor"] = 61,
+        ["Features/Audit/AuditLogView.razor"] = 43,
     };
-
-    // A literal display string: an attribute whose value starts with a capital and contains no binding.
-    private static readonly Regex LiteralText =
-        new(@"(?:Text|Title|Placeholder|title)=""([A-Z][^""{@]{2,})""", RegexOptions.Compiled);
 
     private static string ComponentRoot()
     {
@@ -61,7 +56,7 @@ public class TextCoverageTests
         var full = Path.Combine(ComponentRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar));
         Assert.True(File.Exists(full), $"'{relativePath}' was not found — the scan is pointed at the wrong place, or the file moved.");
 
-        return LiteralText.Matches(File.ReadAllText(full)).Count;
+        return TextScan.Count(File.ReadAllText(full));
     }
 
     [Theory]
@@ -110,8 +105,16 @@ public class TextCoverageTests
         Assert.True(CountLiterals("Features/Audit/AuditLogView.razor") > 0,
             "The scan found no literal text in AuditLogView, which is not credible — the regex or the path is broken.");
 
-        Assert.Matches(LiteralText, """<RadzenButton Text="Save" />""");
-        Assert.DoesNotMatch(LiteralText, """<RadzenButton Text="@_saveText" />""");
+        // The three categories the scan must see, and the three kinds of false positive it must not.
+        Assert.Contains("Save changes", TextScan.Candidates("""<RadzenButton Text="Save changes" />"""));
+        Assert.Contains("You are not a member.", TextScan.Candidates("<RadzenText>You are not a member.</RadzenText>"));
+        Assert.Contains("Invitation sent", TextScan.Candidates("""NotificationService.Notify("Invitation sent");"""));
+
+        Assert.Empty(TextScan.Candidates("""<RadzenButton Text="@_saveText" />"""));
+        Assert.Empty(TextScan.Candidates("""<RadzenStack Orientation="Orientation.Horizontal" />"""));
+        Assert.Empty(TextScan.Candidates("""<UsersListView ActionsTemplate="ActionsTemplate" />"""));
+        Assert.Empty(TextScan.Candidates("""throw new InvalidOperationException("Unknown action here.");"""));
+        Assert.Empty(TextScan.Candidates("/// <summary>Prose that is only documentation.</summary>"));
     }
 
     /// <summary>Every key the toolkit exposes must be discoverable, or a consumer cannot translate it.</summary>

@@ -297,9 +297,27 @@ without you doing anything — and a test of your own over `ThargaTextKeys.All` 
 that you have not translated yet.
 
 > **Migration in progress.** `LoginDisplay`, `TeamSelector` and `UsersView` resolve every string they render.
-> `TeamComponent` and `AuditLogView` still render some text literally and are being moved across
-> (Tharga/Team#204); a build-time ratchet stops that set growing. Until they are done, overriding the
-> toolkit's wording will leave some English in those two.
+> `TeamComponent` (61) and `AuditLogView` (43) still render text literally and are being moved across
+> (Tharga/Team#204); a build-time ratchet stops those counts growing. Until they are done, overriding the
+> toolkit's wording will leave English in those two — including **dialog titles, notifications and
+> confirmation prompts**, which is most of what a user actually reads there.
+
+#### Messages that name something
+
+A message with a value in it is a **template with positional placeholders**, resolved through
+`TextSet.Format`:
+
+```csharp
+// key default: "Email sent to {0}"
+_text.Format(TeamText.EmailSent, recipient);
+```
+
+Placeholders are positional rather than interpolated because a translated sentence often needs its parts in
+a different order — a translator can move `{0}` and `{1}`, and cannot touch a C# interpolated string at all.
+
+A malformed template — one naming a placeholder that does not exist — falls back to the English default
+rather than throwing. Templates can come from your content system, so they are untrusted input on a render
+path.
 
 #### Keys are whole strings, not substitutable nouns
 

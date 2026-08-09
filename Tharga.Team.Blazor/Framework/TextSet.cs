@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Globalization;
 
 namespace Tharga.Team.Blazor.Framework;
 
@@ -32,6 +33,43 @@ public sealed class TextSet
     /// <summary>The resolved string for <paramref name="key"/>, or its English default.</summary>
     public string this[TextKey key]
         => _values.TryGetValue(key.Key, out var value) && !string.IsNullOrEmpty(value) ? value : key.Default;
+
+    /// <summary>
+    /// The resolved string for <paramref name="key"/> with <paramref name="args"/> substituted into its
+    /// placeholders — the form for a message that names something, e.g. <c>"Email sent to {0}"</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Positional placeholders, not interpolation.</b> A translated sentence often needs its parts in a
+    /// different order from the English, so the template has to carry <c>{0}</c> / <c>{1}</c> that a
+    /// translator can move. An interpolated C# string cannot be translated at all — the text is compiled in.
+    /// <para>
+    /// <b>Never throws while rendering.</b> A translator can supply a template referencing a placeholder that
+    /// does not exist, which would otherwise take the page down at render time on data the toolkit does not
+    /// control. A malformed translation falls back to the English default; a malformed default — a toolkit
+    /// bug, and covered by tests — falls back to the raw template rather than throwing.
+    /// </para>
+    /// </remarks>
+    public string Format(TextKey key, params object[] args)
+    {
+        var template = this[key];
+
+        try
+        {
+            return string.Format(CultureInfo.CurrentCulture, template, args ?? []);
+        }
+        catch (FormatException)
+        {
+        }
+
+        try
+        {
+            return string.Format(CultureInfo.CurrentCulture, key.Default, args ?? []);
+        }
+        catch (FormatException)
+        {
+            return key.Default;
+        }
+    }
 }
 
 /// <summary>Resolving many <see cref="TextKey"/> values in one pass.</summary>

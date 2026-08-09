@@ -134,8 +134,7 @@
     /// </remarks>
     private HashSet<string> _suspendedTeamKeys = [];
 
-    private const string SuspendedTitle =
-        "Your access to this team is suspended. Select it to see what that means.";
+    private string SuspendedTitle => _text[TeamSelectorText.SuspendedTitle];
 
     private bool IsSuspended(ITeam team) => team != null && _suspendedTeamKeys.Contains(team.Key);
 
@@ -162,7 +161,7 @@
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(
-            [TeamMenuText.Loading, TeamMenuText.CreateTeam, TeamSelectorText.Suspended, TeamSelectorText.AccessLevelTooltip, .. AccessLevelText.All]);
+            [TeamMenuText.Loading, TeamMenuText.CreateTeam, .. TeamSelectorText.All, .. AccessLevelText.All]);
 
         _allowTeamCreation = BlazorOptions.Value.AllowTeamCreation;
 
