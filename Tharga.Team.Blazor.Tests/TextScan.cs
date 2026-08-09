@@ -36,19 +36,40 @@ internal static class TextScan
     /// Not display text. Validated by running the scan over the already-migrated components: whatever it
     /// still reported there was, with one real exception, an identifier or a component-library enum name.
     /// </summary>
-    private static readonly Regex Identifier = new(@"^[A-Z][a-z]+([A-Z][a-z]*)+$", RegexOptions.Compiled);
+    /// <summary>
+    /// A razor comment. Not rendered, and prose by nature — the same case as an XML doc comment, and the
+    /// largest remaining source of false positives once components keep their C# in the markup file: these
+    /// blocks routinely quote the very strings the component renders when explaining a past defect.
+    /// </summary>
+    private static readonly Regex RazorComment = new(@"@\*.*?\*@", RegexOptions.Compiled | RegexOptions.Singleline);
+
+    /// <summary>A PascalCase identifier, optionally written as a call — <c>AddThargaAuditLogging()</c>.</summary>
+    private static readonly Regex Identifier = new(@"^[A-Z][a-z]+([A-Z][a-z]*)+(\(\))?$", RegexOptions.Compiled);
     private static readonly Regex EnumQualified = new(@"^[A-Za-z]+\.[A-Za-z]", RegexOptions.Compiled);
     private static readonly Regex OtherNonDisplay = new(@"^[a-z]+:[a-z]|^[A-Za-z]+<|\.razor$|^rz-", RegexOptions.Compiled);
 
+    /// <summary>
+    /// A comma-separated field list — a CSV/JSON export header, which is an interchange format rather than
+    /// display text.
+    /// </summary>
+    /// <remarks>
+    /// <b>Excluded because translating it would be a defect, not a feature.</b> A downstream import matches
+    /// these column names; a header that changed with the viewer's language would break every consumer's
+    /// import the first time someone switched. So this is not the count being tuned down — it is a string
+    /// that must stay literal, and the scan should stop asking for it to be keyed.
+    /// </remarks>
+    private static readonly Regex FieldList = new(@"^[A-Za-z]+(,[A-Za-z]+){3,}$", RegexOptions.Compiled);
+
     private static bool IsDisplayText(string value)
-        => !Identifier.IsMatch(value) && !EnumQualified.IsMatch(value) && !OtherNonDisplay.IsMatch(value);
+        => !Identifier.IsMatch(value) && !EnumQualified.IsMatch(value) && !OtherNonDisplay.IsMatch(value)
+           && !FieldList.IsMatch(value);
 
     /// <summary>Every candidate display string in <paramref name="source"/>, deduplicated.</summary>
     public static IReadOnlyList<string> Candidates(string source)
     {
         var found = new List<string>();
 
-        foreach (var line in source.Split('\n'))
+        foreach (var line in RazorComment.Replace(source, string.Empty).Split('\n'))
         {
             // XML documentation is not rendered. It is the largest source of false positives here, because
             // it is prose by nature.
@@ -56,7 +77,10 @@ internal static class TextScan
 
             // XML documentation is not rendered, and is prose by nature — the largest source of false
             // positives. Exception messages are developer-facing, not user-facing.
-            if (trimmed.StartsWith("///", StringComparison.Ordinal)) continue;
+            // A comment of any kind is not rendered. XML docs were skipped from the start; a plain // line
+            // is the same case and was missed only because the first components scanned kept their C# in
+            // the .razor, where such comments are rarer.
+            if (trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
             if (line.Contains("throw new", StringComparison.Ordinal)) continue;
             if (line.Contains("Exception(", StringComparison.Ordinal)) continue;
 

@@ -40,6 +40,7 @@ public class TextCoverageTests
         "Features/Team/TeamSelector.razor",
         "Features/Authentication/LoginDisplay.razor",
         "Features/User/UsersView.razor",
+        "Features/Audit/AuditLogView.razor",
     ];
 
     /// <summary>
@@ -53,16 +54,15 @@ public class TextCoverageTests
     private static readonly Dictionary<string, int> Pending = new()
     {
         ["Features/Api/ApiKeyRevealDialog.razor"] = 2,
-        ["Features/Api/ApiKeyView.razor"] = 47,
+        ["Features/Api/ApiKeyView.razor"] = 44,
         ["Features/Api/SystemApiKeyView.razor"] = 35,
-        ["Features/Audit/AuditLogView.razor"] = 52,
         ["Features/Roles/TenantRoleManager.razor"] = 11,
         ["Features/Scopes/ScopeView.razor"] = 15,
         ["Features/Simulation/AccessSimulationBar.razor"] = 3,
         ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
         ["Features/Team/InviteUserDialog.razor"] = 4,
         ["Features/Team/SuspendedTeamNotice.razor"] = 2,
-        ["Features/Team/TeamComponent.razor"] = 61,
+        ["Features/Team/TeamComponent.razor"] = 60,
         ["Features/Team/TeamDialog.razor"] = 1,
         ["Features/Team/TeamIconDialog.razor"] = 7,
         ["Features/Team/TeamInviteView.razor"] = 3,
@@ -72,7 +72,7 @@ public class TextCoverageTests
         ["Features/User/TeamsListView.razor"] = 30,
         ["Features/User/UserIconDialog.razor"] = 8,
         ["Features/User/UserProfileView.razor"] = 13,
-        ["Features/User/UsersListView.razor"] = 51,
+        ["Features/User/UsersListView.razor"] = 50,
         ["Framework/RoleEditor.razor"] = 3,
         ["Framework/ScopeOverrideEditor.razor"] = 2,
     };
