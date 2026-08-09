@@ -33,17 +33,30 @@ internal static class TextScan
         new(@"\$?""([A-Z][a-z][^""]{6,})""", RegexOptions.Compiled);
 
     /// <summary>
-    /// Not display text. Validated by running the scan over the already-migrated components: whatever it
-    /// still reported there was, with one real exception, an identifier or a component-library enum name.
-    /// </summary>
-    /// <summary>
     /// A razor comment. Not rendered, and prose by nature — the same case as an XML doc comment, and the
     /// largest remaining source of false positives once components keep their C# in the markup file: these
     /// blocks routinely quote the very strings the component renders when explaining a past defect.
     /// </summary>
     private static readonly Regex RazorComment = new(@"@\*.*?\*@", RegexOptions.Compiled | RegexOptions.Singleline);
 
-    /// <summary>A PascalCase identifier, optionally written as a call — <c>AddThargaAuditLogging()</c>.</summary>
+    /// <summary>
+    /// A <c>…Property="Member"</c> binding — <c>TextProperty</c>, <c>ValueProperty</c>,
+    /// <c>DisabledProperty</c>. The value names a member of the bound item, never text shown to anyone.
+    /// </summary>
+    /// <remarks>
+    /// Excluded at extraction rather than by value, because the value is indistinguishable from display
+    /// text once separated from its attribute: <c>DisabledProperty="Inherited"</c> yields the perfectly
+    /// plausible label "Inherited". Short member names slipped through only because the length floor hid
+    /// them.
+    /// </remarks>
+    private static readonly Regex PropertyBinding = new(@"\w*Property=""[^""]*""", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Not display text. Validated by running the scan over the already-migrated components: whatever it
+    /// still reported there was, with one real exception, an identifier or a component-library enum name.
+    /// <see cref="Identifier"/> also allows a trailing <c>()</c>, so a method name passed as data —
+    /// <c>AddThargaAuditLogging()</c> — is recognised as the identifier it is.
+    /// </summary>
     private static readonly Regex Identifier = new(@"^[A-Z][a-z]+([A-Z][a-z]*)+(\(\))?$", RegexOptions.Compiled);
     private static readonly Regex EnumQualified = new(@"^[A-Za-z]+\.[A-Za-z]", RegexOptions.Compiled);
     private static readonly Regex OtherNonDisplay = new(@"^[a-z]+:[a-z]|^[A-Za-z]+<|\.razor$|^rz-", RegexOptions.Compiled);
@@ -71,22 +84,19 @@ internal static class TextScan
 
         foreach (var line in RazorComment.Replace(source, string.Empty).Split('\n'))
         {
-            // XML documentation is not rendered. It is the largest source of false positives here, because
-            // it is prose by nature.
-            var trimmed = line.TrimStart();
-
-            // XML documentation is not rendered, and is prose by nature — the largest source of false
-            // positives. Exception messages are developer-facing, not user-facing.
-            // A comment of any kind is not rendered. XML docs were skipped from the start; a plain // line
-            // is the same case and was missed only because the first components scanned kept their C# in
-            // the .razor, where such comments are rarer.
-            if (trimmed.StartsWith("//", StringComparison.Ordinal)) continue;
+            // A comment of any kind is not rendered, and is prose by nature — the largest source of false
+            // positives. XML docs were skipped from the start; a plain // line is the same case, missed
+            // only because the first components scanned kept their C# in the .razor. Exception messages
+            // are developer-facing, so they are not display text either.
+            if (line.TrimStart().StartsWith("//", StringComparison.Ordinal)) continue;
             if (line.Contains("throw new", StringComparison.Ordinal)) continue;
             if (line.Contains("Exception(", StringComparison.Ordinal)) continue;
 
-            foreach (Match m in Attribute.Matches(line)) found.Add(m.Groups[1].Value);
-            foreach (Match m in Inline.Matches(line)) found.Add(m.Groups[1].Value);
-            foreach (Match m in CodeString.Matches(line)) found.Add(m.Groups[1].Value);
+            var scannable = PropertyBinding.Replace(line, string.Empty);
+
+            foreach (Match m in Attribute.Matches(scannable)) found.Add(m.Groups[1].Value);
+            foreach (Match m in Inline.Matches(scannable)) found.Add(m.Groups[1].Value);
+            foreach (Match m in CodeString.Matches(scannable)) found.Add(m.Groups[1].Value);
         }
 
         return [.. found

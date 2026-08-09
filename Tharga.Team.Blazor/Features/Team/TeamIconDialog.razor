@@ -9,25 +9,26 @@
 @inject IIconProcessor IconProcessor
 @inject DialogService DialogService
 @inject NotificationService NotificationService
+@inject IThargaTextProvider TextProvider
 
 @*
     Sets a team's icon from a file upload or an image URL (downloaded server-side), or removes it. All
     paths go through ITeamManagementService (team:manage) and the pluggable IIconStore.
 *@
 <RadzenStack Gap="1rem">
-    <RadzenText TextStyle="TextStyle.Body2">Upload an image (up to @_maxUploadMb MB) or provide an image URL.@(_canDownscale ? " Images are squared and downscaled automatically — the short side is padded, never cropped." : $" Images larger than {_maxUploadMb} MB are rejected.")</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2">@_text.Format(_canDownscale ? TeamIconDialogText.IntroDownscale : TeamIconDialogText.IntroNoDownscale, _maxUploadMb)</RadzenText>
 
     <RadzenStack Gap="0.25rem">
-        <RadzenLabel Text="Upload a file" />
+        <RadzenLabel Text="@_text[TeamIconDialogText.UploadFile]" />
         <InputFile OnChange="OnFileSelected" accept="image/*" disabled="@_busy" />
     </RadzenStack>
 
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="0.5rem">
         <RadzenStack Gap="0.25rem" Style="flex:1;">
-            <RadzenLabel Text="…or image URL" />
+            <RadzenLabel Text="@_text[TeamIconDialogText.OrImageUrl]" />
             <RadzenTextBox @bind-Value="_url" Placeholder="https://…/logo.png" Style="width:100%;" Disabled="@_busy" />
         </RadzenStack>
-        <RadzenButton Text="Download" Icon="download" Click="OnFetchUrl" Disabled="@(_busy || string.IsNullOrWhiteSpace(_url))" />
+        <RadzenButton Text="@_text[TeamIconDialogText.Download]" Icon="download" Click="OnFetchUrl" Disabled="@(_busy || string.IsNullOrWhiteSpace(_url))" />
     </RadzenStack>
 
     @if (_busy)
@@ -37,9 +38,9 @@
 
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
         <div>
-            <RadzenButton Text="Remove icon" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Flat" Click="OnRemove" Visible="@HasIcon" Disabled="@_busy" />
+            <RadzenButton Text="@_text[TeamIconDialogText.RemoveIcon]" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Flat" Click="OnRemove" Visible="@HasIcon" Disabled="@_busy" />
         </div>
-        <RadzenButton Text="Close" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close(_changed))" />
+        <RadzenButton Text="@_text[TeamIconDialogText.Close]" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close(_changed))" />
     </RadzenStack>
 </RadzenStack>
 
@@ -58,11 +59,15 @@
     // The default NoOpIconProcessor does not resize, so promising automatic downscaling
     // without a real one tells the user something false — oversized uploads are rejected.
     private bool _canDownscale;
+    private TextSet _text = TextSet.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(TeamIconDialogText.All);
         _maxUploadMb = Math.Max(1, IconOptions.Value.MaxUploadBytes / (1024 * 1024));
         _canDownscale = IconCapability.CanProcessImages(IconProcessor);
+
+        await base.OnInitializedAsync();
     }
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
@@ -103,7 +108,7 @@
     {
         await TeamManagementService.SetTeamIconAsync(TeamKey, data, contentType);
         _changed = true;
-        NotificationService.Notify(NotificationSeverity.Success, "Team icon updated");
+        NotificationService.Notify(NotificationSeverity.Success, _text[TeamIconDialogText.NotifyUpdated]);
         DialogService.Close(true);
     }
 
@@ -114,12 +119,12 @@
         {
             await TeamManagementService.ClearTeamIconAsync(TeamKey);
             _changed = true;
-            NotificationService.Notify(NotificationSeverity.Success, "Team icon removed");
+            NotificationService.Notify(NotificationSeverity.Success, _text[TeamIconDialogText.NotifyRemoved]);
             DialogService.Close(true);
         }
         catch (Exception ex) { NotifyError(ex); }
         finally { _busy = false; }
     }
 
-    private void NotifyError(Exception ex) => NotificationService.Notify(NotificationSeverity.Error, "Icon update failed", ex.Message);
+    private void NotifyError(Exception ex) => NotificationService.Notify(NotificationSeverity.Error, _text[TeamIconDialogText.NotifyFailed], ex.Message);
 }

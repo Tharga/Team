@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject IUserManagementService UserManagementService
 @inject NotificationService NotificationService
+@inject IThargaTextProvider TextProvider
 
 @*
     Users that exist in the external directory but have no local user record. Loaded on demand only —
@@ -8,14 +9,14 @@
     directory pages arrive.
 *@
 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem" class="rz-mb-3 rz-mt-2">
-    <RadzenButton Text="@(_loadedOnce ? "Refresh" : "Load")" Icon="refresh" Click="@LoadAsync" Disabled="@_loading" />
+    <RadzenButton Text="@_text[_loadedOnce ? DirectoryOnlyUsersViewText.Refresh : DirectoryOnlyUsersViewText.Load]" Icon="refresh" Click="@LoadAsync" Disabled="@_loading" />
     @if (_loading)
     {
         <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Primary" Mode="ProgressBarMode.Indeterminate" Style="width: 24px; height: 24px;" ShowValue="false" />
     }
     @if (_loadedOnce && !_loading)
     {
-        <RadzenText TextStyle="TextStyle.Caption">@_users.Count user(s) found only in the directory</RadzenText>
+        <RadzenText TextStyle="TextStyle.Caption">@_text.Format(DirectoryOnlyUsersViewText.FoundCount, _users.Count)</RadzenText>
     }
 </RadzenStack>
 
@@ -28,17 +29,17 @@
                     <UserAvatar EMail="@context.EMail" Name="@context.Name" Size="32px" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Name" Property="@nameof(DirectoryUser.Name)" />
-            <RadzenDataGridColumn Title="Email" Property="@nameof(DirectoryUser.EMail)" />
-            <RadzenDataGridColumn Title="Status" Sortable="false" Filterable="false" Width="120px">
+            <RadzenDataGridColumn Title="@_text[DirectoryOnlyUsersViewText.ColumnName]" Property="@nameof(DirectoryUser.Name)" />
+            <RadzenDataGridColumn Title="@_text[DirectoryOnlyUsersViewText.ColumnEmail]" Property="@nameof(DirectoryUser.EMail)" />
+            <RadzenDataGridColumn Title="@_text[DirectoryOnlyUsersViewText.ColumnStatus]" Sortable="false" Filterable="false" Width="120px">
                 <Template>
                     @if (context.Enabled == false)
                     {
-                        <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Disabled" />
+                        <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[DirectoryOnlyUsersViewText.StatusDisabled]" />
                     }
                     else
                     {
-                        <RadzenBadge BadgeStyle="BadgeStyle.Success" Variant="Variant.Flat" Text="Enabled" />
+                        <RadzenBadge BadgeStyle="BadgeStyle.Success" Variant="Variant.Flat" Text="@_text[DirectoryOnlyUsersViewText.StatusEnabled]" />
                     }
                 </Template>
             </RadzenDataGridColumn>
@@ -47,10 +48,7 @@
 }
 else
 {
-    <RadzenText TextStyle="TextStyle.Body2">
-        Users that exist in the external directory but not in this application. Nothing is fetched
-        automatically — press Load to query the directory.
-    </RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2">@_text[DirectoryOnlyUsersViewText.EmptyPrompt]</RadzenText>
 }
 
 @code {
@@ -59,6 +57,13 @@ else
     private bool _loading;
     private bool _loadedOnce;
     private CancellationTokenSource _cancellation;
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(DirectoryOnlyUsersViewText.All);
+        await base.OnInitializedAsync();
+    }
 
     private async Task LoadAsync()
     {
@@ -89,7 +94,7 @@ else
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Directory listing failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[DirectoryOnlyUsersViewText.NotifyFailed], ex.Message);
         }
         finally
         {

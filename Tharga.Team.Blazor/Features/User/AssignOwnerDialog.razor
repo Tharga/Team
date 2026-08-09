@@ -1,4 +1,5 @@
 @inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
 
 @*
     Picks a new owner for a team that has lost its owner. The candidate list is the team's existing
@@ -7,35 +8,31 @@
     an owner would hand the team to somebody who may never arrive.
 *@
 <RadzenStack Gap="1rem">
-    <RadzenText TextStyle="TextStyle.Body1">
-        <b>@TeamName</b> has no owner. Choose one of its members to take ownership.
-    </RadzenText>
+    <RadzenText TextStyle="TextStyle.Body1">@_text.Format(AssignOwnerDialogText.Prompt, TeamName)</RadzenText>
 
     @if (_candidates.Length == 0)
     {
         <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-            This team has no accepted members, so there is nobody to make owner. Invite someone and have
-            them accept first, or delete the team.
+            @_text[AssignOwnerDialogText.NoCandidates]
         </RadzenAlert>
     }
     else
     {
         <RadzenStack Gap="0.5rem">
-            <RadzenLabel Text="New owner" Component="newOwner" />
+            <RadzenLabel Text="@_text[AssignOwnerDialogText.NewOwner]" Component="newOwner" />
             <RadzenDropDown @bind-Value="_selectedMemberKey" Data="@_candidates" TextProperty="Name" ValueProperty="Key"
                             Name="newOwner" Style="width: 100%;" />
         </RadzenStack>
 
         <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-            The new owner gains full control of this team. The action is recorded in the audit log.
+            @_text[AssignOwnerDialogText.Consequence]
         </RadzenAlert>
     }
 
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
-        <RadzenButton Text="OK" ButtonStyle="ButtonStyle.Primary" Disabled="@(_selectedMemberKey == null)"
+        <RadzenButton Text="@_text[AssignOwnerDialogText.Ok]" ButtonStyle="ButtonStyle.Primary" Disabled="@(_selectedMemberKey == null)"
                       Click="@(() => DialogService.Close(_selectedMemberKey))" />
-        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat"
-                      Click="@(() => DialogService.Close(null))" />
+        <CancelButton Click="@(() => { DialogService.Close(null); return Task.CompletedTask; })" />
     </RadzenStack>
 </RadzenStack>
 
@@ -48,12 +45,16 @@
 
     private TeamMemberInfo[] _candidates = [];
     private string _selectedMemberKey;
+    private TextSet _text = TextSet.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(AssignOwnerDialogText.All);
         _candidates = (Members ?? [])
             .Where(m => !string.IsNullOrEmpty(m.Key) && m.State == MembershipState.Member)
             .OrderBy(m => m.Name)
             .ToArray();
+
+        await base.OnInitializedAsync();
     }
 }
