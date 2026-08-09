@@ -32,13 +32,13 @@ public class TextCoverageTests
     [
         "Features/Team/TeamSelector.razor",
         "Features/Authentication/LoginDisplay.razor",
+        "Features/User/UsersView.razor",
     ];
 
     /// <summary>Not yet migrated, with the count as it stands. These may only go down.</summary>
     private static readonly Dictionary<string, int> Pending = new()
     {
         ["Features/Team/TeamComponent.razor"] = 24,
-        ["Features/User/UsersView.razor"] = 3,
         ["Features/Audit/AuditLogView.razor"] = 47,
     };
 
@@ -124,6 +124,9 @@ public class TextCoverageTests
         Assert.Contains(all, k => k.Key == TeamMenuText.Team.Key);
         Assert.Contains(all, k => k.Key == TeamSelectorText.Suspended.Key);
         Assert.Contains(all, k => k.Key == AccessLevelText.Owner.Key);
+        // A catalogue added after ThargaTextKeys was written must appear without anyone registering it -
+        // that is the whole point of discovering by reflection, and UsersViewText is the first such case.
+        Assert.Contains(all, k => k.Key == UsersViewText.TeamsTab.Key);
         Assert.All(all, k => Assert.False(string.IsNullOrWhiteSpace(k.Default)));
     }
 
