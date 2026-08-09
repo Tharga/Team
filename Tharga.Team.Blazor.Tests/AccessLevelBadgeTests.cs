@@ -69,13 +69,13 @@ public class AccessLevelBadgeTests
     [Fact]
     public void Text_NoAccessLevel_StatesThereIsNoAccess()
     {
-        Assert.Equal("No access", AccessLevelBadge.Text(null));
+        Assert.Equal("No access", AccessLevelBadge.Text(null, TextSet.Empty));
     }
 
     [Fact]
     public void Text_AccessLevel_IsTheLevelName()
     {
-        Assert.Equal("Administrator", AccessLevelBadge.Text(AccessLevel.Administrator));
+        Assert.Equal("Administrator", AccessLevelBadge.Text(AccessLevel.Administrator, TextSet.Empty));
     }
 
     [Theory]

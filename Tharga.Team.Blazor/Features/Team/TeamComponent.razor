@@ -105,7 +105,10 @@ else
                                 {
                                     <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(myLevel)))"
                                                  Variant="Variant.Flat"
-                                                 Text="@AccessLevelBadge.Text(myLevel)"
+                                                 @* TextSet.Empty renders the English defaults: this component
+                                                    has not been migrated onto the text catalogue yet, and is
+                                                    listed as pending in TextCoverage. *@
+                                                 Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
                                                  title="Your access level on this team." />
                                 }
                                 else
