@@ -10,6 +10,7 @@
 @inject AvatarChangeNotifier AvatarChangeNotifier
 @inject DialogService DialogService
 @inject NotificationService NotificationService
+@inject IThargaTextProvider TextProvider
 
 @*
     Sets the current user's own icon (self-service) from a file upload or an image URL, or removes it —
@@ -17,19 +18,19 @@
     and the pluggable IIconStore.
 *@
 <RadzenStack Gap="1rem">
-    <RadzenText TextStyle="TextStyle.Body2">Upload an image (up to @_maxUploadMb MB) or provide an image URL.@(_canDownscale ? " Images are squared and downscaled automatically — the short side is padded, never cropped." : $" Images larger than {_maxUploadMb} MB are rejected.") This replaces your Gravatar image.</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2">@_text.Format(_canDownscale ? UserIconDialogText.IntroDownscale : UserIconDialogText.IntroNoDownscale, _maxUploadMb)</RadzenText>
 
     <RadzenStack Gap="0.25rem">
-        <RadzenLabel Text="Upload a file" />
+        <RadzenLabel Text="@_text[UserIconDialogText.UploadFile]" />
         <InputFile OnChange="OnFileSelected" accept="image/*" disabled="@_busy" />
     </RadzenStack>
 
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="0.5rem">
         <RadzenStack Gap="0.25rem" Style="flex:1;">
-            <RadzenLabel Text="…or image URL" />
+            <RadzenLabel Text="@_text[UserIconDialogText.OrImageUrl]" />
             <RadzenTextBox @bind-Value="_url" Placeholder="https://…/photo.png" Style="width:100%;" Disabled="@_busy" />
         </RadzenStack>
-        <RadzenButton Text="Download" Icon="download" Click="OnFetchUrl" Disabled="@(_busy || string.IsNullOrWhiteSpace(_url))" />
+        <RadzenButton Text="@_text[UserIconDialogText.Download]" Icon="download" Click="OnFetchUrl" Disabled="@(_busy || string.IsNullOrWhiteSpace(_url))" />
     </RadzenStack>
 
     @if (_busy)
@@ -39,9 +40,9 @@
 
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween" AlignItems="AlignItems.Center">
         <div>
-            <RadzenButton Text="Use Gravatar" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Flat" Click="OnRemove" Visible="@HasIcon" Disabled="@_busy" title="Remove the uploaded image and fall back to Gravatar" />
+            <RadzenButton Text="@_text[UserIconDialogText.UseGravatar]" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Flat" Click="OnRemove" Visible="@HasIcon" Disabled="@_busy" title="@_text[UserIconDialogText.UseGravatarTooltip]" />
         </div>
-        <RadzenButton Text="Close" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close(_changed))" />
+        <RadzenButton Text="@_text[UserIconDialogText.Close]" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close(_changed))" />
     </RadzenStack>
 </RadzenStack>
 
@@ -60,11 +61,15 @@
     // The default NoOpIconProcessor does not resize, so promising automatic downscaling
     // without a real one tells the user something false — oversized uploads are rejected.
     private bool _canDownscale;
+    private TextSet _text = TextSet.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(UserIconDialogText.All);
         _maxUploadMb = Math.Max(1, IconOptions.Value.MaxUploadBytes / (1024 * 1024));
         _canDownscale = IconCapability.CanProcessImages(IconProcessor);
+
+        await base.OnInitializedAsync();
     }
 
     private async Task OnFileSelected(InputFileChangeEventArgs e)
@@ -114,7 +119,7 @@
         }
 
         _changed = true;
-        NotificationService.Notify(NotificationSeverity.Success, "Profile picture updated");
+        NotificationService.Notify(NotificationSeverity.Success, _text[UserIconDialogText.NotifyUpdated]);
         DialogService.Close(true);
     }
 
@@ -134,12 +139,12 @@
             }
 
             _changed = true;
-            NotificationService.Notify(NotificationSeverity.Success, "Reverted to Gravatar");
+            NotificationService.Notify(NotificationSeverity.Success, _text[UserIconDialogText.NotifyReverted]);
             DialogService.Close(true);
         }
         catch (Exception ex) { NotifyError(ex); }
         finally { _busy = false; }
     }
 
-    private void NotifyError(Exception ex) => NotificationService.Notify(NotificationSeverity.Error, "Update failed", ex.Message);
+    private void NotifyError(Exception ex) => NotificationService.Notify(NotificationSeverity.Error, _text[UserIconDialogText.NotifyFailed], ex.Message);
 }

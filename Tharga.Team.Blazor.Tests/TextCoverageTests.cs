@@ -46,6 +46,9 @@ public class TextCoverageTests
         "Framework/ScopeOverrideEditor.razor",
         "Framework/RoleEditor.razor",
         "Features/Team/TeamDialog.razor",
+        "Features/User/DirectoryOnlyUsersView.razor",
+        "Features/User/UserIconDialog.razor",
+        "Features/Team/TeamIconDialog.razor",
     ];
 
     /// <summary>
@@ -67,12 +70,9 @@ public class TextCoverageTests
         ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
         ["Features/Team/InviteUserDialog.razor"] = 4,
         ["Features/Team/TeamComponent.razor"] = 60,
-        ["Features/Team/TeamIconDialog.razor"] = 7,
         ["Features/Team/TeamInviteView.razor"] = 3,
         ["Features/User/DeleteUserDialog.razor"] = 6,
-        ["Features/User/DirectoryOnlyUsersView.razor"] = 6,
         ["Features/User/TeamsListView.razor"] = 30,
-        ["Features/User/UserIconDialog.razor"] = 8,
         ["Features/User/UserProfileView.razor"] = 13,
         ["Features/User/UsersListView.razor"] = 50,
     };
