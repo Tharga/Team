@@ -12,15 +12,21 @@ Branch `feature/text-team-and-users-surfaces`, off `master` at `7cca961`.
 
 - [ ] **3. `TeamsListView` (30).**
 
-- [ ] **4. The user dialogs (22).** `UserIconDialog` 8, `DirectoryOnlyUsersView` 6, `DeleteUserDialog` 6,
-      `AssignOwnerDialog` 2.
+- [~] **4. The user dialogs (22, six left).** Done: `AssignOwnerDialog` 2 (`e9bdd30`), `UserIconDialog` 8
+      and `DirectoryOnlyUsersView` 6 (`99dc412`). **Remaining: `DeleteUserDialog` 6.**
+      **Left deliberately — it needs plural handling, not substitution.** It builds its ownership warning
+      from ternaries: *"a team"* vs *"{n} teams"*, *"it"* vs *"them"*, *"this team is"* vs *"these teams
+      are"*. A sentence assembled from those fragments cannot be translated — agreement and word order both
+      move — so each variant has to be a whole keyed sentence chosen by count. The icon dialogs now show the
+      pattern: two complete intro sentences selected by condition, rather than a shared head plus a ternary
+      tail.
 
 - [ ] **5. `TeamComponent` (60).** Most of it is dialog titles, notifications and confirmation prompts in
       the C# block. Positional placeholders via `TextSet.Format`, never interpolation.
 
 - [~] **6. The team dialogs (22 → 12 left).** Done (`e9bdd30`): `RoleEditor` 3, `ScopeOverrideEditor` 1,
       `SuspendedTeamNotice` 2, `TeamDialog` 1, `AssignOwnerDialog` 2 — all at zero and in `Migrated`.
-      Remaining: `TeamIconDialog` 7, `InviteUserDialog` 4, `TeamInviteView` 3.
+      `TeamIconDialog` 7 also done (`99dc412`). **Remaining: `InviteUserDialog` 4, `TeamInviteView` 3.**
       Two things fell out of it:
       - **A sixth scan false positive.** `DisabledProperty="Inherited"` was counted as the label
         Inherited. A `…Property="…"` value names a member of the bound item, never text, and it is
@@ -60,4 +66,18 @@ Branch `feature/text-team-and-users-surfaces`, off `master` at `7cca961`.
 1,906. **Remaining: 174 strings across 9 files** — `UsersListView` 50, `TeamsListView` 30,
 `DirectoryOnlyUsersView` 6, `UserIconDialog` 8, `DeleteUserDialog` 6 (steps 2-4); `TeamComponent` 60
 (step 5); `TeamIconDialog` 7, `InviteUserDialog` 4, `TeamInviteView` 3 (step 6). Then steps 7-9.
-**Next: step 2, `UsersListView`** — 604 lines, the largest single file left.
+**Superseded — see below.**
+
+## Last session (continued)
+
+2026-08-09 — three more migrated (`99dc412`): `UserIconDialog` 8, `TeamIconDialog` 7,
+`DirectoryOnlyUsersView` 6. Suite green at 1,906; eight of the fourteen files are now done.
+
+**Remaining: 153 strings across 6 files.**
+- `TeamComponent` 60, `UsersListView` 50, `TeamsListView` 30 — the three large files, each needing a full
+  read before it can be migrated safely.
+- `DeleteUserDialog` 6 — small, but blocked on the plural decision recorded in step 4.
+- `InviteUserDialog` 4, `TeamInviteView` 3 — small and unread; straightforward.
+
+**Next: `InviteUserDialog` and `TeamInviteView`** (quick), then `DeleteUserDialog` once the plural shape is
+settled, then the three large files with a fresh context.
