@@ -281,6 +281,33 @@ builder.AddThargaTeam(o => o.Blazor.AddTextProvider<MyMenuText>());
 
 Without a provider the English defaults are used, so this is non-breaking for existing apps.
 
+#### Finding every key you can override
+
+`ThargaTextKeys.All` is the complete set the toolkit can render, each entry carrying its stable key and
+English default. Enumerate it to generate a translation table, seed a content system, or assert in your own
+tests that you have covered everything:
+
+```csharp
+foreach (var key in ThargaTextKeys.All)
+    Console.WriteLine($"{key.Key}	{key.Default}");
+```
+
+It is discovered by reflection over the toolkit's catalogues, so a key added in a later version appears
+without you doing anything — and a test of your own over `ThargaTextKeys.All` will tell you when one arrives
+that you have not translated yet.
+
+> **Migration in progress.** `LoginDisplay` and `TeamSelector` resolve every string they render.
+> `TeamComponent`, `UsersView` and `AuditLogView` still render some text literally and are being moved across
+> (Tharga/Team#204); a build-time ratchet stops that set growing. Until they are done, overriding the
+> toolkit's wording will leave some English in those three.
+
+#### Keys are whole strings, not substitutable nouns
+
+There is deliberately **no** `Text["Team"] = "Organisation"` knob. Composing sentences from a noun token
+produces broken translations: Swedish suffixes the definite article, so *"medlem i ett team"* becomes
+*"teamet"* — a form no substitution reaches — and word order moves besides. Each string is keyed whole, which
+is what lets a translation differ structurally from the English rather than only lexically.
+
 ### Adding your own profile-menu items
 
 Register extra entries on the `LoginDisplay` profile menu. They render after the built-in items and above

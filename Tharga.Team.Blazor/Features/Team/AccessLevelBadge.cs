@@ -34,8 +34,13 @@ internal static class AccessLevelBadge
     }
 
     /// <summary>Badge text — the level name, or an explicit statement that there is no access.</summary>
-    public static string Text(AccessLevel? accessLevel)
-        => accessLevel?.ToString() ?? "No access";
+    /// <remarks>
+    /// Takes a resolved <see cref="TextSet"/> rather than awaiting a provider: this class is static and pure
+    /// so it stays unit-testable, and the component has already resolved its strings in one pass. Passing
+    /// <see cref="TextSet.Empty"/> yields the English defaults.
+    /// </remarks>
+    public static string Text(AccessLevel? accessLevel, TextSet text)
+        => (text ?? TextSet.Empty)[AccessLevelText.For(accessLevel)];
 
     /// <summary>
     /// Radzen <c>BadgeStyle</c> name for the level. Returned as a string so this stays free of a

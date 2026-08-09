@@ -35,7 +35,7 @@
             <span>@SelectedTeam.Name</span>
             @if (IsSuspended(SelectedTeam))
             {
-                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Suspended"
+                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[TeamSelectorText.Suspended]"
                              title="@SuspendedTitle" />
             }
         }
@@ -51,7 +51,7 @@
                         <span>@(((ITeam)team).Name)</span>
                         @if (IsSuspended((ITeam)team))
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Suspended"
+                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[TeamSelectorText.Suspended]"
                                          title="@SuspendedTitle" />
                         }
                     </RadzenStack>
@@ -62,7 +62,7 @@
                         <span>@(((ITeam)team).Name)</span>
                         @if (IsSuspended((ITeam)team))
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Suspended"
+                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[TeamSelectorText.Suspended]"
                                          title="@SuspendedTitle" />
                         }
                     </RadzenStack>
@@ -75,8 +75,8 @@
             var accessLevel = AccessLevelBadge.Resolve(context.User);
             <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(accessLevel)))"
                          Variant="Variant.Flat"
-                         Text="@AccessLevelBadge.Text(accessLevel)"
-                         title="Your access level on the selected team" />
+                         Text="@AccessLevelBadge.Text(accessLevel, _text)"
+                         title="@_text[TeamSelectorText.AccessLevelTooltip]" />
         }
     </Authorized>
 </AuthorizeView>
@@ -141,8 +141,10 @@
 
     private bool _canSeeAllTeams;
     private ITeam _selectedTeam;
-    private string _loadingText = TeamMenuText.Loading.Default;
-    private string _createTeamText = TeamMenuText.CreateTeam.Default;
+    // One pass over every key this component renders, rather than an await and a field per label.
+    private TextSet _text = TextSet.Empty;
+    private string _loadingText => _text[TeamMenuText.Loading];
+    private string _createTeamText => _text[TeamMenuText.CreateTeam];
     private string _createTeamPath = "/team";
     private bool _allowTeamCreation = true;
 
@@ -159,8 +161,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _loadingText = await TextProvider.GetAsync(TeamMenuText.Loading);
-        _createTeamText = await TextProvider.GetAsync(TeamMenuText.CreateTeam);
+        _text = await TextProvider.ResolveAsync(
+            [TeamMenuText.Loading, TeamMenuText.CreateTeam, TeamSelectorText.Suspended, TeamSelectorText.AccessLevelTooltip, .. AccessLevelText.All]);
 
         _allowTeamCreation = BlazorOptions.Value.AllowTeamCreation;
 
