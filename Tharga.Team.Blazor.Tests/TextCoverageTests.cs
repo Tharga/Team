@@ -41,6 +41,11 @@ public class TextCoverageTests
         "Features/Authentication/LoginDisplay.razor",
         "Features/User/UsersView.razor",
         "Features/Audit/AuditLogView.razor",
+        "Features/User/AssignOwnerDialog.razor",
+        "Features/Team/SuspendedTeamNotice.razor",
+        "Framework/ScopeOverrideEditor.razor",
+        "Framework/RoleEditor.razor",
+        "Features/Team/TeamDialog.razor",
     ];
 
     /// <summary>
@@ -61,20 +66,15 @@ public class TextCoverageTests
         ["Features/Simulation/AccessSimulationBar.razor"] = 3,
         ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
         ["Features/Team/InviteUserDialog.razor"] = 4,
-        ["Features/Team/SuspendedTeamNotice.razor"] = 2,
         ["Features/Team/TeamComponent.razor"] = 60,
-        ["Features/Team/TeamDialog.razor"] = 1,
         ["Features/Team/TeamIconDialog.razor"] = 7,
         ["Features/Team/TeamInviteView.razor"] = 3,
-        ["Features/User/AssignOwnerDialog.razor"] = 2,
         ["Features/User/DeleteUserDialog.razor"] = 6,
         ["Features/User/DirectoryOnlyUsersView.razor"] = 6,
         ["Features/User/TeamsListView.razor"] = 30,
         ["Features/User/UserIconDialog.razor"] = 8,
         ["Features/User/UserProfileView.razor"] = 13,
         ["Features/User/UsersListView.razor"] = 50,
-        ["Framework/RoleEditor.razor"] = 3,
-        ["Framework/ScopeOverrideEditor.razor"] = 2,
     };
 
     private static string ComponentRoot()

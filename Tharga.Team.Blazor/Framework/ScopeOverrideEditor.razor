@@ -1,4 +1,5 @@
 @namespace Tharga.Team.Blazor.Framework
+@inject IThargaTextProvider TextProvider
 
 @*
     Scope-override picker (option b): shows ALL scopes; the ones inherited from the principal's access level
@@ -14,7 +15,7 @@
                 DisabledProperty="Inherited"
                 Value="@_value"
                 ValueChanged="@OnValueChanged"
-                Placeholder="Add scopes..."
+                Placeholder="@_text[ScopeOverrideEditorText.Placeholder]"
                 Style="@Style">
     <Template>
         <span title="@(((ScopeOption)context).Description)">@(((ScopeOption)context).Name)</span>
@@ -39,8 +40,15 @@
 
     [Parameter] public string Style { get; set; } = "min-width: 220px;";
 
+    private TextSet _text = TextSet.Empty;
     private List<ScopeOption> _options = new();
     private IEnumerable<string> _value = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(ScopeOverrideEditorText.All);
+        await base.OnInitializedAsync();
+    }
 
     protected override void OnParametersSet()
     {

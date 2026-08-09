@@ -3,6 +3,7 @@
 @inject ITeamDirectoryService TeamDirectoryService
 @inject ITeamStateService TeamStateService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IThargaTextProvider TextProvider
 
 @*
     Explains why the selected team does nothing, to the one person who cannot find out any other way.
@@ -20,8 +21,8 @@
 @if (_suspended)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" Shade="Shade.Lighter"
-                 AllowClose="false" Icon="block" Title="@Title">
-        <RadzenText TextStyle="TextStyle.Body1">@Message</RadzenText>
+                 AllowClose="false" Icon="block" Title="@(Title ?? _text[SuspendedTeamNoticeText.Title])">
+        <RadzenText TextStyle="TextStyle.Body1">@(Message ?? _text[SuspendedTeamNoticeText.Message])</RadzenText>
         @if (ChildContent != null)
         {
             @ChildContent
@@ -31,23 +32,23 @@
 
 @code {
     /// <summary>Heading. Override to match the host's vocabulary for teams.</summary>
-    [Parameter] public string Title { get; set; } = "Your access to this team is suspended";
+    [Parameter] public string Title { get; set; }
 
     /// <summary>
     /// Body text. The default deliberately says what is *not* lost — a suspension that reads like a
     /// deletion produces the same panicked support ticket the visible-in-selector design exists to avoid.
     /// </summary>
-    [Parameter] public string Message { get; set; } =
-        "You are still a member and nothing has been deleted, but you cannot use this team until an " +
-        "administrator restores your access. Select another team to carry on working.";
+    [Parameter] public string Message { get; set; }
 
     /// <summary>Optional extra content — a support link, or who to contact.</summary>
     [Parameter] public RenderFragment ChildContent { get; set; }
 
     private bool _suspended;
+    private TextSet _text = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(SuspendedTeamNoticeText.All);
         TeamStateService.SelectedTeamChangedEvent += OnSelectedTeamChanged;
         await RefreshAsync();
     }

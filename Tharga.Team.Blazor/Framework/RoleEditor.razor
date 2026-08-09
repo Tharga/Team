@@ -1,4 +1,5 @@
 @namespace Tharga.Team.Blazor.Framework
+@inject IThargaTextProvider TextProvider
 
 @*
     Tenant-role picker. Each option's tooltip shows the role's description (if any) plus the scopes the role
@@ -12,7 +13,7 @@
                 ValueProperty="Name"
                 Value="@_value"
                 ValueChanged="@OnValueChanged"
-                Placeholder="Select roles..."
+                Placeholder="@_text[RoleEditorText.Placeholder]"
                 Style="@Style">
     <Template>
         <span title="@(((RoleOption)context).Tooltip)">@(((RoleOption)context).Name)</span>
@@ -35,25 +36,36 @@
 
     [Parameter] public string Style { get; set; } = "min-width: 220px;";
 
+    private TextSet _text = TextSet.Empty;
     private List<RoleOption> _options = new();
     private IEnumerable<string> _value = Array.Empty<string>();
     private string[] _hiddenSelected = Array.Empty<string>();
 
-    protected override void OnParametersSet()
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(RoleEditorText.All);
+        Rebuild();
+        await base.OnInitializedAsync();
+    }
+
+    protected override void OnParametersSet() => Rebuild();
+
+    private void Rebuild()
     {
         var roles = Roles ?? Array.Empty<TenantRoleDefinition>();
-        _options = roles.Select(r => new RoleOption(r.Name, BuildTooltip(r))).ToList();
+        _options = roles.Select(r => new RoleOption(r.Name, BuildTooltip(r, _text))).ToList();
 
         var (visible, hidden) = RoleSelectionResolver.Split(roles.Select(r => r.Name), Selected);
         _hiddenSelected = hidden.ToArray();
         _value = visible.ToList();
     }
 
-    private static string BuildTooltip(TenantRoleDefinition role)
+    private static string BuildTooltip(TenantRoleDefinition role, TextSet text)
     {
+        text ??= TextSet.Empty;
         var scopes = role.Scopes is { Count: > 0 }
-            ? "Grants: " + string.Join(", ", role.Scopes.OrderBy(s => s, StringComparer.Ordinal))
-            : "Grants no scopes";
+            ? text.Format(RoleEditorText.Grants, string.Join(", ", role.Scopes.OrderBy(s => s, StringComparer.Ordinal)))
+            : text[RoleEditorText.GrantsNothing];
         return string.IsNullOrWhiteSpace(role.Description) ? scopes : $"{role.Description}\n{scopes}";
     }
 

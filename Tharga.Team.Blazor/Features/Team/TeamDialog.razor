@@ -4,15 +4,16 @@
 @attribute [Authorize]
 @inject DialogService DialogService
 @inject ITeamManagementService TeamManagementService
+@inject IThargaTextProvider TextProvider
 
 <RadzenTemplateForm TItem="TeamDialogModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
     <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
         <RadzenStack>
             <RadzenRow>
                 <RadzenColumn>
-                    <RadzenText TextStyle="TextStyle.Caption">Name</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">@_text[TeamDialogText.Name]</RadzenText>
                     <div><RadzenTextBox Name="Name" @bind-Value="@Model.Name" Style="width: 100%; min-width: 174px;" /></div>
-                    <RadzenRequiredValidator Component="Name" Text="Name is required." />
+                    <RadzenRequiredValidator Component="Name" Text="@_text[TeamDialogText.NameRequired]" />
                 </RadzenColumn>
             </RadzenRow>
 
@@ -24,7 +25,7 @@
         </RadzenStack>
         <RadzenStack></RadzenStack>
         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right">
-            <RadzenButton ButtonType="ButtonType.Submit" Text="OK" Icon="check_circle" />
+            <RadzenButton ButtonType="ButtonType.Submit" Text="@_text[TeamDialogText.Ok]" Icon="check_circle" />
             <CancelButton Click="CloseDialog" />
         </RadzenStack>
     </RadzenStack>
@@ -32,6 +33,7 @@
 
 @code {
     private string _errorMessage;
+    private TextSet _text = TextSet.Empty;
 
     [Parameter]
     public string TeamKey { get; set; }
@@ -44,6 +46,7 @@
     protected override async Task OnInitializedAsync()
     {
         Model = new TeamDialogModel { Name = Name };
+        _text = await TextProvider.ResolveAsync(TeamDialogText.All);
 
         await base.OnInitializedAsync();
     }
