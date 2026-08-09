@@ -296,10 +296,10 @@ It is discovered by reflection over the toolkit's catalogues, so a key added in 
 without you doing anything — and a test of your own over `ThargaTextKeys.All` will tell you when one arrives
 that you have not translated yet.
 
-> **Migration in progress.** `LoginDisplay` and `TeamSelector` resolve every string they render.
-> `TeamComponent`, `UsersView` and `AuditLogView` still render some text literally and are being moved across
+> **Migration in progress.** `LoginDisplay`, `TeamSelector` and `UsersView` resolve every string they render.
+> `TeamComponent` and `AuditLogView` still render some text literally and are being moved across
 > (Tharga/Team#204); a build-time ratchet stops that set growing. Until they are done, overriding the
-> toolkit's wording will leave some English in those three.
+> toolkit's wording will leave some English in those two.
 
 #### Keys are whole strings, not substitutable nouns
 

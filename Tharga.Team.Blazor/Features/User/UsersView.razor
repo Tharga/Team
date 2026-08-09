@@ -3,6 +3,7 @@
 @typeparam TMember where TMember : class, Tharga.Team.ITeamMember
 @inject IServiceProvider ServiceProvider
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IThargaTextProvider TextProvider
 
 @*
     No [Authorize] attribute here: it is inert on a non-page component and invited false confidence.
@@ -13,18 +14,18 @@
 
 <RadzenTabs @bind-SelectedIndex="_selectedTab">
     <Tabs>
-        <RadzenTabsItem Text="Users">
+        <RadzenTabsItem Text="@_text[UsersViewText.UsersTab]">
             <UsersListView TMember="TMember" ActionsTemplate="ActionsTemplate" ActionItems="ActionItems" ActionInvoked="ActionInvoked"
                            ShowAuditLogButton="ShowAuditLogButton" FocusUserKey="@_focusUserKey" TeamSelected="ShowTeamAsync" />
         </RadzenTabsItem>
-        <RadzenTabsItem Text="Teams">
+        <RadzenTabsItem Text="@_text[UsersViewText.TeamsTab]">
             <TeamsListView TMember="TMember" TeamActionsTemplate="TeamActionsTemplate" MemberActionsTemplate="MemberActionsTemplate"
                            TeamActionItems="TeamActionItems" TeamActionInvoked="TeamActionInvoked"
                            ShowAuditLogButton="ShowAuditLogButton" FocusTeamKey="@_focusTeamKey" MemberSelected="ShowUserAsync" />
         </RadzenTabsItem>
         @if (_showDirectoryTab)
         {
-            <RadzenTabsItem Text="Users in directory only">
+            <RadzenTabsItem Text="@_text[UsersViewText.DirectoryOnlyTab]">
                 <DirectoryOnlyUsersView />
             </RadzenTabsItem>
         }
@@ -83,6 +84,8 @@
     private const int UsersTab = 0;
     private const int TeamsTab = 1;
 
+    // Resolved once in OnInitializedAsync; read synchronously in markup. See TextSet.
+    private TextSet _text = TextSet.Empty;
     private bool _showDirectoryTab;
     private int _selectedTab;
     private string _focusUserKey;
@@ -113,6 +116,8 @@
         var hasUsersManage = TeamScopeGate.HasSystemScope(authState.User, SystemUserScopes.Manage);
         var directoryRegistered = ServiceProvider.GetService<IUserDirectoryService>() is { IsConfigured: true };
         _showDirectoryTab = UserAdminGate.ShowDirectoryFeatures(hasUsersManage, directoryRegistered);
+
+        _text = await TextProvider.ResolveAsync(UsersViewText.All);
 
         await base.OnInitializedAsync();
     }
