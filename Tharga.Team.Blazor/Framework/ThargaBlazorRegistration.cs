@@ -72,7 +72,36 @@ public static class ThargaBlazorRegistration
             services.AddScoped(typeof(ITeamService), sp => sp.GetRequiredService(o._teamService));
 
             services.AddScoped(o._userService);
-            services.AddScoped(typeof(IUserService), sp => sp.GetRequiredService(o._userService));
+            services.AddScoped(typeof(IUserService), sp =>
+            {
+                var userService = sp.GetRequiredService(o._userService);
+
+                // A first sign-in creates the user record while resolving the caller, outside any service the
+                // auditing decorators wrap -- so it is subscribed per scope here rather than decorated.
+                // Failing to audit must never fail the sign-in that triggered it (Tharga/Team#142).
+                if (userService is UserServiceBase auditable)
+                {
+                    var auditLogger = sp.GetService<CompositeAuditLogger>();
+                    var logger = sp.GetService<ILogger<UserServiceCompletenessCheck>>();
+
+                    if (auditLogger != null)
+                    {
+                        auditable.UserCreatedEvent += (_, e) =>
+                        {
+                            try
+                            {
+                                auditLogger.Log(AuthAuditEntries.UserCreated(e.User, e.Principal));
+                            }
+                            catch (Exception ex)
+                            {
+                                logger?.LogWarning(ex, "Failed to audit the creation of a user on first sign-in.");
+                            }
+                        };
+                    }
+                }
+
+                return userService;
+            });
 
             // Runs at startup, once everything else is registered — reachability depends on whether an
             // icon store and a directory are present, and those may be registered after this point.

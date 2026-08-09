@@ -40,6 +40,11 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
         try
         {
             await _userRepository.AddAsync(candidate);
+
+            // Only here. The duplicate-key path below lost the race, so another caller created the record and
+            // announcing a second creation would put two entries in the audit log for one user.
+            RaiseUserCreated(candidate, claimsPrincipal);
+
             return candidate;
         }
         catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
