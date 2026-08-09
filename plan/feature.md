@@ -60,8 +60,11 @@ Two entries rather than one, so a reader can see that a person arrived *and* tha
 
 - **The OIDC handler is not integration-tested.** Exercising it needs a full authentication pipeline; the
   entry it produces is tested directly instead.
-- **The race path is enforced by placement, not by a test.** The raise sits inside the success branch, above
-  the duplicate-key catch, and is commented as such — but nothing fails if a later edit moves it.
+- ~~The race path is enforced by placement, not by a test.~~ **Now tested** — `UserCreatedEventTests`
+  covers first sign-in, a returning user, **losing the insert race**, and no subscriber. Getting that test
+  honest took three attempts: the first two threw a `MongoWriteException` the production filter did not match
+  (it guards on `WriteError?.Category == DuplicateKey`), so the exception propagated and the test was
+  exercising the wrong path while appearing to fail for the right reason.
 
 ## What this unblocks
 
