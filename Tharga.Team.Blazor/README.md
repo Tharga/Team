@@ -3,7 +3,13 @@
 ![Nuget](https://img.shields.io/nuget/dt/Tharga.Team.Blazor)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Team management Blazor components for multi-tenant applications. Works with both **Blazor Server** and **Blazor WebAssembly**.
+Team management Blazor components for multi-tenant applications.
+
+> **Hosting:** the components themselves are hosting-agnostic, but **this package is not WebAssembly-clean
+> today**. It references `Tharga.Team.Service`, which references `Tharga.MongoDB` and `Swashbuckle.AspNetCore`
+> directly — so taking the components also takes the MongoDB driver and the OpenAPI generator. Use it under
+> **Blazor Server**. The contracts package, `Tharga.Team`, has no server-side dependencies and is the one a
+> browser client can take cleanly. See `docs/articles/architecture.md` for the full reference graph.
 
 ## Components
 

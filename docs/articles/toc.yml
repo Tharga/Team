@@ -2,6 +2,8 @@
   href: index.md
 - name: Getting started
   href: getting-started.md
+- name: Architecture
+  href: architecture.md
 - name: Implementation guide
   href: implementation-guide.md
 - name: User management & directory
