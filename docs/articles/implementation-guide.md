@@ -302,7 +302,8 @@ that you have not translated yet.
 the honest list matters more than a reassuring one: a component not below is still rendering English.
 
 **Fully routed** — every string resolves through your provider: `LoginDisplay`, `TeamSelector`,
-`AuditLogView`, and the `UsersView` tab strip.
+`AuditLogView`, the `UsersView` tab strip, `DirectoryOnlyUsersView`, `UserIconDialog`, `TeamIconDialog`,
+`TeamDialog`, `AssignOwnerDialog`, `SuspendedTeamNotice`, `RoleEditor` and `ScopeOverrideEditor`.
 
 > **Read that last one carefully.** `UsersView` is a wrapper around the tab strip. The tabs it renders —
 > `UsersListView` (50 strings) and `TeamsListView` (30) — are separate components and are **not** migrated.
@@ -312,10 +313,11 @@ the honest list matters more than a reassuring one: a component not below is sti
 
 **Still literal**, largest first: `TeamComponent` 60, `UsersListView` 50, `ApiKeyView` 44,
 `SystemApiKeyView` 35, `TeamsListView` 30, `ScopeView` 15, `UserProfileView` 13, `AccessSimulationDialog` 12,
-`TenantRoleManager` 11, `UserIconDialog` 8, `TeamIconDialog` 7, `DirectoryOnlyUsersView` 6,
-`DeleteUserDialog` 6, `InviteUserDialog` 4, `TeamInviteView` 3, `AccessSimulationBar` 3, `RoleEditor` 3,
-`ApiKeyRevealDialog` 2, `SuspendedTeamNotice` 2, `AssignOwnerDialog` 2, `ScopeOverrideEditor` 2,
-`TeamDialog` 1 — **319 strings across 22 components.**
+`TenantRoleManager` 11, `DeleteUserDialog` 6, `InviteUserDialog` 4, `TeamInviteView` 3,
+`AccessSimulationBar` 3, `ApiKeyRevealDialog` 2 — **288 strings across 14 components.**
+
+Of those, **153 are on the surfaces #204 names** — `TeamComponent`, the two `UsersView` tabs, and three
+dialogs they open. The other 135 are on API-key, scope and simulation surfaces that #204 does not cover.
 
 A build-time ratchet holds every one of those numbers: it fails if a count grows, fails if a count shrinks
 without the record being updated, and fails if a component carrying literal text is missing from the list
