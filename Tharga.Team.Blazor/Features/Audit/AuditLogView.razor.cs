@@ -16,6 +16,10 @@ public partial class AuditLogView : ComponentBase
     [Inject] private NotificationService NotificationService { get; init; }
     [Inject] private IJSRuntime JS { get; init; }
     [Inject] private AuthenticationStateProvider AuthStateProvider { get; init; }
+    [Inject] private IThargaTextProvider TextProvider { get; init; }
+
+    /// <summary>Resolved once in <see cref="OnInitializedAsync"/>; read synchronously in markup. See <see cref="TextSet"/>.</summary>
+    private TextSet _text = TextSet.Empty;
 
     [Parameter] public string TeamKey { get; set; }
     [Parameter] public AuditCallerType? RestrictCallerType { get; set; }
@@ -117,6 +121,10 @@ public partial class AuditLogView : ComponentBase
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+
+        // Before the not-configured branch below, which returns early: that alert is user-facing too, and
+        // resolving after it would leave the one message shown to a misconfigured host in English.
+        _text = await TextProvider.ResolveAsync(AuditLogViewText.All);
 
         _auditReadService = ServiceProvider.GetService<IAuditReadService>();
         _auditOversightService = ServiceProvider.GetService<IAuditOversightService>();
@@ -251,7 +259,7 @@ public partial class AuditLogView : ComponentBase
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Query failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[AuditLogViewText.NotifyQueryFailed], ex.Message);
         }
     }
 
@@ -390,7 +398,7 @@ public partial class AuditLogView : ComponentBase
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Chart data failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[AuditLogViewText.NotifyChartDataFailed], ex.Message);
         }
     }
 
@@ -445,7 +453,7 @@ public partial class AuditLogView : ComponentBase
 
             if (!exportEntries.Any())
             {
-                NotificationService.Notify(NotificationSeverity.Warning, "No data to export");
+                NotificationService.Notify(NotificationSeverity.Warning, _text[AuditLogViewText.NotifyNoDataToExport]);
                 return;
             }
 
@@ -486,7 +494,7 @@ public partial class AuditLogView : ComponentBase
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Export failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[AuditLogViewText.NotifyExportFailed], ex.Message);
         }
     }
 
@@ -527,14 +535,15 @@ public partial class AuditLogView : ComponentBase
     /// Multi-line hover-tooltip detail for a failed entry in the "OK" column: the failure code, the
     /// authorization scope and its result when present, and the reason text. Null for successful entries.
     /// </summary>
-    internal static string BuildFailureDetail(AuditEntry entry)
+    internal static string BuildFailureDetail(AuditEntry entry, TextSet text = null)
     {
         if (entry is null || entry.Success) return null;
+        text ??= TextSet.Empty;
         var lines = new List<string> { BuildFailureCode(entry) };
         if (!string.IsNullOrEmpty(entry.ScopeChecked))
-            lines.Add($"Scope: {entry.ScopeChecked} ({entry.ScopeResult})");
+            lines.Add(text.Format(AuditLogViewText.FailureScope, entry.ScopeChecked, entry.ScopeResult));
         if (!string.IsNullOrEmpty(entry.ErrorMessage))
-            lines.Add($"Reason: {entry.ErrorMessage}");
+            lines.Add(text.Format(AuditLogViewText.FailureReason, entry.ErrorMessage));
         return string.Join("\n", lines);
     }
 

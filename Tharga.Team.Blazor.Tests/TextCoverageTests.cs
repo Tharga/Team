@@ -17,28 +17,64 @@ namespace Tharga.Team.Blazor.Tests;
 /// move that file into <see cref="Migrated"/> so it can never slip back.
 /// </para>
 /// <para>
-/// This scans **attribute** strings only — `Text=`, `Title=`, `Placeholder=`, `title=`. Inline prose between
-/// tags is user-facing too and is <b>not</b> covered here, because distinguishing it from markup, bound
-/// expressions and scope names like <c>team:manage</c> needs judgement a regex does not have. So a zero here
-/// means "no literal attribute text", not "fully translated" — stated plainly so the number is not read as
-/// more than it is.
+/// <b>What is scanned.</b> All three categories of user-facing string — markup attributes, prose between
+/// tags, and literals in the C# block — across a component's <c>.razor</c> <b>and its sibling
+/// <c>.razor.cs</c></b>. A zero therefore means "no literal display text found by the scan", not "provably
+/// fully translated"; the scan is a stable, directional heuristic rather than a parser.
+/// </para>
+/// <para>
+/// <b>Components are discovered, not listed.</b> <see cref="EveryComponentWithText_IsTracked"/> walks every
+/// <c>.razor</c> in the library and fails if one carrying literal text appears in neither table. This is
+/// not hypothetical bookkeeping: the first version of this file tracked five hand-picked paths and recorded
+/// <c>UsersView</c> as migrated at zero — true of the 124-line wrapper, and false of the tabs it renders,
+/// where <c>UsersListView</c> and <c>TeamsListView</c> held 81 untracked strings. A consumer would have
+/// supplied a full translation table and still found that view in English, which is the complaint #204 was
+/// filed about. A list somebody must remember to extend is how the number stops meaning anything.
 /// </para>
 /// </remarks>
 public class TextCoverageTests
 {
-    /// <summary>Components fully migrated: these must stay at zero literal attribute strings.</summary>
+    /// <summary>Components fully migrated: these must stay at zero literal strings.</summary>
     private static readonly string[] Migrated =
     [
         "Features/Team/TeamSelector.razor",
         "Features/Authentication/LoginDisplay.razor",
         "Features/User/UsersView.razor",
+        "Features/Audit/AuditLogView.razor",
     ];
 
-    /// <summary>Not yet migrated, with the count as it stands. These may only go down.</summary>
+    /// <summary>
+    /// Not yet migrated, with the count as it stands. These may only go down.
+    /// </summary>
+    /// <remarks>
+    /// Baselined 2026-08-09 across the whole library, counting code-behind. The previous baseline covered
+    /// two files and reported 104; the real figure was 376 — see the type-level remarks for how the gap
+    /// arose and why discovery replaced the hand-written list.
+    /// </remarks>
     private static readonly Dictionary<string, int> Pending = new()
     {
-        ["Features/Team/TeamComponent.razor"] = 61,
-        ["Features/Audit/AuditLogView.razor"] = 43,
+        ["Features/Api/ApiKeyRevealDialog.razor"] = 2,
+        ["Features/Api/ApiKeyView.razor"] = 44,
+        ["Features/Api/SystemApiKeyView.razor"] = 35,
+        ["Features/Roles/TenantRoleManager.razor"] = 11,
+        ["Features/Scopes/ScopeView.razor"] = 15,
+        ["Features/Simulation/AccessSimulationBar.razor"] = 3,
+        ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
+        ["Features/Team/InviteUserDialog.razor"] = 4,
+        ["Features/Team/SuspendedTeamNotice.razor"] = 2,
+        ["Features/Team/TeamComponent.razor"] = 60,
+        ["Features/Team/TeamDialog.razor"] = 1,
+        ["Features/Team/TeamIconDialog.razor"] = 7,
+        ["Features/Team/TeamInviteView.razor"] = 3,
+        ["Features/User/AssignOwnerDialog.razor"] = 2,
+        ["Features/User/DeleteUserDialog.razor"] = 6,
+        ["Features/User/DirectoryOnlyUsersView.razor"] = 6,
+        ["Features/User/TeamsListView.razor"] = 30,
+        ["Features/User/UserIconDialog.razor"] = 8,
+        ["Features/User/UserProfileView.razor"] = 13,
+        ["Features/User/UsersListView.razor"] = 50,
+        ["Framework/RoleEditor.razor"] = 3,
+        ["Framework/ScopeOverrideEditor.razor"] = 2,
     };
 
     private static string ComponentRoot()
@@ -51,12 +87,26 @@ public class TextCoverageTests
         return Path.Combine(dir.FullName, "Tharga.Team.Blazor");
     }
 
+    /// <summary>
+    /// The literal display strings in a component — its markup and its code-behind together.
+    /// </summary>
+    /// <remarks>
+    /// <b>The code-behind half is not optional.</b> <c>AuditLogView</c> keeps 554 lines of C# in a
+    /// <c>.razor.cs</c>, including every notification title it raises. Scanning only the <c>.razor</c>
+    /// reported 43 where the component had 52, and the nine it missed — "Export failed", "Query failed" —
+    /// are precisely the messages a user sees when something goes wrong.
+    /// </remarks>
     private static int CountLiterals(string relativePath)
     {
         var full = Path.Combine(ComponentRoot(), relativePath.Replace('/', Path.DirectorySeparatorChar));
         Assert.True(File.Exists(full), $"'{relativePath}' was not found — the scan is pointed at the wrong place, or the file moved.");
 
-        return TextScan.Count(File.ReadAllText(full));
+        var count = TextScan.Count(File.ReadAllText(full));
+
+        var codeBehind = full + ".cs";
+        if (File.Exists(codeBehind)) count += TextScan.Count(File.ReadAllText(codeBehind));
+
+        return count;
     }
 
     [Theory]
@@ -66,7 +116,7 @@ public class TextCoverageTests
         var count = CountLiterals(relativePath);
 
         Assert.True(count == 0,
-            $"'{relativePath}' is recorded as migrated but has {count} literal attribute string(s). " +
+            $"'{relativePath}' is recorded as migrated but has {count} literal string(s). " +
             "Add a TextKey to the component's catalogue and resolve it through the TextSet, or a consumer " +
             "overriding the toolkit's wording will find this one still in English.");
     }
@@ -78,13 +128,12 @@ public class TextCoverageTests
         var count = CountLiterals(relativePath);
 
         Assert.True(count <= allowed,
-            $"'{relativePath}' has {count} literal attribute string(s), up from the recorded {allowed}. " +
+            $"'{relativePath}' has {count} literal string(s), up from the recorded {allowed}. " +
             "#204 is a ratchet — this number may only go down. Route the new string through the text catalogue.");
 
-        Assert.True(count == allowed || count < allowed);
         if (count < allowed)
         {
-            // Not a failure, but the record is now wrong and the next reader would trust it.
+            // Not a failure of the code, but the record is now wrong and the next reader would trust it.
             Assert.Fail(
                 $"'{relativePath}' is down to {count} literal string(s) from {allowed} — good, but update the " +
                 "recorded count (or move it to Migrated if it is zero) so the remaining work stays accurate.");
@@ -92,20 +141,49 @@ public class TextCoverageTests
     }
 
     /// <summary>
+    /// Every component carrying literal text must appear in one of the two tables above.
+    /// </summary>
+    /// <remarks>
+    /// This is the test that would have caught the <c>UsersView</c> overstatement described in the type
+    /// remarks. A component at zero needs no entry — there is nothing to track — but the moment one gains a
+    /// literal string it must be recorded, so "not on the list" can never again read as "nothing to do".
+    /// </remarks>
+    [Fact]
+    public void EveryComponentWithText_IsTracked()
+    {
+        var root = ComponentRoot();
+        var tracked = new HashSet<string>(Migrated, StringComparer.OrdinalIgnoreCase);
+        foreach (var path in Pending.Keys) tracked.Add(path);
+
+        var untracked = new List<string>();
+
+        foreach (var file in Directory.GetFiles(root, "*.razor", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/');
+            if (tracked.Contains(relative)) continue;
+            if (CountLiterals(relative) == 0) continue;
+
+            untracked.Add(relative);
+        }
+
+        Assert.True(untracked.Count == 0,
+            "These components render literal text and are in neither Migrated nor Pending, so the recorded " +
+            "remaining work understates reality: " + string.Join(", ", untracked.OrderBy(x => x, StringComparer.Ordinal)));
+    }
+
+    /// <summary>
     /// The scan can silently match nothing — a moved file, a broken regex — and every assertion above would
     /// pass while checking nothing. This proves it still finds what it is supposed to find.
     /// </summary>
+    /// <remarks>
+    /// <b>Proven against fixtures, not against production files.</b> An earlier version asserted that
+    /// <c>AuditLogView</c> contained literals, which made the self-check fail the moment the migration
+    /// succeeded — the test would have broken by the work being finished. Fixtures do not run out.
+    /// </remarks>
     [Fact]
     public void TheScan_ActuallyFindsLiterals()
     {
-        Assert.NotEmpty(Migrated);
-        Assert.NotEmpty(Pending);
-
-        // The largest pending component is the proof the regex still matches real markup.
-        Assert.True(CountLiterals("Features/Audit/AuditLogView.razor") > 0,
-            "The scan found no literal text in AuditLogView, which is not credible — the regex or the path is broken.");
-
-        // The three categories the scan must see, and the three kinds of false positive it must not.
+        // The three categories the scan must see, and the four kinds of false positive it must not.
         Assert.Contains("Save changes", TextScan.Candidates("""<RadzenButton Text="Save changes" />"""));
         Assert.Contains("You are not a member.", TextScan.Candidates("<RadzenText>You are not a member.</RadzenText>"));
         Assert.Contains("Invitation sent", TextScan.Candidates("""NotificationService.Notify("Invitation sent");"""));
@@ -115,6 +193,11 @@ public class TextCoverageTests
         Assert.Empty(TextScan.Candidates("""<UsersListView ActionsTemplate="ActionsTemplate" />"""));
         Assert.Empty(TextScan.Candidates("""throw new InvalidOperationException("Unknown action here.");"""));
         Assert.Empty(TextScan.Candidates("/// <summary>Prose that is only documentation.</summary>"));
+
+        // And it must still reach a real file at all — a path or glob mistake would otherwise leave every
+        // count at zero, which reads as "all migrated".
+        Assert.True(CountLiterals("Features/Team/TeamComponent.razor") > 0,
+            "The scan found no literal text in TeamComponent, which is not credible — the path is broken.");
     }
 
     /// <summary>Every key the toolkit exposes must be discoverable, or a consumer cannot translate it.</summary>
@@ -131,6 +214,11 @@ public class TextCoverageTests
         // that is the whole point of discovering by reflection, and UsersViewText is the first such case.
         Assert.Contains(all, k => k.Key == UsersViewText.TeamsTab.Key);
         Assert.All(all, k => Assert.False(string.IsNullOrWhiteSpace(k.Default)));
+
+        // Every key of a newly added catalogue must arrive here, not just a sample of it: this is the list a
+        // consumer generates their translation table from, so a key reflection misses is invisible to them
+        // in exactly the way a literal string is.
+        Assert.All(AuditLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()

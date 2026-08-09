@@ -10,7 +10,7 @@
 @if (guard == AccessGuard.NotConfigured)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
-        Audit logging is not configured. Call <code>AddThargaAuditLogging()</code> in Program.cs to enable this view.
+        @_text.Format(AuditLogViewText.NotConfigured, "AddThargaAuditLogging()")
     </RadzenAlert>
 }
 else if (guard == AccessGuard.Loading)
@@ -19,7 +19,7 @@ else if (guard == AccessGuard.Loading)
 }
 else if (guard == AccessGuard.Denied)
 {
-    <RadzenText>Access denied.</RadzenText>
+    <RadzenText>@_text[AuditLogViewText.AccessDenied]</RadzenText>
 }
 else if (_mongoAvailable == null)
 {
@@ -28,27 +28,27 @@ else if (_mongoAvailable == null)
 else if (_mongoAvailable == false)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
-        Enable MongoDB audit storage to use this view.
+        @_text[AuditLogViewText.MongoRequired]
     </RadzenAlert>
 }
 else
 {
     <RadzenTabs Change="@OnTabChange">
         <Tabs>
-            <RadzenTabsItem Text="Log">
+            <RadzenTabsItem Text="@_text[AuditLogViewText.TabLog]">
                 @* Pinned dimensions are hidden rather than announced: the host chose the scope and says so
                    in its own words, and a banner naming raw keys is noise on a page built for one team. *@
                 @* Top-bar filters *@
                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.End" class="rz-mb-4 rz-mt-2" Wrap="FlexWrap.Wrap">
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                        <RadzenLabel Text="Period" />
+                        <RadzenLabel Text="@_text[AuditLogViewText.Period]" />
                         <RadzenSelectBar @bind-Value="_datePeriod" TValue="string" Change="@OnFilterChanged" Size="ButtonSize.Small">
                             <Items>
-                                <RadzenSelectBarItem Text="Today" Value="@AuditPeriod.Today" />
-                                <RadzenSelectBarItem Text="7 days" Value="@AuditPeriod.SevenDays" />
-                                <RadzenSelectBarItem Text="30 days" Value="@AuditPeriod.ThirtyDays" />
-                                <RadzenSelectBarItem Text="90 days" Value="@AuditPeriod.NinetyDays" />
-                                <RadzenSelectBarItem Text="All" Value="@AuditPeriod.All" />
+                                <RadzenSelectBarItem Text="@_text[AuditLogViewText.PeriodToday]" Value="@AuditPeriod.Today" />
+                                <RadzenSelectBarItem Text="@_text[AuditLogViewText.PeriodSevenDays]" Value="@AuditPeriod.SevenDays" />
+                                <RadzenSelectBarItem Text="@_text[AuditLogViewText.PeriodThirtyDays]" Value="@AuditPeriod.ThirtyDays" />
+                                <RadzenSelectBarItem Text="@_text[AuditLogViewText.PeriodNinetyDays]" Value="@AuditPeriod.NinetyDays" />
+                                <RadzenSelectBarItem Text="@_text[AuditLogViewText.FilterAll]" Value="@AuditPeriod.All" />
                             </Items>
                         </RadzenSelectBar>
                     </RadzenStack>
@@ -57,16 +57,16 @@ else
                        one value and hides itself: a system API key has no team, a team key has exactly
                        one, and neither is something the reader can act on. *@
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(AuditFilterVisibility.ShouldShow(_teams.Count, PinnedFilter?.TeamKey != null))">
-                        <RadzenLabel Text="Team" />
+                        <RadzenLabel Text="@_text[AuditLogViewText.Team]" />
                         <RadzenDropDown @bind-Value="_filterTeams" TValue="IEnumerable<string>" Data="@_teams"
                                         TextProperty="@nameof(TeamInfo.Name)" ValueProperty="@nameof(TeamInfo.Key)"
                                         Multiple="true" AllowClear="true" AllowFiltering="true"
-                                        Placeholder="All" Change="@(_ => OnFilterChanged())"
+                                        Placeholder="@_text[AuditLogViewText.FilterAll]" Change="@(_ => OnFilterChanged())"
                                         Style="width: 200px;" />
                     </RadzenStack>
                     @* A single source tells the reader nothing they can act on — one option is not a filter. *@
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(AuditFilterVisibility.ShouldShow(_sources.Count, false))">
-                        <RadzenLabel Text="Source" />
+                        <RadzenLabel Text="@_text[AuditLogViewText.Source]" />
                         <RadzenSelectBar @bind-Value="_filterSources" TValue="IEnumerable<string>" Multiple="true"
                                          Change="@OnFilterChanged" Size="ButtonSize.Small">
                             <Items>
@@ -82,7 +82,7 @@ else
                        column is visible, and kept as two filters so "everything that changed anything"
                        (action: manage, across features) stays one click. *@
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(AuditFilterVisibility.ShouldShow(_features.Count, PinnedFilter?.Feature != null))">
-                        <RadzenLabel Text="Scope feature" />
+                        <RadzenLabel Text="@_text[AuditLogViewText.ScopeFeature]" />
                         <RadzenSelectBar @bind-Value="_filterFeatures" TValue="IEnumerable<string>" Multiple="true"
                                          Change="@OnFilterChanged" Size="ButtonSize.Small">
                             <Items>
@@ -97,33 +97,33 @@ else
                        rather than select bars — a bar of every action wraps to several rows and pushes
                        the grid off screen. *@
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(AuditFilterVisibility.ShouldShow(_actions.Count, PinnedFilter?.Action != null))">
-                        <RadzenLabel Text="Scope action" />
+                        <RadzenLabel Text="@_text[AuditLogViewText.ScopeAction]" />
                         <RadzenDropDown @bind-Value="_filterActions" TValue="IEnumerable<string>" Data="@_actions"
                                         Multiple="true" AllowClear="true" AllowFiltering="true"
-                                        Placeholder="All" Change="@(_ => OnFilterChanged())"
+                                        Placeholder="@_text[AuditLogViewText.FilterAll]" Change="@(_ => OnFilterChanged())"
                                         Style="width: 200px;" />
                     </RadzenStack>
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                        <RadzenLabel Text="Event" />
+                        <RadzenLabel Text="@_text[AuditLogViewText.Event]" />
                         <RadzenDropDown @bind-Value="_filterEventTypes" TValue="IEnumerable<AuditEventType>" Data="@EventTypeOptions"
                                         Multiple="true" AllowClear="true"
-                                        Placeholder="All" Change="@(_ => OnFilterChanged())"
+                                        Placeholder="@_text[AuditLogViewText.FilterAll]" Change="@(_ => OnFilterChanged())"
                                         Style="width: 200px;" />
                     </RadzenStack>
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                        <RadzenLabel Text="Result" />
+                        <RadzenLabel Text="@_text[AuditLogViewText.Result]" />
                         <RadzenSelectBar @bind-Value="_filterSuccess" TValue="IEnumerable<bool>" Multiple="true"
                                          Change="@OnFilterChanged" Size="ButtonSize.Small">
                             <Items>
-                                <RadzenSelectBarItem Text="Success" Value="@true" />
-                                <RadzenSelectBarItem Text="Failure" Value="@false" />
+                                <RadzenSelectBarItem Text="@_text[AuditLogViewText.Success]" Value="@true" />
+                                <RadzenSelectBarItem Text="@_text[AuditLogViewText.Failure]" Value="@false" />
                             </Items>
                         </RadzenSelectBar>
                     </RadzenStack>
-                    <RadzenSplitButton Text="Export" Icon="download" Click="@(_ => ExportAsync("csv"))" Size="ButtonSize.Small">
+                    <RadzenSplitButton Text="@_text[AuditLogViewText.Export]" Icon="download" Click="@(_ => ExportAsync("csv"))" Size="ButtonSize.Small">
                         <ChildContent>
-                            <RadzenSplitButtonItem Text="CSV" Value="csv" Icon="table_view" />
-                            <RadzenSplitButtonItem Text="JSON" Value="json" Icon="data_object" />
+                            <RadzenSplitButtonItem Text="@_text[AuditLogViewText.ExportCsv]" Value="csv" Icon="table_view" />
+                            <RadzenSplitButtonItem Text="@_text[AuditLogViewText.ExportJson]" Value="json" Icon="data_object" />
                         </ChildContent>
                     </RadzenSplitButton>
                 </RadzenStack>
@@ -135,40 +135,40 @@ else
                                 AllowSorting="true" AllowPaging="true" AllowFiltering="true"
                                 FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                                 PageSize="@_pageSize" PageSizeOptions="@PageSizeOptionsValues"
-                                ShowPagingSummary="true" PagingSummaryFormat="Showing {0}-{1} of {2}"
+                                ShowPagingSummary="true" PagingSummaryFormat="@_text[AuditLogViewText.PagingSummary]"
                                 Style="max-height:600px">
                     <Columns>
-                        <RadzenDataGridColumn Title="Time" Width="160px" Filterable="false" Sortable="true"
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnTime]" Width="160px" Filterable="false" Sortable="true"
                                               Property="@nameof(AuditEntry.Timestamp)">
                             <Template><DateTimeView Date="context.Timestamp" /></Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Team" Width="120px"
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.Team]" Width="120px"
                                               Filterable="false" Sortable="false"
                                               Visible="@(string.IsNullOrEmpty(TeamKey))">
                             <Template>@GetTeamName(context.TeamKey)</Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Caller" Property="@nameof(AuditEntry.CallerIdentity)" Width="180px"
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnCaller]" Property="@nameof(AuditEntry.CallerIdentity)" Width="180px"
                                               Sortable="true">
                             <Template>
                                 <span title="@context.CallerIdentity">@GetCallerDisplayName(context)</span>
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Source" Width="70px" Filterable="false" Sortable="false">
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.Source]" Width="70px" Filterable="false" Sortable="false">
                             <Template>@context.CallerSource</Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Scope" Property="@nameof(AuditEntry.ScopeChecked)" Width="140px"
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnScope]" Property="@nameof(AuditEntry.ScopeChecked)" Width="140px"
                                               Filterable="false" Sortable="false" />
-                        <RadzenDataGridColumn Title="Method" Property="@nameof(AuditEntry.MethodName)" Width="140px"
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnMethod]" Property="@nameof(AuditEntry.MethodName)" Width="140px"
                                               Sortable="true" />
-                        <RadzenDataGridColumn Title="Duration" Property="@nameof(AuditEntry.DurationMs)" Width="80px"
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnDuration]" Property="@nameof(AuditEntry.DurationMs)" Width="80px"
                                               Filterable="false" Sortable="true" TextAlign="TextAlign.Right"
                                               HeaderCssClass="rz-text-align-end">
                             <Template>@(context.DurationMs) ms</Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Event" Width="110px" Filterable="false" Sortable="false">
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.Event]" Width="110px" Filterable="false" Sortable="false">
                             <Template>@context.EventType</Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Result" Width="160px" Filterable="false" Sortable="false">
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.Result]" Width="160px" Filterable="false" Sortable="false">
                             <Template>
                                 @if (context.Success)
                                 {
@@ -176,7 +176,7 @@ else
                                 }
                                 else
                                 {
-                                    <span title="@BuildFailureDetail(context)" style="display:inline-flex;align-items:center;gap:0.25rem;">
+                                    <span title="@BuildFailureDetail(context, _text)" style="display:inline-flex;align-items:center;gap:0.25rem;">
                                         <RadzenIcon Icon="error" Style="color: red" />
                                         <span style="color:#dc3545;font-size:0.8rem;white-space:nowrap;">@BuildFailureCode(context)</span>
                                     </span>
@@ -190,8 +190,8 @@ else
                             <RadzenTable Class="rz-m-2" Style="max-width:600px;">
                                 <RadzenTableHeader>
                                     <RadzenTableHeaderRow>
-                                        <RadzenTableHeaderCell>Detail</RadzenTableHeaderCell>
-                                        <RadzenTableHeaderCell>Value</RadzenTableHeaderCell>
+                                        <RadzenTableHeaderCell>@_text[AuditLogViewText.DetailName]</RadzenTableHeaderCell>
+                                        <RadzenTableHeaderCell>@_text[AuditLogViewText.DetailValue]</RadzenTableHeaderCell>
                                     </RadzenTableHeaderRow>
                                 </RadzenTableHeader>
                                 <RadzenTableBody>
@@ -199,7 +199,7 @@ else
                                     {
                                         <RadzenTableRow>
                                             <RadzenTableCell><code>@pair.Key</code></RadzenTableCell>
-                                            <RadzenTableCell>@(string.IsNullOrEmpty(pair.Value) ? "(empty)" : pair.Value)</RadzenTableCell>
+                                            <RadzenTableCell>@(string.IsNullOrEmpty(pair.Value) ? _text[AuditLogViewText.DetailEmpty] : pair.Value)</RadzenTableCell>
                                         </RadzenTableRow>
                                     }
                                 </RadzenTableBody>
@@ -207,103 +207,103 @@ else
                         }
                         else
                         {
-                            <span class="rz-text-muted rz-m-2" style="display:inline-block;">No additional details.</span>
+                            <span class="rz-text-muted rz-m-2" style="display:inline-block;">@_text[AuditLogViewText.NoAdditionalDetails]</span>
                         }
                     </Template>
                 </RadzenDataGrid>
 
                 @* Sits with the count, so an unexpectedly short history reads as retention rather than as
                    nothing having happened. *@
-                <RadzenText TextStyle="TextStyle.Caption" class="rz-mt-1">@_totalCount total entries. @RetentionText</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-mt-1">@_text.Format(AuditLogViewText.TotalEntries, _totalCount, RetentionText)</RadzenText>
             </RadzenTabsItem>
 
-            <RadzenTabsItem Text="Usage">
+            <RadzenTabsItem Text="@_text[AuditLogViewText.TabUsage]">
                 @if (_chartEntries.Any())
                 {
                     <RadzenStack Orientation="Orientation.Vertical" Gap="1rem" class="rz-mt-2">
                         <RadzenCard>
-                            <RadzenText TextStyle="TextStyle.Subtitle1">Calls over time</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Subtitle1">@_text[AuditLogViewText.ChartCallsOverTime]</RadzenText>
                             <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mb-2">
                                 <RadzenRadioButtonList @bind-Value="_timeGrouping" TValue="string" Orientation="Orientation.Horizontal">
                                     <Items>
-                                        <RadzenRadioButtonListItem Text="Hourly" Value="@("hourly")" />
-                                        <RadzenRadioButtonListItem Text="Daily" Value="@("daily")" />
+                                        <RadzenRadioButtonListItem Text="@_text[AuditLogViewText.GroupingHourly]" Value="@("hourly")" />
+                                        <RadzenRadioButtonListItem Text="@_text[AuditLogViewText.GroupingDaily]" Value="@("daily")" />
                                     </Items>
                                 </RadzenRadioButtonList>
                             </RadzenStack>
                             <RadzenChart Style="height:300px">
-                                <RadzenLineSeries Data="@GetCallsOverTime()" CategoryProperty="Period" ValueProperty="Count" Title="Calls" />
-                                <RadzenCategoryAxis><RadzenAxisTitle Text="Time" /></RadzenCategoryAxis>
-                                <RadzenValueAxis><RadzenAxisTitle Text="Count" /></RadzenValueAxis>
+                                <RadzenLineSeries Data="@GetCallsOverTime()" CategoryProperty="Period" ValueProperty="Count" Title="@_text[AuditLogViewText.SeriesCalls]" />
+                                <RadzenCategoryAxis><RadzenAxisTitle Text="@_text[AuditLogViewText.ColumnTime]" /></RadzenCategoryAxis>
+                                <RadzenValueAxis><RadzenAxisTitle Text="@_text[AuditLogViewText.AxisCount]" /></RadzenValueAxis>
                             </RadzenChart>
                         </RadzenCard>
 
                         <RadzenCard>
-                            <RadzenText TextStyle="TextStyle.Subtitle1">Success vs Failure</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Subtitle1">@_text[AuditLogViewText.ChartSuccessVsFailure]</RadzenText>
                             <RadzenChart Style="height:300px">
-                                <RadzenPieSeries Data="@GetSuccessFailure()" CategoryProperty="Label" ValueProperty="Count" Title="Status" />
+                                <RadzenPieSeries Data="@GetSuccessFailure()" CategoryProperty="Label" ValueProperty="Count" Title="@_text[AuditLogViewText.SeriesStatus]" />
                             </RadzenChart>
                         </RadzenCard>
 
                         <RadzenCard>
-                            <RadzenText TextStyle="TextStyle.Subtitle1">By Feature</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Subtitle1">@_text[AuditLogViewText.ChartByFeature]</RadzenText>
                             <RadzenChart Style="height:300px">
-                                <RadzenBarSeries Data="@GetByFeature()" CategoryProperty="Label" ValueProperty="Count" Title="Calls" />
+                                <RadzenBarSeries Data="@GetByFeature()" CategoryProperty="Label" ValueProperty="Count" Title="@_text[AuditLogViewText.SeriesCalls]" />
                                 <RadzenCategoryAxis />
-                                <RadzenValueAxis><RadzenAxisTitle Text="Count" /></RadzenValueAxis>
+                                <RadzenValueAxis><RadzenAxisTitle Text="@_text[AuditLogViewText.AxisCount]" /></RadzenValueAxis>
                             </RadzenChart>
                         </RadzenCard>
 
                         <RadzenCard>
-                            <RadzenText TextStyle="TextStyle.Subtitle1">Top Callers</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Subtitle1">@_text[AuditLogViewText.ChartTopCallers]</RadzenText>
                             <RadzenChart Style="height:300px">
-                                <RadzenBarSeries Data="@GetTopCallers()" CategoryProperty="Label" ValueProperty="Count" Title="Calls" />
+                                <RadzenBarSeries Data="@GetTopCallers()" CategoryProperty="Label" ValueProperty="Count" Title="@_text[AuditLogViewText.SeriesCalls]" />
                                 <RadzenCategoryAxis />
-                                <RadzenValueAxis><RadzenAxisTitle Text="Count" /></RadzenValueAxis>
+                                <RadzenValueAxis><RadzenAxisTitle Text="@_text[AuditLogViewText.AxisCount]" /></RadzenValueAxis>
                             </RadzenChart>
                         </RadzenCard>
                     </RadzenStack>
                 }
                 else
                 {
-                    <RadzenText class="rz-mt-2">No data available for the selected filters.</RadzenText>
+                    <RadzenText class="rz-mt-2">@_text[AuditLogViewText.NoDataForFilters]</RadzenText>
                 }
             </RadzenTabsItem>
 
-            <RadzenTabsItem Text="Performance">
+            <RadzenTabsItem Text="@_text[AuditLogViewText.TabPerformance]">
                 @if (_chartEntries.Any())
                 {
                     <RadzenStack Orientation="Orientation.Vertical" Gap="1rem" class="rz-mt-2">
                         <RadzenCard>
-                            <RadzenText TextStyle="TextStyle.Subtitle1">Average Response Time</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Subtitle1">@_text[AuditLogViewText.ChartAverageResponseTime]</RadzenText>
                             <RadzenChart Style="height:300px">
-                                <RadzenLineSeries Data="@GetResponseTimeOverTime()" CategoryProperty="Period" ValueProperty="Value" Title="Avg ms" />
+                                <RadzenLineSeries Data="@GetResponseTimeOverTime()" CategoryProperty="Period" ValueProperty="Value" Title="@_text[AuditLogViewText.SeriesAverageMs]" />
                                 <RadzenCategoryAxis />
                                 <RadzenValueAxis><RadzenAxisTitle Text="ms" /></RadzenValueAxis>
                             </RadzenChart>
                         </RadzenCard>
 
                         <RadzenCard>
-                            <RadzenText TextStyle="TextStyle.Subtitle1">Response Time by Feature</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Subtitle1">@_text[AuditLogViewText.ChartResponseTimeByFeature]</RadzenText>
                             <RadzenChart Style="height:300px">
-                                <RadzenBarSeries Data="@GetResponseTimeByFeature()" CategoryProperty="Period" ValueProperty="Value" Title="Avg ms" />
+                                <RadzenBarSeries Data="@GetResponseTimeByFeature()" CategoryProperty="Period" ValueProperty="Value" Title="@_text[AuditLogViewText.SeriesAverageMs]" />
                                 <RadzenCategoryAxis />
                                 <RadzenValueAxis><RadzenAxisTitle Text="ms" /></RadzenValueAxis>
                             </RadzenChart>
                         </RadzenCard>
 
                         <RadzenCard>
-                            <RadzenText TextStyle="TextStyle.Subtitle1">Slowest Operations (Top 10)</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Subtitle1">@_text[AuditLogViewText.ChartSlowestOperations]</RadzenText>
                             <RadzenDataGrid Data="@GetSlowest()" TItem="AuditEntry" AllowSorting="false" PageSize="10" Style="max-height:400px">
                                 <Columns>
-                                    <RadzenDataGridColumn Title="Time" Width="160px">
+                                    <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnTime]" Width="160px">
                                         <Template><DateTimeView Date="context.Timestamp" /></Template>
                                     </RadzenDataGridColumn>
-                                    <RadzenDataGridColumn Title="Feature" Property="@nameof(AuditEntry.Feature)" Width="100px" />
-                                    <RadzenDataGridColumn Title="Action" Property="@nameof(AuditEntry.Action)" Width="80px" />
-                                    <RadzenDataGridColumn Title="Method" Property="@nameof(AuditEntry.MethodName)" Width="120px" />
-                                    <RadzenDataGridColumn Title="Duration (ms)" Property="@nameof(AuditEntry.DurationMs)" Width="100px" TextAlign="TextAlign.End" />
-                                    <RadzenDataGridColumn Title="Caller" Width="160px">
+                                    <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnFeature]" Property="@nameof(AuditEntry.Feature)" Width="100px" />
+                                    <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnAction]" Property="@nameof(AuditEntry.Action)" Width="80px" />
+                                    <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnMethod]" Property="@nameof(AuditEntry.MethodName)" Width="120px" />
+                                    <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnDurationMs]" Property="@nameof(AuditEntry.DurationMs)" Width="100px" TextAlign="TextAlign.End" />
+                                    <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnCaller]" Width="160px">
                                         <Template>
                                             <span title="@context.CallerIdentity">@GetCallerDisplayName(context)</span>
                                         </Template>
@@ -315,7 +315,7 @@ else
                 }
                 else
                 {
-                    <RadzenText class="rz-mt-2">No data available for the selected filters.</RadzenText>
+                    <RadzenText class="rz-mt-2">@_text[AuditLogViewText.NoDataForFilters]</RadzenText>
                 }
             </RadzenTabsItem>
         </Tabs>
