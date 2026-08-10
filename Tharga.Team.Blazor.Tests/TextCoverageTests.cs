@@ -55,6 +55,7 @@ public class TextCoverageTests
         "Features/User/DeleteUserDialog.razor",
         "Features/User/TeamsListView.razor",
         "Features/User/UsersListView.razor",
+        "Features/Team/TeamComponent.razor",
     ];
 
     /// <summary>
@@ -71,10 +72,9 @@ public class TextCoverageTests
         ["Features/Api/ApiKeyView.razor"] = 44,
         ["Features/Api/SystemApiKeyView.razor"] = 35,
         ["Features/Roles/TenantRoleManager.razor"] = 11,
-        ["Features/Scopes/ScopeView.razor"] = 15,
+        ["Features/Scopes/ScopeView.razor"] = 14,
         ["Features/Simulation/AccessSimulationBar.razor"] = 3,
         ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
-        ["Features/Team/TeamComponent.razor"] = 60,
         ["Features/User/UserProfileView.razor"] = 13,
     };
 
@@ -196,9 +196,17 @@ public class TextCoverageTests
         Assert.Empty(TextScan.Candidates("/// <summary>Prose that is only documentation.</summary>"));
 
         // And it must still reach a real file at all — a path or glob mistake would otherwise leave every
-        // count at zero, which reads as "all migrated".
-        Assert.True(CountLiterals("Features/Team/TeamComponent.razor") > 0,
-            "The scan found no literal text in TeamComponent, which is not credible — the path is broken.");
+        // count at zero, which reads as "all migrated". Driven by the Pending table rather than by a named
+        // component: this assertion previously named AuditLogView, then TeamComponent, and broke both times
+        // *because the migration succeeded*. Any entry still recorded as pending is by definition a file
+        // that must scan above zero.
+        var stillPending = Pending.OrderByDescending(x => x.Value).FirstOrDefault();
+        if (stillPending.Key != null)
+        {
+            Assert.True(CountLiterals(stillPending.Key) > 0,
+                $"The scan found no literal text in '{stillPending.Key}', which is recorded as having " +
+                $"{stillPending.Value} — so the scan is broken rather than the record being stale.");
+        }
     }
 
     /// <summary>Every key the toolkit exposes must be discoverable, or a consumer cannot translate it.</summary>

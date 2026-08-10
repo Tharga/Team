@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace Tharga.Team.Blazor.Tests;
 
@@ -17,7 +17,10 @@ namespace Tharga.Team.Blazor.Tests;
 /// </remarks>
 public class ConsentBadgeOrderTests
 {
-    private const string MembershipBadge = "Text=\"Not a member\"";
+    // Matches the catalogue key rather than the English literal: the badge text moved into
+    // TeamComponentText for #204, so scanning for "Not a member" would silently find nothing and the
+    // order would stop being checked at all.
+    private const string MembershipBadge = "TeamComponentText.NotAMember";
     private const string LevelBadge = "TeamVisibility.Label(";
     private const string ComponentPath = "Tharga.Team.Blazor/Features/Team/TeamComponent.razor";
 
@@ -85,7 +88,7 @@ public class ConsentBadgeOrderTests
             @<text>
                 <RadzenStack Orientation="Orientation.Horizontal">
                     <RadzenBadge Text="@TeamVisibility.Label(ConsentOf(team))" />
-                    <RadzenBadge Text="Not a member" />
+                    <RadzenBadge Text="@_text[TeamComponentText.NotAMember]" />
                 </RadzenStack>
             </text>;
             """;
