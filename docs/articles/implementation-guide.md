@@ -299,26 +299,40 @@ that you have not translated yet.
 
 #### Coverage — what a provider actually reaches today
 
-**Migration in progress (Tharga/Team#204).** Registering a provider does not yet translate the whole UI, and
-the honest list matters more than a reassuring one: a component not below is still rendering English.
+**Every surface Tharga/Team#204 names is now fully routed.** Registering a provider still does not
+translate the whole UI, and the honest list matters more than a reassuring one: a component not below is
+still rendering English.
 
 **Fully routed** — every string resolves through your provider: `LoginDisplay`, `TeamSelector`,
-`AuditLogView`, the `UsersView` tab strip, `DirectoryOnlyUsersView`, `UserIconDialog`, `TeamIconDialog`,
-`TeamDialog`, `AssignOwnerDialog`, `SuspendedTeamNotice`, `RoleEditor` and `ScopeOverrideEditor`.
+**`TeamComponent`**, `AuditLogView`, `UsersView` **and both of its tabs (`UsersListView`,
+`TeamsListView`)**, `DirectoryOnlyUsersView`, **`DeleteUserDialog`**, **`InviteUserDialog`**,
+**`TeamInviteView`**, `UserIconDialog`, `TeamIconDialog`, `TeamDialog`, `AssignOwnerDialog`,
+`SuspendedTeamNotice`, `AccessSimulationCard`, `RoleEditor` and `ScopeOverrideEditor`.
 
-> **Read that last one carefully.** `UsersView` is a wrapper around the tab strip. The tabs it renders —
-> `UsersListView` (50 strings) and `TeamsListView` (30) — are separate components and are **not** migrated.
-> An earlier version of this note said "UsersView resolves every string it renders", which was true of the
-> wrapper and misleading about the page. If you translate the toolkit and open the users admin view, both
-> tabs are still in English.
+> **`UsersView` now means the whole page.** It is a wrapper around a tab strip, and an earlier version of
+> this note said it "resolves every string it renders" while `UsersListView` and `TeamsListView` held 80
+> literals between them — true of the wrapper, misleading about the page. Both tabs are migrated as of
+> 3.13, so the claim is now true of what you actually see.
 
-**Still literal**, largest first: `TeamComponent` 60, `UsersListView` 50, `ApiKeyView` 44,
-`SystemApiKeyView` 35, `TeamsListView` 30, `ScopeView` 15, `UserProfileView` 13, `AccessSimulationDialog` 12,
-`TenantRoleManager` 11, `DeleteUserDialog` 6, `InviteUserDialog` 4, `TeamInviteView` 3,
-`AccessSimulationBar` 3, `ApiKeyRevealDialog` 2 — **288 strings across 14 components.**
+**Still literal**, largest first: `ApiKeyView` 44, `SystemApiKeyView` 35, `ScopeView` 14,
+`UserProfileView` 13, `AccessSimulationDialog` 12, `TenantRoleManager` 11, `AccessSimulationBar` 3,
+`ApiKeyRevealDialog` 2 — **134 strings across 8 components.**
 
-Of those, **153 are on the surfaces #204 names** — `TeamComponent`, the two `UsersView` tabs, and three
-dialogs they open. The other 135 are on API-key, scope and simulation surfaces that #204 does not cover.
+**None of those are on the surfaces #204 names.** They are API-key, scope and simulation surfaces, which
+that issue does not cover.
+
+### Plurals, and what a translator can and cannot do
+
+Sentences that vary with a count are **one key per form, each holding the whole sentence** — for example
+`team.deleteUser.ownsOneTeam` and `team.deleteUser.ownsManyTeams`. Nothing is assembled at runtime from a
+head and a tail, because those reorder in translation and often change agreement elsewhere in the sentence.
+
+Both forms of a pair take **the same arguments in the same order**, even where one does not use all of
+them, so a template can move a placeholder freely.
+
+The limitation is deliberate: a language with **more than two plural categories** (Polish, Russian, Arabic)
+cannot be expressed today. English and Swedish both have two. Since no key is a fragment, adding a
+count-aware overload later would not invalidate any translation written now.
 
 A build-time ratchet holds every one of those numbers: it fails if a count grows, fails if a count shrinks
 without the record being updated, and fails if a component carrying literal text is missing from the list

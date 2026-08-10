@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
 
 env:
   # Bump by hand when a release breaks compatibility or adds public API; only the patch is automatic.
-  MAJOR_MINOR: '3.12'
+  MAJOR_MINOR: '3.13'
 
 permissions:
   contents: write
