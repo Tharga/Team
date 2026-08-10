@@ -20,7 +20,7 @@
         </RadzenStack>
     </RadzenAlert>
 }
-else if (_canSimulate)
+else if (_canSimulate && ShowEntryPoint)
 {
     <RadzenButton Text="@Text" Icon="visibility" ButtonStyle="ButtonStyle.Light"
                   Size="ButtonSize.Small" Variant="Variant.Flat" Click="@Open" />
@@ -29,6 +29,23 @@ else if (_canSimulate)
 @code {
     /// <summary>Label for the entry-point button. Defaults to "View as…".</summary>
     [Parameter] public string Text { get; set; } = "View as…";
+
+    /// <summary>
+    /// Whether the <b>way in</b> — the "View as…" button — is offered here. Default true. Set it false
+    /// where the entry point lives somewhere else, such as the access card on the profile page.
+    /// </summary>
+    /// <remarks>
+    /// <b>It cannot hide the way out.</b> The active-simulation banner and its "Return to my access"
+    /// button render regardless, which is what keeps this component safe to place: the reason it is one
+    /// component rather than two is that a host must not be able to wire up the entry without the exit.
+    /// This parameter suppresses only the half that has an alternative.
+    /// <para>
+    /// Setting it false everywhere leaves no way to start a simulation at all — which is a legitimate way
+    /// to turn the feature off in the UI, but <c>o.Blazor.Simulation.Enabled = false</c> is the honest one:
+    /// it also stops the cookie being read and the filter being reached.
+    /// </para>
+    /// </remarks>
+    [Parameter] public bool ShowEntryPoint { get; set; } = true;
 
     private AccessSimulation _active;
     private bool _canSimulate;

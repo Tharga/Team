@@ -79,6 +79,10 @@
                         </RadzenStack>
                     </RadzenStack>
                 </RadzenCard>
+                @if (ShowAccessCard)
+                {
+                    <AccessSimulationCard />
+                }
                 <ExpandableCard Icon="work" Text="Claims">
                     <ChildContent>
                         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" class="rz-mb-2">
@@ -102,6 +106,22 @@
 </CascadingAuthenticationState>
 
 @code {
+    /// <summary>
+    /// Whether the built-in access card — demo mode and "view as another user" — is rendered between the
+    /// profile details and Claims. Default true.
+    /// </summary>
+    /// <remarks>
+    /// <b>Presentation only, and it draws nothing unless access simulation is switched on.</b> The card
+    /// suppresses itself when <c>o.Blazor.Simulation.Enabled</c> is false or the caller cannot simulate, so
+    /// a host that does not use the feature is unaffected without setting this.
+    /// <para>
+    /// Set it false only to place <c>&lt;AccessSimulationCard /&gt;</c> somewhere else yourself — two
+    /// copies on one page would each carry their own way out, which reads as a bug rather than as
+    /// redundancy.
+    /// </para>
+    /// </remarks>
+    [Parameter] public bool ShowAccessCard { get; set; } = true;
+
     private IUser _user;
     private bool _canUpload;
     private bool _editingName;

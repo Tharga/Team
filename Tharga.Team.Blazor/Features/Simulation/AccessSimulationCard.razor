@@ -3,24 +3,16 @@
 @inject DialogService DialogService
 @inject IThargaTextProvider TextProvider
 
-@* The profile-page entry point. AccessSimulationBar stays in the layout and remains the guaranteed way
-   out — this card is an additional way in, not a replacement. A control reachable only by navigating to a
-   page is not a safe sole exit from a session whose access has been reduced. *@
+@* Rendered by UserProfileView between the profile card and Claims. AccessSimulationBar stays in the
+   layout and remains the guaranteed way out — this card is an additional way in, never the sole exit,
+   because a control reachable only by navigating to a page is no use to someone whose reduced session is
+   what makes that page hard to reach. *@
 
 @if (_render)
 {
-    <RadzenCard class="rz-my-2">
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem">
-            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0">@_text[AccessSimulationCardText.Title]</RadzenText>
-            <RadzenButton Icon="@(_expanded ? "expand_less" : "expand_more")"
-                          title="@(_expanded ? _text[AccessSimulationCardText.Collapse] : _text[AccessSimulationCardText.Expand])"
-                          ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Variant="Variant.Flat"
-                          Click="@(() => _expanded = !_expanded)" />
-        </RadzenStack>
-
-        @if (_expanded)
-        {
-            <RadzenStack Orientation="Orientation.Vertical" Gap="1rem" class="rz-mt-3">
+    <ExpandableCard Icon="visibility" Text="@_text[AccessSimulationCardText.Title]" Selected="@(_active != null)">
+        <ChildContent>
+            <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
                 @if (_active != null)
                 {
                     @* Ungated on purpose — see OnInitializedAsync. *@
@@ -56,24 +48,13 @@
                     </RadzenStack>
                 }
             </RadzenStack>
-        }
-    </RadzenCard>
+        </ChildContent>
+    </ExpandableCard>
 }
 
 @code {
-    /// <summary>
-    /// Whether the card starts expanded when nothing is being simulated. Defaults to false — on a profile
-    /// page this is a secondary control, and an always-open panel pushes the page's actual content down.
-    /// </summary>
-    /// <remarks>
-    /// It always starts expanded while a simulation <i>is</i> active, whatever this says: a way out folded
-    /// behind a disclosure is a way out someone has to already know about.
-    /// </remarks>
-    [Parameter] public bool Expanded { get; set; }
-
     private AccessSimulation _active;
     private bool _render;
-    private bool _expanded;
     private TextSet _text = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
@@ -87,8 +68,6 @@
         // remove the scope that authorizes starting one, so gating the exit on it would let someone
         // strand themselves.
         _render = _active != null || await SimulationState.CanSimulateAsync();
-
-        _expanded = _active != null || Expanded;
 
         await base.OnInitializedAsync();
     }

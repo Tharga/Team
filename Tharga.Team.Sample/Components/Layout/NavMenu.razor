@@ -9,9 +9,11 @@
             </RadzenStack>
         </RadzenStack>
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
-            @* Access simulation: the entry point when nothing is simulated, the warning banner and the
-               way out when something is. One component, so the way in cannot be wired without the way out. *@
-            <AccessSimulationBar />
+            @* The way *out* of a reduced session: the warning banner and its "Return to my access" button,
+               on every page. The "View as…" entry point is suppressed here because the access card on the
+               profile page offers it instead — but the banner still renders, which is the half that must
+               never depend on remembering where the entry point lives. *@
+            <AccessSimulationBar ShowEntryPoint="false" />
             <TeamSelector />
             <LoginDisplay />
         </RadzenStack>

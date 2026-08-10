@@ -8,8 +8,7 @@
 
 <PageTitle>Profile</PageTitle>
 
-@* The way *in* to demo mode and impersonation. The way *out* is <AccessSimulationBar /> in NavMenu, which
-   shows on every page — this card is deliberately not the only exit. *@
-<AccessSimulationCard />
-
+@* The access card (demo mode + "view as") is rendered by UserProfileView between the profile details and
+   Claims — see its ShowAccessCard parameter. The way *out* of a reduced session is the banner half of
+   <AccessSimulationBar /> in NavMenu, which shows on every page. *@
 <UserProfileView />
