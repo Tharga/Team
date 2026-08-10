@@ -48,6 +48,8 @@
     private string _teamText = TeamMenuText.Team.Default;
     private string _logoutText = TeamMenuText.Logout.Default;
     private string _loginText = TeamMenuText.Login.Default;
+    private string _profilePath = TeamMenuNavigation.DefaultProfilePath;
+    private string _teamPath = TeamMenuNavigation.DefaultTeamPath;
 
     [Parameter]
     public bool? ShowTeam { get; set; }
@@ -62,6 +64,9 @@
     protected override async Task OnInitializedAsync()
     {
         _showTeamDefault = ThargaBlazorOptions.Value._teamService != null;
+
+        _profilePath = TeamMenuNavigation.Resolve(ThargaBlazorOptions.Value.ProfilePath, TeamMenuNavigation.DefaultProfilePath);
+        _teamPath = TeamMenuNavigation.Resolve(ThargaBlazorOptions.Value.TeamPath, TeamMenuNavigation.DefaultTeamPath);
 
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (authState.User.Identity?.IsAuthenticated ?? false)
@@ -106,10 +111,10 @@
         switch (args.Icon)
         {
             case "account_circle":
-                NavigationManager.NavigateTo("profile");
+                NavigationManager.NavigateTo(_profilePath);
                 break;
             case "group":
-                NavigationManager.NavigateTo("team");
+                NavigationManager.NavigateTo(_teamPath);
                 break;
             case "logout":
                 await Logout();

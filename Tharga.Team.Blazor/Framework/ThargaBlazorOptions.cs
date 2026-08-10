@@ -177,6 +177,36 @@ public record ThargaBlazorOptions : BlazorOptions
     public string CreateTeamPath { get; set; }
 
     /// <summary>
+    /// Optional route the profile menu's built-in <b>User</b> item navigates to, instead of
+    /// <c>profile</c>. Set it when the host mounts <c>UserProfileView</c> somewhere else.
+    /// </summary>
+    /// <remarks>
+    /// The toolkit ships the profile <i>component</i> and the host chooses the route, so the two could
+    /// disagree with no way to reconcile them: the menu item navigated to a literal, and a host mounting
+    /// the page at, say, <c>/account</c> got a menu item leading nowhere. Host-supplied menu items were
+    /// never affected — they carry their own <c>Href</c>.
+    /// <para>
+    /// <c>null</c> (the default) keeps the built-in route, so nothing changes for an existing host.
+    /// </para>
+    /// </remarks>
+    public string ProfilePath { get; set; }
+
+    /// <summary>
+    /// Optional route the profile menu's built-in <b>Team</b> item navigates to, instead of <c>team</c>.
+    /// Set it when the host mounts <c>TeamComponent</c> somewhere else.
+    /// </summary>
+    /// <remarks>
+    /// The counterpart to <see cref="ProfilePath"/>, and separate from it on purpose: the two pages are
+    /// mounted independently, so one being moved says nothing about the other.
+    /// <para>
+    /// Distinct from <see cref="InvitePath"/>, which points at a route carrying <c>TeamInviteView</c> for
+    /// people redeeming an invitation — a different capability with a different audience, which is why
+    /// they are not one setting.
+    /// </para>
+    /// </remarks>
+    public string TeamPath { get; set; }
+
+    /// <summary>
     /// Optional route that generated invitation links point at, instead of <c>/team</c>.
     /// </summary>
     /// <remarks>
