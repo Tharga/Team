@@ -184,6 +184,22 @@ public sealed class AccessSimulationState
     public Task StartAsync(AccessSimulation simulation) => WriteAndReloadAsync(AccessSimulationCookie.Write(simulation));
 
     /// <summary>
+    /// Starts demo mode: keeps the caller's team access exactly as it is and drops their system-wide
+    /// access, so a demonstration shows the product rather than the administrative surface.
+    /// </summary>
+    /// <remarks>
+    /// Reads the caller's own scopes rather than taking a target, because the target *is* their own
+    /// access — see <see cref="AccessSimulationTargets.FromDemo"/>. Ending it is the ordinary
+    /// <see cref="StopAsync"/>, which restores the system scopes by re-issuing claims through the normal
+    /// request path.
+    /// </remarks>
+    public async Task StartDemoAsync()
+    {
+        var scopes = await GetOwnScopesAsync();
+        await StartAsync(AccessSimulationTargets.FromDemo(scopes));
+    }
+
+    /// <summary>
     /// Ends the simulation and returns the caller to their real access.
     /// </summary>
     /// <remarks>

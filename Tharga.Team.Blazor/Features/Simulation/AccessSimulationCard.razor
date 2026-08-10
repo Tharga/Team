@@ -1,0 +1,105 @@
+@using Tharga.Team.Blazor.Features.Simulation
+@inject AccessSimulationState SimulationState
+@inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
+
+@* The profile-page entry point. AccessSimulationBar stays in the layout and remains the guaranteed way
+   out — this card is an additional way in, not a replacement. A control reachable only by navigating to a
+   page is not a safe sole exit from a session whose access has been reduced. *@
+
+@if (_render)
+{
+    <RadzenCard class="rz-my-2">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem">
+            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0">@_text[AccessSimulationCardText.Title]</RadzenText>
+            <RadzenButton Icon="@(_expanded ? "expand_less" : "expand_more")"
+                          title="@(_expanded ? _text[AccessSimulationCardText.Collapse] : _text[AccessSimulationCardText.Expand])"
+                          ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Variant="Variant.Flat"
+                          Click="@(() => _expanded = !_expanded)" />
+        </RadzenStack>
+
+        @if (_expanded)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="1rem" class="rz-mt-3">
+                @if (_active != null)
+                {
+                    @* Ungated on purpose — see OnInitializedAsync. *@
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationCardText.ActiveNotice]</RadzenText>
+                        <div>
+                            <RadzenButton Text="@_text[AccessSimulationCardText.Stop]" Icon="undo"
+                                          ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.Small"
+                                          Variant="Variant.Flat" Click="@Stop" />
+                        </div>
+                    </RadzenStack>
+                }
+                else
+                {
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[AccessSimulationCardText.DemoMode]</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationCardText.DemoDescription]</RadzenText>
+                        <div>
+                            <RadzenButton Text="@_text[AccessSimulationCardText.StartDemo]" Icon="slideshow"
+                                          ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                                          Variant="Variant.Flat" Click="@StartDemo" />
+                        </div>
+                    </RadzenStack>
+
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[AccessSimulationCardText.ViewAsUser]</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationCardText.ViewAsDescription]</RadzenText>
+                        <div>
+                            <RadzenButton Text="@_text[AccessSimulationCardText.ViewAsUser]" Icon="visibility"
+                                          ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                          Variant="Variant.Flat" Click="@Open" />
+                        </div>
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        }
+    </RadzenCard>
+}
+
+@code {
+    /// <summary>
+    /// Whether the card starts expanded when nothing is being simulated. Defaults to false — on a profile
+    /// page this is a secondary control, and an always-open panel pushes the page's actual content down.
+    /// </summary>
+    /// <remarks>
+    /// It always starts expanded while a simulation <i>is</i> active, whatever this says: a way out folded
+    /// behind a disclosure is a way out someone has to already know about.
+    /// </remarks>
+    [Parameter] public bool Expanded { get; set; }
+
+    private AccessSimulation _active;
+    private bool _render;
+    private bool _expanded;
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!SimulationState.Enabled) return;
+
+        _text = await TextProvider.ResolveAsync(AccessSimulationCardText.All);
+        _active = await SimulationState.GetActiveAsync();
+
+        // Asked only when nothing is active, exactly as AccessSimulationBar does it: a simulation can
+        // remove the scope that authorizes starting one, so gating the exit on it would let someone
+        // strand themselves.
+        _render = _active != null || await SimulationState.CanSimulateAsync();
+
+        _expanded = _active != null || Expanded;
+
+        await base.OnInitializedAsync();
+    }
+
+    private Task StartDemo() => SimulationState.StartDemoAsync();
+
+    private Task Stop() => SimulationState.StopAsync();
+
+    private async Task Open()
+    {
+        await DialogService.OpenAsync<AccessSimulationDialog>(_text[AccessSimulationCardText.ViewAsUser],
+            options: new DialogOptions { Width = "560px", CloseDialogOnOverlayClick = true });
+    }
+}

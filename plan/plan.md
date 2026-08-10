@@ -12,10 +12,18 @@ Branch: `feature/profile-access-card` (from `master`).
       (defaults as named constants) read by `LoginDisplay` in place of the two literals. Blank is treated
       as unset — an empty string is what an unset config binding yields, and taking it literally would
       break the menu in the way this exists to prevent. 10 tests; 897 Blazor tests green.
-- [ ] 3. **The demo-mode target.** A fifth `AccessSimulationKind` plus a factory in
-      `AccessSimulationTargets` building an `AccessSimulation` from the caller's *current team scopes*,
-      with `DropSystemScopes` / `DropAppRoles` set. The four existing targets already set both flags, so
-      the new part is only "target set = what I already hold in this team", not the dropping.
+- [x] 3. **The demo-mode target.** `AccessSimulationTargets.FromDemo(ownTeamScopes)` +
+      `AccessSimulationState.StartDemoAsync()`. **No fifth enum member** — the user chose to reuse
+      `AccessSimulationKind.Scopes` with a `DemoLabel` constant, so this adds no public enum API. The
+      audit downside is smaller than it looked when the choice was made:
+      `AccessSimulationAuditEnricher:31` writes `simulation.target` from `Label`, so a demo records
+      `kind=Scopes, target=Demo mode` and is still distinguishable — via the target rather than the kind.
+      `DemoLabel` is deliberately **not** localizable, because audit metadata that varies by operator
+      language cannot be searched across a deployment.
+
+      Sets no `AccessLevel`, which is what keeps the team access identical — `ApplyAccessLevel` returns
+      immediately on null (`AccessSimulationFilter:72`), so the clamp never runs and the level consent
+      granted survives.
 - [ ] 4. **Prove the consent question rather than assume it.** A test that a caller whose team access comes
       from consent still holds those team scopes once `DropAppRoles` has removed the application role the
       consent keys off.
@@ -32,6 +40,19 @@ Branch: `feature/profile-access-card` (from `master`).
       Note `AccessSimulationConsentAccessTests` already covers a neighbouring question (a consent-only
       Developer *can* simulate, via `TeamGrantResolver`), which also settles the worry that
       `simulation:use` at Administrator would be out of reach for them. It does not cover this.
+
+      **Done** — `AccessSimulationDemoModeTests.Demo_KeepsTeamScopesThatArrivedViaConsent`, plus 7 more
+      covering the drops, the untouched team access and level, the label, and that de-escalation still
+      holds. 8 tests.
+- [x] 5. **The card.** `AccessSimulationCard` (user's naming choice), expandable, exit ungated exactly as
+      `AccessSimulationBar:44` does it. Starts expanded whenever a simulation is active regardless of the
+      `Expanded` parameter — a way out folded behind a disclosure is one you have to already know about.
+      Renders nothing when the feature is disabled or the caller cannot simulate. Strings via
+      `AccessSimulationCardText` through `IThargaTextProvider`; added to `TextCoverageTests.Migrated` and
+      passing at zero literals.
+- [x] 6. Mounted on the sample's profile page, with a comment recording that the bar in `NavMenu` remains
+      the guaranteed way out. The sample already had `Simulation.Enabled = true` and the bar in place.
+- [x] 7. Build clean, full suite **1941 passed, 0 failed**.
 - [ ] 5. **The card component.** Expandable, with impersonation and the demo toggle. Exit control
       ungated, mirroring `AccessSimulationBar.razor:44`. Strings through `IThargaTextProvider` — the
       project has a `TextCoverageTests` ratchet and a new component with literals would fail it.
