@@ -26,11 +26,43 @@ selector:
 ```
 
 That one component is both halves: the **"View as…"** entry point when nothing is simulated, and the
-**banner with the way out** when something is. Placing it means you cannot wire up the way in without the
-way out.
+**banner with the way out** when something is. Placing it wires up both.
 
 Off by default. A host that does not enable it is unaffected — the cookie is never read, the filter is
 never reached, and the audit enricher is not even registered.
+
+### The card on the profile page
+
+`<UserProfileView />` renders `<AccessSimulationCard />` between the profile details and Claims whenever
+simulation is enabled and the caller can simulate. It offers the same two things as the bar — a way in and,
+while something is active, a way out — in a place that does not take up room on every page.
+
+Nothing to wire: it is on by default. Set `ShowAccessCard="false"` on `UserProfileView` to place
+`<AccessSimulationCard />` somewhere else yourself. Two copies on one page would each carry their own way
+out, which reads as a bug rather than as redundancy.
+
+### Turning either half of the bar off
+
+Both halves of `AccessSimulationBar` can be suppressed independently, because the card offers the same
+things elsewhere:
+
+```razor
+<AccessSimulationBar ShowEntryPoint="false" ShowBanner="false" />
+```
+
+| Parameter | Effect |
+|---|---|
+| `ShowEntryPoint="false"` | No "View as…" button here. Start a simulation from the card instead |
+| `ShowBanner="false"` | No warning banner while a simulation is active — **and no way out here** |
+
+> **`ShowBanner="false"` moves the exit, it does not remove the need for one.** The banner is the way back
+> that does not depend on remembering where anything lives; switching it off makes the access card the only
+> one. That is supported — it is why the card exists — but the profile page must stay reachable under a
+> reduced session. Gate it on a scope a simulation can remove and there is no way back but signing out.
+>
+> The reason to do it is a **demonstration**: a full-width warning across every page is exactly what demo
+> mode was turned on to avoid. For the access-checking job the feature was built for, leave it alone —
+> being loud is the point.
 
 ## Who can use it
 
@@ -50,12 +82,31 @@ to stop would let someone strand themselves.
 | **A role** | Exactly what that tenant role grants |
 | **An access level** | Exactly what that level grants |
 | **Scopes** | A set you tick by hand, from the scopes you hold |
+| **Demo mode** | Your own team access, unchanged — with your system-wide access dropped |
 
-All four work the same way: each names a **target scope set**, and the simulation keeps what the target
+They all work the same way: each names a **target scope set**, and the simulation keeps what the target
 has *and you also have*, removing everything else.
 
 **Applying a role replaces, it does not add.** Simulating the `Support` role leaves you with `Support`'s
 scopes and nothing more — not your own plus its.
+
+### Demo mode
+
+The one target that is not somebody else's access. It names **your own**, so the intersection removes
+nothing within the team and the only thing that changes is the system half.
+
+Use it to demonstrate the product: a system user — a Developer, say — selects a team, starts demo mode, and
+the audience sees what a member of that team sees instead of the cross-team administrative surface. Stop it
+and the system scopes come back.
+
+- **Your team access is untouched**, including access that reaches you through consent rather than
+  membership, and including your access level. No level is applied, so nothing is clamped.
+- **Your system scopes and application roles go**, which is what removes the wider team list and the
+  developer-only surfaces.
+- It is started from the **card on the profile page** — one button, no target to pick.
+
+In the audit log a demo records `simulation.kind = Scopes` with `simulation.target = Demo mode`, so it is
+distinguishable from a hand-picked scope simulation by the target rather than the kind.
 
 ## What it cannot show, and why you are told
 
