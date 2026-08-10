@@ -27,6 +27,14 @@
       place and can be updated without republishing a package.
     -->
     <NoWarn>1701;1702;CS1591;NU1510;NU5048</NoWarn>
+    <!--
+      RZ10012: a markup element whose name matches no component in scope. As a warning this is close to
+      useless and actively dangerous: the element compiles as unknown HTML, renders nothing, and the build
+      passes. That is how <AccessSimulationCard /> reached UserProfileView without a @using and silently
+      drew nothing on the profile page — a feature that existed, was tested, and was invisible.
+      There is no legitimate reason for this library to emit raw PascalCase markup, so it is an error.
+    -->
+    <WarningsAsErrors>$(WarningsAsErrors);RZ10012</WarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md">
