@@ -29,7 +29,7 @@
                 }
             }
         }
-        else if (_teams.Length == 1 && SelectedTeam != null)
+        else if (TeamSelectorGate.ShowSelectedTeamName(_teams.Length, SelectedTeam != null))
         {
             <TeamAvatar Team="SelectedTeam" Size="24px" />
             <span>@SelectedTeam.Name</span>
@@ -39,9 +39,10 @@
                              title="@SuspendedTitle" />
             }
         }
-        else if (_teams.Length > 1 && SelectedTeam != null)
+        else if (TeamSelectorGate.ShowPicker(_teams.Length, SelectedTeam != null))
         {
             <RadzenDropDown @bind-Value=@SelectedTeam Data="@(_teams.OrderBy(f => f.Name))" TextProperty="Name"
+                            Placeholder="@_selectTeamText"
                             AllowFiltering="@TeamSelectorGate.ShowFilter(_teams.Length, FilterThreshold, AllowFiltering)"
                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                             FilterOperator="StringFilterOperator.Contains">
@@ -144,6 +145,7 @@
     private TextSet _text = TextSet.Empty;
     private string _loadingText => _text[TeamMenuText.Loading];
     private string _createTeamText => _text[TeamMenuText.CreateTeam];
+    private string _selectTeamText => _text[TeamSelectorText.SelectTeam];
     private string _createTeamPath = "/team";
     private bool _allowTeamCreation = true;
 
