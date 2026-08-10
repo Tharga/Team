@@ -52,6 +52,17 @@ Branch: `feature/profile-access-card` (from `master`).
       passing at zero literals.
 - [x] 6. Mounted on the sample's profile page, with a comment recording that the bar in `NavMenu` remains
       the guaranteed way out. The sample already had `Simulation.Enabled = true` and the bar in place.
+
+      **And moved the sample's profile page to `/account`** — the thing the user originally asked for, and
+      the only way the new option gets exercised rather than merely shipped. `o.Blazor.ProfilePath =
+      "/account"` in `Program.cs` is what keeps the profile-menu item working; without it the item 404s,
+      which is precisely the defect the option exists for. So the sample now demonstrates the failure being
+      prevented rather than a setting nobody sets. `TeamPath` is left unset (commented) because the sample
+      does mount `TeamComponent` at the default route — showing that either can be set independently.
+
+      Swept the sample's own links too: `NavMenu`, `Home` and the `IconSettingsPage` prose all pointed at
+      `/profile`. Those are host-side links, unaffected by the option — worth noting, because "the menu
+      item still worked" would otherwise have masked three broken ones.
 - [x] 7. Build clean, full suite **1941 passed, 0 failed**.
 - [ ] 5. **The card component.** Expandable, with impersonation and the demo toggle. Exit control
       ungated, mirroring `AccessSimulationBar.razor:44`. Strings through `IThargaTextProvider` — the

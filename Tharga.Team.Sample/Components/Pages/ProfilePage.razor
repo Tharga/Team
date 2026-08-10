@@ -1,4 +1,7 @@
-@page "/profile"
+@* Deliberately NOT the toolkit's default "/profile". Mounting it elsewhere is what exercises
+   o.Blazor.ProfilePath in Program.cs — without which the profile-menu item would navigate to /profile and
+   404. That was the defect the option was added for, so the sample is where it stays proven. *@
+@page "/account"
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
