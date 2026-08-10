@@ -5,7 +5,7 @@
     <Authors>Daniel Bohlin</Authors>
     <Company>Thargelion AB</Company>
     <Product>Tharga Team Images</Product>
-    <Description>Image processing for Tharga Team icons — automatic downscaling of uploaded icons via ImageSharp.</Description>
+    <Description>Image processing for Tharga Team icons — automatic squaring and downscaling of uploaded icons via SkiaSharp.</Description>
     <PackageIconUrl>https://thargelion.net/assets/component-team.png</PackageIconUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
@@ -33,8 +33,15 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <!-- Held at 3.x deliberately: SixLabors.ImageSharp 4.0+ enforces a build-time commercial license (SixLaborsLicenseKey / sixlabors.lic). -->
-    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
+    <PackageReference Include="SkiaSharp" Version="4.151.1" />
+    <!--
+      The self-contained libSkiaSharp.so, so a Linux host needs no fontconfig or freetype packages.
+      Referenced here rather than left to the consumer: a missing native asset builds cleanly and fails
+      at upload time in production, which is the one failure mode a package dependency can rule out.
+      The plain SkiaSharp.NativeAssets.Linux variant is smaller but pulls a font stack we never use —
+      icons are decoded, scaled and encoded, never drawn with text.
+    -->
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.1" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.10" />
   </ItemGroup>
   <ItemGroup>
