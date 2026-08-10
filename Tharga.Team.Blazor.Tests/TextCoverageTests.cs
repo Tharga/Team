@@ -1,4 +1,4 @@
-using Tharga.Team.Blazor.Framework;
+﻿using Tharga.Team.Blazor.Framework;
 
 namespace Tharga.Team.Blazor.Tests;
 
@@ -50,6 +50,10 @@ public class TextCoverageTests
         "Features/User/UserIconDialog.razor",
         "Features/Team/TeamIconDialog.razor",
         "Features/Simulation/AccessSimulationCard.razor",
+        "Features/Team/TeamInviteView.razor",
+        "Features/Team/InviteUserDialog.razor",
+        "Features/User/DeleteUserDialog.razor",
+        "Features/User/TeamsListView.razor",
     ];
 
     /// <summary>
@@ -69,11 +73,7 @@ public class TextCoverageTests
         ["Features/Scopes/ScopeView.razor"] = 15,
         ["Features/Simulation/AccessSimulationBar.razor"] = 3,
         ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
-        ["Features/Team/InviteUserDialog.razor"] = 4,
         ["Features/Team/TeamComponent.razor"] = 60,
-        ["Features/Team/TeamInviteView.razor"] = 3,
-        ["Features/User/DeleteUserDialog.razor"] = 6,
-        ["Features/User/TeamsListView.razor"] = 30,
         ["Features/User/UserProfileView.razor"] = 13,
         ["Features/User/UsersListView.razor"] = 50,
     };

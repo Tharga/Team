@@ -5,23 +5,24 @@
 @inject DialogService DialogService
 @inject ITeamManagementService TeamManagementService
 @inject IServiceProvider ServiceProvider
+@inject IThargaTextProvider TextProvider
 
 <RadzenTemplateForm TItem="InviteUserModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
     <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
         <RadzenStack>
             <RadzenRow>
                 <RadzenColumn>
-                    <RadzenText TextStyle="TextStyle.Caption">Name</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">@_text[InviteUserDialogText.Name]</RadzenText>
                     <div><RadzenTextBox Name="Name" @bind-Value="@Model.Name" Style="width: 100%; min-width: 174px;" /></div>
-                    <RadzenRequiredValidator Component="Name" Text="Name is required." />
+                    <RadzenRequiredValidator Component="Name" Text="@_text[InviteUserDialogText.NameRequired]" />
                 </RadzenColumn>
             </RadzenRow>
 
             <RadzenRow>
                 <RadzenColumn>
-                    <RadzenText TextStyle="TextStyle.Caption">Email (optional)</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">@_text[InviteUserDialogText.Email]</RadzenText>
                     <div><RadzenTextBox Name="Email" @bind-Value="@Model.Email" Style="width: 100%; min-width: 174px;" /></div>
-                    <RadzenEmailValidator Component="Email" Text="Enter a valid email address." />
+                    <RadzenEmailValidator Component="Email" Text="@_text[InviteUserDialogText.EmailInvalid]" />
                 </RadzenColumn>
             </RadzenRow>
 
@@ -30,7 +31,7 @@
                 <RadzenRow>
                     <RadzenColumn>
                         <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall">
-                            Email sending is not configured. The invite link will be available for manual sharing.
+                            @_text[InviteUserDialogText.NoEmailSender]
                         </RadzenAlert>
                     </RadzenColumn>
                 </RadzenRow>
@@ -38,7 +39,7 @@
 
             <RadzenRow>
                 <RadzenColumn>
-                    <RadzenText TextStyle="TextStyle.Caption">Access Level</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">@_text[InviteUserDialogText.AccessLevel]</RadzenText>
                     <div><RadzenDropDown TValue="AccessLevel" @bind-value="@Model.AccessLevel" Data="@_accessLevels" /></div>
                 </RadzenColumn>
             </RadzenRow>
@@ -51,7 +52,7 @@
         </RadzenStack>
         <RadzenStack></RadzenStack>
         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right">
-            <RadzenButton ButtonType="ButtonType.Submit" Text="OK" Icon="check_circle" />
+            <RadzenButton ButtonType="ButtonType.Submit" Text="@_text[InviteUserDialogText.Submit]" Icon="check_circle" />
             <CancelButton Click="CloseDialog" />
         </RadzenStack>
     </RadzenStack>
@@ -61,6 +62,7 @@
     private string _errorMessage;
     private AccessLevel[] _accessLevels;
     private bool _emailSenderAvailable;
+    private TextSet _text = TextSet.Empty;
 
     [Parameter]
     public string TeamKey { get; set; }
@@ -72,6 +74,8 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(InviteUserDialogText.All);
+
         Model = new InviteUserModel
         {
             AccessLevel = AccessLevel.User

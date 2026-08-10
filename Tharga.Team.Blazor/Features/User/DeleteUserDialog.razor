@@ -1,5 +1,6 @@
-@inject DialogService DialogService
+﻿@inject DialogService DialogService
 @inject IUserManagementService UserManagementService
+@inject IThargaTextProvider TextProvider
 
 @*
     Confirmation for the user-delete flow. The local delete (all team memberships + the user record)
@@ -10,19 +11,17 @@
     directory match.
 *@
 <RadzenStack Gap="1rem">
-    <RadzenText TextStyle="TextStyle.Body1">
-        Delete <b>@UserName</b>? The user is removed from every team and the user record is deleted.
-        This cannot be undone.
-    </RadzenText>
+    <RadzenText TextStyle="TextStyle.Body1">@_text.Format(DeleteUserDialogText.Intro, UserName)</RadzenText>
 
     @if (_ownedTeams is { Count: > 0 })
     {
         <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
+            @* One key per plural form, each a whole sentence. The three interleaved ternaries this
+               replaces could not be translated: the clauses reorder, and the count changes agreement
+               elsewhere in the sentence. Both variants take the same arguments in the same order. *@
             <RadzenText TextStyle="TextStyle.Body2">
-                <b>@UserName</b> is the owner of @(_ownedTeams.Count == 1 ? "a team" : $"{_ownedTeams.Count} teams").
-                Deleting them leaves @(_ownedTeams.Count == 1 ? "it" : "them") with no owner, and ownership
-                cannot be transferred afterwards — only an administrator holding
-                <code>@SystemTeamScopes.AssignOwner</code> can assign a new one.
+                @_text.Format(_ownedTeams.Count == 1 ? DeleteUserDialogText.OwnsOneTeam : DeleteUserDialogText.OwnsManyTeams,
+                              UserName, _ownedTeams.Count, SystemTeamScopes.AssignOwner)
             </RadzenText>
             <ul>
                 @foreach (var team in _ownedTeams)
@@ -31,7 +30,7 @@
                 }
             </ul>
             <RadzenText TextStyle="TextStyle.Body2">
-                Transfer ownership first if @(_ownedTeams.Count == 1 ? "this team is" : "these teams are") still in use.
+                @_text[_ownedTeams.Count == 1 ? DeleteUserDialogText.TransferOneFirst : DeleteUserDialogText.TransferManyFirst]
             </RadzenText>
         </RadzenAlert>
     }
@@ -42,57 +41,53 @@
         {
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
                 <RadzenProgressBarCircular ProgressBarStyle="ProgressBarStyle.Primary" Mode="ProgressBarMode.Indeterminate" Style="width: 20px; height: 20px;" ShowValue="false" />
-                <RadzenText TextStyle="TextStyle.Caption">Checking the directory…</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text[DeleteUserDialogText.CheckingDirectory]</RadzenText>
             </RadzenStack>
         }
         else if (_directoryStatus == DirectoryUserStatus.NotFound)
         {
             <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-                This user no longer exists in the directory — the account has already been deleted there.
-                Only the local user is removed.
+                @_text[DeleteUserDialogText.DirectoryNotFound]
             </RadzenAlert>
         }
         else if (_directoryStatus == DirectoryUserStatus.NotLinked)
         {
             <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-                This user could not be matched to a directory account, so there is nothing to delete in
-                the directory. Only the local user is removed.
+                @_text[DeleteUserDialogText.DirectoryNotLinked]
             </RadzenAlert>
         }
         else
         {
             @if (_directoryStatus == DirectoryUserStatus.Disabled)
             {
-                <RadzenText TextStyle="TextStyle.Caption">The user exists in the directory, but the account is disabled.</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text[DeleteUserDialogText.DirectoryDisabled]</RadzenText>
             }
             else if (_directoryStatus == DirectoryUserStatus.Found)
             {
-                <RadzenText TextStyle="TextStyle.Caption">The user exists in the directory.</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text[DeleteUserDialogText.DirectoryFound]</RadzenText>
             }
             else if (_checkError != null)
             {
-                <RadzenText TextStyle="TextStyle.Caption">Directory check failed: @_checkError</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text.Format(DeleteUserDialogText.DirectoryCheckFailed, _checkError)</RadzenText>
             }
 
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
                 <RadzenCheckBox @bind-Value="_alsoDeleteFromDirectory" Name="alsoDeleteFromDirectory" TValue="bool" />
-                <RadzenLabel Text="Also delete from the external directory" Component="alsoDeleteFromDirectory" />
+                <RadzenLabel Text="@_text[DeleteUserDialogText.AlsoDeleteFromDirectory]" Component="alsoDeleteFromDirectory" />
             </RadzenStack>
 
             @if (_alsoDeleteFromDirectory)
             {
                 <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-                    Deleting from the directory removes the account <b>organization-wide</b>, affecting every
-                    application it signs in to — not just this one. An administrator can restore it for a
-                    limited time (30 days in Microsoft Entra ID).
+                    @_text[DeleteUserDialogText.DirectoryWarning]
                 </RadzenAlert>
             }
         }
     }
 
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
-        <RadzenButton Text="Delete" ButtonStyle="ButtonStyle.Danger" Click="@(() => DialogService.Close(_alsoDeleteFromDirectory))" />
-        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close(null))" />
+        <RadzenButton Text="@_text[DeleteUserDialogText.Delete]" ButtonStyle="ButtonStyle.Danger" Click="@(() => DialogService.Close(_alsoDeleteFromDirectory))" />
+        <RadzenButton Text="@_text[DeleteUserDialogText.Cancel]" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close(null))" />
     </RadzenStack>
 </RadzenStack>
 
@@ -111,9 +106,12 @@
     private DirectoryUserStatus? _directoryStatus;
     private string _checkError;
     private IReadOnlyList<ITeam> _ownedTeams;
+    private TextSet _text = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(DeleteUserDialogText.All);
+
         // Best-effort, and deliberately silent on failure. This warning improves a confirmation that
         // already works; a store that cannot answer it must not block the delete behind an error.
         if (!string.IsNullOrEmpty(UserKey))
