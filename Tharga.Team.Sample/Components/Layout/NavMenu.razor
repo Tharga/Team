@@ -9,11 +9,16 @@
             </RadzenStack>
         </RadzenStack>
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
-            @* The way *out* of a reduced session: the warning banner and its "Return to my access" button,
-               on every page. The "View as…" entry point is suppressed here because the access card on the
-               profile page offers it instead — but the banner still renders, which is the half that must
-               never depend on remembering where the entry point lives. *@
-            <AccessSimulationBar ShowEntryPoint="false" />
+            @* Both halves off, so this draws nothing: the access card on /account is the entry point *and*
+               the way out. Kept rather than deleted so the two switches are visible — set either to true
+               to get that half back in the top bar while testing.
+
+               ShowBanner="false" is what keeps a demo clean; the warning banner spans every page and
+               announces that access is reduced, which is the opposite of what a demonstration wants. The
+               trade is real: nothing on screen now says the session is reduced, so the only way back is
+               the profile page. That works here because /account carries [Authorize] and nothing more —
+               a host gating it on a scope a simulation can remove would strand the caller. *@
+            <AccessSimulationBar ShowEntryPoint="false" ShowBanner="false" />
             <TeamSelector />
             <LoginDisplay />
         </RadzenStack>

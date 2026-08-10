@@ -2,11 +2,15 @@
 @inject AccessSimulationState SimulationState
 @inject DialogService DialogService
 
-@* One component for a host to place, not two. It is the entry point when nothing is simulated and the
-   indicator when something is, so a host cannot wire up the way in without also wiring up the way out —
-   which is the failure that leaves someone stuck in a reduced session wondering why. *@
+@* One component for a host to place, not two: the entry point when nothing is simulated, the indicator
+   and the way out when something is. Placing it therefore wires up both halves by default.
 
-@if (_active != null)
+   Both halves can now be switched off individually — ShowEntryPoint and ShowBanner — because the access
+   card on the profile page offers the same two things in a place a demo does not have to look at. That
+   makes "the way in cannot be wired without the way out" a default rather than a guarantee, so read those
+   two parameters before assuming this component is the exit. *@
+
+@if (_active != null && ShowBanner)
 {
     @* Deliberately loud, and on every page while active. A caller who forgets they are simulating reads
        missing controls as bugs and files them against their own session. *@
@@ -35,10 +39,7 @@ else if (_canSimulate && ShowEntryPoint)
     /// where the entry point lives somewhere else, such as the access card on the profile page.
     /// </summary>
     /// <remarks>
-    /// <b>It cannot hide the way out.</b> The active-simulation banner and its "Return to my access"
-    /// button render regardless, which is what keeps this component safe to place: the reason it is one
-    /// component rather than two is that a host must not be able to wire up the entry without the exit.
-    /// This parameter suppresses only the half that has an alternative.
+    /// Suppresses only the way <i>in</i>; <see cref="ShowBanner"/> governs the way out.
     /// <para>
     /// Setting it false everywhere leaves no way to start a simulation at all — which is a legitimate way
     /// to turn the feature off in the UI, but <c>o.Blazor.Simulation.Enabled = false</c> is the honest one:
@@ -46,6 +47,26 @@ else if (_canSimulate && ShowEntryPoint)
     /// </para>
     /// </remarks>
     [Parameter] public bool ShowEntryPoint { get; set; } = true;
+
+    /// <summary>
+    /// Whether the active-simulation banner — and with it the "Return to my access" button — is rendered
+    /// here. Default true.
+    /// </summary>
+    /// <remarks>
+    /// <b>Set this false only when the way out exists somewhere the caller can still reach.</b> The banner
+    /// is the exit that does not depend on remembering where anything lives, so switching it off makes the
+    /// access card on the profile page the only one. That is a supported arrangement — it is why the card
+    /// exists — but it is the host's job to keep the profile route reachable under a reduced session:
+    /// gate that page on a scope a simulation can remove and there is no way back but signing out.
+    /// <para>
+    /// The point of hiding it is a <b>demonstration</b>. Demo mode exists so an audience sees the product
+    /// rather than the administrative surface, and a full-width warning across every page is exactly the
+    /// thing it was turned on to avoid. Outside that case, leave it alone: for the access-checking job the
+    /// feature was built for, being loud is the feature — someone who forgets they are simulating reads
+    /// missing controls as bugs and files them against their own session.
+    /// </para>
+    /// </remarks>
+    [Parameter] public bool ShowBanner { get; set; } = true;
 
     private AccessSimulation _active;
     private bool _canSimulate;
