@@ -12,11 +12,12 @@
 @inject NotificationService NotificationService
 @inject IJSRuntime Js
 @inject Microsoft.Extensions.Options.IOptions<Tharga.Team.Blazor.Framework.ThargaBlazorOptions> BlazorOptions
+@inject IThargaTextProvider TextProvider
 
 @if (!_canAdminister)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false" class="rz-mt-2">
-        Viewing teams and their members requires the <b>@SystemUserScopes.Manage</b> system scope.
+        @_text.Format(TeamsListViewText.RequiresScope, SystemUserScopes.Manage)
     </RadzenAlert>
 }
 else if (_loaded)
@@ -29,22 +30,22 @@ else if (_loaded)
                     <TeamAvatar IconReference="@context.Icon" Name="@context.Name" TeamKey="@context.Key" Size="32px" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Name" Property="Name">
+            <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnName]" Property="Name">
                 <Template>
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
                         <span>@context.Name</span>
                         @if (context.MemberCount == 0)
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Empty" />
+                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[TeamsListViewText.BadgeEmpty]" />
                         }
                     </RadzenStack>
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Owner" Property="OwnerName">
+            <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnOwner]" Property="OwnerName">
                 <Template>
                     @if (string.IsNullOrEmpty(context.OwnerName))
                     {
-                        <RadzenBadge BadgeStyle="BadgeStyle.Danger" Variant="Variant.Flat" Text="No owner" />
+                        <RadzenBadge BadgeStyle="BadgeStyle.Danger" Variant="Variant.Flat" Text="@_text[TeamsListViewText.BadgeNoOwner]" />
                     }
                     else
                     {
@@ -52,19 +53,19 @@ else if (_loaded)
                     }
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Members" Property="ActiveMemberCount" Width="130px" Filterable="false">
+            <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnMembers]" Property="ActiveMemberCount" Width="130px" Filterable="false">
                 <Template>
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
                         <span>@context.ActiveMemberCount</span>
                         @if (context.InvitedCount > 0)
                         {
                             <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat"
-                                         Text="@($"+{context.InvitedCount} invited")" />
+                                         Text="@_text.Format(TeamsListViewText.InvitedCount, context.InvitedCount)" />
                         }
                     </RadzenStack>
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Last used" Property="@nameof(TeamViewModel.LastUsed)" Width="150px" Filterable="false">
+            <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnLastUsed]" Property="@nameof(TeamViewModel.LastUsed)" Width="150px" Filterable="false">
                 <Template>
                     @if (LastSeenText.IsNever(context.LastUsed))
                     {
@@ -78,7 +79,7 @@ else if (_loaded)
             </RadzenDataGridColumn>
             @if (_canSeeAllTeams)
             {
-                <RadzenDataGridColumn Title="Consent" Property="Consent" Width="140px" Filterable="false">
+                <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnConsent]" Property="Consent" Width="140px" Filterable="false">
                     <Template Context="team">
                         <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(TeamVisibility.BadgeStyle(team.Consent)))"
                                      Variant="Variant.Flat"
@@ -89,26 +90,26 @@ else if (_loaded)
             <RadzenDataGridColumn Title="" Width="140px" Sortable="false" Filterable="false">
                 <Template>
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
-                        <RadzenSplitButton Text="View" Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                        <RadzenSplitButton Text="@_text[TeamsListViewText.ActionView]" Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                                            Click="@(item => OnTeamActionAsync(item, context))">
                             <ChildContent>
                                 @if (ShowAuditLogButton)
                                 {
-                                    <RadzenSplitButtonItem Text="Audit log" Value="@AuditAction" Icon="manage_search" />
+                                    <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionAuditLog]" Value="@AuditAction" Icon="manage_search" />
                                 }
                                 @TeamActionItems
                                 @if (_canManageTeams)
                                 {
-                                    <RadzenSplitButtonItem Text="Rename" Value="@RenameAction" Icon="edit" />
-                                    <RadzenSplitButtonItem Text="Set icon" Value="@SetIconAction" Icon="image" />
+                                    <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionRename]" Value="@RenameAction" Icon="edit" />
+                                    <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionSetIcon]" Value="@SetIconAction" Icon="image" />
                                 }
                                 @if (UserAdminGate.CanAssignOwner(_canAssignOwner, context.IsOwnerless))
                                 {
-                                    <RadzenSplitButtonItem Text="Assign owner" Value="@AssignOwnerAction" Icon="manage_accounts" />
+                                    <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionAssignOwner]" Value="@AssignOwnerAction" Icon="manage_accounts" />
                                 }
                                 @if (_canDeleteTeams)
                                 {
-                                    <RadzenSplitButtonItem Text="Delete" Value="@DeleteAction" Icon="delete" />
+                                    <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionDelete]" Value="@DeleteAction" Icon="delete" />
                                 }
                             </ChildContent>
                         </RadzenSplitButton>
@@ -127,12 +128,12 @@ else if (_loaded)
         <RadzenCard class="rz-mt-3">
             <RadzenText TextStyle="TextStyle.Subtitle1"><strong>@_selectedTeam.Name</strong></RadzenText>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
-                <RadzenText TextStyle="TextStyle.Caption">Team key</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text[TeamsListViewText.TeamKey]</RadzenText>
                 <code>@_selectedTeam.Key</code>
                 <RadzenButton Icon="content_copy" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
-                              title="Copy team key" Click="@(() => CopyAsync(_selectedTeam.Key))" />
+                              title="@_text[TeamsListViewText.CopyTeamKey]" Click="@(() => CopyAsync(_selectedTeam.Key))" />
             </RadzenStack>
-            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">Members</RadzenText>
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">@_text[TeamsListViewText.MembersHeading]</RadzenText>
             <RadzenDataGrid Data="@_selectedTeam.Members" TItem="TeamMemberInfo" AllowSorting="true"
                             AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive">
                 <Columns>
@@ -141,12 +142,12 @@ else if (_loaded)
                             <UserAvatar EMail="@context.EMail" IconReference="@context.Icon" Name="@context.Name" UserKey="@context.Key" Size="32px" />
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn Title="Name" Property="Name">
+                    <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnName]" Property="Name">
                         <Template>
                             @if (MemberSelected.HasDelegate && !string.IsNullOrEmpty(context.Key))
                             {
                                 <RadzenButton Text="@context.Name" ButtonStyle="ButtonStyle.Primary" Variant="Variant.Text"
-                                              Size="ButtonSize.Small" title="Show this user"
+                                              Size="ButtonSize.Small" title="@_text[TeamsListViewText.ShowThisUser]"
                                               Click="@(() => MemberSelected.InvokeAsync(context.Key))" />
                             }
                             else
@@ -155,10 +156,10 @@ else if (_loaded)
                             }
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn Title="Email" Property="EMail" />
-                    <RadzenDataGridColumn Title="Role" Property="AccessLevel" Width="120px" Filterable="false" />
-                    <RadzenDataGridColumn Title="State" Property="State" Width="100px" Filterable="false" />
-                    <RadzenDataGridColumn Title="Last seen" Property="@nameof(TeamMemberInfo.LastSeen)" Width="150px" Filterable="false">
+                    <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnEmail]" Property="EMail" />
+                    <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnRole]" Property="AccessLevel" Width="120px" Filterable="false" />
+                    <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnState]" Property="State" Width="100px" Filterable="false" />
+                    <RadzenDataGridColumn Title="@_text[TeamsListViewText.ColumnLastSeen]" Property="@nameof(TeamMemberInfo.LastSeen)" Width="150px" Filterable="false">
                         <Template>
                             @if (LastSeenText.IsNever(context.LastSeen))
                             {
@@ -233,12 +234,15 @@ else
     private IUser[] _users;
     private ITeam<TMember>[] _teams;
     private bool _canSeeAllTeams;
+    private TextSet _text = TextSet.Empty;
 
     private List<TeamViewModel> _teamViewModels = new();
     private TeamViewModel _selectedTeam;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(TeamsListViewText.All);
+
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(authState.User);
         _canAdminister = UserAdminGate.CanAdministerUsers(
@@ -372,7 +376,7 @@ else
     {
         var pinned = new Audit.AuditPinnedFilter { TeamKey = team.Key };
 
-        await DialogService.OpenAsync($"Audit log — {team.Name}", _ =>
+        await DialogService.OpenAsync(_text.Format(TeamsListViewText.AuditLogTitle, team.Name), _ =>
             @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
             new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
     }
@@ -385,7 +389,7 @@ else
     private async Task RenameTeamAsync(TeamViewModel team)
     {
         var result = await DialogService.OpenAsync<TeamDialog<TMember>>(
-            $"Rename {team.Name}",
+            _text.Format(TeamsListViewText.RenameTitle, team.Name),
             new Dictionary<string, object> { { "TeamKey", team.Key }, { "Name", team.Name } },
             new DialogOptions { Resizable = true, Draggable = true });
 
@@ -396,7 +400,7 @@ else
     private async Task SetTeamIconAsync(TeamViewModel team)
     {
         var result = await DialogService.OpenAsync<TeamIconDialog>(
-            $"Icon — {team.Name}",
+            _text.Format(TeamsListViewText.IconTitle, team.Name),
             new Dictionary<string, object>
             {
                 { nameof(TeamIconDialog.TeamKey), team.Key },
@@ -415,7 +419,7 @@ else
     /// </summary>
     private async Task AssignOwnerAsync(TeamViewModel team)
     {
-        var newOwnerKey = await DialogService.OpenAsync<AssignOwnerDialog>($"Assign owner — {team.Name}",
+        var newOwnerKey = await DialogService.OpenAsync<AssignOwnerDialog>(_text.Format(TeamsListViewText.AssignOwnerTitle, team.Name),
             new Dictionary<string, object>
             {
                 { nameof(AssignOwnerDialog.TeamName), team.Name },
@@ -433,12 +437,12 @@ else
             await LoadDataAsync();
             _selectedTeam = _teamViewModels.FirstOrDefault(t => t.Key == team.Key);
 
-            NotificationService.Notify(NotificationSeverity.Success, "Owner assigned",
-                $"'{team.Name}' now has an owner.");
+            NotificationService.Notify(NotificationSeverity.Success, _text[TeamsListViewText.OwnerAssigned],
+                _text.Format(TeamsListViewText.OwnerAssignedDetail, team.Name));
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Could not assign owner", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[TeamsListViewText.CouldNotAssignOwner], ex.Message);
         }
     }
 
@@ -449,11 +453,12 @@ else
     /// </summary>
     private async Task DeleteTeamAsync(TeamViewModel team)
     {
-        var members = team.MemberCount == 1 ? "1 member" : $"{team.MemberCount} members";
+        // One whole sentence per plural form. The member count used to be composed into the middle of
+        // this sentence at runtime, which no translator can reorder.
         var confirmed = await DialogService.Confirm(
-            $"Team '{team.Name}' and its {members} will be permanently deleted. This cannot be undone.",
-            "Delete team",
-            new ConfirmOptions { OkButtonText = "Delete", CancelButtonText = "Cancel" });
+            _text.Format(team.MemberCount == 1 ? TeamsListViewText.DeleteConfirmOne : TeamsListViewText.DeleteConfirmMany, team.Name, team.MemberCount),
+            _text[TeamsListViewText.DeleteTitle],
+            new ConfirmOptions { OkButtonText = _text[TeamsListViewText.DeleteOk], CancelButtonText = _text[TeamsListViewText.DeleteCancel] });
 
         if (confirmed is not true) return;
 
@@ -463,11 +468,11 @@ else
 
             if (_selectedTeam?.Key == team.Key) _selectedTeam = null;
             await LoadDataAsync();
-            NotificationService.Notify(NotificationSeverity.Success, "Team deleted", team.Name);
+            NotificationService.Notify(NotificationSeverity.Success, _text[TeamsListViewText.TeamDeleted], team.Name);
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Delete failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[TeamsListViewText.DeleteFailed], ex.Message);
         }
     }
 }

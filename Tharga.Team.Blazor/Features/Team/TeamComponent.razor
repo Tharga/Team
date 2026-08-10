@@ -21,6 +21,7 @@
 @inject IOptions<ThargaBlazorOptions> BlazorOptions
 @inject IServiceProvider ServiceProvider
 @inject ILogger<TeamComponent<TMember>> Logger
+@inject IThargaTextProvider TextProvider
 
 @* Current-user row highlight. Applied to the cells (not the <tr>) so Radzen's own cell backgrounds
    don't paint over it. The translucent blue composites correctly on both light and dark themes;
@@ -78,7 +79,7 @@ else
                                 AllowPaging="@TeamSelectorGate.ShowFilter(_teams.Length, TeamPageSize + 1, AllowTeamPaging)"
                                 FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                                 PageSize="@TeamPageSize" PageSizeOptions="@TeamPageSizeOptionsValues"
-                                ShowPagingSummary="true" PagingSummaryFormat="Showing {0}-{1} of {2}"
+                                ShowPagingSummary="true" PagingSummaryFormat="@_text[TeamComponentText.PagingSummary]"
                                 ExpandMode="DataGridExpandMode.Multiple"
                                 RowRender="@OnTeamRowRender">
                     <Columns>
@@ -87,7 +88,7 @@ else
                            from their membership row, the badges from consent -- so they are marked
                            unsortable rather than given a SortProperty that does not exist. A sort control
                            that silently does nothing is worse than no control. *@
-                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="Team" Property="Name"
+                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnTeam]" Property="Name"
                                               SortOrder="SortOrder.Ascending" Filterable="true">
                             <Template Context="team">
                                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
@@ -96,7 +97,7 @@ else
                                 </RadzenStack>
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="Your access" Width="140px" Filterable="false" Sortable="false">
+                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnYourAccess]" Width="140px" Filterable="false" Sortable="false">
                             <Template Context="team">
                                 @{
                                     var myLevel = MyAccessLevel(team);
@@ -109,7 +110,7 @@ else
                                                     has not been migrated onto the text catalogue yet, and is
                                                     listed as pending in TextCoverage. *@
                                                  Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
-                                                 title="Your access level on this team." />
+                                                 title="@_text[TeamComponentText.YourAccessTooltip]" />
                                 }
                                 else
                                 {
@@ -117,7 +118,7 @@ else
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="Consent" Width="230px" Filterable="false" Sortable="false"
+                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnConsent]" Width="230px" Filterable="false" Sortable="false"
                                               Visible="@(_canSeeAllTeams || _showConsentToggle)">
                             <Template Context="team">
                                 @* No label: the column header already says Consent, and repeating it in
@@ -125,7 +126,7 @@ else
                                 @ConsentCell(team)
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="Members" Width="110px" Filterable="false" Sortable="false">
+                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnMembers]" Width="110px" Filterable="false" Sortable="false">
                             <Template Context="team">
                                 @{
                                     var counts = TeamMemberCounts.Of(team.Members);
@@ -167,12 +168,12 @@ else
                 }
             }
         }
-        <RadzenText Visible="@(!_teams.Any() && _allowTeamCreation)">You are not member of a team. Create your own team and start inviting members.</RadzenText>
-        <RadzenText Visible="@(!_teams.Any() && !_allowTeamCreation)">You are not member of a team.</RadzenText>
+        <RadzenText Visible="@(!_teams.Any() && _allowTeamCreation)">@_text[TeamComponentText.NoTeamsCanCreate]</RadzenText>
+        <RadzenText Visible="@(!_teams.Any() && !_allowTeamCreation)">@_text[TeamComponentText.NoTeams]</RadzenText>
         @if (_allowTeamCreation)
         {
             <RadzenStack Orientation="Orientation.Horizontal">
-                <RadzenButton Icon="add" Text="Create new Team" Click="@(() => CreateTeam())"/>
+                <RadzenButton Icon="add" Text="@_text[TeamComponentText.CreateTeam]" Click="@(() => CreateTeam())"/>
             </RadzenStack>
         }
 
@@ -317,8 +318,12 @@ else
         await _teamGrid.ExpandRow(row);
     }
 
+    private TextSet _text = TextSet.Empty;
+
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(TeamComponentText.All);
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var claims = authState.User;
         _canManage = claims.HasClaim(TeamClaimTypes.Scope, TeamScopes.Manage);
@@ -431,7 +436,7 @@ else
     private async Task RenameTeam(ITeam team)
     {
         var result = await DialogService.OpenAsync<TeamDialog<TMember>>(
-            $"Rename {team.Name}",
+            _text.Format(TeamComponentText.RenameTitle, team.Name),
             new Dictionary<string, object> { { "TeamKey", team.Key }, { "Name", team.Name } },
             new DialogOptions { Resizable = true, Draggable = true });
 
@@ -441,7 +446,7 @@ else
     private async Task SetTeamIcon(ITeam<TMember> team)
     {
         var result = await DialogService.OpenAsync<TeamIconDialog>(
-            $"Icon — {team.Name}",
+            _text.Format(TeamComponentText.IconTitle, team.Name),
             new Dictionary<string, object>
             {
                 { nameof(TeamIconDialog.TeamKey), team.Key },
@@ -455,7 +460,7 @@ else
     private async Task AddUser(ITeam<TMember> team)
     {
         var result = await DialogService.OpenAsync<InviteUserDialog>(
-            "Invite User",
+            _text[TeamComponentText.InviteUserTitle],
             new Dictionary<string, object> { { "TeamKey", team.Key }, { "TeamName", team.Name } },
             new DialogOptions { Resizable = true, Draggable = true });
 
@@ -478,19 +483,19 @@ else
                     {
                         await emailSender.SendInviteAsync(inviteResult.Email, inviteResult.Name, link, team.Name);
                         NotificationService.Notify(NotificationSeverity.Success,
-                            "Invitation sent", $"Email sent to {inviteResult.Email}");
+                            _text[TeamComponentText.InvitationSent], _text.Format(TeamComponentText.EmailSentTo, inviteResult.Email));
                     }
                     catch (Exception ex)
                     {
                         NotificationService.Notify(NotificationSeverity.Warning,
-                            "Email failed", $"Could not send email: {ex.Message}");
+                            _text[TeamComponentText.EmailFailed], _text.Format(TeamComponentText.CouldNotSendEmail, ex.Message));
                     }
                 }
 
                 await Js.InvokeVoidAsync("clipboard.copyText", link);
                 NotificationService.Notify(new NotificationMessage
                 {
-                    Summary = "The invitation link has been copied to the clipboard."
+                    Summary = _text[TeamComponentText.InviteLinkCopied]
                 });
             }
         }
@@ -508,7 +513,7 @@ else
         }
 
         var email = member.Invitation?.EMail ?? user?.EMail;
-        var response = await DialogService.Confirm($"User '{email}' will be removed from the team '{team.Name}'.");
+        var response = await DialogService.Confirm(_text.Format(TeamComponentText.ConfirmRemoveMember, email, team.Name));
         if (response != true) return;
 
         await TeamManagementService.RemoveMemberAsync(team.Key, member.Key);
@@ -532,7 +537,7 @@ else
 
     private void NotifyMemberNotFound()
     {
-        NotificationService.Notify(NotificationSeverity.Warning, "Member not found", "The member could not be located. Please reload the page.");
+        NotificationService.Notify(NotificationSeverity.Warning, _text[TeamComponentText.MemberNotFound], _text[TeamComponentText.MemberNotFoundDetail]);
     }
 
     private void StartMemberNameEdit(TMember member)
@@ -604,7 +609,7 @@ else
 
         if (eligibleMembers.Length == 0)
         {
-            NotificationService.Notify(NotificationSeverity.Warning, "No eligible members", "There are no other active members to transfer ownership to.");
+            NotificationService.Notify(NotificationSeverity.Warning, _text[TeamComponentText.NoEligibleMembers], _text[TeamComponentText.NoEligibleMembersDetail]);
             return;
         }
 
@@ -617,7 +622,7 @@ else
 
         string selectedKey = memberOptions.First().Key;
 
-        var result = await DialogService.OpenAsync("Transfer Ownership", ds =>
+        var result = await DialogService.OpenAsync(_text[TeamComponentText.TransferOwnershipTitle], ds =>
             @<RadzenStack Gap="1rem">
                 <RadzenText>Select the new owner of team '@team.Name':</RadzenText>
                 <RadzenDropDown TValue="string" @bind-Value="selectedKey"
@@ -625,8 +630,8 @@ else
                                 TextProperty="Display"
                                 ValueProperty="Key" />
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" Gap="0.5rem">
-                    <RadzenButton Text="Transfer" ButtonStyle="ButtonStyle.Warning" Click="@(_ => ds.Close(true))" />
-                    <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@(_ => ds.Close(false))" />
+                    <RadzenButton Text="@_text[TeamComponentText.Transfer]" ButtonStyle="ButtonStyle.Warning" Click="@(_ => ds.Close(true))" />
+                    <RadzenButton Text="@_text[TeamComponentText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="@(_ => ds.Close(false))" />
                 </RadzenStack>
             </RadzenStack>,
             new DialogOptions { Width = "400px" });
@@ -635,7 +640,7 @@ else
 
         await TeamManagementService.TransferOwnershipAsync(team.Key, selectedKey);
         await ReloadTeams();
-        NotificationService.Notify(NotificationSeverity.Success, "Ownership transferred");
+        NotificationService.Notify(NotificationSeverity.Success, _text[TeamComponentText.OwnershipTransferred]);
     }
 
     /// <summary>
@@ -654,7 +659,7 @@ else
                 <RadzenDataGrid Data="@team.Members" TItem="TMember" RowRender="@OnMemberRowRender">
                     <Columns>
                         @* <RadzenDataGridColumn Title="Key" Property="@nameof(ITeamMember.Key)" /> *@
-                        <RadzenDataGridColumn Title="EMail" SortOrder="SortOrder.Ascending">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnEmail]" SortOrder="SortOrder.Ascending">
                             <Template>
                                 @{
                                     var user = _users.FirstOrDefault(x => x.Key == context.Key);
@@ -663,7 +668,7 @@ else
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Name" Property="@nameof(ITeamMember.Name)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnName]" Property="@nameof(ITeamMember.Name)">
                             <Template>
                                 @{
                                     var canEditThisRow = EnableMemberNameEdit && CanManageMembers(team);
@@ -682,7 +687,7 @@ else
                                         {
                                             <RadzenButton Icon="restart_alt" ButtonStyle="ButtonStyle.Warning" Variant="Variant.Flat" Size="ButtonSize.Small"
                                                           Click="@(() => ResetMemberName(team, context))"
-                                                          title="Clear override (use the global user name)"
+                                                          title="@_text[TeamComponentText.ClearNameOverride]"
                                                           Style="flex: 0 0 auto;" />
                                         }
                                         <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
@@ -701,7 +706,7 @@ else
                                                       && !string.IsNullOrEmpty(user?.Name)
                                                       && member.Name != user.Name;
                                     var tooltip = hasOverride
-                                        ? $"Team override. Original name: {user.Name}"
+                                        ? _text.Format(TeamComponentText.NameOverrideTooltip, user.Name)
                                         : null;
 
                                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem">
@@ -710,13 +715,13 @@ else
                                         {
                                             <RadzenButton Icon="edit" Variant="Variant.Text" Size="ButtonSize.Small"
                                                           Click="@(() => StartMemberNameEdit(member))"
-                                                          title="Edit display name" />
+                                                          title="@_text[TeamComponentText.EditDisplayName]" />
                                         }
                                     </RadzenStack>
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Access Level" Property="@nameof(ITeamMember.AccessLevel)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnAccessLevel]" Property="@nameof(ITeamMember.AccessLevel)">
                             <Template>
                                 @if (_user.Key == context.Key || context.AccessLevel == AccessLevel.Owner) //Cannot change self or owner.
                                 {
@@ -734,7 +739,7 @@ else
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Roles" Width="200px" Visible="@(ShowRoles && _tenantRoleRegistry != null)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnRoles]" Width="200px" Visible="@(ShowRoles && _tenantRoleRegistry != null)">
                             <Template>
                                 @if (CanManageMembers(team) && _user.Key != context.Key && context.AccessLevel != AccessLevel.Owner)
                                 {
@@ -748,7 +753,7 @@ else
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Scope Overrides" Width="200px" Visible="@(ShowScopeOverrides && _scopeRegistry != null)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnScopeOverrides]" Width="200px" Visible="@(ShowScopeOverrides && _scopeRegistry != null)">
                             <Template>
                                 @if (CanManageMembers(team) && _user.Key != context.Key && context.AccessLevel != AccessLevel.Owner)
                                 {
@@ -764,18 +769,18 @@ else
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Scopes" Width="80px" Visible="@(_scopeRegistry != null && ShowScopeTooltip)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnScopes]" Width="80px" Visible="@(_scopeRegistry != null && ShowScopeTooltip)">
                             <Template>
                                 <span title="@GetEffectiveScopesWithOriginText(team, context)">
                                     <RadzenIcon Icon="info" Style="cursor: help;" />
                                 </span>
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Status" Property="@nameof(ITeamMember.State)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnStatus]" Property="@nameof(ITeamMember.State)">
                             <Template>
                                 @if (context.State == MembershipState.Invited && context.Invitation != null)
                                 {
-                                    <span title="@($"Invited {context.Invitation.InviteTime:yyyy-MM-dd HH:mm} UTC")" style="cursor: help;">@context.State</span>
+                                    <span title="@_text.Format(TeamComponentText.InvitedAt, context.Invitation.InviteTime.ToString("yyyy-MM-dd HH:mm"))" style="cursor: help;">@context.State</span>
                                 }
                                 else
                                 {
@@ -788,12 +793,12 @@ else
                                 @if (context.SuspendedAt != null)
                                 {
                                     <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat"
-                                                 Text="Suspended" class="rz-ml-2"
+                                                 Text="@_text[TeamComponentText.Suspended]" class="rz-ml-2"
                                                  title="@SuspendedMemberTitle(context)" />
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="Last Seen" Property="@nameof(ITeamMember.LastSeen)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnLastSeen]" Property="@nameof(ITeamMember.LastSeen)">
                             <Template>
                                 <DateTimeView Date="@context.LastSeen"/>
                             </Template>
@@ -875,15 +880,15 @@ else
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.35rem" Wrap="FlexWrap.Wrap">
             @if (_canSeeAllTeams && !IsMemberOf(team))
             {
-                <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat" Text="Not a member"
-                             title="You are viewing this team through cross-team access, not membership." />
+                <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat" Text="@_text[TeamComponentText.NotAMember]"
+                             title="@_text[TeamComponentText.NotAMemberTooltip]" />
             }
             @if (_canSeeAllTeams || _showConsentToggle)
             {
                 <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(TeamVisibility.BadgeStyle(ConsentOf(team))))"
                              Variant="Variant.Flat"
                              Text="@TeamVisibility.Label(ConsentOf(team))"
-                             title="What this team has consented to grant. Select the team to change it." />
+                             title="@_text[TeamComponentText.ConsentTooltip]" />
             }
         </RadzenStack>
     </text>;
@@ -904,7 +909,7 @@ else
                                 Value="@ConsentOf(team)"
                                 Data="@_consentLevels"
                                 AllowClear="true"
-                                Placeholder="No access"
+                                Placeholder="@_text[TeamComponentText.NoAccess]"
                                 Change="@(async args => await SetConsent(team, (AccessLevel?)args))"
                                 Style="width: 100%;" />
             </RadzenStack>
@@ -937,7 +942,7 @@ else
     /// Computed once rather than per row: it does not vary by team, and rebuilding it inside a template
     /// that runs per render is work for nothing.
     /// </remarks>
-    private string ConsentLabel => $"Consent access for {string.Join(", ", _consentRoles)}";
+    private string ConsentLabel => _text.Format(TeamComponentText.ConsentAccessFor, string.Join(", ", _consentRoles));
 
     /// <summary>The team-level actions, as a button or a split button. Shared by both layouts.</summary>
     private RenderFragment<ITeam<TMember>> TeamActionsFragment => team =>
@@ -984,7 +989,7 @@ else
 
     private async Task DeleteTeam(ITeam<TMember> team)
     {
-        var response = await DialogService.Confirm($"Team '{team.Name}' will be deleted.");
+        var response = await DialogService.Confirm(_text.Format(TeamComponentText.ConfirmDeleteTeam, team.Name));
         if (response != true) return;
 
         await TeamManagementService.DeleteTeamAsync(team.Key);
@@ -1072,8 +1077,8 @@ else
         if (suspended)
         {
             var confirmed = await DialogService.Confirm(
-                "They keep their membership, access level and history, and still see the team -- but can do nothing in it until access is restored.",
-                "Suspend access to this team?");
+                _text[TeamComponentText.ConfirmSuspendDetail],
+                _text[TeamComponentText.ConfirmSuspendTitle]);
             if (confirmed != true) return;
         }
 
@@ -1085,22 +1090,27 @@ else
         catch (Exception ex)
         {
             NotificationService.Notify(NotificationSeverity.Error,
-                suspended ? "Could not suspend access" : "Could not restore access", ex.Message);
+                _text[suspended ? TeamComponentText.CouldNotSuspend : TeamComponentText.CouldNotRestore], ex.Message);
         }
     }
 
-    private static string SuspendedMemberTitle(TMember member)
+    /// <remarks>
+    /// One whole sentence per variant rather than a head with an optional actor clause appended. That
+    /// clause moves in other languages, so a sentence built from two halves cannot be translated. No
+    /// longer static: it reads the resolved catalogue.
+    /// </remarks>
+    private string SuspendedMemberTitle(TMember member)
     {
         var when = member.SuspendedAt?.ToString("yyyy-MM-dd HH:mm");
-        var who = string.IsNullOrEmpty(member.SuspendedBy) ? null : $" by {member.SuspendedBy}";
-        return $"Access suspended {when}{who}. Still a member of the team, with no scopes in it.";
+        var hasActor = !string.IsNullOrEmpty(member.SuspendedBy);
+        return _text.Format(hasActor ? TeamComponentText.SuspendedByTooltip : TeamComponentText.SuspendedTooltip, when, member.SuspendedBy);
     }
 
     private List<(string Value, string Text, string Icon)> MemberActions(ITeam<TMember> team, TMember member)
     {
         var actions = new List<(string, string, string)>();
-        if (CanManageMembers(team) && member.Invitation != null) actions.Add((CopyInviteAction, "Copy invitation link", "link"));
-        if (ShowAuditLogButton && CanReadMemberAudit(team)) actions.Add((MemberAuditAction, "Audit log", "manage_search"));
+        if (CanManageMembers(team) && member.Invitation != null) actions.Add((CopyInviteAction, _text[TeamComponentText.ActionCopyInviteLink], "link"));
+        if (ShowAuditLogButton && CanReadMemberAudit(team)) actions.Add((MemberAuditAction, _text[TeamComponentText.ActionAuditLog], "manage_search"));
         if (CanManageMembers(team) && _user.Key != member.Key && member.AccessLevel != AccessLevel.Owner)
         {
             // Suspension needs access to take away, and an invitation that has not been accepted grants
@@ -1112,10 +1122,10 @@ else
                 // Otherwise the same conditions as Remove, for the same reasons: member:manage, never
                 // your own row, never the owner. The service refuses all of them regardless.
                 actions.Add(member.SuspendedAt != null
-                    ? (RestoreMemberAction, "Restore access", "play_circle")
-                    : (SuspendMemberAction, "Suspend access", "block"));
+                    ? (RestoreMemberAction, _text[TeamComponentText.ActionRestoreAccess], "play_circle")
+                    : (SuspendMemberAction, _text[TeamComponentText.ActionSuspendAccess], "block"));
             }
-            actions.Add((RemoveMemberAction, "Remove member", "remove"));
+            actions.Add((RemoveMemberAction, _text[TeamComponentText.ActionRemoveMember], "remove"));
         }
         return actions;
     }
@@ -1138,13 +1148,13 @@ else
     private List<(string Value, string Text, string Icon)> TeamActions(ITeam<TMember> team)
     {
         var actions = new List<(string, string, string)>();
-        if (CanManageMembers(team)) actions.Add((InviteAction, "Invite user", "person_add"));
+        if (CanManageMembers(team)) actions.Add((InviteAction, _text[TeamComponentText.ActionInviteUser], "person_add"));
         if (CanRenameTeam(team))
         {
-            actions.Add((IconAction, "Set icon", "image"));
+            actions.Add((IconAction, _text[TeamComponentText.ActionSetIcon], "image"));
             actions.Add((RenameAction, "Rename", "edit"));
         }
-        if (CanTransferOwnership(team)) actions.Add((TransferAction, "Transfer ownership", "swap_horiz"));
+        if (CanTransferOwnership(team)) actions.Add((TransferAction, _text[TeamComponentText.ActionTransferOwnership], "swap_horiz"));
         if (CanLeaveTeam(team)) actions.Add((LeaveAction, "Leave", "remove"));
         if (CanDeleteTeam(team)) actions.Add((DeleteAction, "Delete", "delete"));
         return actions;
@@ -1202,7 +1212,7 @@ else
         // Fully qualified deliberately. Razor resolves a component tag by @using or by full name only —
         // it does not walk enclosing namespaces the way C# does, so a partially-qualified tag compiles
         // clean and renders as an unknown HTML element: an empty dialog, no exception, no log.
-        await DialogService.OpenAsync($"Audit log — {identity}", _ =>
+        await DialogService.OpenAsync(_text.Format(TeamComponentText.AuditLogTitle, identity), _ =>
             @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
             new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
     }
@@ -1304,7 +1314,7 @@ else
         await Js.InvokeVoidAsync("clipboard.copyText", link);
         NotificationService.Notify(new NotificationMessage
         {
-            Summary = "The invitation link has been copied to the clipboard."
+            Summary = _text[TeamComponentText.InviteLinkCopied]
         });
     }
 

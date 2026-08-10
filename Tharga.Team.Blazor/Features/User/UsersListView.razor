@@ -12,6 +12,7 @@
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 @inject IJSRuntime Js
+@inject IThargaTextProvider TextProvider
 
 @* Current-user row highlight. Applied to the cells (not the <tr>) so Radzen's own cell backgrounds
    don't paint over it — the same mechanism TeamComponent uses for its member grid. *@
@@ -36,7 +37,7 @@ else if (_loaded)
     @if (_showDirectory)
     {
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-3 rz-mt-2">
-            <RadzenButton Text="Verify all" Icon="how_to_reg" ButtonStyle="ButtonStyle.Light" Click="@VerifyAllAsync" Disabled="@_verifying" />
+            <RadzenButton Text="@_text[UsersListViewText.VerifyAll]" Icon="how_to_reg" ButtonStyle="ButtonStyle.Light" Click="@VerifyAllAsync" Disabled="@_verifying" />
         </RadzenStack>
     }
     <RadzenDataGrid Data="@_allUsers" TItem="UserViewModel" AllowSorting="true" AllowPaging="true" PageSize="10"
@@ -48,10 +49,10 @@ else if (_loaded)
                     <UserAvatar EMail="@context.EMail" IconReference="@context.Icon" Name="@context.Name" UserKey="@context.Key" Size="32px" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Name" Property="Name" />
-            <RadzenDataGridColumn Title="Email" Property="EMail" />
-            <RadzenDataGridColumn Title="Teams" Property="@nameof(UserViewModel.TeamCount)" Filterable="false" />
-            <RadzenDataGridColumn Title="Last seen" Property="@nameof(UserViewModel.LastSeen)" Filterable="false">
+            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnName]" Property="Name" />
+            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnEmail]" Property="EMail" />
+            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnTeams]" Property="@nameof(UserViewModel.TeamCount)" Filterable="false" />
+            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnLastSeen]" Property="@nameof(UserViewModel.LastSeen)" Filterable="false">
                 <Template>
                     @if (LastSeenText.IsNever(context.LastSeen))
                     {
@@ -76,7 +77,7 @@ else if (_loaded)
                            in both directions. *@
                         @if (context.IsDisabled)
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Danger" Variant="Variant.Filled" Text="Disabled"
+                            <RadzenBadge BadgeStyle="BadgeStyle.Danger" Variant="Variant.Filled" Text="@_text[UsersListViewText.BadgeDisabled]"
                                          title="@GetDisabledText(context)" />
                         }
                         @if (_showDirectory && context.DirectoryStatus != null)
@@ -84,33 +85,33 @@ else if (_loaded)
                             <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(DirectoryStatusBadge.Style(context.DirectoryStatus.Value)))"
                                          Variant="Variant.Flat" Text="@DirectoryStatusBadge.Text(context.DirectoryStatus.Value)" />
                         }
-                        <RadzenSplitButton Text="View" Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                        <RadzenSplitButton Text="@_text[UsersListViewText.ActionView]" Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                                            Click="@(item => OnUserActionAsync(item, context))">
                             <ChildContent>
                                 @if (_showDirectory)
                                 {
-                                    <RadzenSplitButtonItem Text="Verify" Value="@VerifyAction" Icon="person_search" />
+                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionVerify]" Value="@VerifyAction" Icon="person_search" />
                                 }
-                                <RadzenSplitButtonItem Text="Rename" Value="@RenameAction" Icon="edit" />
+                                <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionRename]" Value="@RenameAction" Icon="edit" />
                                 @if (_showAdminUpload)
                                 {
-                                    <RadzenSplitButtonItem Text="Set icon" Value="@SetIconAction" Icon="image" />
+                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionSetIcon]" Value="@SetIconAction" Icon="image" />
                                 }
                                 @if (UserAdminGate.CanReadAudit(ShowAuditLogButton, _canReadAudit))
                                 {
-                                    <RadzenSplitButtonItem Text="Audit log" Value="@AuditAction" Icon="manage_search" />
+                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionAuditLog]" Value="@AuditAction" Icon="manage_search" />
                                 }
                                 @ActionItems
                                 @if (context.IsDisabled)
                                 {
-                                    <RadzenSplitButtonItem Text="Enable" Value="@EnableAction" Icon="play_circle" />
+                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionEnable]" Value="@EnableAction" Icon="play_circle" />
                                 }
                                 else
                                 {
-                                    <RadzenSplitButtonItem Text="@(canDisableUser ? DisableText : DisableSelfText)" Value="@DisableAction"
+                                    <RadzenSplitButtonItem Text="@(canDisableUser ? _text[UsersListViewText.ActionDisable] : _text[UsersListViewText.ActionDisableSelf])" Value="@DisableAction"
                                                            Icon="block" Disabled="@(!canDisableUser)" />
                                 }
-                                <RadzenSplitButtonItem Text="@(canDeleteUser ? DeleteText : DeleteSelfText)" Value="@DeleteAction"
+                                <RadzenSplitButtonItem Text="@(canDeleteUser ? _text[UsersListViewText.ActionDelete] : _text[UsersListViewText.ActionDeleteSelf])" Value="@DeleteAction"
                                                        Icon="delete" Disabled="@(!canDeleteUser)" />
                             </ChildContent>
                         </RadzenSplitButton>
@@ -135,16 +136,16 @@ else if (_loaded)
                 </RadzenStack>
             </RadzenStack>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
-                <RadzenText TextStyle="TextStyle.Caption">User key</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text[UsersListViewText.UserKey]</RadzenText>
                 <code>@_selectedUser.Key</code>
                 <RadzenButton Icon="content_copy" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
-                              title="Copy user key" Click="@(() => CopyAsync(_selectedUser.Key))" />
+                              title="@_text[UsersListViewText.CopyUserKey]" Click="@(() => CopyAsync(_selectedUser.Key))" />
             </RadzenStack>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
-                <RadzenText TextStyle="TextStyle.Caption">Identity</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text[UsersListViewText.Identity]</RadzenText>
                 <code>@_selectedUser.Identity</code>
                 <RadzenButton Icon="content_copy" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
-                              title="Copy identity" Click="@(() => CopyAsync(_selectedUser.Identity))" />
+                              title="@_text[UsersListViewText.CopyIdentity]" Click="@(() => CopyAsync(_selectedUser.Identity))" />
             </RadzenStack>
             @*
                 Directory id is opt-in twice over — the host's entity must declare it, and the user must
@@ -152,7 +153,7 @@ else if (_loaded)
                 which is a different and alarming claim, so say which of the two applies.
             *@
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-2">
-                <RadzenText TextStyle="TextStyle.Caption">Directory id</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption">@_text[UsersListViewText.DirectoryId]</RadzenText>
                 @if (string.IsNullOrEmpty(_selectedUser.DirectoryId))
                 {
                     <RadzenText TextStyle="TextStyle.Caption" title="@DirectoryLink.AbsenceHint(_directoryIdStored)">
@@ -163,18 +164,18 @@ else if (_loaded)
                 {
                     <code>@_selectedUser.DirectoryId</code>
                     <RadzenButton Icon="content_copy" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
-                                  title="Copy directory id" Click="@(() => CopyAsync(_selectedUser.DirectoryId))" />
+                                  title="@_text[UsersListViewText.CopyDirectoryId]" Click="@(() => CopyAsync(_selectedUser.DirectoryId))" />
                 }
             </RadzenStack>
-            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">Team memberships</RadzenText>
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">@_text[UsersListViewText.TeamMemberships]</RadzenText>
             <RadzenDataGrid Data="@_selectedUser.Teams" TItem="UserTeamInfo" AllowSorting="true">
                 <Columns>
-                    <RadzenDataGridColumn Title="Team" Property="TeamName">
+                    <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnTeam]" Property="TeamName">
                         <Template>
                             @if (TeamSelected.HasDelegate && !string.IsNullOrEmpty(context.TeamKey))
                             {
                                 <RadzenButton Text="@context.TeamName" ButtonStyle="ButtonStyle.Primary" Variant="Variant.Text"
-                                              Size="ButtonSize.Small" title="Show this team"
+                                              Size="ButtonSize.Small" title="@_text[UsersListViewText.ShowThisTeam]"
                                               Click="@(() => TeamSelected.InvokeAsync(context.TeamKey))" />
                             }
                             else
@@ -183,8 +184,8 @@ else if (_loaded)
                             }
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn Title="Role" Property="AccessLevel" Width="120px" />
-                    <RadzenDataGridColumn Title="State" Property="State" Width="100px" />
+                    <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnRole]" Property="AccessLevel" Width="120px" />
+                    <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnState]" Property="State" Width="100px" />
                 </Columns>
             </RadzenDataGrid>
         </RadzenCard>
@@ -235,19 +236,6 @@ else
     private const string DisableAction = "disable";
     private const string EnableAction = "enable";
 
-    private const string DeleteText = "Delete";
-    private const string DisableText = "Disable";
-
-    /// <summary><inheritdoc cref="DeleteSelfText" path="/summary"/></summary>
-    private const string DisableSelfText = "Disable (this is you)";
-
-    /// <summary>
-    /// Label on the caller's own row. The item is disabled there, and a disabled control with no stated
-    /// reason reads as a bug — <see cref="RadzenSplitButtonItem"/> carries no tooltip, so the reason has
-    /// to be the label.
-    /// </summary>
-    private const string DeleteSelfText = "Delete (this is you)";
-
     private string _currentUserKey;
     private bool _directoryIdStored;
     private bool _loaded;
@@ -262,9 +250,12 @@ else
 
     private List<UserViewModel> _allUsers = new();
     private UserViewModel _selectedUser;
+    private TextSet _text = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(UsersListViewText.All);
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var hasUsersManage = TeamScopeGate.HasSystemScope(authState.User, SystemUserScopes.Manage);
 
@@ -393,7 +384,7 @@ else
 
     private async Task SetUserIconAsync(UserViewModel user)
     {
-        var result = await DialogService.OpenAsync<UserIconDialog>($"Icon — {user.Name}",
+        var result = await DialogService.OpenAsync<UserIconDialog>(_text.Format(UsersListViewText.IconTitle, user.Name),
             new Dictionary<string, object>
             {
                 { nameof(UserIconDialog.AdminUserKey), user.Key },
@@ -412,15 +403,15 @@ else
     {
         var editedName = user.StoredName;
 
-        var confirmed = await DialogService.OpenAsync($"Rename — {user.EMail ?? user.Name}", ds =>
+        var confirmed = await DialogService.OpenAsync(_text.Format(UsersListViewText.RenameTitle, user.EMail ?? user.Name), ds =>
             @<RadzenStack Gap="1rem">
                 <RadzenText TextStyle="TextStyle.Body2">
-                    This sets the user's name everywhere. Leave it empty to fall back to a name resolved from their email.
+                    @_text[UsersListViewText.RenameHelp]
                 </RadzenText>
-                <RadzenTextBox Value="@editedName" ValueChanged="@(v => editedName = v)" Placeholder="Name" Style="width: 100%;" />
+                <RadzenTextBox Value="@editedName" ValueChanged="@(v => editedName = v)" Placeholder="@_text[UsersListViewText.NamePlaceholder]" Style="width: 100%;" />
                 <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" Gap="0.5rem">
-                    <RadzenButton Text="Save" ButtonStyle="ButtonStyle.Primary" Click="@(_ => ds.Close(true))" />
-                    <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="@(_ => ds.Close(false))" />
+                    <RadzenButton Text="@_text[UsersListViewText.Save]" ButtonStyle="ButtonStyle.Primary" Click="@(_ => ds.Close(true))" />
+                    <RadzenButton Text="@_text[UsersListViewText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="@(_ => ds.Close(false))" />
                 </RadzenStack>
             </RadzenStack>,
             new DialogOptions { Width = "480px" });
@@ -441,13 +432,13 @@ else
             // rename, because the name in this application really did change.
             if (result?.DirectoryError != null)
             {
-                NotificationService.Notify(NotificationSeverity.Warning, "Renamed here, not in the directory",
+                NotificationService.Notify(NotificationSeverity.Warning, _text[UsersListViewText.RenamedLocallyTitle],
                     result.DirectoryError);
             }
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Rename failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.RenameFailed], ex.Message);
         }
     }
 
@@ -472,7 +463,7 @@ else
         // identity provider put a display name in the name claim.
         var pinned = new Audit.AuditPinnedFilter { CallerUserIdentity = user.Identity };
 
-        await DialogService.OpenAsync($"Audit log — {user.Name ?? user.EMail}", _ =>
+        await DialogService.OpenAsync(_text.Format(UsersListViewText.AuditLogTitle, user.Name ?? user.EMail), _ =>
             @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
             new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
     }
@@ -486,7 +477,7 @@ else
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Verification failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.VerificationFailed], ex.Message);
         }
     }
 
@@ -504,7 +495,7 @@ else
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Verification failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.VerificationFailed], ex.Message);
         }
         finally
         {
@@ -522,16 +513,16 @@ else
     {
         if (disabled && !UserAdminGate.CanDisableUser(user.Key, _currentUserKey))
         {
-            NotificationService.Notify(NotificationSeverity.Warning, "Cannot disable your own account",
-                "Another administrator has to do it, so somebody is always left able to manage users.");
+            NotificationService.Notify(NotificationSeverity.Warning, _text[UsersListViewText.CannotDisableSelfTitle],
+                _text[UsersListViewText.CannotDisableSelfDetail]);
             return;
         }
 
         if (disabled)
         {
             var confirmed = await DialogService.Confirm(
-                $"Disable {user.Name ?? user.EMail}? They are signed out shortly and cannot sign in again, but keep their teams and history so this can be undone.",
-                "Confirm disable user");
+                _text.Format(UsersListViewText.ConfirmDisable, user.Name ?? user.EMail),
+                _text[UsersListViewText.ConfirmDisableTitle]);
             if (confirmed != true) return;
         }
 
@@ -539,24 +530,27 @@ else
         {
             await UserManagementService.SetUserDisabledAsync(user.Key, disabled);
             NotificationService.Notify(NotificationSeverity.Success,
-                disabled ? "User disabled" : "User enabled",
-                disabled
-                    ? $"{user.Name ?? user.EMail} will be signed out within the claim-revalidation interval."
-                    : $"{user.Name ?? user.EMail} can sign in again.");
+                _text[disabled ? UsersListViewText.UserDisabled : UsersListViewText.UserEnabled],
+                _text.Format(disabled ? UsersListViewText.UserDisabledDetail : UsersListViewText.UserEnabledDetail, user.Name ?? user.EMail));
             await LoadDataAsync();
         }
         catch (Exception ex)
         {
             NotificationService.Notify(NotificationSeverity.Error,
-                disabled ? "Could not disable user" : "Could not enable user", ex.Message);
+                _text[disabled ? UsersListViewText.CouldNotDisable : UsersListViewText.CouldNotEnable], ex.Message);
         }
     }
 
-    private static string GetDisabledText(UserViewModel user)
+    /// <remarks>
+    /// One whole sentence per variant rather than a head with an optional <c>" by {name}"</c> appended.
+    /// The actor clause moves in other languages, so a sentence assembled from two halves cannot be
+    /// translated. No longer static: it reads the resolved catalogue.
+    /// </remarks>
+    private string GetDisabledText(UserViewModel user)
     {
         var when = user.DisabledAt?.ToString("yyyy-MM-dd HH:mm");
-        var who = string.IsNullOrEmpty(user.DisabledBy) ? null : $" by {user.DisabledBy}";
-        return $"Disabled in this application {when}{who}. Not the same as being disabled in the directory.";
+        var hasActor = !string.IsNullOrEmpty(user.DisabledBy);
+        return _text.Format(hasActor ? UsersListViewText.DisabledByTooltip : UsersListViewText.DisabledTooltip, when, user.DisabledBy);
     }
 
     private async Task DeleteUserAsync(UserViewModel user)
@@ -565,12 +559,12 @@ else
         // dispatches on the value, so a host-supplied "delete" reaches here without passing the markup gate.
         if (!UserAdminGate.CanDeleteUser(user.Key, _currentUserKey))
         {
-            NotificationService.Notify(NotificationSeverity.Warning, "Cannot delete your own account",
-                "Another administrator has to remove you, so somebody is always left able to manage users.");
+            NotificationService.Notify(NotificationSeverity.Warning, _text[UsersListViewText.CannotDeleteSelfTitle],
+                _text[UsersListViewText.CannotDeleteSelfDetail]);
             return;
         }
 
-        var dialogResult = await DialogService.OpenAsync<DeleteUserDialog>("Delete user",
+        var dialogResult = await DialogService.OpenAsync<DeleteUserDialog>(_text[UsersListViewText.DeleteUserTitle],
             new Dictionary<string, object>
             {
                 { nameof(DeleteUserDialog.UserName), user.Name ?? user.EMail },
@@ -584,13 +578,18 @@ else
             var result = await UserManagementService.DeleteUserAsync(user.Key, alsoDeleteFromDirectory);
             if (result.DirectoryError != null)
             {
-                NotificationService.Notify(NotificationSeverity.Warning, "User deleted locally",
-                    $"Directory delete did not complete: {result.DirectoryError}");
+                NotificationService.Notify(NotificationSeverity.Warning, _text[UsersListViewText.DeletedLocallyTitle],
+                    _text.Format(UsersListViewText.DirectoryDeleteIncomplete, result.DirectoryError));
             }
             else
             {
-                NotificationService.Notify(NotificationSeverity.Success, "User deleted",
-                    $"Removed from {result.RemovedTeamCount} team(s){(result.DirectoryDeleted ? " and the directory" : "")}.");
+                // Four whole sentences over two independent axes - one team or several, directory or not.
+                // The English "team(s)" shorthand has no equivalent in a language that inflects.
+                var removed = result.RemovedTeamCount == 1
+                    ? (result.DirectoryDeleted ? UsersListViewText.RemovedFromOneTeamAndDirectory : UsersListViewText.RemovedFromOneTeam)
+                    : (result.DirectoryDeleted ? UsersListViewText.RemovedFromManyTeamsAndDirectory : UsersListViewText.RemovedFromManyTeams);
+                NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.UserDeleted],
+                    _text.Format(removed, result.RemovedTeamCount));
             }
 
             if (_selectedUser?.Key == user.Key) _selectedUser = null;
@@ -598,7 +597,7 @@ else
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Delete failed", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.DeleteFailed], ex.Message);
         }
     }
 }

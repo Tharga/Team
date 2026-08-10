@@ -7,15 +7,16 @@
 @inject ITeamManagementService TeamManagementService
 @inject IUserService UserService
 @inject NavigationManager NavigationManager
+@inject IThargaTextProvider TextProvider
 
 <RadzenStack Visible="@(!string.IsNullOrEmpty(_inviteCode) && _invitation != null)">
     <CascadingAuthenticationState>
         <AuthorizeView>
             <Authorized>
-                <RadzenText Text="@($"You have been invited to team '{_invitation.TeamName}'. Do you want to join?")" />
+                <RadzenText Text="@_text.Format(TeamInviteViewText.Invitation, _invitation.TeamName)" />
                 <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem">
-                    <StandardButton Text="Yes" Icon="check_circle" Click="JoinTeam" />
-                    <StandardButton Text="No" Icon="do_not_disturb_on" Click="Decline" />
+                    <StandardButton Text="@_text[TeamInviteViewText.Accept]" Icon="check_circle" Click="JoinTeam" />
+                    <StandardButton Text="@_text[TeamInviteViewText.Decline]" Icon="do_not_disturb_on" Click="Decline" />
                 </RadzenStack>
             </Authorized>
         </AuthorizeView>
@@ -26,7 +27,7 @@
 {
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-p-2">
         <RadzenIcon Icon="mail" />
-        <RadzenText TextStyle="TextStyle.Body1">You have no pending invitations. When you open an invitation link, the request to join will appear here.</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body1">@_text[TeamInviteViewText.NoInvitations]</RadzenText>
     </RadzenStack>
 }
 
@@ -35,6 +36,7 @@
     private string _inviteCode;
     private TeamInvitation _invitation;
     private IUser _user;
+    private TextSet _text = TextSet.Empty;
 
     [Parameter]
     public string InviteCode { get; set; }
@@ -48,6 +50,10 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Resolved before the early return: the "no pending invitations" message renders precisely when
+        // there is no invite code, so resolving after it would leave that one string in English.
+        _text = await TextProvider.ResolveAsync(TeamInviteViewText.All);
+
         var inviteCode = await GetInviteCode();
         if (string.IsNullOrEmpty(inviteCode)) return;
 

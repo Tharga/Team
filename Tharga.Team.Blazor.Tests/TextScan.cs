@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 
 namespace Tharga.Team.Blazor.Tests;
 
@@ -52,6 +52,18 @@ internal static class TextScan
     private static readonly Regex PropertyBinding = new(@"\w*Property=""[^""]*""", RegexOptions.Compiled);
 
     /// <summary>
+    /// A Blazor generic type argument — <c>TValue="AccessLevel?"</c>, <c>TItem="TeamViewModel"</c>. A type
+    /// name, never text shown to anyone.
+    /// </summary>
+    /// <remarks>
+    /// Excluded at extraction for the same reason as <see cref="PropertyBinding"/>: once separated from its
+    /// attribute the value is indistinguishable from a label. <c>AccessLevel?</c> reads exactly like a
+    /// perfectly plausible column heading, and it was the last "literal" standing in <c>TeamComponent</c>
+    /// after #204 — untranslatable by nature, so the scan was wrong rather than the component.
+    /// </remarks>
+    private static readonly Regex TypeArgument = new(@"T(?:Value|Item)=""[^""]*""", RegexOptions.Compiled);
+
+    /// <summary>
     /// Not display text. Validated by running the scan over the already-migrated components: whatever it
     /// still reported there was, with one real exception, an identifier or a component-library enum name.
     /// <see cref="Identifier"/> also allows a trailing <c>()</c>, so a method name passed as data —
@@ -92,7 +104,7 @@ internal static class TextScan
             if (line.Contains("throw new", StringComparison.Ordinal)) continue;
             if (line.Contains("Exception(", StringComparison.Ordinal)) continue;
 
-            var scannable = PropertyBinding.Replace(line, string.Empty);
+            var scannable = TypeArgument.Replace(PropertyBinding.Replace(line, string.Empty), string.Empty);
 
             foreach (Match m in Attribute.Matches(scannable)) found.Add(m.Groups[1].Value);
             foreach (Match m in Inline.Matches(scannable)) found.Add(m.Groups[1].Value);
