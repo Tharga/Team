@@ -54,6 +54,7 @@ public class TextCoverageTests
         "Features/Team/InviteUserDialog.razor",
         "Features/User/DeleteUserDialog.razor",
         "Features/User/TeamsListView.razor",
+        "Features/User/UsersListView.razor",
     ];
 
     /// <summary>
@@ -75,7 +76,6 @@ public class TextCoverageTests
         ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
         ["Features/Team/TeamComponent.razor"] = 60,
         ["Features/User/UserProfileView.razor"] = 13,
-        ["Features/User/UsersListView.razor"] = 50,
     };
 
     private static string ComponentRoot()
