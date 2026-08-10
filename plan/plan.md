@@ -35,12 +35,33 @@ Branch: `feature/skiasharp-icon-processor` (from `master`).
       the real `AddThargaImageProcessing()` registration — `docs/images/logo.png` composited onto a 400x150
       white band, processed, and the output inspected visually as well as by assertion: 256x256, logo
       centred, aspect preserved, nothing cropped, alpha 0 in both padding bands and 255 in the content.
-      That proves the codecs load and the pipeline works on Windows; **CI on `ubuntu-latest` is what proves
-      the Linux native asset**, and it is the half worth watching on the PR.
-- [~] 10. Docs: `README.md` (package table, dependency tree, the `AddThargaImageProcessing` comment),
+      That proves the codecs load and the pipeline works on Windows.
+
+      **Linux verified locally instead of waiting for CI.** The workflow only triggers on `master` pushes
+      and pull requests, so pushing the branch runs nothing — and the native asset is the one part of this
+      change a Windows test run cannot speak to. Ran the Images tests in Docker instead, against a copy of
+      the three projects so container builds could not clobber the Windows output:
+      - `mcr.microsoft.com/dotnet/sdk:10.0` (glibc) — **11/11 passed**
+      - `mcr.microsoft.com/dotnet/sdk:10.0-alpine` (musl) — **11/11 passed**
+
+      Both with no host packages installed, which is what `NoDependencies` is for. The Alpine run exists
+      because the package README claims Alpine works as-is, and musl versus glibc is exactly the kind of
+      claim that is repeated rather than checked.
+- [x] 10. Docs: `README.md` (package table, dependency tree, the `AddThargaImageProcessing` comment),
       `Tharga.Team.Images/README.md`, `docs/articles/icons.md`, `docs/articles/architecture.md` (table row
-      **and** the mermaid `SHARP` node), `docs/articles/implementation-guide.md`. Land as a `docs:` commit.
-- [ ] 11. Commit, push, ask the user to verify.
+      **and** the mermaid `SHARP` node), `docs/articles/implementation-guide.md`. Landed as a `docs:` commit.
+      Added a new *Platform support and licensing* section to the package README — the licence position and
+      the renamed type are the two things a consumer actually needs on upgrade, and neither had a home.
+- [~] 11. Commit, push, ask the user to verify. Pushed 2026-08-10; PR deliberately not opened yet, per the
+      workflow.
+
+## Correction to the acceptance criteria
+
+`feature.md` says *"No `SixLabors` reference anywhere in the repository, production or test."* Taken
+literally that is not met and should not be: the package README's upgrade note, the `icons.md` migration
+paragraph and the ported test file's XML doc all name ImageSharp **on purpose**, because a consumer
+upgrading needs to know what changed and why. What is actually met is the intended criterion — no
+`SixLabors` *dependency*, in any project file, production or test.
 
 ## Close-out (only once the user confirms)
 
