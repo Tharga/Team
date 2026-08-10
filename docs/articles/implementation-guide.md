@@ -2151,5 +2151,5 @@ app.UseThargaControllers();
 | `Tharga.Team.Service` | Step 3 | API controllers, API key auth, scopes, audit |
 | `Tharga.Team.MongoDB` | Step 4 | MongoDB persistence for teams and users |
 | `Tharga.Team.Entra` | (optional) | Microsoft Entra ID user directory — verify / list / delete via Graph ([guide](user-management.md)) |
-| `Tharga.Team.Images` | (optional) | Auto-downscale uploaded team/user icons via ImageSharp ([guide](icons.md)) |
+| `Tharga.Team.Images` | (optional) | Auto-square and downscale uploaded team/user icons via SkiaSharp ([guide](icons.md)) |
 | `Tharga.Team` | (transitive) | Domain models, authorization primitives |

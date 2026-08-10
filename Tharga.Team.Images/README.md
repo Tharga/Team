@@ -1,7 +1,7 @@
 # Tharga.Team.Images
 
 Image processing for Tharga Team icons. Registers an `IIconProcessor` (backed by
-[ImageSharp](https://github.com/SixLabors/ImageSharp)) that **squares and downscales** uploaded icons,
+[SkiaSharp](https://github.com/mono/SkiaSharp)) that **squares and downscales** uploaded icons,
 instead of rejecting ones larger than the configured maximum.
 
 ## Registration
@@ -12,7 +12,7 @@ builder.Services.AddThargaImageProcessing();
 
 The built-in icon store runs the processor before validating/storing. Any uploaded image (team or user)
 is fitted within `IconOptions.MaxDimension` (default **256px**), **squared by padding the short side
-with transparency**, and re-encoded as PNG. Formats ImageSharp can't decode (e.g. SVG) pass through
+with transparency**, and re-encoded as PNG. Formats Skia can't decode (e.g. SVG) pass through
 unchanged, as do images that are already square and within the box.
 
 **Content is never cropped and never upscaled.** The output side is `min(max(width, height), MaxDimension)`:
@@ -37,3 +37,28 @@ Configure the maximum via the platform options:
 ```csharp
 builder.AddThargaTeam(o => o.Icon.MaxDimension = 256);
 ```
+
+## Platform support and licensing
+
+**Nothing to install.** The package references `SkiaSharp.NativeAssets.Linux.NoDependencies` itself, so a
+Linux host needs no `fontconfig` or `libfreetype`, and slim or Alpine containers work as-is. That
+dependency is taken here rather than left to you deliberately: a missing native asset builds cleanly and
+fails at upload time in production, which is the one failure a package reference can rule out entirely.
+
+**SkiaSharp is MIT**, as is this package. Versions **3.10 and earlier used
+[ImageSharp](https://github.com/SixLabors/ImageSharp)**, which is distributed under the Six Labors Split
+Licence and requires a paid commercial licence for closed-source for-profit use above $1M annual gross
+revenue. If you took a Six Labors licence on this package's account, you no longer need one for it.
+
+### Upgrading from 3.10 or earlier
+
+`ImageSharpIconProcessor` is now **`SkiaIconProcessor`**. If you call `AddThargaImageProcessing()` — which
+is what the docs have always shown — nothing changes. Only code that registered the type by hand needs the
+new name:
+
+```csharp
+services.AddScoped<IIconProcessor, SkiaIconProcessor>();   // was ImageSharpIconProcessor
+```
+
+Output is unchanged: same squaring, same no-upscale rule, same transparent padding, same pass-through for
+undecodable formats. Stored icons are not reprocessed.
