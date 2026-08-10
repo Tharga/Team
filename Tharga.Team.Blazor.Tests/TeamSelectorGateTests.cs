@@ -106,4 +106,107 @@ public class TeamSelectorGateTests
             TeamSelectorGate.ShowCreateTeamLink(0, allowTeamCreation: true, showLink: true),
             TeamSelectorGate.ShowCreateTeamLink(0, allowTeamCreation: true, showLink: false));
     }
+
+    // --- ShowSelectedTeamName / ShowPicker: what the selector draws once there are teams to draw ---
+
+    /// <summary>
+    /// The defect Tharga/Team#214 reported. A caller holding <c>teams:read</c> who belongs to no team sees
+    /// every team and has selected none, and the top bar rendered <b>nothing at all</b> — not a disabled
+    /// control, not an empty dropdown, not the "Create team" link. The picker must appear so the widened
+    /// set is offered rather than unreachable.
+    /// </summary>
+    [Fact]
+    public void ShowPicker_TeamsVisibleButNoneSelected_IsShown()
+    {
+        Assert.True(TeamSelectorGate.ShowPicker(5, hasSelection: false));
+    }
+
+    /// <summary>
+    /// Wider than the issue states. It names the several-teams case, but a single visible team with no
+    /// selection fell through the same gap for the same reason, so it is fixed by the same branch.
+    /// </summary>
+    [Fact]
+    public void ShowPicker_OneTeamVisibleAndNoneSelected_IsShown()
+    {
+        Assert.True(TeamSelectorGate.ShowPicker(1, hasSelection: false));
+        Assert.False(TeamSelectorGate.ShowSelectedTeamName(1, hasSelection: false));
+    }
+
+    /// <summary>
+    /// Unchanged behaviour for the ordinary member: one team, already selected, so a dropdown over it
+    /// could not do anything and the name is what is shown.
+    /// </summary>
+    [Fact]
+    public void ShowSelectedTeamName_OneTeamSelected_IsTheNameNotThePicker()
+    {
+        Assert.True(TeamSelectorGate.ShowSelectedTeamName(1, hasSelection: true));
+        Assert.False(TeamSelectorGate.ShowPicker(1, hasSelection: true));
+    }
+
+    /// <summary>Unchanged behaviour: several teams with one selected is the dropdown, as before.</summary>
+    [Fact]
+    public void ShowPicker_SeveralTeamsWithASelection_IsShown()
+    {
+        Assert.True(TeamSelectorGate.ShowPicker(4, hasSelection: true));
+        Assert.False(TeamSelectorGate.ShowSelectedTeamName(4, hasSelection: true));
+    }
+
+    /// <summary>
+    /// Neither branch claims the teamless caller — that is <see cref="TeamSelectorGate.ShowCreateTeamLink"/>'s
+    /// state, and a picker over zero teams would be the same empty control the fix exists to avoid.
+    /// </summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NeitherBranch_ClaimsTheTeamlessCaller(bool hasSelection)
+    {
+        Assert.False(TeamSelectorGate.ShowPicker(0, hasSelection));
+        Assert.False(TeamSelectorGate.ShowSelectedTeamName(0, hasSelection));
+    }
+
+    /// <summary>
+    /// <b>The actual defect, stated as a property.</b> #214 was not a wrong branch but a missing one: three
+    /// individually correct rules met in a state none of them covered, and the component drew nothing. So
+    /// what is worth pinning is exhaustiveness rather than any single case — every state with at least one
+    /// visible team must be claimed by exactly one branch, whether or not anyone anticipated it.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(5)]
+    [InlineData(50)]
+    public void WithTeamsVisible_ExactlyOneBranchRenders(int teamCount)
+    {
+        foreach (var hasSelection in new[] { true, false })
+        {
+            var branches = new[]
+            {
+                TeamSelectorGate.ShowSelectedTeamName(teamCount, hasSelection),
+                TeamSelectorGate.ShowPicker(teamCount, hasSelection)
+            };
+
+            Assert.True(branches.Count(x => x) == 1,
+                $"{teamCount} team(s), selection={hasSelection} is claimed by {branches.Count(x => x)} branches. " +
+                "Zero is Tharga/Team#214 — an empty top bar with no way to reach a team; two would render both.");
+        }
+    }
+
+    /// <summary>
+    /// The self-check for the exhaustiveness test above: it would pass just as happily against a pair of
+    /// predicates that ignored their arguments and returned a constant true and a constant false, so this
+    /// proves both inputs still reach both branches.
+    /// </summary>
+    [Fact]
+    public void TheBranchesActuallyDependOnBothInputs()
+    {
+        // The selection is what moves a single team between the two branches.
+        Assert.NotEqual(
+            TeamSelectorGate.ShowPicker(1, hasSelection: true),
+            TeamSelectorGate.ShowPicker(1, hasSelection: false));
+
+        // And the count is what decides whether a selection means "nothing to choose" at all.
+        Assert.NotEqual(
+            TeamSelectorGate.ShowSelectedTeamName(1, hasSelection: true),
+            TeamSelectorGate.ShowSelectedTeamName(2, hasSelection: true));
+    }
 }

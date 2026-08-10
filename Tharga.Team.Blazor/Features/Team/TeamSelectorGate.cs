@@ -40,6 +40,43 @@ internal static class TeamSelectorGate
         => teamCount == 0 && allowTeamCreation && showLink;
 
     /// <summary>
+    /// Whether the selector renders the selected team's name instead of a control.
+    /// </summary>
+    /// <remarks>
+    /// One team and it is already selected, so there is nothing left to choose — a dropdown over a single
+    /// entry the caller is already inside is a control that cannot do anything.
+    /// </remarks>
+    /// <param name="teamCount">Teams the caller can see, which for a <c>teams:read</c> holder is every team
+    /// in the deployment rather than the ones they belong to.</param>
+    /// <param name="hasSelection">Whether a team is currently selected.</param>
+    public static bool ShowSelectedTeamName(int teamCount, bool hasSelection)
+        => teamCount == 1 && hasSelection;
+
+    /// <summary>
+    /// Whether the selector renders the picker. True for every visible-teams state except the one
+    /// <see cref="ShowSelectedTeamName"/> claims, so between them no state renders nothing.
+    /// </summary>
+    /// <remarks>
+    /// <b>Includes "teams visible, none selected", which is what Tharga/Team#214 reported.</b> A caller
+    /// holding <c>teams:read</c> who belongs to no team sees every team and has selected none, because
+    /// <see cref="TeamSelectionResolver"/> deliberately draws its fallback from own memberships only. That
+    /// is the right call — defaulting out of the widened set would park an oversight caller inside an
+    /// arbitrary tenant they never picked — but the render tree previously covered only
+    /// <c>count == 1 &amp;&amp; selected</c> and <c>count &gt; 1 &amp;&amp; selected</c>, so the state fell
+    /// through every branch and the top bar drew nothing at all.
+    /// <para>
+    /// The fix offers the set rather than entering it: the picker appears with a placeholder and no value,
+    /// so the caller still chooses explicitly and nothing is selected on their behalf. It covers
+    /// <c>count == 1</c> without a selection too — the issue names only the several-teams case, but one
+    /// visible team and no selection rendered nothing for the same reason.
+    /// </para>
+    /// </remarks>
+    /// <param name="teamCount">Teams the caller can see.</param>
+    /// <param name="hasSelection">Whether a team is currently selected.</param>
+    public static bool ShowPicker(int teamCount, bool hasSelection)
+        => teamCount > 0 && !ShowSelectedTeamName(teamCount, hasSelection);
+
+    /// <summary>
     /// The team count at and above which the selector offers a search box.
     /// </summary>
     /// <remarks>
