@@ -836,7 +836,7 @@ public class MyTeamService : TeamServiceRepositoryBase<TeamEntity, TeamMember>
 
 | Component | Description |
 |-----------|-------------|
-| `<TeamSelector />` | Dropdown to switch between teams. `ShowCreateTeamLink="false"` hides the teamless "Create team" link (presentation only — `AllowTeamCreation` is what governs creation). Gains a **search box** once there are `FilterThreshold` teams (default 8) — below that a short list is read faster than it is typed into. `AllowFiltering` forces it either way |
+| `<TeamSelector />` | Dropdown to switch between teams. Shows the team's name instead when there is exactly one and it is selected, and the picker with a *Select a team* placeholder whenever teams are visible but none is chosen. `ShowCreateTeamLink="false"` hides the teamless "Create team" link (presentation only — `AllowTeamCreation` is what governs creation). Gains a **search box** once there are `FilterThreshold` teams (default 8) — below that a short list is read faster than it is typed into. `AllowFiltering` forces it either way |
 | `<TeamComponent />` | Full team management (create, rename, delete, members). **Cards while the list is short, a sortable/filterable/paged grid once it is not** — the same threshold the selector uses. See [Finding a team](#finding-a-team-when-there-are-many-of-them) |
 | `<TeamInviteView />` | Pending invitation view. **Works standalone on its own route** — see [Where invitations are redeemed](#where-invitations-are-redeemed) |
 | `<UsersView />` | Admin user list: last seen, directory verification, user deletion, and a directory-only tab when a directory service is registered. Highlights your own row, shows record keys with copy, and cross-links users to teams. Its **Teams** tab shows owner, last used, invited-count split and an empty-team badge, and offers deleting any team to a holder of the `teams:delete` system scope, which no consent option grants. Opt-in `ShowAuditLogButton` adds a per-row audit log. Viewing and acting require the `users:manage` system scope — enforced in the service layer (see [User management & directory](user-management.md)) |
@@ -1745,6 +1745,18 @@ they never picked is never selected for them. When there is no current or rememb
 fallback always comes from the caller's **own** memberships — so a support user with no memberships and no
 prior choice lands on no team, rather than inside whichever tenant happens to sort first. A remembered team
 that is no longer visible (deleted, consent revoked, scope removed) falls back the same way.
+
+**With teams visible and none selected, `TeamSelector` shows the picker with a *Select a team* placeholder**
+— the estate is offered, not entered. This is the ordinary first visit for a support or operations account:
+they can see every team and belong to none, so there is nothing to default to and the choice stays theirs.
+Override the placeholder through `TeamSelectorText.SelectTeam` (`team.selector.selectTeam`) like any other
+string.
+
+> Before 3.10.10 this state rendered **nothing at all** — an empty top bar with no way to reach a team
+> (Tharga/Team#214). If you built a wrapper component to cover it, you can drop it. Note that the two blank
+> states meant opposite things and were indistinguishable on screen: a *Create team* link meant `teams:read`
+> was **not** reaching the caller, while a completely empty bar meant it **was**. If you spent time
+> re-checking a scope mapping that turned out to be correct, this is why.
 
 Team enumeration is deliberately **not audited** — it is a read with no side effect. Mutations performed
 inside a team are audited as usual.
