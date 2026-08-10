@@ -158,9 +158,16 @@ with transparency**, and re-encode as PNG:
 builder.Services.AddThargaImageProcessing();
 ```
 
-It registers an `IIconProcessor` (ImageSharp) that the built-in store runs before validating/storing.
+It registers an `IIconProcessor` (SkiaSharp) that the built-in store runs before validating/storing.
 Formats it can't decode (e.g. SVG) pass through unchanged, as do images already square and within
 bounds. Bring your own by registering a custom `IIconProcessor`.
+
+The package carries its own Linux native assets, so there is nothing to install on the host and slim or
+Alpine containers work as-is. **From 3.11 it uses SkiaSharp (MIT); 3.10 and earlier used ImageSharp**,
+whose Six Labors Split Licence requires a paid licence for closed-source for-profit use above $1M annual
+gross revenue — so if you held one on this package's account, you no longer need it. The processor type
+was renamed `ImageSharpIconProcessor` → `SkiaIconProcessor` in the same release, which only affects code
+that registered it by hand rather than calling `AddThargaImageProcessing()`. Output is unchanged.
 
 ### What squaring produces
 

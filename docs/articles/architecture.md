@@ -14,7 +14,7 @@ How the packages fit together, and where a request goes.
 | `Tharga.Team.Service` | Domain services, authorization decorators, audit, API-key authentication, controllers | Server-side |
 | `Tharga.Team.MongoDB` | MongoDB persistence | — |
 | `Tharga.Team.Entra` | Directory adapter | Keeps **`Azure.Identity`** off consumers who do not use Entra |
-| `Tharga.Team.Images` | Image processing for icons | Keeps **`SixLabors.ImageSharp`** — and its licence terms — off consumers who do not resize images |
+| `Tharga.Team.Images` | Image processing for icons | Keeps **`SkiaSharp`** and its native binaries off consumers who do not resize images |
 | `Tharga.Team.Mcp` | Team-backed bridge for MCP | Opt-in protocol surface; keeps **`Tharga.Mcp`** off consumers with no agent surface |
 
 Three of those exist purely to quarantine a dependency. That is the test a package has to pass here: a
@@ -35,7 +35,7 @@ flowchart TB
   DRIVER(["Tharga.MongoDB"])
   SWAGGER(["Swashbuckle.AspNetCore"])
   AZURE(["Azure.Identity"])
-  SHARP(["SixLabors.ImageSharp"])
+  SKIA(["SkiaSharp"])
   THARGAMCP(["Tharga.Mcp"])
 
   BLAZOR --> TEAM
@@ -50,7 +50,7 @@ flowchart TB
   SERVICE -.-> SWAGGER
   MONGO -.-> DRIVER
   ENTRA -.-> AZURE
-  IMAGES -.-> SHARP
+  IMAGES -.-> SKIA
   MCP -.-> THARGAMCP
 ```
 
