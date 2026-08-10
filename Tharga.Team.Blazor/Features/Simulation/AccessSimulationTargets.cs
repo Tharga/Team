@@ -72,6 +72,51 @@ internal static class AccessSimulationTargets
         };
     }
 
+    /// <summary>
+    /// The label recorded for a demo-mode simulation, in the banner and in the audit metadata.
+    /// </summary>
+    /// <remarks>
+    /// <b>Deliberately not localized.</b> It is written to <c>simulation.target</c> on every audit entry
+    /// produced during a demo, and metadata whose value depends on the operator's language cannot be
+    /// searched or compared across a deployment. The card's visible wording is a separate, localizable
+    /// string.
+    /// </remarks>
+    public const string DemoLabel = "Demo mode";
+
+    /// <summary>
+    /// Demo mode: the caller's own team access, with their system-wide access dropped.
+    /// </summary>
+    /// <remarks>
+    /// The one target that is not a *replacement*. The other four name someone else's access; this one
+    /// names the caller's own, so the intersection removes nothing team-side and the only thing that
+    /// changes is the system half — which is what <see cref="AccessSimulation.DropSystemScopes"/> and
+    /// <see cref="AccessSimulation.DropAppRoles"/> already do for every kind.
+    /// <para>
+    /// <b>No access level is set</b>, which is what keeps the team access identical. Passing one would run
+    /// it through the clamp and could lower the level the caller holds on this team — the opposite of
+    /// "show me exactly what an ordinary member of this team sees, minus my system privileges".
+    /// </para>
+    /// <para>
+    /// Recorded as <see cref="AccessSimulationKind.Scopes"/> rather than a kind of its own, so this adds no
+    /// public API. The consequence is that <c>simulation.kind</c> reads <c>Scopes</c> in the audit log;
+    /// <c>simulation.target</c> carries <see cref="DemoLabel"/>, which is what distinguishes a demo from a
+    /// hand-picked scope simulation.
+    /// </para>
+    /// </remarks>
+    /// <param name="ownTeamScopes">
+    /// The caller's own scopes on the selected team — <c>AccessSimulationState.GetOwnScopesAsync</c>.
+    /// Anything narrower would silently reduce their team access as well as their system access.
+    /// </param>
+    public static AccessSimulation FromDemo(IEnumerable<string> ownTeamScopes)
+        => new()
+        {
+            Kind = AccessSimulationKind.Scopes,
+            Label = DemoLabel,
+            Scopes = [.. ownTeamScopes ?? []],
+            DropSystemScopes = true,
+            DropAppRoles = true
+        };
+
     /// <summary>An access level, with the scopes that level grants.</summary>
     public static AccessSimulation FromAccessLevel(AccessLevel accessLevel, IEnumerable<string> scopes)
         => new()

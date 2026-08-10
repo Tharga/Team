@@ -53,6 +53,13 @@ builder.AddThargaTeam(o =>
     // the caller really holds. Off by default; the sample turns it on so the path is exercised.
     o.Blazor.Simulation.Enabled = true;
 
+    // The sample mounts UserProfileView at /account rather than the toolkit's default /profile, so this
+    // option is what keeps the profile menu's User item pointing at it. Without it that item navigates to
+    // a literal "profile" and 404s — the defect these options were added for. Leaving both unset keeps the
+    // built-in routes, so an ordinary host needs neither.
+    o.Blazor.ProfilePath = "/account";
+    // o.Blazor.TeamPath   = "/team";   // unset: the sample does mount TeamComponent at the default route.
+
     // Demo: revalidate team claims every 20 seconds so a member removal, access downgrade, or consent
     // change is reflected quickly in a live circuit while testing (#127). The production default is a slow
     // 30 minutes; set o.Blazor.ClaimRevalidation.Enabled = false to turn revalidation off entirely.

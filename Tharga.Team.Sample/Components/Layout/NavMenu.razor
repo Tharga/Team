@@ -9,9 +9,16 @@
             </RadzenStack>
         </RadzenStack>
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
-            @* Access simulation: the entry point when nothing is simulated, the warning banner and the
-               way out when something is. One component, so the way in cannot be wired without the way out. *@
-            <AccessSimulationBar />
+            @* Both halves off, so this draws nothing: the access card on /account is the entry point *and*
+               the way out. Kept rather than deleted so the two switches are visible — set either to true
+               to get that half back in the top bar while testing.
+
+               ShowBanner="false" is what keeps a demo clean; the warning banner spans every page and
+               announces that access is reduced, which is the opposite of what a demonstration wants. The
+               trade is real: nothing on screen now says the session is reduced, so the only way back is
+               the profile page. That works here because /account carries [Authorize] and nothing more —
+               a host gating it on a scope a simulation can remove would strand the caller. *@
+            <AccessSimulationBar ShowEntryPoint="false" ShowBanner="false" />
             <TeamSelector />
             <LoginDisplay />
         </RadzenStack>
@@ -25,7 +32,7 @@
 
             <AuthorizeView>
                 <Authorized>
-                    <RadzenPanelMenuItem Text="Profile" Path="profile" Icon="person"/>
+                    <RadzenPanelMenuItem Text="Profile" Path="account" Icon="person"/>
                     <RadzenPanelMenuItem Text="Team" Path="team" Icon="groups"/>
                     <RadzenPanelMenuItem Text="Scopes" Path="scopes" Icon="shield"/>
                     @* <RadzenPanelMenuItem Text="Invites" Path="invites" Icon="mail"/> *@

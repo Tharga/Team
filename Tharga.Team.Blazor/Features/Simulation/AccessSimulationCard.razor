@@ -1,0 +1,84 @@
+@using Tharga.Team.Blazor.Features.Simulation
+@inject AccessSimulationState SimulationState
+@inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
+
+@* Rendered by UserProfileView between the profile card and Claims. AccessSimulationBar stays in the
+   layout and remains the guaranteed way out — this card is an additional way in, never the sole exit,
+   because a control reachable only by navigating to a page is no use to someone whose reduced session is
+   what makes that page hard to reach. *@
+
+@if (_render)
+{
+    <ExpandableCard Icon="visibility" Text="@_text[AccessSimulationCardText.Title]" Selected="@(_active != null)">
+        <ChildContent>
+            <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+                @if (_active != null)
+                {
+                    @* Ungated on purpose — see OnInitializedAsync. *@
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationCardText.ActiveNotice]</RadzenText>
+                        <div>
+                            <RadzenButton Text="@_text[AccessSimulationCardText.Stop]" Icon="undo"
+                                          ButtonStyle="ButtonStyle.Warning" Size="ButtonSize.Small"
+                                          Variant="Variant.Flat" Click="@Stop" />
+                        </div>
+                    </RadzenStack>
+                }
+                else
+                {
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[AccessSimulationCardText.DemoMode]</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationCardText.DemoDescription]</RadzenText>
+                        <div>
+                            <RadzenButton Text="@_text[AccessSimulationCardText.StartDemo]" Icon="slideshow"
+                                          ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                                          Variant="Variant.Flat" Click="@StartDemo" />
+                        </div>
+                    </RadzenStack>
+
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[AccessSimulationCardText.ViewAsUser]</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationCardText.ViewAsDescription]</RadzenText>
+                        <div>
+                            <RadzenButton Text="@_text[AccessSimulationCardText.ViewAsUser]" Icon="visibility"
+                                          ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                          Variant="Variant.Flat" Click="@Open" />
+                        </div>
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        </ChildContent>
+    </ExpandableCard>
+}
+
+@code {
+    private AccessSimulation _active;
+    private bool _render;
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!SimulationState.Enabled) return;
+
+        _text = await TextProvider.ResolveAsync(AccessSimulationCardText.All);
+        _active = await SimulationState.GetActiveAsync();
+
+        // Asked only when nothing is active, exactly as AccessSimulationBar does it: a simulation can
+        // remove the scope that authorizes starting one, so gating the exit on it would let someone
+        // strand themselves.
+        _render = _active != null || await SimulationState.CanSimulateAsync();
+
+        await base.OnInitializedAsync();
+    }
+
+    private Task StartDemo() => SimulationState.StartDemoAsync();
+
+    private Task Stop() => SimulationState.StopAsync();
+
+    private async Task Open()
+    {
+        await DialogService.OpenAsync<AccessSimulationDialog>(_text[AccessSimulationCardText.ViewAsUser],
+            options: new DialogOptions { Width = "560px", CloseDialogOnOverlayClick = true });
+    }
+}

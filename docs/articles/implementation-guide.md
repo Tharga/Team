@@ -240,8 +240,9 @@ builder.AddThargaAuth(o =>
 
 | Component | Namespace | Description |
 |-----------|-----------|-------------|
-| `<LoginDisplay />` | `Tharga.Team.Blazor.Features.Authentication` | Profile menu with Gravatar when authenticated, login button when not. Navigates to `/login`, `/logout`, and profile/team pages. The Team item can be restricted to specific roles via `TeamMenuRoles`. |
-| `<UserProfileView />` | `Tharga.Team.Blazor.Features.User` | The signed-in user's avatar, name and email, with inline editing of their own name, plus authentication claims in an expandable card. |
+| `<LoginDisplay />` | `Tharga.Team.Blazor.Features.Authentication` | Profile menu with Gravatar when authenticated, login button when not. Navigates to `/login`, `/logout`, and the profile/team pages — at `o.Blazor.ProfilePath` and `o.Blazor.TeamPath` if you mounted them somewhere other than `/profile` and `/team`. The Team item can be restricted to specific roles via `TeamMenuRoles`. |
+| `<UserProfileView />` | `Tharga.Team.Blazor.Features.User` | The signed-in user's avatar, name and email, with inline editing of their own name, plus authentication claims in an expandable card. When access simulation is enabled it also renders `<AccessSimulationCard />` between the two — set `ShowAccessCard="false"` to place that yourself. |
+| `<AccessSimulationCard />` | `Tharga.Team.Blazor.Features.Simulation` | Expandable card offering **demo mode** and **view as another user**, plus the way out while either is active. Rendered by `UserProfileView` by default; draws nothing unless simulation is enabled and the caller can simulate. See [access simulation](access-simulation.md) |
 
 ### Usage
 
@@ -637,6 +638,8 @@ builder.Services.AddThargaTeamBlazor(o =>
     o.Title = "My App";
     o.AutoCreateFirstTeam = true;          // default: false — auto-creates a team for first-time users
     o.CreateTeamPath = "/get-started";     // default: null — built-in "Create team" entry points navigate here instead of the bare create (see "Overriding the Create team action")
+    o.ProfilePath = "/account";            // default: null — where the profile menu's User item navigates. Set it if you mounted <UserProfileView /> anywhere but /profile
+    o.TeamPath = "/organisation";          // default: null — where the profile menu's Team item navigates. Set it if you mounted <TeamComponent /> anywhere but /team
     o.ShowMemberRoles = false;             // default: false — shows tenant role assignment in team UI
     o.ShowScopeOverrides = false;          // default: false — shows scope override controls in TeamComponent (team-member UI). For ApiKeyView, opt in via the [Parameter] ShowScopeOverrides on the component itself; the two flags are intentionally independent.
     o.RegisterTeamService<MyTeamService, MyUserService>();
@@ -1778,11 +1781,34 @@ o.CreateTeamPath = "/get-started";
 
 Both default to unset, so behavior is unchanged unless you opt in. The override applies to the built-in UI entry points only — teams created programmatically or via `AutoCreateFirstTeam` are unaffected.
 
+### Where the profile menu navigates
+
+`LoginDisplay`'s two built-in items — **User** and **Team** — navigate to `/profile` and `/team`. The toolkit
+ships `<UserProfileView />` and `<TeamComponent />` as components and lets you mount them at any route, so
+if you mounted either anywhere else, say where it went:
+
+```csharp
+o.ProfilePath = "/account";        // default: null — keeps /profile
+o.TeamPath    = "/organisation";   // default: null — keeps /team
+```
+
+Both default to unset, so an existing host needs neither. They are independent: the two pages are mounted
+separately, so moving one says nothing about the other.
+
+**Menu items you supply yourself were never affected** — they carry their own `Href` and are matched before
+the built-ins. This is only about the two the toolkit renders.
+
+> This matters beyond a stray link if you use access simulation. With `ShowBanner="false"` on
+> `AccessSimulationBar`, the access card on the profile page is the only way out of a reduced session — so
+> the profile route has to actually resolve.
+
 ### Component parameter reference
 
 | Component | Parameters |
 |-----------|-----------|
 | `<TeamSelector>` | `CreateTeamRequested` (intercept the teamless "Create team" link) |
+| `<UserProfileView>` | `ShowAccessCard` (default true — renders `<AccessSimulationCard />` between the profile details and Claims) |
+| `<AccessSimulationBar>` | `Text` ("View as…"), `ShowEntryPoint` (true), `ShowBanner` (true — **off means the profile card is the only way out**) |
 | `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button) |
 | `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton` |
 | `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton` |

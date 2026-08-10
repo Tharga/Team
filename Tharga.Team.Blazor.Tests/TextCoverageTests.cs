@@ -49,6 +49,7 @@ public class TextCoverageTests
         "Features/User/DirectoryOnlyUsersView.razor",
         "Features/User/UserIconDialog.razor",
         "Features/Team/TeamIconDialog.razor",
+        "Features/Simulation/AccessSimulationCard.razor",
     ];
 
     /// <summary>

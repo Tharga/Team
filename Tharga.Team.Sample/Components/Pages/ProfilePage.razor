@@ -1,8 +1,14 @@
-@page "/profile"
+@* Deliberately NOT the toolkit's default "/profile". Mounting it elsewhere is what exercises
+   o.Blazor.ProfilePath in Program.cs — without which the profile-menu item would navigate to /profile and
+   404. That was the defect the option was added for, so the sample is where it stays proven. *@
+@page "/account"
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
 
 <PageTitle>Profile</PageTitle>
 
+@* The access card (demo mode + "view as") is rendered by UserProfileView between the profile details and
+   Claims — see its ShowAccessCard parameter. The way *out* of a reduced session is the banner half of
+   <AccessSimulationBar /> in NavMenu, which shows on every page. *@
 <UserProfileView />
