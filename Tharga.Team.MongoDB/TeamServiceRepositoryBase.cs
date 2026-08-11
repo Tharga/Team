@@ -47,6 +47,35 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
         return _teamRepository.RenameAsync(teamKey, name);
     }
 
+    /// <summary>This store can soft-delete, so <c>TeamDeleteMode.Soft</c> takes effect.</summary>
+    protected override bool SupportsSoftDelete => true;
+
+    /// <inheritdoc />
+    protected override Task SoftDeleteTeamAsync(string teamKey, string deletedBy)
+    {
+        return _teamRepository.SetDeletedAsync(teamKey, DateTime.UtcNow, deletedBy);
+    }
+
+    /// <inheritdoc />
+    protected override Task RestoreTeamAsync(string teamKey)
+    {
+        return _teamRepository.SetDeletedAsync(teamKey, null, null);
+    }
+
+    /// <summary>
+    /// Removes the team record and drops its database. The only path here that needs <c>dropDatabase</c>.
+    /// </summary>
+    /// <remarks>
+    /// Same ordering and same wrapping as <see cref="DeleteTeamAsync(string)"/> — record first, so a drop
+    /// failure leaves an orphaned database rather than a live team pointing at nothing.
+    /// </remarks>
+    protected override async Task PurgeTeamAsync(string teamKey)
+    {
+        await _teamRepository.DeleteAsync(teamKey);
+
+        await DropTeamDatabaseAsync(teamKey);
+    }
+
     /// <summary>
     /// Removes the team record, then drops the team's database.
     /// </summary>

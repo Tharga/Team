@@ -25,12 +25,29 @@ the read-path sweep, then the UI.
       database rather than a live team pointing at deleted data. **The ordering is the half that would have
       lost data** — FortDocs only reported an error-handling problem because the drop happened to throw
       first. 66 tests in that project, up 4.
-- [ ] 4. **The model.** `IsDeleted` / `DeletedAt` / `DeletedBy` on the team entity, stored by name (the
-      persistence rule — enums by name, and a `DateTime?` needs no attribute). `TeamDeleteMode` option,
-      defaulting to `Soft`.
-- [ ] 5. **The seam.** `RestoreTeamAsync` and `PurgeTeamAsync` as `virtual` members on `TeamServiceBase`
-      with working defaults — **never `abstract`**, or every derived host breaks at compile time in a patch.
-      `DeleteTeamAsync` becomes soft when the mode says so.
+- [x] 4. **The model.** `DeletedAt` / `DeletedBy` on `ITeam` as **default interface members** (the pattern
+      `ConsentedRoles` already uses, so a host implementing `ITeam` directly keeps compiling), and on
+      `TeamEntityBase` as `BsonIgnoreIfNull` properties — a live team's document is byte-identical to one
+      written before the feature, so nothing migrates. **`IsDeleted` is derived from `DeletedAt`, never
+      stored**: two fields that must agree eventually disagree, and then every read depends on which one it
+      happened to consult. `TeamDeleteMode` enum + `o.TeamDeleteMode` defaulting to `Soft`.
+- [x] 5. **The seam.** `SupportsSoftDelete`, `SoftDeleteTeamAsync`, `RestoreTeamAsync`, `PurgeTeamAsync` —
+      all `virtual`, matching the `SetTeamMemberSuspendedAsync` precedent already in this class.
+      **`SupportsSoftDelete` defaulting to false is what keeps this a patch**: a host that predates the
+      feature cannot mark a team deleted, so its delete resolves to the hard one it already had rather than
+      failing on an operation it cannot perform. `PurgeTeamAsync` defaults to the existing
+      `DeleteTeamAsync`, so every store gains a working purge for free.
+
+      The mode reaches the service through an **optional** constructor parameter read by a **virtual**
+      property — neither a derived host that never passes it nor one that wants to decide the mode itself
+      has to change.
+
+      Mongo side: `SetDeletedAsync` / `GetIncludingDeletedAsync` / `GetAllTeamsIncludingDeletedAsync` on
+      `ITeamRepository` as throwing default interface methods (the `GetAllTeamsAsync` precedent), and
+      **four repository reads now filter `DeletedAt == null`** — `GetAsync`, `GetTeamsByUserAsync`,
+      `GetTeamsByConsentAsync`, `GetAllTeamsAsync`. The unfiltered reads are separately *named* rather than
+      a defaulted boolean, because one forgotten argument would resurrect a deleted team into an ordinary
+      list.
 - [ ] 6. **`teams:purge` scope**, registered beside `teams:delete`, enforced in
       `AuthorizationTeamServiceDecorator` — the single enforcement point, where the other team mutations are
       already gated.

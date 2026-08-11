@@ -1,4 +1,4 @@
-using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 
 namespace Tharga.Team.MongoDB;
@@ -18,10 +18,28 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
 
     public IAsyncEnumerable<TTeamEntity> GetTeamsByUserAsync(string userKey)
     {
-        return _collection.GetAsync(x => x.Members.Any(y => y.Key == userKey && y.State == MembershipState.Member));
+        return _collection.GetAsync(x => x.DeletedAt == null && x.Members.Any(y => y.Key == userKey && y.State == MembershipState.Member));
     }
 
+    /// <summary>
+    /// A live team by key. Returns null for a soft-deleted one, which is what makes a deleted team stop
+    /// resolving and stop granting access everywhere at once.
+    /// </summary>
     public Task<TTeamEntity> GetAsync(string teamKey)
+    {
+        return _collection.GetOneAsync(x => x.Key == teamKey && x.DeletedAt == null);
+    }
+
+    /// <summary>
+    /// A team by key <b>whether or not it is deleted</b> — for restore, purge, and for refusing to reuse a
+    /// deleted team's key.
+    /// </summary>
+    /// <remarks>
+    /// Named rather than parameterised, for the same reason as
+    /// <see cref="GetAllTeamsIncludingDeletedAsync"/>: a defaulted boolean is one forgotten argument away
+    /// from resurrecting a deleted team into an ordinary read.
+    /// </remarks>
+    public Task<TTeamEntity> GetIncludingDeletedAsync(string teamKey)
     {
         return _collection.GetOneAsync(x => x.Key == teamKey);
     }
@@ -255,12 +273,37 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
 
     public IAsyncEnumerable<TTeamEntity> GetTeamsByConsentAsync(string[] roles)
     {
-        return _collection.GetAsync(x => x.ConsentedRoles != null && x.ConsentedRoles.Any(r => roles.Contains(r)));
+        return _collection.GetAsync(x => x.DeletedAt == null && x.ConsentedRoles != null && x.ConsentedRoles.Any(r => roles.Contains(r)));
     }
 
+    /// <summary>
+    /// Every live team. Soft-deleted teams are excluded here, not by the caller.
+    /// </summary>
+    /// <remarks>
+    /// <b>The filter belongs at the store, not above it.</b> Every caller excluding deleted teams for
+    /// itself is a rule restated once per read, and the read that forgets is a silent leak rather than a
+    /// visible bug. <see cref="GetAllTeamsIncludingDeletedAsync"/> is the one way to see them, and has to
+    /// be asked for by name.
+    /// </remarks>
     public IAsyncEnumerable<TTeamEntity> GetAllTeamsAsync()
     {
+        return _collection.GetAsync(x => x.DeletedAt == null);
+    }
+
+    /// <inheritdoc />
+    public IAsyncEnumerable<TTeamEntity> GetAllTeamsIncludingDeletedAsync()
+    {
         return _collection.GetAsync(x => true);
+    }
+
+    /// <inheritdoc />
+    public Task SetDeletedAsync(string teamKey, DateTime? deletedAt, string deletedBy)
+    {
+        var filter = new FilterDefinitionBuilder<TTeamEntity>().Eq(x => x.Key, teamKey);
+        var update = new UpdateDefinitionBuilder<TTeamEntity>()
+            .Set(x => x.DeletedAt, deletedAt)
+            .Set(x => x.DeletedBy, deletedAt == null ? null : deletedBy);
+        return _collection.UpdateOneAsync(filter, update);
     }
 
 }

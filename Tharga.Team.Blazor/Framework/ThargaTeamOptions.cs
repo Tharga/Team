@@ -85,6 +85,24 @@ public class ThargaTeamOptions
     public AuditOptions Audit { get; set; }
 
     /// <summary>
+    /// What deleting a team does. Defaults to <see cref="TeamDeleteMode.Soft"/> — the team is marked
+    /// deleted and hidden from every read, and can be restored or purged afterwards.
+    /// </summary>
+    /// <remarks>
+    /// <b>The default changed in 3.13.1.</b> Before it, <c>DeleteTeamAsync</c> removed the record and
+    /// dropped the team's storage in one irreversible step. Nothing in the API changed and a deleted team
+    /// still disappears from every read; what differs is that the document survives until purged, and that
+    /// deleting no longer needs the elevated database privilege dropping storage requires
+    /// (Tharga/Team#224).
+    /// <para>
+    /// Set it to <see cref="TeamDeleteMode.Hard"/> to keep the old behaviour — appropriate where a deletion
+    /// must genuinely leave nothing behind, and where the deployment holds the privilege to drop a team's
+    /// storage.
+    /// </para>
+    /// </remarks>
+    public TeamDeleteMode TeamDeleteMode { get; set; } = TeamDeleteMode.Soft;
+
+    /// <summary>
     /// Options for email sending (SMTP). When set and no custom email service is registered,
     /// the built-in SmtpTeamEmailSender is used. Set to null to disable email.
     /// </summary>

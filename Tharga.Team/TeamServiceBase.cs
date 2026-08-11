@@ -9,6 +9,7 @@ public abstract class TeamServiceBase : ITeamService
     private readonly ILogger<TeamServiceBase> _logger;
     private readonly IIconStore _iconStore;
     private readonly ITeamCache _cache;
+    private readonly TeamDeleteMode _configuredDeleteMode;
 
     /// <param name="userService">Resolves the calling user.</param>
     /// <param name="logger">Optional. Used to report ambiguous member matches.</param>
@@ -24,13 +25,30 @@ public abstract class TeamServiceBase : ITeamService
         IUserService userService,
         ILogger<TeamServiceBase> logger = null,
         IIconStore iconStore = null,
-        ITeamCache cache = null)
+        ITeamCache cache = null,
+        TeamDeleteMode deleteMode = TeamDeleteMode.Soft)
     {
         _userService = userService;
         _logger = logger;
         _iconStore = iconStore;
         _cache = cache ?? InMemoryTeamCache.Shared;
+        _configuredDeleteMode = deleteMode;
     }
+
+    /// <summary>
+    /// What deleting a team does in this store. Defaults to whatever the host configured, or
+    /// <see cref="TeamDeleteMode.Soft"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>An optional constructor parameter rather than a required one</b>, and a virtual property rather
+    /// than a field read, so neither a derived host that never passes it nor one that wants to decide the
+    /// mode itself has to change. Both matter in a patch.
+    /// <para>
+    /// Note this is only half the answer — see <see cref="SupportsSoftDelete"/>. A store that cannot mark a
+    /// team deleted deletes outright whatever this says.
+    /// </para>
+    /// </remarks>
+    protected virtual TeamDeleteMode DeleteMode => _configuredDeleteMode;
 
     /// <summary>
     /// The cache this instance actually ended up with, so <see cref="TeamCacheWiring"/> can tell a forwarded
@@ -46,6 +64,58 @@ public abstract class TeamServiceBase : ITeamService
     protected abstract Task<ITeam> CreateTeamAsync(string teamKey, string name, IUser user, string displayName = null);
     protected abstract Task SetTeamNameAsync(string teamKey, string name);
     protected abstract Task DeleteTeamAsync(string teamKey);
+
+    /// <summary>
+    /// Whether this store can soft-delete. <c>false</c> by default, so a store that has not implemented it
+    /// keeps deleting exactly as before.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is what keeps soft delete a patch rather than a break.</b> The default delete mode is
+    /// <see cref="TeamDeleteMode.Soft"/>, but a host deriving from this class predates the feature and
+    /// cannot mark a team deleted. Reporting <c>false</c> makes the mode resolve to
+    /// <see cref="TeamDeleteMode.Hard"/> for that store — the behaviour it already had — instead of failing
+    /// on an operation it cannot perform.
+    /// <para>
+    /// Surfaces are expected to consult this before offering restore or purge; a control that throws when
+    /// clicked is worse than no control.
+    /// </para>
+    /// </remarks>
+    protected virtual bool SupportsSoftDelete => false;
+
+    /// <summary>
+    /// Marks the team deleted without removing it, recording when and by whom.
+    /// </summary>
+    /// <remarks>
+    /// <b>Virtual, never abstract</b> — an abstract member here breaks every derived host at compile time.
+    /// The default delegates to <see cref="DeleteTeamAsync(string)"/>, so a store that has not implemented
+    /// soft delete performs the irreversible delete it always did rather than throwing. Paired with
+    /// <see cref="SupportsSoftDelete"/>, which tells callers which of the two they will get.
+    /// </remarks>
+    protected virtual Task SoftDeleteTeamAsync(string teamKey, string deletedBy) => DeleteTeamAsync(teamKey);
+
+    /// <summary>Clears the deleted mark, returning the team to normal use.</summary>
+    /// <remarks>
+    /// Unreachable unless <see cref="SupportsSoftDelete"/> is <c>true</c> — there is nothing to restore in a
+    /// store that deletes outright — so the default throws rather than pretending to succeed.
+    /// </remarks>
+    protected virtual Task RestoreTeamAsync(string teamKey)
+        => throw new NotSupportedException(
+            $"This team store does not support soft delete, so '{teamKey}' cannot be restored. " +
+            $"Override {nameof(SupportsSoftDelete)} and {nameof(SoftDeleteTeamAsync)} to enable it.");
+
+    /// <summary>
+    /// Removes the team permanently, including its storage.
+    /// </summary>
+    /// <remarks>
+    /// The default is <see cref="DeleteTeamAsync(string)"/> — precisely what deleting a team meant before
+    /// soft delete existed — so every store gains a working purge without implementing anything.
+    /// <para>
+    /// This is the only operation that needs whatever privilege the adapter requires to drop a team's data.
+    /// For the MongoDB adapter in a per-team-database deployment that is <c>dropDatabase</c>, which is why
+    /// confining it here is the point of Tharga/Team#224.
+    /// </para>
+    /// </remarks>
+    protected virtual Task PurgeTeamAsync(string teamKey) => DeleteTeamAsync(teamKey);
     protected abstract Task AddTeamMemberAsync(string teamKey, InviteUserModel model);
     protected abstract Task RemoveTeamMemberAsync(string teamKey, string userKey);
     protected abstract Task<ITeam> SetTeamMemberInvitationResponseAsync(string teamKey, string userKey, string inviteKey, bool accept);
@@ -153,14 +223,69 @@ public abstract class TeamServiceBase : ITeamService
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
 
+    /// <summary>
+    /// Deletes the team — soft by default, so it can be restored, and so deleting needs no privilege to
+    /// drop storage.
+    /// </summary>
+    /// <remarks>
+    /// Resolves to a hard delete when the host asks for one, and also when the store cannot soft-delete:
+    /// see <see cref="SupportsSoftDelete"/>. Either way the team disappears from every read, which is why
+    /// the change of default is invisible through this API.
+    /// </remarks>
     public async Task DeleteTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
     {
-        await DeleteTeamAsync(teamKey);
+        if (UseSoftDelete)
+        {
+            var deletedBy = (await GetCurrentUserAsync())?.Key;
+            await SoftDeleteTeamAsync(teamKey, deletedBy);
+        }
+        else
+        {
+            await DeleteTeamAsync(teamKey);
+        }
+
+        await AfterTeamRemovedFromUseAsync(teamKey);
+    }
+
+    /// <summary>Restores a soft-deleted team.</summary>
+    public async Task RestoreTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+    {
+        await RestoreTeamAsync(teamKey);
 
         await _cache.RemoveCustomRolesAsync(teamKey);
 
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
+
+    /// <summary>
+    /// Removes a team permanently, including its storage. Irreversible.
+    /// </summary>
+    /// <remarks>
+    /// The only operation needing the privilege to drop a team's data. A store refusal surfaces as
+    /// <see cref="TeamStorageException"/> rather than as the store's own exception.
+    /// </remarks>
+    public async Task PurgeTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+    {
+        await PurgeTeamAsync(teamKey);
+
+        await AfterTeamRemovedFromUseAsync(teamKey);
+    }
+
+    /// <summary>
+    /// Shared tail of every operation that takes a team out of use, so soft delete, hard delete and purge
+    /// cannot drift on cache invalidation or on notifying the UI.
+    /// </summary>
+    private async Task AfterTeamRemovedFromUseAsync(string teamKey)
+    {
+        await _cache.RemoveCustomRolesAsync(teamKey);
+
+        TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+    }
+
+    /// <summary>
+    /// Whether this delete should be soft: the host asked for it <b>and</b> the store can do it.
+    /// </summary>
+    private bool UseSoftDelete => DeleteMode == TeamDeleteMode.Soft && SupportsSoftDelete;
 
     /// <inheritdoc cref="ITeamManagementService.GetTeamMemberAsync"/>
     public async Task<ITeamMember> GetTeamMemberAsync(string teamKey, string userKey)
