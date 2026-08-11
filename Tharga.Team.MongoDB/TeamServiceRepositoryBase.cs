@@ -47,14 +47,55 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
         return _teamRepository.RenameAsync(teamKey, name);
     }
 
+    /// <summary>
+    /// Removes the team record, then drops the team's database.
+    /// </summary>
+    /// <remarks>
+    /// <b>The record goes first, and the order is the point.</b> The two writes cannot be made atomic —
+    /// one is a document delete, the other a database drop — so the only choice is which way a partial
+    /// failure fails. Dropping first and then failing to delete the record leaves a <i>live team pointing
+    /// at deleted data</i>: it still lists, still resolves, still authorizes, and every read against it
+    /// returns empty. Deleting the record first leaves an orphaned database, which is inert and which a
+    /// sweep can find. Reported by Eplicta FortDocs (Tharga/Team#224), where the drop happened to throw
+    /// first and nothing was lost.
+    /// <para>
+    /// A drop failure is wrapped as <see cref="TeamStorageException"/> rather than allowed to surface as a
+    /// driver exception — see that type for why the message addresses the deployment rather than the caller.
+    /// The record is already gone at that point, which is the intended outcome: the team is deleted, and
+    /// what remains is a database to clean up.
+    /// </para>
+    /// </remarks>
     protected override async Task DeleteTeamAsync(string teamKey)
     {
-        var databaseContext = new DatabaseContext { DatabasePart = teamKey };
-        var service = _mongoDbServiceFactory.GetMongoDbService(() => databaseContext);
-        var databaseName = service.GetDatabaseName();
-        service.DropDatabase(databaseName);
-
         await _teamRepository.DeleteAsync(teamKey);
+
+        await DropTeamDatabaseAsync(teamKey);
+    }
+
+    /// <summary>
+    /// Drops the database backing <paramref name="teamKey"/>, translating a store refusal into
+    /// <see cref="TeamStorageException"/>.
+    /// </summary>
+    private Task DropTeamDatabaseAsync(string teamKey)
+    {
+        try
+        {
+            var databaseContext = new DatabaseContext { DatabasePart = teamKey };
+            var service = _mongoDbServiceFactory.GetMongoDbService(() => databaseContext);
+            var databaseName = service.GetDatabaseName();
+            service.DropDatabase(databaseName);
+        }
+        catch (Exception e)
+        {
+            throw new TeamStorageException(teamKey,
+                $"The team record for '{teamKey}' was removed, but its database could not be dropped. " +
+                "This deployment's database user is not permitted to drop databases — in MongoDB Atlas, " +
+                "'readWriteAnyDatabase' does not include 'dropDatabase'; it needs 'dbAdminAnyDatabase', " +
+                "'atlasAdmin' or a custom role covering every per-team database. The database is now " +
+                "orphaned and can be dropped manually.", e);
+        }
+
+        return Task.CompletedTask;
     }
 
     protected override async Task AddTeamMemberAsync(string teamKey, InviteUserModel model)
