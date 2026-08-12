@@ -234,6 +234,10 @@ public abstract class TeamServiceBase : ITeamService
     /// </remarks>
     public async Task DeleteTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
     {
+        // Captured before the delete, and that ordering is required: once a team is soft-deleted the
+        // filtered read returns null, so afterwards there is no roster left to evict from the cache.
+        var memberKeys = await MemberKeysForCacheEvictionAsync<TMember>(teamKey);
+
         if (UseSoftDelete)
         {
             var deletedBy = (await GetCurrentUserAsync())?.Key;
@@ -244,7 +248,7 @@ public abstract class TeamServiceBase : ITeamService
             await DeleteTeamAsync(teamKey);
         }
 
-        await AfterTeamRemovedFromUseAsync(teamKey);
+        await AfterTeamRemovedFromUseAsync(teamKey, memberKeys);
     }
 
     /// <summary>Restores a soft-deleted team.</summary>
@@ -252,9 +256,12 @@ public abstract class TeamServiceBase : ITeamService
     {
         await RestoreTeamAsync(teamKey);
 
-        await _cache.RemoveCustomRolesAsync(teamKey);
+        // Evicted *after* the restore, the mirror of delete. While the team was deleted, any membership
+        // lookup cached a null — GetTeamMemberAsync caches the miss as well as the hit — and a cached null
+        // would keep denying access to a team that is live again.
+        var memberKeys = await MemberKeysForCacheEvictionAsync<TMember>(teamKey);
 
-        TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+        await AfterTeamRemovedFromUseAsync(teamKey, memberKeys);
     }
 
     /// <summary>
@@ -266,20 +273,56 @@ public abstract class TeamServiceBase : ITeamService
     /// </remarks>
     public async Task PurgeTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
     {
+        var memberKeys = await MemberKeysForCacheEvictionAsync<TMember>(teamKey);
+
         await PurgeTeamAsync(teamKey);
 
-        await AfterTeamRemovedFromUseAsync(teamKey);
+        await AfterTeamRemovedFromUseAsync(teamKey, memberKeys);
     }
 
     /// <summary>
     /// Shared tail of every operation that takes a team out of use, so soft delete, hard delete and purge
     /// cannot drift on cache invalidation or on notifying the UI.
     /// </summary>
-    private async Task AfterTeamRemovedFromUseAsync(string teamKey)
+    private async Task AfterTeamRemovedFromUseAsync(string teamKey, IReadOnlyCollection<string> memberKeys)
     {
         await _cache.RemoveCustomRolesAsync(teamKey);
 
+        // <b>Without this a soft-deleted team keeps authorizing.</b> GetTeamMemberAsync reads the member
+        // cache before the store, so the repository's deleted-team filter is never consulted for a caller
+        // whose membership is already cached — they stay authorized on a deleted team until the entry
+        // expires. Silent, and an authorization failure rather than a display one.
+        //
+        // Every other member-changing operation on this class already evicts the same way; deletion was
+        // the omission. Done with the existing per-member operation rather than a new ITeamCache member,
+        // so no custom cache implementation has to change and none can silently skip it.
+        foreach (var memberKey in memberKeys)
+        {
+            await _cache.RemoveMemberAsync(teamKey, memberKey);
+        }
+
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+    }
+
+    /// <summary>
+    /// The member keys whose cache entries have to be evicted when a team enters or leaves use.
+    /// </summary>
+    /// <remarks>
+    /// Best-effort by design: a store that cannot answer must not block a delete. An empty result degrades
+    /// to today's behaviour — entries expire on their own — rather than failing the operation.
+    /// </remarks>
+    private async Task<IReadOnlyCollection<string>> MemberKeysForCacheEvictionAsync<TMember>(string teamKey)
+        where TMember : ITeamMember
+    {
+        try
+        {
+            var team = await GetTeamAsync<TMember>(teamKey);
+            return [.. (team?.Members ?? []).Select(x => x.Key).Where(x => !string.IsNullOrEmpty(x))];
+        }
+        catch
+        {
+            return [];
+        }
     }
 
     /// <summary>

@@ -56,7 +56,7 @@ the read-path sweep, then the UI.
       `GetTeamsByUserAsync` and consent through `GetTeamsByConsentAsync`, so a soft-deleted team stops
       granting access without a special case in the claims pipeline.
 
-      ### ⚠ OPEN DEFECT FOUND 2026-08-12 — the member cache keeps a deleted team authorizing
+      ### ✅ DEFECT FOUND AND CLOSED 2026-08-12 — the member cache kept a deleted team authorizing
 
       `TeamServiceBase.GetTeamMemberAsync` consults `ITeamCache.GetMemberAsync(teamKey, userKey)` **before**
       reading the store (`TeamServiceBase.cs:297`). Soft delete clears only custom roles
@@ -74,7 +74,22 @@ the read-path sweep, then the UI.
       (read the team including deleted and evict each member; or have soft delete write through the cache)
       each have consequences worth choosing deliberately rather than at the end of a long session.
 
-      **Nothing ships until this is closed.** Soft delete is on by default, so this is not optional.
+      **Closed the same day, with no interface change.** `TeamServiceBase` reads the team's roster
+      *before* the delete and evicts each member through the existing
+      `ITeamCache.RemoveMemberAsync(teamKey, userKey)` — an operation every implementation already has, so
+      no custom cache has to change and none can silently skip it. The ordering is required: after a soft
+      delete the filtered read returns null, so there would be no roster left to evict from.
+
+      **Restore evicts too, for the opposite reason.** `GetTeamMemberAsync` caches a miss as well as a hit
+      (`cached.Found` distinguishes them), so a lookup made while the team was deleted leaves a cached
+      `null` that would go on denying access to a team that is live again.
+
+      Pinned by `SoftDeleteCacheEvictionTests` (5 tests), including one that fails if the roster is read
+      after the delete rather than before — the version that would evict nothing while passing every other
+      assertion.
+
+      **Worth noting:** every other member-changing operation on `TeamServiceBase` already evicted this way;
+      deletion was simply the omission. The fix follows the established pattern rather than inventing one.
 
 - [ ] 7b. **The remaining above-store read paths.** `GetTeamsAsync`, `GetAllTeamsAsync`, `GetTeamByKeyAsync`,
       `GetConsentedTeamsAsync`, `TeamStateService`/`TeamSelector`, the MCP `team://` resources, and the
@@ -82,7 +97,15 @@ the read-path sweep, then the UI.
 - [ ] 8. **The enumerating guard.** A test that walks the read surface and fails when a read is added
       without filtering — with a fixture proving it catches a violation, or it passes forever while
       checking nothing. This is what the patch-release risk rests on.
-- [ ] 9. **Key reservation.** Creating a team whose key belongs to a soft-deleted team is refused, and the
+- [ ] 9. **Key reservation. — CALL SITE IDENTIFIED 2026-08-12, and it is urgent.**
+      `TeamCustomRolesCacheTests` documents it exactly: *"A deleted team's key is handed out again —
+      `GetRandomUnsusedTeamKey` only checks that no team currently holds it."* That check now reads through
+      the filtered team read, so **a soft-deleted team is invisible to it and its key will be reissued** —
+      pointing a brand-new team at the deleted team's database in a `DatabasePart` deployment, which is the
+      corruption #224 worries about arriving by another route. `GetRandomUnsusedTeamKey` must consult
+      `GetIncludingDeletedAsync`. This is not optional and it is the reason keys stay reserved.
+
+- [ ] 9b. **Key reservation on explicit create.** Creating a team whose key belongs to a soft-deleted team is refused, and the
       message names that team so the operator can restore or purge instead of guessing.
 - [ ] 10. **Audit.** Delete, restore and purge each audited with metadata, via the existing
       `AuditingTeamServiceDecorator`.
