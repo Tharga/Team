@@ -63,6 +63,26 @@ public interface ITeamService
     Task<ITeam> CreateTeamAsync(string name = null);
     Task RenameTeamAsync<TMember>(string teamKey, string name) where TMember : ITeamMember;
     Task DeleteTeamAsync<TMember>(string teamKey) where TMember : ITeamMember;
+
+    /// <summary>Restores a soft-deleted team.</summary>
+    /// <remarks>
+    /// A default interface method, so an existing implementation of this contract keeps compiling. The
+    /// default throws rather than no-opping: reporting success for a restore that did not happen leaves an
+    /// operator believing a team is back when it is still invisible.
+    /// </remarks>
+    Task RestoreTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(RestoreTeamAsync)}.");
+
+    /// <summary>Permanently removes a team and its storage. Irreversible.</summary>
+    /// <remarks>
+    /// A default interface method for the same reason as <see cref="RestoreTeamAsync{TMember}"/>, and it
+    /// throws for a stronger one: a purge that silently did nothing would leave storage the operator
+    /// believes is gone.
+    /// </remarks>
+    Task PurgeTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(PurgeTeamAsync)}.");
     Task<ITeamMember> GetTeamMemberAsync(string teamKey, string userKey);
     IAsyncEnumerable<ITeamMember> GetMembersAsync(string teamKey);
     Task AddMemberAsync(string teamKey, InviteUserModel model);

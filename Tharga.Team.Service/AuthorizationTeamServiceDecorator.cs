@@ -1,4 +1,4 @@
-using Tharga.Team;
+﻿using Tharga.Team;
 
 namespace Tharga.Team.Service;
 
@@ -119,6 +119,31 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     {
         await RequireDeleteAsync(teamKey);
         await _inner.DeleteTeamAsync<TMember>(teamKey);
+    }
+
+    /// <summary>Restoring is authorized by the same rule as deleting — it undoes it.</summary>
+    public async Task RestoreTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+    {
+        await RequireDeleteAsync(teamKey);
+        await _inner.RestoreTeamAsync<TMember>(teamKey);
+    }
+
+    /// <summary>
+    /// Purging is the irreversible one and needs its own system scope, never a team-level grant.
+    /// </summary>
+    /// <remarks>
+    /// <b>No <c>AllowTeamCreation</c> self-service path here</b>, unlike <see cref="RequireDeleteAsync"/>.
+    /// A team administrator deleting their own team is recoverable and reasonable; destroying its storage
+    /// outright is not something a tenant should reach by holding <c>team:manage</c>.
+    /// </remarks>
+    public async Task PurgeTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+    {
+        if (!await _authorizer.HasSystemScopeAsync(SystemTeamScopes.Purge))
+            throw new UnauthorizedAccessException(
+                $"Permanently removing team '{teamKey}' requires the '{SystemTeamScopes.Purge}' system scope. " +
+                $"'{SystemTeamScopes.Delete}' authorizes a recoverable delete, not this.");
+
+        await _inner.PurgeTeamAsync<TMember>(teamKey);
     }
 
     // Team administration (team:manage on the team, or the teams:manage system grant).

@@ -168,6 +168,7 @@ public static class ThargaBlazorRegistration
             {
                 if (scopes.All.All(s => s.Name != SystemTeamScopes.Delete))
                     scopes.Register(SystemTeamScopes.Delete, "Delete any team (cross-team), regardless of membership or the AllowTeamCreation option.");
+                    scopes.Register(SystemTeamScopes.Purge, "Permanently remove a soft-deleted team and drop its storage. Irreversible, and the only team operation needing the database privilege to drop data.");
                 if (scopes.All.All(s => s.Name != SystemUserScopes.Manage))
                     scopes.Register(SystemUserScopes.Manage, "Administer users (cross-team): verify against the external directory, list directory-only users, and delete users.");
                 if (scopes.All.All(s => s.Name != SystemTeamScopes.Manage))

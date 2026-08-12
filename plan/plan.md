@@ -51,7 +51,32 @@ the read-path sweep, then the UI.
 - [ ] 6. **`teams:purge` scope**, registered beside `teams:delete`, enforced in
       `AuthorizationTeamServiceDecorator` — the single enforcement point, where the other team mutations are
       already gated.
-- [ ] 7. **The read-path sweep.** `GetTeamsAsync`, `GetAllTeamsAsync`, `GetTeamByKeyAsync`,
+- [~] 7. **The read-path sweep.** Storage-level reads are done (step 5): the four repository reads filter
+      `DeletedAt == null`, which also covers **both claims paths** — membership resolves through
+      `GetTeamsByUserAsync` and consent through `GetTeamsByConsentAsync`, so a soft-deleted team stops
+      granting access without a special case in the claims pipeline.
+
+      ### ⚠ OPEN DEFECT FOUND 2026-08-12 — the member cache keeps a deleted team authorizing
+
+      `TeamServiceBase.GetTeamMemberAsync` consults `ITeamCache.GetMemberAsync(teamKey, userKey)` **before**
+      reading the store (`TeamServiceBase.cs:297`). Soft delete clears only custom roles
+      (`AfterTeamRemovedFromUseAsync` → `RemoveCustomRolesAsync`), so a **cached member entry survives the
+      delete and keeps that caller authorized on a deleted team until the entry expires**. The repository
+      filter is never consulted, so none of step 5's work helps here.
+
+      This is precisely the leak that makes default-on soft delete risky *as a patch* — it is silent, and it
+      is an authorization failure rather than a display bug.
+
+      **Why it is not fixed in this commit:** `ITeamCache` has no "evict every member of this team"
+      operation, only per-user and per-team-custom-roles. Adding one is an interface change that must be a
+      default interface method to stay non-breaking — and a **no-op default would leak silently for every
+      custom cache implementation**, which is the same failure wearing a different hat. The alternatives
+      (read the team including deleted and evict each member; or have soft delete write through the cache)
+      each have consequences worth choosing deliberately rather than at the end of a long session.
+
+      **Nothing ships until this is closed.** Soft delete is on by default, so this is not optional.
+
+- [ ] 7b. **The remaining above-store read paths.** `GetTeamsAsync`, `GetAllTeamsAsync`, `GetTeamByKeyAsync`,
       `GetConsentedTeamsAsync`, `TeamStateService`/`TeamSelector`, the MCP `team://` resources, and the
       claims pipeline. **Filtering goes behind the port**, not into the Mongo implementation.
 - [ ] 8. **The enumerating guard.** A test that walks the read surface and fails when a read is added
