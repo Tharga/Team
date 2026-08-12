@@ -1,4 +1,4 @@
-namespace Tharga.Team;
+﻿namespace Tharga.Team;
 
 /// <summary>
 /// System-level (cross-team) scope constants for team operations. Unlike the in-team <see cref="TeamScopes"/>
@@ -13,6 +13,27 @@ public static class SystemTeamScopes
     /// <c>AllowTeamCreation</c> self-service option. The unconditional, cross-team delete path.
     /// </summary>
     public const string Delete = "teams:delete";
+
+    /// <summary>
+    /// Authorizes permanently removing a soft-deleted team, including dropping its storage.
+    /// </summary>
+    /// <remarks>
+    /// <b>Separate from <see cref="Delete"/> because it is the only irreversible one</b>, and because it is
+    /// the only one needing whatever privilege the storage adapter requires to destroy a team's data — for
+    /// the MongoDB adapter in a per-team-database deployment, <c>dropDatabase</c>. That privilege is one
+    /// most managed deployments will not grant permanently: Atlas's <c>readWriteAnyDatabase</c> does not
+    /// include it.
+    /// <para>
+    /// Splitting it means a deployment can withhold both this scope and the database grant and still delete
+    /// teams normally, which is what Eplicta FortDocs asked for in Tharga/Team#224.
+    /// </para>
+    /// <para>
+    /// <b>Restoring needs no scope of its own.</b> It is strictly less destructive than the delete it
+    /// undoes, so <see cref="Delete"/> covers it — anyone trusted to remove a team is trusted to change
+    /// their mind. A third scope would be a grant nobody has asked for and one more thing to map.
+    /// </para>
+    /// </remarks>
+    public const string Purge = "teams:purge";
 
     /// <summary>
     /// Authorizes enumerating <b>any</b> team via <c>ITeamService.GetAllTeamsAsync</c>, regardless of

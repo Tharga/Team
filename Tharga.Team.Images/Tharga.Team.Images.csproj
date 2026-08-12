@@ -42,7 +42,7 @@
       icons are decoded, scaled and encoded, never drawn with text.
     -->
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.1" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team\Tharga.Team.csproj" />

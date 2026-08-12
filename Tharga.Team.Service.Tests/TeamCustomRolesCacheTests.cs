@@ -1,4 +1,4 @@
-namespace Tharga.Team.Service.Tests;
+﻿namespace Tharga.Team.Service.Tests;
 
 /// <summary>
 /// The custom-roles cache on <c>TeamServiceBase</c>: the claims path reads a team's custom roles on every
@@ -102,7 +102,11 @@ public class TeamCustomRolesCacheTests
         var after = await sut.GetTeamCustomRolesAsync(teamKey);
 
         Assert.Empty(after);
-        Assert.Equal(2, sut.GetTeamCallCount);
+
+        // Three, not two, since soft delete: deleting now reads the team's roster first so the members can
+        // be evicted from the cache — without which a cached membership keeps authorizing a deleted team.
+        // The extra read is the intended cost of that fix and happens once per delete.
+        Assert.Equal(3, sut.GetTeamCallCount);
     }
 
     /// <summary>

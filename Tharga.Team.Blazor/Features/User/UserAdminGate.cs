@@ -1,4 +1,4 @@
-namespace Tharga.Team.Blazor.Features.User;
+﻿namespace Tharga.Team.Blazor.Features.User;
 
 /// <summary>
 /// Gating decisions for the user administration surface. Viewing the admin lists and acting on users
@@ -38,6 +38,32 @@ public static class UserAdminGate
     /// </remarks>
     public static bool CanDeleteTeams(bool hasTeamsDeleteScope)
         => hasTeamsDeleteScope;
+
+    /// <summary>
+    /// Whether the Teams tab offers restoring a soft-deleted team. The same grant as deleting one.
+    /// </summary>
+    /// <remarks>
+    /// Restoring is strictly less destructive than the delete it undoes, so it needs no scope of its own —
+    /// anyone trusted to remove a team is trusted to change their mind. Offered only on a team that is
+    /// actually deleted; a control that does nothing is worse than no control.
+    /// </remarks>
+    public static bool CanRestoreTeam(bool hasTeamsDeleteScope, bool isDeleted)
+        => hasTeamsDeleteScope && isDeleted;
+
+    /// <summary>
+    /// Whether the Teams tab offers permanently removing a soft-deleted team.
+    /// </summary>
+    /// <remarks>
+    /// <b>Its own scope, and only on an already-deleted team.</b> Purge is the one irreversible team
+    /// operation and the only one needing the deployment's privilege to destroy stored data, so it is
+    /// gated on <c>teams:purge</c> rather than on <c>teams:delete</c> (Tharga/Team#224).
+    /// <para>
+    /// Requiring the team to be soft-deleted first is deliberate: it makes destruction a second, separate
+    /// decision rather than something reachable in one click from a live team.
+    /// </para>
+    /// </remarks>
+    public static bool CanPurgeTeam(bool hasTeamsPurgeScope, bool isDeleted)
+        => hasTeamsPurgeScope && isDeleted;
 
     /// <summary>
     /// Whether the Users tab offers deleting the user on this row. False for the signed-in caller's own

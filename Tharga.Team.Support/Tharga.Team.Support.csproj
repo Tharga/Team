@@ -39,7 +39,7 @@
       later capabilities bring (email, Tharga.Neurolito.Client) out of Tharga.Team.Service, which
       every consumer installs.
     -->
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
   </ItemGroup>
   <ItemGroup>
     <!-- References the service; nothing references this back, so no consumer acquires it by accident. -->

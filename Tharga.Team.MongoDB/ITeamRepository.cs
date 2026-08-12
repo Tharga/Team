@@ -40,6 +40,44 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
             $"cross-team listing (the '{SystemTeamScopes.Read}' system scope).");
 
     /// <summary>
+    /// Marks a team deleted, or clears the mark when <paramref name="deletedAt"/> is null.
+    /// </summary>
+    /// <remarks>
+    /// Declared with a default implementation so existing custom repositories keep compiling — and it
+    /// throws rather than no-opping, because a soft delete that silently does nothing reports success while
+    /// leaving the team live and readable, which is worse than refusing.
+    /// <para>
+    /// A repository that does not implement this makes its service report
+    /// <c>SupportsSoftDelete = false</c>, so the throw is unreachable through the normal path: the delete
+    /// resolves to the irreversible one the store already had.
+    /// </para>
+    /// </remarks>
+    /// <summary>A team by key whether or not it is deleted — for restore, purge and key reservation.</summary>
+    Task<TTeamEntity> GetIncludingDeletedAsync(string teamKey)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(GetIncludingDeletedAsync)}. Implement it to " +
+            "support soft delete, restore and purge.");
+
+    Task SetDeletedAsync(string teamKey, DateTime? deletedAt, string deletedBy)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetDeletedAsync)}. Implement it to support " +
+            "soft delete, restore and purge.");
+
+    /// <summary>
+    /// Every team including soft-deleted ones — the only read that sees them, for restore and purge
+    /// surfaces.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately a separate method rather than a flag on <see cref="GetAllTeamsAsync"/>. A boolean
+    /// parameter defaulting to "exclude" is one forgotten argument away from leaking deleted teams into an
+    /// ordinary list; a distinct name has to be chosen on purpose.
+    /// </remarks>
+    IAsyncEnumerable<TTeamEntity> GetAllTeamsIncludingDeletedAsync()
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(GetAllTeamsIncludingDeletedAsync)}. Implement " +
+            "it to list soft-deleted teams for restore and purge.");
+
+    /// <summary>
     /// Removes the user's member entries from every team they appear in, regardless of membership state.
     /// Backs user deletion. Returns the number of teams the user was removed from.
     /// </summary>
