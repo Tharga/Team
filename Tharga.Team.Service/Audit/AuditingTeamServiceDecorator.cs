@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.AspNetCore.Http;
 
 namespace Tharga.Team.Service.Audit;
@@ -116,6 +116,59 @@ public class AuditingTeamServiceDecorator : ITeamService
         {
             sw.Stop();
             Log("delete", nameof(DeleteTeamAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, metadata);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Restoring is audited as its own action rather than as another "delete" — an operator reading the log
+    /// has to be able to see that a deletion was undone, and by whom.
+    /// </summary>
+    public async Task RestoreTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await _inner.RestoreTeamAsync<TMember>(teamKey);
+            sw.Stop();
+            // Read after, not before: the team is invisible to the ordinary read while it is deleted, so
+            // its name is only available once it is back.
+            var restored = await TryGetTeamAsync<TMember>(teamKey);
+            Log("restore", nameof(RestoreTeamAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey,
+                metadata: Meta((AuditMetadataKeys.TeamName, restored?.Name)));
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("restore", nameof(RestoreTeamAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Purging is the irreversible one, so its entry is the last record that this team ever existed.
+    /// </summary>
+    /// <remarks>
+    /// The name is read first and recorded even when the purge fails — a failed purge in a deployment
+    /// without the storage privilege is exactly the event an operator will be looking for, and a key alone
+    /// does not tell them which team it was.
+    /// </remarks>
+    public async Task PurgeTeamAsync<TMember>(string teamKey) where TMember : ITeamMember
+    {
+        var previous = await TryGetTeamAsync<TMember>(teamKey);
+        var metadata = Meta((AuditMetadataKeys.TeamName, previous?.Name));
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await _inner.PurgeTeamAsync<TMember>(teamKey);
+            sw.Stop();
+            Log("purge", nameof(PurgeTeamAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, metadata: metadata);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("purge", nameof(PurgeTeamAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, metadata);
             throw;
         }
     }
