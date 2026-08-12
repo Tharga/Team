@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.JSInterop;
 using Radzen;
 using Radzen.Blazor;
+using Tharga.Team.Blazor.Features.User;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Service.Audit;
 
@@ -203,18 +204,53 @@ public partial class AuditLogView : ComponentBase
         await BuildCallerNameCacheAsync();
     }
 
+    /// <summary>
+    /// Fills the identity → display-name cache from whichever user source this caller may actually read.
+    /// </summary>
+    /// <remarks>
+    /// <b>The source is a permission decision, not a registration one.</b> This used to guard on
+    /// <see cref="IUserService"/> being registered and then call <c>GetAsync()</c>, which requires the
+    /// <c>users:manage</c> <i>system</i> scope. No team access level grants a system scope, so the callers
+    /// entitled to read their own team's audit log were exactly the ones who could not render it — the
+    /// exception escaped <c>OnInitializedAsync</c> and took the page with it (Tharga/Team#222).
+    /// <para>
+    /// <see cref="UserDirectoryGate"/> makes the same choice <c>TeamComponent</c> has made since #139. For a
+    /// team-scoped log the co-member projection is arguably the better set anyway: the cache exists only to
+    /// turn a caller identity into a display name, and the callers in a team's log come from that team.
+    /// </para>
+    /// <para>
+    /// <b>Never fatal.</b> The cache is cosmetic — <see cref="GetCallerDisplayName"/> already falls back to
+    /// the raw identity — so a failure here degrades names and nothing else. That holds even for a host's
+    /// own <see cref="IUserService"/> failing for a reason no gate could predict, which is the half of #222
+    /// that the gate alone does not cover.
+    /// </para>
+    /// </remarks>
     private async Task BuildCallerNameCacheAsync()
     {
         var userService = ServiceProvider.GetService<IUserService>();
-        if (userService != null)
+        if (userService == null) return;
+
+        try
         {
-            await foreach (var user in userService.GetAsync())
+            var claims = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+            var source = UserDirectoryGate.Resolve(TeamScopeGate.HasSystemScope(claims, SystemUserScopes.Manage));
+
+            var users = source == UserDirectorySource.FullDirectory
+                ? await userService.GetAsync().ToArrayAsync()
+                : [.. await userService.GetTeamMemberUsersAsync()];
+
+            foreach (var user in users)
             {
                 if (!string.IsNullOrEmpty(user.Identity))
                     _callerNameCache.TryAdd(user.Identity, user.EMail ?? user.Identity);
                 if (!string.IsNullOrEmpty(user.EMail))
                     _callerNameCache.TryAdd(user.EMail, user.EMail);
             }
+        }
+        catch (Exception)
+        {
+            // Names fall back to the raw caller identity. A display-name cache must not decide whether the
+            // audit log renders.
         }
     }
 
