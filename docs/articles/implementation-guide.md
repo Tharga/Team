@@ -1379,7 +1379,8 @@ not authorize writing to another.
 | `team:read` | team | `TeamScopes.Read` | View team details & members |
 | `team:manage` | team | `TeamScopes.Manage` | Rename, delete, transfer ownership, consent, custom roles |
 | `member:manage` | team | `TeamScopes.MemberManage` | Invite/remove members, **suspend/restore a member**, change access level/roles/scope-overrides, edit display names |
-| `teams:delete` | **system** | `SystemTeamScopes.Delete` | Delete **any** team (cross-team) |
+| `teams:delete` | **system** | `SystemTeamScopes.Delete` | Delete **any** team (cross-team), and restore one that was soft-deleted |
+| `teams:purge` | **system** | `SystemTeamScopes.Purge` | **Permanently** remove a soft-deleted team and destroy its stored data. Irreversible |
 | `teams:read` | **system** | `SystemTeamScopes.Read` | See **every** team (cross-team discovery) |
 | `teams:manage` | **system** | `SystemTeamScopes.Manage` | Rename and set the icon of **any** team — **not** consent or custom roles |
 | `apikey:manage` | team | `ApiKeyScopes.Manage` | Create/refresh/lock/**disable**/delete API keys |
@@ -1422,9 +1423,53 @@ Team mutations are enforced in the **service layer** (`AuthorizationTeamServiceD
 |---|---|
 | Create | authenticated **and** `AllowTeamCreation` (no scope — self-service) |
 | Delete | (`team:manage` on the team **and** `AllowTeamCreation`) **or** `teams:delete` |
+| Restore | Same as Delete — restoring undoes it and is strictly less destructive |
+| Purge | `teams:purge` **only**. No team-level or `AllowTeamCreation` path: destroying a team's data is not something a tenant should reach by holding `team:manage` |
 | Rename / Consent | `team:manage` on the team |
 | Member invite/remove/role/overrides/display-name | `member:manage` on the team |
 | Transfer ownership | Owner only |
+
+### Deleting a team: soft delete, restore and purge
+
+**From 3.13.1 deleting a team is recoverable by default.** `DeleteTeamAsync` marks the team deleted and
+hides it from every read; the record survives until it is purged.
+
+```csharp
+o.TeamDeleteMode = TeamDeleteMode.Soft;   // default
+o.TeamDeleteMode = TeamDeleteMode.Hard;   // pre-3.13.1 behaviour: remove and destroy in one step
+```
+
+Nothing in the API changed and a deleted team still disappears from every list, lookup, team selector and
+MCP resource — and stops granting access, because the membership and consent reads that issue claims
+exclude it too. The observable difference is that the document survives, and that **deleting no longer
+needs the privilege to destroy stored data**.
+
+| Operation | Scope | Reversible | Needs the storage privilege |
+|---|---|---|---|
+| Delete | `teams:delete` | Yes — restore | No |
+| Restore | `teams:delete` | — | No |
+| **Purge** | **`teams:purge`** | **No** | **Yes** |
+
+> **Purge is the only operation that destroys data, and it requires the privilege to do so.** The MongoDB
+> adapter drops the team's database, and in a per-team-database deployment (`DatabasePart` = team key) that
+> needs a database user permitted to run `dropDatabase`. **MongoDB Atlas's `readWriteAnyDatabase` does not
+> include it** — you need `dbAdminAnyDatabase`, `atlasAdmin`, or a custom role, and because the database
+> name is generated per team the grant has to cover *any* database matching the pattern.
+>
+> **A deployment that never purges can withhold both `teams:purge` and that database grant entirely** and
+> still delete teams normally. That is the point of the split (Tharga/Team#224).
+>
+> When the privilege is missing, purge fails with a `TeamStorageException` naming what the deployment has
+> to grant, rather than a driver stack trace. The team record is already gone at that point — the ordering
+> is deliberate, so a partial failure leaves an inert orphaned database rather than a live team pointing at
+> deleted data.
+
+**A soft-deleted team keeps its key** until it is purged, so a new team can never be created on it. In a
+per-team-database deployment that would otherwise point the new team at the deleted team's data.
+
+**If your store predates this**, nothing changes: a `TeamServiceBase` that does not override
+`SupportsSoftDelete` reports `false`, and its deletes stay exactly as irreversible as they were. Implement
+`SoftDeleteTeamAsync` and `RestoreTeamAsync` to opt in.
 
 Team scopes (`team:*`, `member:manage`) authorize only the caller's **own** team — the `TeamKey` claim must match the team being acted on, so an admin of one team can't act on another. `TeamComponent` mirrors this in the UI: because the scope is issued for the **selected** team only, the Rename and Delete buttons appear on the selected team and not on the other teams you belong to. Select a team to manage it. **`teams:delete`** is a **system** scope (toolkit-defined) that authorizes deleting *any* team regardless of membership and regardless of `AllowTeamCreation` — grant it to your support/dev tooling via `o.ConfigureSystemRoles` (e.g. map `Developer` → `teams:delete`) or to a system API key. Setting `AllowTeamCreation = false` disables the self-service create and in-team delete paths but never blocks `teams:delete`.
 
@@ -1664,7 +1709,8 @@ The toolkit auto-registers these; grant them through `ConfigureSystemRoles` or a
 | Scope | Authorizes |
 |---|---|
 | `teams:read` | Enumerating any team, regardless of membership. Discovery only — selecting a team still yields only what it consented to |
-| `teams:delete` | Deleting any team, regardless of membership or `AllowTeamCreation` |
+| `teams:delete` | Deleting any team, regardless of membership or `AllowTeamCreation`; also restoring a soft-deleted one |
+| `teams:purge` | Permanently removing a soft-deleted team and destroying its stored data |
 | `teams:assign-owner` | Giving an **ownerless** team an owner from its existing members. Refused when the team already has one |
 | `users:manage` | User administration: the admin lists, verify, rename, delete |
 
