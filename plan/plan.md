@@ -97,13 +97,24 @@ the read-path sweep, then the UI.
 - [ ] 8. **The enumerating guard.** A test that walks the read surface and fails when a read is added
       without filtering — with a fixture proving it catches a violation, or it passes forever while
       checking nothing. This is what the patch-release risk rests on.
-- [ ] 9. **Key reservation. — CALL SITE IDENTIFIED 2026-08-12, and it is urgent.**
+- [x] 9. **Key reservation. — DONE 2026-08-12. Was a live corruption path.**
       `TeamCustomRolesCacheTests` documents it exactly: *"A deleted team's key is handed out again —
       `GetRandomUnsusedTeamKey` only checks that no team currently holds it."* That check now reads through
       the filtered team read, so **a soft-deleted team is invisible to it and its key will be reissued** —
       pointing a brand-new team at the deleted team's database in a `DatabasePart` deployment, which is the
       corruption #224 worries about arriving by another route. `GetRandomUnsusedTeamKey` must consult
       `GetIncludingDeletedAsync`. This is not optional and it is the reason keys stay reserved.
+
+      **Fixed** with a `virtual IsTeamKeyInUseAsync`, defaulting to the old live-only read so no existing
+      store changes behaviour, and overridden in the Mongo adapter to consult
+      `GetIncludingDeletedAsync`. Pinned by `SoftDeletedKeyReservationTests`, including that the default
+      still falls back to the live read.
+
+      **Worth recording about how this was found:** soft delete *introduced* it rather than exposing it.
+      The comment in `TeamCustomRolesCacheTests` described key reuse as a fact about hard delete, where it
+      was harmless because nothing survived to collide with. The lesson for the rest of the sweep is that
+      the risk is not only reads — it is **writes that consult a read**, which is a larger surface than the
+      backlog's read-path list.
 
 - [ ] 9b. **Key reservation on explicit create.** Creating a team whose key belongs to a soft-deleted team is refused, and the
       message names that team so the operator can restore or purge instead of guessing.

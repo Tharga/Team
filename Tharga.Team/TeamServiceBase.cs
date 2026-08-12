@@ -116,6 +116,23 @@ public abstract class TeamServiceBase : ITeamService
     /// </para>
     /// </remarks>
     protected virtual Task PurgeTeamAsync(string teamKey) => DeleteTeamAsync(teamKey);
+
+    /// <summary>
+    /// Whether a team key is already taken — <b>including by a soft-deleted team</b>.
+    /// </summary>
+    /// <remarks>
+    /// <b>A soft-deleted team still owns its key, and this is what enforces that.</b> Key generation used
+    /// the ordinary team read, which now excludes deleted teams — so without this a deleted team's key
+    /// reads as free and gets reissued. In a deployment that derives a team's database name from its key,
+    /// the new team would then be pointed at the deleted team's data: the corruption Tharga/Team#224 is
+    /// about, arriving by a different route.
+    /// <para>
+    /// The default keeps the old behaviour — live teams only — so a store that cannot see deleted teams is
+    /// unaffected, which is also the store that cannot soft-delete and therefore never has one.
+    /// </para>
+    /// </remarks>
+    protected virtual async Task<bool> IsTeamKeyInUseAsync(string teamKey)
+        => await GetTeamAsync(teamKey) != null;
     protected abstract Task AddTeamMemberAsync(string teamKey, InviteUserModel model);
     protected abstract Task RemoveTeamMemberAsync(string teamKey, string userKey);
     protected abstract Task<ITeam> SetTeamMemberInvitationResponseAsync(string teamKey, string userKey, string inviteKey, bool accept);
@@ -716,8 +733,7 @@ public abstract class TeamServiceBase : ITeamService
         while (true)
         {
             teamKey = StringExtension.UpperCaseAlphaNumericCharacters.Random();
-            var item = await GetTeamAsync(teamKey);
-            if (item == null) break;
+            if (!await IsTeamKeyInUseAsync(teamKey)) break;
         }
 
         return teamKey;

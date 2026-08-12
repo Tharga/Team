@@ -47,6 +47,13 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
         return _teamRepository.RenameAsync(teamKey, name);
     }
 
+    /// <summary>
+    /// A key is in use while <b>any</b> team holds it, deleted or not, so a soft-deleted team keeps its key
+    /// reserved until it is purged.
+    /// </summary>
+    protected override async Task<bool> IsTeamKeyInUseAsync(string teamKey)
+        => await _teamRepository.GetIncludingDeletedAsync(teamKey) != null;
+
     /// <summary>This store can soft-delete, so <c>TeamDeleteMode.Soft</c> takes effect.</summary>
     protected override bool SupportsSoftDelete => true;
 
