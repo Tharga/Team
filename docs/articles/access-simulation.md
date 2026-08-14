@@ -74,6 +74,41 @@ withhold it by re-registering it at a level nobody has.
 **Ending a simulation is never gated.** A simulation can remove `simulation:use` itself, so requiring it
 to stop would let someone strand themselves.
 
+**Whether the controls appear is answered from your claims.** With no simulation active the principal
+already carries the scopes the grant resolver issued, so neither the bar nor the card queries the team
+store to decide whether to draw itself — which matters on a host that has replaced the toolkit's team cache
+with one that caches nothing. While a simulation *is* active the claims have been filtered, so the real
+grant is resolved instead: that is the one case where it cannot be read off the principal, and it is why
+simulating `simulation:use` away does not lock you out of your own picker.
+
+Because it reads claims, a grant changed mid-session reaches these controls at the next claim
+revalidation — the same freshness every other scope-gated surface in the toolkit has.
+
+## Translating it
+
+Both components route their wording through `IThargaTextProvider`:
+
+| Component | Keys |
+|-----------|------|
+| `AccessSimulationCard` | `team.simulation.card.*` — ten keys |
+| `AccessSimulationBar` | `team.simulation.bar.*` — five keys |
+
+Enumerate `ThargaTextKeys.All` to generate the table with the English defaults; the banner's keys arrive
+there like any other.
+
+**The banner sentence is one key, not three.** `team.simulation.bar.viewingAs` is
+`"Viewing as {0} — your own access is reduced."`, where `{0}` is what is being simulated. Translating a
+whole sentence lets you put the target where your language wants it; a "viewing as" prefix and a "your
+access is reduced" suffix would hard-code English word order. `team.simulation.bar.targetRole` and
+`.targetAccessLevel` do the same for naming a role or a level. A translation that drops the `{0}` renders
+the sentence without naming the target rather than failing.
+
+**`AccessSimulationTargets.DemoLabel` is deliberately not translatable.** It is written to audit metadata,
+where a value that varies by operator language cannot be searched or compared.
+
+> **Not yet translatable:** `AccessSimulationDialog`, the "View as another user" screen. The way *out* of a
+> reduced session translates; the way in does not, yet.
+
 ## What you can simulate
 
 | Target | What it means |

@@ -1,6 +1,7 @@
 @using Tharga.Team.Blazor.Features.Simulation
 @inject AccessSimulationState SimulationState
 @inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
 
 @* One component for a host to place, not two: the entry point when nothing is simulated, the indicator
    and the way out when something is. Placing it therefore wires up both halves by default.
@@ -17,22 +18,30 @@
     <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false" class="rz-m-0 rz-p-2">
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem">
             <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
-                Viewing as <strong>@Describe(_active)</strong> — your own access is reduced.
+                @_sentence.Before<strong>@AccessSimulationBannerSentence.Describe(_active, _text)</strong>@_sentence.After
             </RadzenText>
-            <RadzenButton Text="Return to my access" Icon="undo" ButtonStyle="ButtonStyle.Warning"
+            <RadzenButton Text="@_text[AccessSimulationBarText.Stop]" Icon="undo" ButtonStyle="ButtonStyle.Warning"
                           Size="ButtonSize.Small" Variant="Variant.Flat" Click="@Stop" />
         </RadzenStack>
     </RadzenAlert>
 }
 else if (_canSimulate && ShowEntryPoint)
 {
-    <RadzenButton Text="@Text" Icon="visibility" ButtonStyle="ButtonStyle.Light"
+    <RadzenButton Text="@EntryPointText" Icon="visibility" ButtonStyle="ButtonStyle.Light"
                   Size="ButtonSize.Small" Variant="Variant.Flat" Click="@Open" />
 }
 
 @code {
-    /// <summary>Label for the entry-point button. Defaults to "View as…".</summary>
-    [Parameter] public string Text { get; set; } = "View as…";
+    /// <summary>
+    /// Label for the entry-point button. Defaults to the resolved <c>team.simulation.bar.viewAs</c> text,
+    /// which is "View as…" until a host translates it.
+    /// </summary>
+    /// <remarks>
+    /// A value set here wins over the resolved text, so a host that wants different wording in one place
+    /// still gets it. For translating the wording everywhere, register an <see cref="IThargaTextProvider"/>
+    /// instead — this parameter takes a literal and cannot vary by language (Tharga/Team#221).
+    /// </remarks>
+    [Parameter] public string Text { get; set; }
 
     /// <summary>
     /// Whether the <b>way in</b> — the "View as…" button — is offered here. Default true. Set it false
@@ -70,10 +79,19 @@ else if (_canSimulate && ShowEntryPoint)
 
     private AccessSimulation _active;
     private bool _canSimulate;
+    private TextSet _text = TextSet.Empty;
+    private (string Before, string After) _sentence = AccessSimulationBannerSentence.SplitAround(AccessSimulationBarText.ViewingAs.Default);
+
+    private string EntryPointText => Text ?? _text[AccessSimulationBarText.ViewAs];
 
     protected override async Task OnInitializedAsync()
     {
         if (!SimulationState.Enabled) return;
+
+        // The dialog's own title comes from the card's catalogue, so both entry points open a dialog
+        // carrying the same wording rather than two translations of the same screen.
+        _text = await TextProvider.ResolveAsync([.. AccessSimulationBarText.All, AccessSimulationCardText.ViewAsUser]);
+        _sentence = AccessSimulationBannerSentence.SplitAround(_text[AccessSimulationBarText.ViewingAs]);
 
         _active = await SimulationState.GetActiveAsync();
 
@@ -82,17 +100,9 @@ else if (_canSimulate && ShowEntryPoint)
         if (_active == null) _canSimulate = await SimulationState.CanSimulateAsync();
     }
 
-    private static string Describe(AccessSimulation simulation) => simulation.Kind switch
-    {
-        AccessSimulationKind.User => simulation.Label,
-        AccessSimulationKind.Role => $"the {simulation.Label} role",
-        AccessSimulationKind.AccessLevel => $"access level {simulation.Label}",
-        _ => simulation.Label
-    };
-
     private async Task Open()
     {
-        await DialogService.OpenAsync<AccessSimulationDialog>("View as another user",
+        await DialogService.OpenAsync<AccessSimulationDialog>(_text[AccessSimulationCardText.ViewAsUser],
             options: new DialogOptions { Width = "560px", CloseDialogOnOverlayClick = true });
     }
 
