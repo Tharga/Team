@@ -4,35 +4,42 @@ Branch: `feature/simulation-audit-enricher-circuit` (from `master`, CI = GitHub 
 
 ## Steps
 
-- [ ] 1. **Package updates up front.** `dotnet outdated -u` across the whole solution, then
-      `dotnet build -c Release` + `dotnet test -c Release` before any feature code.
-      Available: `Tharga.Toolkit` 1.16.0 → 1.16.1, `Tharga.Mcp` 1.0.1 → 1.1.0,
-      `Tharga.MongoDB` 2.14.2 → 2.14.3, `Microsoft.NET.Test.Sdk` 18.8.1 → 18.9.0 (7 test projects).
-      All patch or minor — no majors to flag.
+- [x] 1. **Package updates up front.** Applied: `Tharga.Toolkit` 1.16.0 → 1.16.1, `Tharga.Mcp` 1.0.1 →
+      1.1.0, `Tharga.MongoDB` 2.14.2 → 2.14.3, `Microsoft.NET.Test.Sdk` 18.8.1 → 18.9.0 (7 test projects).
+      All patch or minor — no majors to flag. `dotnet build -c Release` clean (13 pre-existing warnings,
+      0 errors); `dotnet test -c Release` green — 1967 passed, 0 failed. Committed as `523fb83`.
 
-- [ ] 2. **Tests first** in `Tharga.Team.Blazor.Tests`, extending `AccessSimulationAuditEnricherTests`:
-      ambient principal used when there is no `HttpContext`; `HttpContext` preferred when both are present;
-      neither source adds nothing; malformed claim on the ambient path adds nothing and does not throw.
-      Plus tests for the accessor itself — the value is visible inside the scope and cleared after it,
-      including on an exception.
+- [x] 2. **Tests first** — new `AccessSimulationInCircuitTests` (11): the enricher's fallback (ambient
+      principal read, `HttpContext` preferred over it, neither source, malformed claim), the handler
+      (publishes for the activity, released on completion and on a throw, a failing
+      `AuthenticationStateProvider` does not break the activity), the accessor (nested scope restores its
+      parent), and the acceptance criterion end to end with its self-check.
 
-- [ ] 3. **`AccessSimulationPrincipalAccessor`** (internal, `Features/Simulation`, `AsyncLocal`-backed
-      singleton) with a `Push(ClaimsPrincipal)` returning `IDisposable`, mirroring `AuditContextAccessor`.
+- [x] 3. **`AccessSimulationPrincipalAccessor`** — internal, `AsyncLocal`-backed, `Push` returns a
+      restoring scope guarded against double dispose. Instance field rather than the static one
+      `AuditContextAccessor` uses; nothing here needs static reach, and per-instance keeps tests isolated.
+      Null is a legitimate value to push — an activity with no readable state must shadow an outer
+      principal, not inherit it.
 
-- [ ] 4. **`AccessSimulationCircuitHandler : CircuitHandler`** overriding `CreateInboundActivityHandler`:
-      resolve the principal from `AuthenticationStateProvider`, push it for the duration of the activity,
-      release afterwards. Circuit-scoped, so it may take the circuit's own `AuthenticationStateProvider`.
+- [x] 4. **`AccessSimulationCircuitHandler`** — overrides `CreateInboundActivityHandler`, resolves the
+      principal per inbound activity (not once per circuit: an `AsyncLocal` set at circuit start does not
+      flow into the call stacks the renderer later begins). A failure reading the state is logged and
+      treated as "no principal" rather than propagated — recording context must not become a new way for
+      an interaction to fail.
 
-- [ ] 5. **Extend the enricher** to fall back to the accessor when `HttpContext` is null. Extracts the
-      claim-reading half so both paths share one implementation. Optional constructor parameter, so the
-      existing tests and any hand-construction keep compiling.
+- [x] 5. **Extended the enricher** — `httpContextAccessor?.HttpContext?.User ?? principalAccessor?.Current`.
+      No extraction needed after all: only the principal differs, the claim read is already one line, so
+      both paths share it as it stands.
 
-- [ ] 6. **Register both** in `ThargaBlazorRegistration` inside the existing `if (o.Simulation.Enabled)`
-      block — accessor as singleton, handler as scoped `CircuitHandler`. No host change.
+- [x] 6. **Registered both** inside the existing `if (o.Simulation.Enabled)` block. Added two guard tests
+      to `AccessSimulationRegistrationTests`: the container really does inject the accessor into the
+      enricher (the parameter is optional, so a missed registration would silently disable the fix), plus
+      the self-check that the enricher still resolves without it.
 
-- [ ] 7. **Verify** — `dotnet build -c Release`, `dotnet test -c Release`, full suite green.
+- [x] 7. **Verified** — `dotnet build -c Release` 0 errors; full suite green, 1980 passed / 0 failed
+      (Blazor 919 → 932).
 
-- [ ] 8. **Docs review** — `docs/articles/access-simulation.md` and `README.md`. The audit-metadata section
+- [~] 8. **Docs review** — `docs/articles/access-simulation.md` and `README.md`. The audit-metadata section
       is the one that changes; decide whether the circuit behaviour deserves its own note.
 
 - [ ] 9. **Close-out** (only after the user says it is done) — package re-check, `plan/` archived to the

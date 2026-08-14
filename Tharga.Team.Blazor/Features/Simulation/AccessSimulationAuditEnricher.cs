@@ -15,12 +15,21 @@ namespace Tharga.Team.Blazor.Features.Simulation;
 /// Registered as a singleton, like every <see cref="IAuditEnricher"/>, so the simulation is read through
 /// <see cref="IHttpContextAccessor"/> rather than from a scoped dependency.
 /// </para>
+/// <para>
+/// <b>An interactive component has no <c>HttpContext</c></b>, and reading that alone silently dropped the
+/// metadata from every entry a Blazor Server host wrote — including all of the ones made during a demo,
+/// which is when it is wanted (Tharga/Team#220). Inside a circuit the principal comes from
+/// <see cref="AccessSimulationPrincipalAccessor"/> instead. Both paths then read the same claim, so there
+/// is one place that decides what a simulation is rather than two that can disagree.
+/// </para>
 /// </remarks>
-internal sealed class AccessSimulationAuditEnricher(IHttpContextAccessor httpContextAccessor) : IAuditEnricher
+internal sealed class AccessSimulationAuditEnricher(
+    IHttpContextAccessor httpContextAccessor,
+    AccessSimulationPrincipalAccessor principalAccessor = null) : IAuditEnricher
 {
     public void Enrich(AuditEntry entry, IDictionary<string, string> metadata)
     {
-        var principal = httpContextAccessor?.HttpContext?.User;
+        var principal = httpContextAccessor?.HttpContext?.User ?? principalAccessor?.Current;
         if (principal == null) return;
 
         var simulation = AccessSimulationCookie.Read(principal.FindFirst(AccessSimulationCookie.ClaimType)?.Value);

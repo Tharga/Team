@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
 using Tharga.Team;
 using Tharga.Team.Blazor.Features.Simulation;
@@ -74,5 +75,50 @@ public class AccessSimulationRegistrationTests
         if (enabled) services.AddSingleton<IAuditEnricher, AccessSimulationAuditEnricher>();
 
         return [.. services.BuildServiceProvider().GetServices<IAuditEnricher>().OfType<AccessSimulationAuditEnricher>()];
+    }
+
+    /// <summary>
+    /// The container has to hand the enricher the accessor, or the circuit path is dead code: the
+    /// parameter is optional so that a host registering the enricher alone still resolves, which is
+    /// exactly what would let the fix silently not apply. Tharga/Team#220.
+    /// </summary>
+    [Fact]
+    public void TheEnricherIsGivenTheCircuitPrincipalAccessor()
+    {
+        var services = new ServiceCollection();
+        services.AddHttpContextAccessor();
+        services.AddSingleton<AccessSimulationPrincipalAccessor>();
+        services.AddSingleton<IAuditEnricher, AccessSimulationAuditEnricher>();
+
+        var provider = services.BuildServiceProvider();
+        var enricher = provider.GetServices<IAuditEnricher>().OfType<AccessSimulationAuditEnricher>().Single();
+        var principals = provider.GetRequiredService<AccessSimulationPrincipalAccessor>();
+
+        var metadata = new Dictionary<string, string>();
+        var simulation = new AccessSimulation { Kind = AccessSimulationKind.Scopes, Label = "Demo", Scopes = [] };
+
+        using (principals.Push(new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim(AccessSimulationCookie.ClaimType, AccessSimulationCookie.Write(simulation))], "Test"))))
+        {
+            enricher.Enrich(
+                new AuditEntry { Timestamp = DateTime.UtcNow, EventType = AuditEventType.ServiceCall, Action = "probe" },
+                metadata);
+        }
+
+        Assert.Equal("true", metadata[AccessSimulationMetadataKeys.Active]);
+    }
+
+    /// <summary>
+    /// The self-check for the test above: without the accessor in the container the enricher still
+    /// resolves — so the assertion there is about injection happening, not about the type existing.
+    /// </summary>
+    [Fact]
+    public void TheEnricherStillResolvesWithoutTheAccessor()
+    {
+        var services = new ServiceCollection();
+        services.AddHttpContextAccessor();
+        services.AddSingleton<IAuditEnricher, AccessSimulationAuditEnricher>();
+
+        Assert.Single(services.BuildServiceProvider().GetServices<IAuditEnricher>().OfType<AccessSimulationAuditEnricher>());
     }
 }
