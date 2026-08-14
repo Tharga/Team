@@ -66,6 +66,10 @@ public static class ThargaBlazorRegistration
             if (o.Simulation.Enabled)
             {
                 services.AddSingleton<Tharga.Team.Service.Audit.IAuditEnricher, Features.Simulation.AccessSimulationAuditEnricher>();
+
+                // Reaches the singleton enricher from a circuit, where there is no HttpContext to read.
+                services.AddSingleton<Features.Simulation.AccessSimulationPrincipalAccessor>();
+                services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, Features.Simulation.AccessSimulationCircuitHandler>();
             }
 
             services.AddScoped(o._teamService);
