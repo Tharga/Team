@@ -157,6 +157,12 @@ action was refused, or performed at a level below the one they hold:
 | `simulation.kind` | `User` · `Role` · `Scopes` · `AccessLevel` |
 | `simulation.target` | The member, role or level being simulated |
 
+**This covers entries written from an interactive component**, not only from a controller. A circuit has no
+`HttpContext` to read the caller from, so the toolkit publishes the circuit's principal for the length of
+each inbound activity and the enricher reads the simulation from there — the same claim the HTTP path
+reads, so the two cannot disagree about what was in force. No host wiring: enabling simulation registers
+it.
+
 ## How it works
 
 The active simulation rides in a session cookie, read once per request and carried on the principal
