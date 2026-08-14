@@ -307,7 +307,8 @@ still rendering English.
 **`TeamComponent`**, `AuditLogView`, `UsersView` **and both of its tabs (`UsersListView`,
 `TeamsListView`)**, `DirectoryOnlyUsersView`, **`DeleteUserDialog`**, **`InviteUserDialog`**,
 **`TeamInviteView`**, `UserIconDialog`, `TeamIconDialog`, `TeamDialog`, `AssignOwnerDialog`,
-`SuspendedTeamNotice`, `AccessSimulationCard`, `RoleEditor` and `ScopeOverrideEditor`.
+`SuspendedTeamNotice`, `AccessSimulationCard`, **`AccessSimulationBar`**, `RoleEditor` and
+`ScopeOverrideEditor`.
 
 > **`UsersView` now means the whole page.** It is a wrapper around a tab strip, and an earlier version of
 > this note said it "resolves every string it renders" while `UsersListView` and `TeamsListView` held 80
@@ -315,8 +316,12 @@ still rendering English.
 > 3.13, so the claim is now true of what you actually see.
 
 **Still literal**, largest first: `ApiKeyView` 44, `SystemApiKeyView` 35, `ScopeView` 14,
-`UserProfileView` 13, `AccessSimulationDialog` 12, `TenantRoleManager` 11, `AccessSimulationBar` 3,
-`ApiKeyRevealDialog` 2 — **134 strings across 8 components.**
+`UserProfileView` 13, `AccessSimulationDialog` 12, `TenantRoleManager` 11, `ApiKeyRevealDialog` 2 —
+**131 strings across 7 components.**
+
+> **`AccessSimulationDialog` is the one to watch if you use simulation.** The banner is migrated as of
+> 3.13, so the way *out* of a reduced session translates — but the "View as another user" screen the
+> banner's own button opens does not yet.
 
 **None of those are on the surfaces #204 names.** They are API-key, scope and simulation surfaces, which
 that issue does not cover.
@@ -1868,7 +1873,7 @@ the built-ins. This is only about the two the toolkit renders.
 |-----------|-----------|
 | `<TeamSelector>` | `CreateTeamRequested` (intercept the teamless "Create team" link) |
 | `<UserProfileView>` | `ShowAccessCard` (default true — renders `<AccessSimulationCard />` between the profile details and Claims) |
-| `<AccessSimulationBar>` | `Text` ("View as…"), `ShowEntryPoint` (true), `ShowBanner` (true — **off means the profile card is the only way out**) |
+| `<AccessSimulationBar>` | `Text` (overrides the resolved `team.simulation.bar.viewAs`, "View as…"), `ShowEntryPoint` (true), `ShowBanner` (true — **off means the profile card is the only way out**) |
 | `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button) |
 | `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton` |
 | `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton` |
