@@ -39,8 +39,13 @@ Branch: `feature/simulation-audit-enricher-circuit` (from `master`, CI = GitHub 
 - [x] 7. **Verified** — `dotnet build -c Release` 0 errors; full suite green, 1980 passed / 0 failed
       (Blazor 919 → 932).
 
-- [~] 8. **Docs review** — `docs/articles/access-simulation.md` and `README.md`. The audit-metadata section
-      is the one that changes; decide whether the circuit behaviour deserves its own note.
+- [x] 8. **Docs review** — added a paragraph to the *Auditing* section of
+      `docs/articles/access-simulation.md` saying the metadata covers entries written from an interactive
+      component and how the principal reaches the enricher. `Tharga.Team.Blazor/README.md` needed no
+      change: its one line ("audited as the real person, with `simulation.*` metadata") was already the
+      promise — it just was not true in Blazor Server until now. Checked the `simulation:use` scope name
+      in both surfaces against `SimulationScopes.Simulate` while there; the docs are right and the issue
+      text's `simulation:simulate` was the reporter's shorthand.
 
 - [ ] 9. **Close-out** (only after the user says it is done) — package re-check, `plan/` archived to the
       Plan directory and removed, records closed: GitHub #220, the central `Requests.md`, the project
@@ -53,4 +58,6 @@ Branch: `feature/simulation-audit-enricher-circuit` (from `master`, CI = GitHub 
 
 ## Last session
 
-2026-08-14 — branch created, plan written, awaiting confirmation before code changes.
+2026-08-14 — implemented and committed (`523fb83` packages, `0a94a9b` fix, `cd2d8fc` docs). Full suite
+green at 1980. Next: push the branch for the user to test against FortDocs. Step 9 (close-out) waits for
+the user to say the feature is done.
