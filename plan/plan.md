@@ -37,8 +37,15 @@ Branch: `feature/simulation-card-and-bar` (from `master`, CI = GitHub Actions). 
       (Blazor 932 → 952). `TextCoverageTests` ratcheted: `AccessSimulationBar.razor` moved from Pending(3)
       to Migrated, which the test itself demanded.
 
-- [ ] 8. **Docs review** — `docs/articles/access-simulation.md` (localization + what the card costs) and
-      `Tharga.Team.Blazor/README.md`. Check whether the text-provider docs enumerate the key sets.
+- [x] 8. **Docs review** — three surfaces, all of which had a claim this feature made false:
+      - `docs/articles/access-simulation.md` — new **Translating it** section (both key catalogues, why the
+        banner is one sentence, what is still literal), plus a paragraph under *Who can use it* on the
+        controls being gated from claims and what that trades away.
+      - `docs/articles/implementation-guide.md` — `AccessSimulationBar` moved into the fully-routed list;
+        the still-literal tally corrected from 134 across 8 components to 131 across 7; the parameter
+        table now says `Text` overrides the resolved key rather than being the only way to set the label.
+      - `Tharga.Team.Blazor/README.md` — the access-simulation bullet now states that both components
+        translate.
 
 - [ ] 9. **Close-out** (only after the user says it is done) — package re-check, `plan/` archived and
       removed, records closed: GitHub #219 and #221, the central `Requests.md`, the project backlog, and
@@ -58,4 +65,9 @@ Branch: `feature/simulation-card-and-bar` (from `master`, CI = GitHub Actions). 
 
 ## Last session
 
-2026-08-14 — branch created, plan written, awaiting confirmation before code changes.
+2026-08-14 — implemented and committed (`d2af718` fix, `5b4b44f` docs). Full suite green at 2000. Next:
+push for the user to test. Step 9 (close-out) waits for the user to say the feature is done.
+
+**Worth raising at close-out:** `AccessSimulationDialog` is now the only untranslated part of the feature,
+at 12 literal strings, and it is the screen the newly-translated banner button opens. File it as its own
+issue rather than letting it sit in the coverage ratchet unnoticed.
