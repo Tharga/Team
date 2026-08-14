@@ -8,7 +8,14 @@
    because a control reachable only by navigating to a page is no use to someone whose reduced session is
    what makes that page hard to reach. *@
 
-@if (_render)
+@if (_render && !_ready)
+{
+    @* The card's own wording is still resolving. Claiming the space says "loading" where returning nothing
+       says "missing" — on a profile page whose other cards have already drawn, an empty gap reads as a
+       page that failed rather than one still working (Tharga/Team#219). *@
+    <Loading />
+}
+else if (_render)
 {
     <ExpandableCard Icon="visibility" Text="@_text[AccessSimulationCardText.Title]" Selected="@(_active != null)">
         <ChildContent>
@@ -55,19 +62,32 @@
 @code {
     private AccessSimulation _active;
     private bool _render;
+    private bool _ready;
     private TextSet _text = TextSet.Empty;
 
+    /// <remarks>
+    /// <b>Whether to render is decided before the text is fetched, and that order is the point.</b> Both
+    /// questions above it are answered from the principal — the active simulation is a claim, and
+    /// <c>CanSimulateAsync</c> reads the caller's scope claims — so a caller who cannot simulate is known
+    /// immediately and never sees a placeholder appear and vanish. Only a caller who <i>will</i> get the
+    /// card waits, and they wait behind a loading state rather than a gap.
+    /// </remarks>
     protected override async Task OnInitializedAsync()
     {
         if (!SimulationState.Enabled) return;
 
-        _text = await TextProvider.ResolveAsync(AccessSimulationCardText.All);
         _active = await SimulationState.GetActiveAsync();
 
         // Asked only when nothing is active, exactly as AccessSimulationBar does it: a simulation can
         // remove the scope that authorizes starting one, so gating the exit on it would let someone
         // strand themselves.
         _render = _active != null || await SimulationState.CanSimulateAsync();
+
+        if (_render)
+        {
+            _text = await TextProvider.ResolveAsync(AccessSimulationCardText.All);
+            _ready = true;
+        }
 
         await base.OnInitializedAsync();
     }

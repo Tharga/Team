@@ -79,13 +79,59 @@ public sealed class AccessSimulationState
     /// <remarks>
     /// Checked against the caller's <b>real</b> grant, so simulating the scope away does not lock them
     /// out of the picker. <see cref="StopAsync"/> deliberately has no equivalent check.
+    /// <para>
+    /// <b>Answered from the principal where the principal can answer it.</b> The scope claims are built by
+    /// <c>TeamMembershipClaimsBuilder</c> from this same resolver, with the same arguments, so a claim is
+    /// the resolver's own answer already carried on the caller — reading it is a cache hit rather than a
+    /// second place restating the rule. It matters because this runs on every render of the card and the
+    /// bar, and a host with no team cache pays a database round trip for each one (Tharga/Team#219).
+    /// </para>
+    /// <para>
+    /// The grant is still resolved whenever the claims cannot answer — see
+    /// <see cref="ClaimsCanAnswer"/>. What the fast path trades away is freshness: a grant changed
+    /// mid-session reaches the principal at the next claim revalidation, exactly as it does for every other
+    /// scope-gated surface in the toolkit.
+    /// </para>
     /// </remarks>
     public async Task<bool> CanSimulateAsync()
     {
         if (!Enabled) return false;
 
+        var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+
+        if (ClaimsCanAnswer(state.User))
+            return state.User.HasClaim(TeamClaimTypes.Scope, SimulationScopes.Simulate);
+
         var grant = await ResolveRealGrantAsync();
         return grant != null && grant.Scopes.Contains(SimulationScopes.Simulate, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Whether <paramref name="principal"/>'s scope claims describe what the caller really holds.
+    /// </summary>
+    /// <remarks>
+    /// Two conditions, both load-bearing.
+    /// <para>
+    /// <b>No simulation may be in force.</b> <c>AccessSimulationFilter</c> removes scope claims, so a
+    /// filtered principal cannot say what was removed — and a caller who simulated
+    /// <see cref="SimulationScopes.Simulate"/> away would be refused the picker that undoes it.
+    /// </para>
+    /// <para>
+    /// <b>Claims must have been issued for the team that is selected.</b> <see cref="TeamClaimTypes.TeamKey"/>
+    /// is issued only when the builder resolved a grant, so its presence is what separates "holds no scopes"
+    /// from "claims were never issued" — an absent scope claim means nothing without it. Matching it against
+    /// the selected team covers the moment between choosing a team and the reload that re-issues claims for
+    /// it.
+    /// </para>
+    /// </remarks>
+    private static bool ClaimsCanAnswer(ClaimsPrincipal principal)
+    {
+        if (AccessSimulationCookie.IsActive(principal)) return false;
+
+        var selectedTeamKey = principal?.FindFirst(Constants.TeamKeyCookie)?.Value;
+
+        return !string.IsNullOrEmpty(selectedTeamKey)
+               && principal.HasClaim(TeamClaimTypes.TeamKey, selectedTeamKey);
     }
 
     /// <summary>The members of the selected team that can be simulated.</summary>
