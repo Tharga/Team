@@ -43,7 +43,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
-    <PackageReference Include="Tharga.MongoDB" Version="2.14.2" />
+    <PackageReference Include="Tharga.MongoDB" Version="2.14.3" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team\Tharga.Team.csproj" />
