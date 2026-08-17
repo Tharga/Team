@@ -122,7 +122,7 @@ public class McpTeamSelectionTests
     {
         var (sut, _) = Build(selectedTeam: null);
 
-        var ctx = sut.Current;
+        var ctx = sut.Current.AsTeamContext();
 
         Assert.Equal(Anchored, ctx.TeamId);
     }
@@ -132,7 +132,7 @@ public class McpTeamSelectionTests
     {
         var (sut, _) = Build(Target, memberOfTarget: new FakeMember("user-1", AccessLevel.Administrator));
 
-        var ctx = sut.Current;
+        var ctx = sut.Current.AsTeamContext();
 
         Assert.Equal(Target, ctx.TeamId);
     }
@@ -149,7 +149,7 @@ public class McpTeamSelectionTests
             roles: ["Support"],
             systemKey: true);
 
-        var ctx = sut.Current;
+        var ctx = sut.Current.AsTeamContext();
 
         Assert.Equal(Target, ctx.TeamId);
         Assert.Equal(McpScope.System, ctx.Scope);
@@ -163,7 +163,7 @@ public class McpTeamSelectionTests
             consentedTeam: new FakeTeam(Target, AccessLevel.Viewer),
             roles: ["Support"]);
 
-        Assert.Equal(Target, sut.Current.TeamId);
+        Assert.Equal(Target, sut.Current.AsTeamContext().TeamId);
     }
 
     [Fact]
@@ -255,7 +255,7 @@ public class McpTeamSelectionTests
     {
         var (sut, _) = Build(selectedTeam: value);
 
-        Assert.Equal(Anchored, sut.Current.TeamId);
+        Assert.Equal(Anchored, sut.Current.AsTeamContext().TeamId);
     }
 
     /// <summary>Naming a team promotes a plain user to Team scope — otherwise the providers stay hidden.</summary>

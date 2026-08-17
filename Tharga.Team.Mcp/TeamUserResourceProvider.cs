@@ -40,7 +40,7 @@ public sealed class TeamUserResourceProvider : IMcpResourceProvider
 
     public Task<IReadOnlyList<McpResourceDescriptor>> ListResourcesAsync(IMcpContext context, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(context?.UserId))
+        if (string.IsNullOrEmpty(context.AsTeamContext()?.UserId))
             return Task.FromResult<IReadOnlyList<McpResourceDescriptor>>(Array.Empty<McpResourceDescriptor>());
 
         return Task.FromResult<IReadOnlyList<McpResourceDescriptor>>(new[]

@@ -19,13 +19,8 @@ public class TeamSystemResourceProviderTests
             Options.Create(new AuditOptions()));
     }
 
-    private IMcpContext MakeContext(bool isDeveloper)
-    {
-        var ctx = Substitute.For<IMcpContext>();
-        ctx.IsDeveloper.Returns(isDeveloper);
-        ctx.Scope.Returns(McpScope.System);
-        return ctx;
-    }
+    private TeamMcpContext MakeContext(bool isDeveloper)
+        => TestMcpContextFactory.Create(isDeveloper: isDeveloper, scope: McpScope.System);
 
     private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(params T[] items)
     {

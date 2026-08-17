@@ -10,13 +10,8 @@ public class TeamResourceProviderTests
     private readonly ITeamManagementService _teamService = Substitute.For<ITeamManagementService>();
     private readonly IApiKeyAdministrationService _apiKeyService = Substitute.For<IApiKeyAdministrationService>();
 
-    private IMcpContext MakeContext(string teamId)
-    {
-        var ctx = Substitute.For<IMcpContext>();
-        ctx.TeamId.Returns(teamId);
-        ctx.Scope.Returns(McpScope.Team);
-        return ctx;
-    }
+    private TeamMcpContext MakeContext(string teamId)
+        => TestMcpContextFactory.Create(teamId: teamId, scope: McpScope.Team);
 
     private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(params T[] items)
     {

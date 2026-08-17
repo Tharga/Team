@@ -127,7 +127,7 @@ public class McpTeamContextEndToEndTests
                         {
                             try
                             {
-                                return Results.Ok(accessor.Current?.TeamId ?? "(none)");
+                                return Results.Ok(accessor.Current.AsTeamContext()?.TeamId ?? "(none)");
                             }
                             catch (UnauthorizedAccessException)
                             {

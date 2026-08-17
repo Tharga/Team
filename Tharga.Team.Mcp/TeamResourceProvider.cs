@@ -40,7 +40,7 @@ public sealed class TeamResourceProvider : IMcpResourceProvider
 
     public Task<IReadOnlyList<McpResourceDescriptor>> ListResourcesAsync(IMcpContext context, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(context?.TeamId))
+        if (string.IsNullOrEmpty(context.AsTeamContext()?.TeamId))
             return Task.FromResult<IReadOnlyList<McpResourceDescriptor>>(Array.Empty<McpResourceDescriptor>());
 
         var list = new List<McpResourceDescriptor>
@@ -77,7 +77,7 @@ public sealed class TeamResourceProvider : IMcpResourceProvider
 
     public async Task<McpResourceContent> ReadResourceAsync(string uri, IMcpContext context, CancellationToken cancellationToken)
     {
-        var teamKey = context?.TeamId;
+        var teamKey = context.AsTeamContext()?.TeamId;
         if (string.IsNullOrEmpty(teamKey))
             throw new UnauthorizedAccessException("No team selected.");
 
@@ -96,7 +96,7 @@ public sealed class TeamResourceProvider : IMcpResourceProvider
     /// had no teams and could never read the very resource <c>ListResourcesAsync</c> had just advertised
     /// to it. Listing gated on the claim while reading gated on membership, and the two disagreed.
     /// <para>
-    /// <b>Safe only because <paramref name="teamKey"/> comes from <c>IMcpContext.TeamId</c></b> — the
+    /// <b>Safe only because <paramref name="teamKey"/> comes from <c>TeamMcpContext.TeamId</c></b> — the
     /// caller's own <c>TeamKey</c> claim, issued by the server — and never from the request. A caller can
     /// therefore only ever name its own team. <see cref="ITeamManagementService.GetTeamByKeyAsync"/> is deliberately
     /// unauthorized ("regardless of the caller's membership"), so passing a caller-supplied key here would
