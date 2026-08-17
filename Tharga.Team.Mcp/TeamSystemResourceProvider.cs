@@ -7,7 +7,8 @@ namespace Tharga.Team.Mcp;
 
 /// <summary>
 /// Read-only MCP resource provider that surfaces system-scope Team data for diagnostic use.
-/// Only available to callers with the Developer role (see <see cref="IMcpContext.IsDeveloper"/>).
+/// Only available to callers with the Developer role (see <see cref="TeamMcpContext.IsDeveloper"/>, recovered
+/// from the context via <c>AsTeamContext()</c> — <see cref="IMcpContext"/> itself carries no identity).
 /// Registered by <c>AddTeam</c> when <see cref="McpTeamOptions.ExposeSystemResources"/> is true.
 /// </summary>
 public sealed class TeamSystemResourceProvider : IMcpResourceProvider
@@ -60,7 +61,7 @@ public sealed class TeamSystemResourceProvider : IMcpResourceProvider
     public async Task<IReadOnlyList<McpResourceDescriptor>> ListResourcesAsync(IMcpContext context, CancellationToken cancellationToken)
     {
         var list = new List<McpResourceDescriptor>();
-        var isDeveloper = context?.IsDeveloper == true;
+        var isDeveloper = context.AsTeamContext()?.IsDeveloper == true;
 
         if (isDeveloper && _apiKeyAdministrationService != null)
         {
@@ -132,7 +133,7 @@ public sealed class TeamSystemResourceProvider : IMcpResourceProvider
         // scope who does not also hold the role -- exactly the divergence this set out to remove.
         if (uri == AuditUri) return await ReadAuditAsync();
 
-        if (context?.IsDeveloper != true)
+        if (context.AsTeamContext()?.IsDeveloper != true)
             throw new UnauthorizedAccessException("System resources require the Developer role.");
 
         return uri switch

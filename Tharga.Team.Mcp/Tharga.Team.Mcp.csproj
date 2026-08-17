@@ -16,8 +16,16 @@
     <IncludeSource>true</IncludeSource>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <InternalsVisibleTo>Tharga.Team.Mcp.Tests</InternalsVisibleTo>
   </PropertyGroup>
+
+  <!--
+    InternalsVisibleTo is an MSBuild *item*, not a property. It sat in the PropertyGroup above where the
+    SDK ignores it silently, so internals were never actually visible to the test project despite the
+    declaration reading as though they were.
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tharga.Team.Mcp.Tests" />
+  </ItemGroup>
   <PropertyGroup>
     <!--
       NU5048: PackageIconUrl is deprecated in favour of an embedded PackageIcon.
@@ -37,7 +45,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Tharga.Mcp" Version="1.1.0" />
+    <PackageReference Include="Tharga.Mcp" Version="2.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team.Service\Tharga.Team.Service.csproj" />

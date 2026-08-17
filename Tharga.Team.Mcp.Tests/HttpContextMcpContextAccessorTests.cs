@@ -33,7 +33,7 @@ public class HttpContextMcpContextAccessorTests
         accessor.HttpContext.Returns(httpContext);
         var sut = new HttpContextMcpContextAccessor(accessor, Options.Create(new McpTeamOptions()));
 
-        var ctx = sut.Current;
+        var ctx = sut.Current.AsTeamContext();
 
         Assert.NotNull(ctx);
         Assert.Equal("user-1", ctx.UserId);
@@ -110,13 +110,13 @@ public class HttpContextMcpContextAccessorTests
         Assert.Equal(McpScope.System, sut.Current.Scope);
     }
 
-    private static IMcpContext CreateContext(params Claim[] claims)
+    private static TeamMcpContext CreateContext(params Claim[] claims)
     {
         var identity = new ClaimsIdentity(claims, "TestAuth");
         var httpContext = new DefaultHttpContext { User = new ClaimsPrincipal(identity) };
         var accessor = Substitute.For<IHttpContextAccessor>();
         accessor.HttpContext.Returns(httpContext);
         var sut = new HttpContextMcpContextAccessor(accessor, Options.Create(new McpTeamOptions()));
-        return sut.Current;
+        return sut.Current.AsTeamContext();
     }
 }

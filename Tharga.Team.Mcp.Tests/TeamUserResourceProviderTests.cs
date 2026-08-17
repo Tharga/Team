@@ -14,13 +14,8 @@ public class TeamUserResourceProviderTests
     private readonly ITeamDirectoryService _teamDirectory = Substitute.For<ITeamDirectoryService>();
     private readonly IHttpContextAccessor _httpContextAccessor = Substitute.For<IHttpContextAccessor>();
 
-    private IMcpContext MakeContext(string userId)
-    {
-        var ctx = Substitute.For<IMcpContext>();
-        ctx.UserId.Returns(userId);
-        ctx.Scope.Returns(McpScope.User);
-        return ctx;
-    }
+    private TeamMcpContext MakeContext(string userId)
+        => TestMcpContextFactory.Create(userId: userId, scope: McpScope.User);
 
     private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(params T[] items)
     {
