@@ -103,7 +103,7 @@ else if (_loaded)
                                     <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionRename]" Value="@RenameAction" Icon="edit" />
                                     <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionSetIcon]" Value="@SetIconAction" Icon="image" />
                                 }
-                                @if (UserAdminGate.CanAssignOwner(_canAssignOwner, context.IsOwnerless))
+                                @if (UserAdminGate.CanSetOwner(_canSetOwner))
                                 {
                                     <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionAssignOwner]" Value="@AssignOwnerAction" Icon="manage_accounts" />
                                 }
@@ -229,7 +229,7 @@ else
     private bool _loaded;
     private bool _canAdminister = true;
     private bool _canDeleteTeams;
-    private bool _canAssignOwner;
+    private bool _canSetOwner;
     private bool _canManageTeams;
     private IUser[] _users;
     private ITeam<TMember>[] _teams;
@@ -250,7 +250,7 @@ else
         _canDeleteTeams = UserAdminGate.CanDeleteTeams(
             TeamScopeGate.HasSystemScope(authState.User, SystemTeamScopes.Delete));
         // System grant only — an in-team scope of the same name must not satisfy it.
-        _canAssignOwner = TeamScopeGate.HasSystemScope(authState.User, SystemTeamScopes.AssignOwner);
+        _canSetOwner = TeamScopeGate.HasSystemScope(authState.User, SystemTeamScopes.SetOwner);
         _canManageTeams = UserAdminGate.CanManageTeams(
             TeamScopeGate.HasSystemScope(authState.User, SystemTeamScopes.Manage));
 
@@ -413,7 +413,7 @@ else
 
     /// <summary>
     /// Repairs a team that has lost its owner, authorized by the
-    /// <see cref="SystemTeamScopes.AssignOwner"/> system scope. Offered only when the team is actually
+    /// <see cref="SystemTeamScopes.SetOwner"/> system scope. Offered only when the team is actually
     /// ownerless — the service refuses otherwise, and a control that throws when clicked is worse than
     /// no control.
     /// </summary>
@@ -430,7 +430,7 @@ else
 
         try
         {
-            await TeamManagementService.AssignOwnerAsync(team.Key, ownerKey);
+            await TeamManagementService.SetOwnerAsync(team.Key, ownerKey);
 
             // The roster drives both the Owner column and whether this action is offered at all, so the
             // list has to be rebuilt rather than patched — otherwise the action stays on a repaired team.

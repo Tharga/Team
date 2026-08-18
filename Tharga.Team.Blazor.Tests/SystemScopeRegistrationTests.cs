@@ -49,7 +49,7 @@ public class SystemScopeRegistrationTests
     [InlineData(SystemTeamScopes.Delete)]
     [InlineData(SystemTeamScopes.Purge)]
     [InlineData(SystemTeamScopes.Manage)]
-    [InlineData(SystemTeamScopes.AssignOwner)]
+    [InlineData(SystemTeamScopes.SetOwner)]
     [InlineData(SystemUserScopes.Manage)]
     public void AddThargaTeamBlazor_RegistersBuiltInSystemScope(string scopeName)
     {

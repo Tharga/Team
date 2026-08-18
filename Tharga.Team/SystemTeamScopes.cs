@@ -48,28 +48,36 @@ public static class SystemTeamScopes
     public const string Read = "teams:read";
 
     /// <summary>
-    /// Authorizes giving an <b>ownerless</b> team an owner, chosen from that team's existing members.
-    /// The repair path for a team whose owner was deleted.
+    /// Authorizes making an existing member the <b>sole owner</b> of <b>any</b> team, whatever its current
+    /// owner count — none, one, or several.
     /// </summary>
     /// <remarks>
     /// <b>Why this is its own scope.</b> The rule this codebase already applies is that a new scope is
-    /// warranted when an operation is irreversible or crosses a tenant boundary. This does the second:
-    /// the caller is by definition not a member of the team being repaired, since a member could not have
-    /// reached this state. It is also privilege escalation by construction — it hands someone `Owner` —
-    /// so it earns its own grant and its own audit entry rather than riding on a scope granted for
-    /// something else.
+    /// warranted when an operation is irreversible or crosses a tenant boundary. This does the second: the
+    /// caller is by definition not a member of the team they are acting on. It is also privilege escalation
+    /// by construction — it hands someone <c>Owner</c> and takes it from whoever held it — so it earns its
+    /// own grant and its own audit entry rather than riding on a scope granted for something else.
     /// <para>
     /// Deliberately <b>not</b> <see cref="Delete"/>: authorizing repair with the right to destroy would
     /// mean the only way to fix a team is to hold the right to delete it. Deliberately not the in-team
-    /// <c>team:manage</c> either, which is `TeamKey`-bound and so cannot fit a non-member.
+    /// <c>team:manage</c> either, which is <c>TeamKey</c>-bound and so cannot fit a non-member.
     /// </para>
     /// <para>
-    /// <b>The operation refuses when the team already has an owner</b>, which is what keeps this a repair
-    /// rather than a way to take over a healthy team. With no sitting owner there is nobody to escalate
-    /// past, so the invariant <c>SetMemberRoleAsync</c> protects stays intact.
+    /// <b>This grant can depose a sitting owner, and is meant to.</b> The two cases it exists for are a team
+    /// synced from a legacy system carrying several owners, which must be reduced to one, and a handover the
+    /// sitting owner cannot perform themselves — they have left, or the account is gone.
+    /// <c>ITeamService.TransferOwnershipAsync</c> remains the in-team path and still requires the caller to
+    /// <i>be</i> the owner; this is the operator path, and the two are not alternatives.
+    /// </para>
+    /// <para>
+    /// <b>Renamed from <c>teams:assign-owner</c> (3.9.0–3.13.0), which authorized only the ownerless-repair
+    /// case.</b> The name changed with the capability rather than being widened in place, so a host that
+    /// granted the old string does not silently acquire the ability to depose owners. A startup check fails
+    /// loudly if the retired name is still registered — see <c>RetiredScopeCheck</c> — because the failure
+    /// would otherwise be a silent refusal at the point of use rather than an error at boot.
     /// </para>
     /// </remarks>
-    public const string AssignOwner = "teams:assign-owner";
+    public const string SetOwner = "teams:set-owner";
 
     /// <summary>
     /// Authorizes renaming <b>any</b> team and setting or clearing its icon, regardless of membership.

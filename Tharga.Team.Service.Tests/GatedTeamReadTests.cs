@@ -194,7 +194,7 @@ public class GatedTeamReadTests
         public Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept) => NotUsed<Task>();
         public Task SetMemberLastSeenAsync(string teamKey) => NotUsed<Task>();
         public Task TransferOwnershipAsync<T>(string teamKey, string newOwnerUserKey) where T : ITeamMember => NotUsed<Task>();
-        public Task AssignOwnerAsync<T>(string teamKey, string newOwnerUserKey) where T : ITeamMember => NotUsed<Task>();
+        public Task<SetOwnerResult> SetOwnerAsync<T>(string teamKey, string newOwnerUserKey) where T : ITeamMember => NotUsed<Task<SetOwnerResult>>();
         public Task SetTeamConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null) => NotUsed<Task>();
         public IAsyncEnumerable<ITeam> GetConsentedTeamsAsync(string[] userRoles) => NotUsed<IAsyncEnumerable<ITeam>>();
         public Task<IReadOnlyList<TenantRoleDefinition>> GetTeamCustomRolesAsync(string teamKey) => Task.FromResult<IReadOnlyList<TenantRoleDefinition>>([]);

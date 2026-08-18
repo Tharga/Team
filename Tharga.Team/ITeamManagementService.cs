@@ -92,17 +92,23 @@ public interface ITeamManagementService
     Task SetTeamConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null);
 
     /// <summary>
-    /// Gives an <b>ownerless</b> team an owner from its existing members. Requires the
-    /// <see cref="SystemTeamScopes.AssignOwner"/> system scope.
+    /// Makes an existing member the <b>sole owner</b> of the team, demoting every other owner to
+    /// <see cref="AccessLevel.Administrator"/>. Requires the <see cref="SystemTeamScopes.SetOwner"/> system
+    /// scope. Returns the user keys of the owners demoted, empty when nothing changed.
     /// </summary>
     /// <remarks>
-    /// The scope is a <i>system</i> grant, unlike everything else here — a member could not have produced
-    /// an ownerless team, so there is no in-team case. Enforcement lives in
-    /// <c>AuthorizationTeamServiceDecorator</c>; the attribute below documents the team-bound half of the
-    /// signature and does not describe the whole rule.
+    /// The scope is a <i>system</i> grant, unlike everything else here, for two reasons rather than one. On
+    /// an ownerless team no in-team caller can exist. On a team that has an owner, the in-team caller who
+    /// should move ownership <i>is</i> the owner, and they already have
+    /// <c>ITeamService.TransferOwnershipAsync</c> — admitting an in-team fallback here would let an
+    /// Administrator depose the owner, which <c>SetMemberRoleAsync</c> exists to refuse.
+    /// <para>
+    /// Enforcement lives in <c>AuthorizationTeamServiceDecorator</c>; the attribute below documents the
+    /// team-bound half of the signature and does not describe the whole rule.
+    /// </para>
     /// </remarks>
-    [RequireScope(SystemTeamScopes.AssignOwner)]
-    Task AssignOwnerAsync(string teamKey, string newOwnerUserKey);
+    [RequireScope(SystemTeamScopes.SetOwner)]
+    Task<SetOwnerResult> SetOwnerAsync(string teamKey, string newOwnerUserKey);
 
     /// <summary>One team and its members. Requires <c>team:read</c> on that team.</summary>
     [RequireScope(TeamScopes.Read)]

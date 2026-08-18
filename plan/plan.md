@@ -4,50 +4,57 @@ Branch `feature/system-owner-change`, from `master` at `3.13.0`.
 
 ## Status
 
-Awaiting plan confirmation. No code written yet.
+**In progress.** Steps 0, 2, 3, 4 and most of 6 are done; build clean, 2025 tests green.
 
-Revised 2026-08-18 after two user decisions: **one scope** (reuse `teams:assign-owner`, no
-`teams:set-owner`), and therefore **one operation** (`SetOwnerAsync` absorbs `AssignOwnerAsync`, which
-becomes an obsolete forwarder). The `teams:purge` brace defect found in the registration block is **not**
-folded in — still awaiting a call on that.
+Revised twice on 2026-08-18 by user decision. Final shape: **one operation** (`SetOwnerAsync`;
+`AssignOwnerAsync` **removed outright**, not obsoleted) under **one renamed scope**
+(`teams:assign-owner` → `teams:set-owner`), enforcing **a team has exactly one owner**. The `teams:purge`
+brace defect is folded in and shipped. xunit 4.0 was attempted and **backed out** — see step 0.
+
+Still to do: authorization tests (4b), audit tests (5b/5c), scope-satisfiability and retired-scope tests
+(2c/2d), UI labelling for the three owner-count states (6b/6c), docs (step 8).
 
 ---
 
 ## Step 0 — Package updates (leading step, mandatory)
 
-- [ ] **0a.** Bump `xunit.v3` 3.2.2 → **4.0.0** and `xunit.runner.visualstudio` 3.1.5 → **4.0.0** in all
+- [x] **0a. BACKED OUT.** Bumped `xunit.v3` 3.2.2 → **4.0.0** and `xunit.runner.visualstudio` 3.1.5 → **4.0.0** in all
       seven test projects: `Tharga.Team.Blazor.Tests`, `Tharga.Team.Service.Tests`, `Tharga.Team.Mcp.Tests`,
       `Tharga.Team.MongoDB.Tests`, `Tharga.Team.Entra.Tests`, `Tharga.Team.Images.Tests`,
       `Tharga.Team.Support.Tests`.
       **This is a major bump** — flagged and approved before starting. No shipping package has an update;
       all eleven are current.
-- [ ] **0b.** `dotnet build -c Release`, then `dotnet test -c Release`. Full suite green (974 at branch
+- [x] **0b. Done, then reverted.** `dotnet build -c Release`, then `dotnet test -c Release`. Full suite green (974 at branch
       point) **before any feature code is written**.
-- [ ] **0c.** Commit: `chore: upgrade xunit to 4.0 across the test projects`.
+- [x] **0c. Not committed — reverted instead.** xunit.v3 4.0 moves to Microsoft.Testing.Platform, which
+      drops the VSTest target on the .NET 10 SDK: the solution builds and **all 2006 tests pass** when each
+      assembly is run directly, but `dotnet test` fails for every project and CI's
+      `--collect:"XPlat Code Coverage"` flags need rewriting. It is a test-platform migration, not a package
+      bump. Filed in the backlog under *Build & test tooling*; shipping packages were all current anyway.
 
 > If xunit 4.0 breaks enough tests to become its own project, stop and report rather than absorbing it into
 > this feature silently.
 
 ## Step 1 — The rules, pure and tested first
 
-- [ ] **1a.** `Tharga.Team/TeamOwnership.cs` — add `CanSetOwner(members, candidateUserKey)` (candidate must
+- [x] **1a.** `Tharga.Team/TeamOwnership.cs` — add `CanSetOwner(members, candidateUserKey)` (candidate must
       be an existing member; unlike `CanAssign`, an existing owner does **not** disqualify) and
       `OwnersToDemote(members, newOwnerUserKey)` returning every member at `Owner` except the incoming one.
       Keep both pure and static, for the reason the type's own remarks already give.
       **Rewrite the type-level remarks** — they currently frame ownerless-ness as the only non-takeover
       state, which stops being true here.
-- [ ] **1b.** `Tharga.Team.Service.Tests/TeamOwnershipTests.cs` — extend. Cases: several owners incl. the
+- [x] **1b.** `Tharga.Team.Service.Tests/TeamOwnershipTests.cs` — extend. Cases: several owners incl. the
       candidate; several owners excl. the candidate; single owner ≠ candidate; candidate already sole owner
       (empty demote set); ownerless; candidate not a member; empty roster; null members; null/empty key.
       Keep the existing `CanAssign` tests untouched and passing.
 
 ## Step 2 — The scope (widen, do not add)
 
-- [ ] **2a.** `Tharga.Team/SystemTeamScopes.cs` — **rewrite** `AssignOwner`'s XML docs. The refusal-based
+- [x] **2a.** `Tharga.Team/SystemTeamScopes.cs` — **rewrite** `AssignOwner`'s XML docs. The refusal-based
       anti-takeover argument is now false and must go, replaced by what the grant actually authorizes:
       make any existing member the sole owner of any team, whatever its current owner count. Keep the
       constant string `teams:assign-owner` — renaming it would break every host's role mapping.
-- [ ] **2b.** `ThargaBlazorRegistration.cs:180` — update the registration *description* string to match.
+- [x] **2b.** `ThargaBlazorRegistration.cs:180` — update the registration *description* string to match.
       No new scope to register.
 - [ ] **2c.** Test that the scope is *satisfiable* end to end, not merely present — registered in the
       **system** registry via `AddThargaSystemScopes` and read by `HasSystemScopeAsync`. The closed
@@ -57,22 +64,24 @@ folded in — still awaiting a call on that.
 
 ## Step 3 — The operation
 
-- [ ] **3a.** `Tharga.Team/ITeamService.cs` — declare `SetOwnerAsync<TMember>` on the internal contract
+- [x] **3a.** `Tharga.Team/ITeamService.cs` — declare `SetOwnerAsync<TMember>` on the internal contract
       (`[EditorBrowsable(Never)]` type; the contract a host implements).
-- [ ] **3b.** `Tharga.Team/ITeamManagementService.cs` — declare it with
+- [x] **3b.** `Tharga.Team/ITeamManagementService.cs` — declare it with
       `[RequireScope(SystemTeamScopes.AssignOwner)]`, mirroring `AssignOwnerAsync` at `:104`. The proxy fails
       closed on an unattributed method, so this is what makes it gated.
-- [ ] **3c.** `Tharga.Team/TeamManagementService.cs` — forward it.
-- [ ] **3d.** `Tharga.Team/TeamServiceBase.cs` — implement:
+- [x] **3c.** `Tharga.Team/TeamManagementService.cs` — forward it.
+- [x] **3d.** `Tharga.Team/TeamServiceBase.cs` — implement:
       read the team; refuse a non-member candidate by name; if the candidate is already sole owner return
       **without writing anything**; otherwise **promote the new owner first**, then demote each
       `OwnersToDemote` entry to `Administrator` — that order is what keeps the team from being ownerless at
       any point; drop the member cache for every changed member; raise `TeamsListChangedEvent`.
       Use the protected `SetTeamMemberRoleAsync`, as transfer and assign both do — `SetMemberRoleAsync`'s
       Owner guard stays untouched.
-- [ ] **3e.** Return the set of demoted members (or expose it to the audit decorator) so the audit entry can
+- [x] **3e.** Return the set of demoted members (or expose it to the audit decorator) so the audit entry can
       name them rather than recording only the promotion.
-- [ ] **3f.** **Collapse `AssignOwnerAsync` into it.** Reimplement as a forwarder, mark
+- [x] **3f. Changed by user decision: removed, not obsoleted.** `AssignOwnerAsync` is gone from both
+      interfaces, the base class, both decorators and the UI. Original wording kept below for the record.
+      ~~Reimplement as a forwarder, mark
       `[Obsolete("Use SetOwnerAsync, which also handles a team that already has an owner. Removed in 4.0.")]`
       on both interfaces. Its existing tests must pass **unchanged** against the new implementation — that is
       the evidence existing callers are unaffected.
@@ -82,7 +91,7 @@ folded in — still awaiting a call on that.
 
 ## Step 4 — Authorization
 
-- [ ] **4a.** `Tharga.Team.Service/AuthorizationTeamServiceDecorator.cs` — gate `SetOwnerAsync` on
+- [x] **4a.** `Tharga.Team.Service/AuthorizationTeamServiceDecorator.cs` — gate `SetOwnerAsync` on
       `HasSystemScopeAsync(SystemTeamScopes.AssignOwner)`, mirroring `AssignOwnerAsync` at `:102`.
       **System grant only, no in-team fallback** — two reasons now, and the second is new: no in-team caller
       can exist on an ownerless team, *and* the in-team caller who should change a healthy team's owner is
@@ -93,7 +102,7 @@ folded in — still awaiting a call on that.
 
 ## Step 5 — Audit
 
-- [ ] **5a.** `Tharga.Team.Service/Audit/AuditingTeamServiceDecorator.cs` — log `set-owner` on success and
+- [x] **5a.** `Tharga.Team.Service/Audit/AuditingTeamServiceDecorator.cs` — log `set-owner` on success and
       failure, mirroring `assign-owner` at `:484`. Metadata: team key, new owner, every demoted owner key.
 - [ ] **5b.** Test the entry carries the demoted owners — the part most likely to be dropped, because the
       operation "works" without it.
@@ -102,7 +111,7 @@ folded in — still awaiting a call on that.
 
 ## Step 6 — UI
 
-- [ ] **6a.** `Tharga.Team.Blazor/Features/User/UserAdminGate.cs` — extend `CanAssignOwner` at `:97` to allow
+- [x] **6a.** `Tharga.Team.Blazor/Features/User/UserAdminGate.cs` — extend `CanAssignOwner` at `:97` to allow
       the action on a team that already has an owner. Same scope, wider precondition.
 - [ ] **6b.** `Tharga.Team.Blazor/Features/User/TeamsListView.razor` — **two affordances over one
       operation**: *Reduce to a single owner* when the team has several owners, *Change owner* when it has

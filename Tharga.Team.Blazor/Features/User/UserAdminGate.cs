@@ -124,8 +124,22 @@ public static class UserAdminGate
     public static bool CanManageTeams(bool hasTeamsManageScope)
         => hasTeamsManageScope;
 
-    public static bool CanAssignOwner(bool hasAssignOwnerScope, bool teamIsOwnerless)
-        => hasAssignOwnerScope && teamIsOwnerless;
+    /// <summary>
+    /// Whether the Teams tab offers the set-owner action. Requires the <b>system</b>
+    /// <see cref="SystemTeamScopes.SetOwner"/> grant, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// <b>No longer conditioned on the team being ownerless</b>, unlike the <c>teams:assign-owner</c> gate
+    /// this replaces. The operation now serves three states — no owner, one owner, several — so gating on
+    /// one of them would hide it from the two cases it was widened for.
+    /// <para>
+    /// A <i>system</i> grant, resolved with <c>TeamScopeGate.HasSystemScope</c>: an in-team scope of the
+    /// same name must not satisfy it. The label the surface shows still varies by owner count, but that is
+    /// wording, not authorization — see <c>TeamsListView</c>.
+    /// </para>
+    /// </remarks>
+    public static bool CanSetOwner(bool hasSetOwnerScope)
+        => hasSetOwnerScope;
 
     /// <summary>
     /// Whether the users list offers the per-row audit action. Requires the <b>system</b>

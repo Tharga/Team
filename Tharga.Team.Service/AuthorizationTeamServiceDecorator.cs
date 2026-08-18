@@ -95,17 +95,23 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     }
 
     /// <remarks>
-    /// A <b>system</b> grant only — there is no in-team fallback, deliberately. The caller is by
-    /// definition not a member of the team being repaired, and an in-team scope of the same name must not
-    /// satisfy it, which is why this asks <c>HasSystemScopeAsync</c> rather than checking a claim.
+    /// A <b>system</b> grant only — there is no in-team fallback, deliberately, and now for two reasons.
+    /// On an ownerless team no in-team caller can exist. On a team that has an owner, the in-team caller
+    /// who should move ownership <i>is</i> the owner, and <see cref="TransferOwnershipAsync{TMember}"/> is
+    /// already their path — an in-team fallback here would let an Administrator depose the owner, which
+    /// <c>SetMemberRoleAsync</c> exists to refuse.
+    /// <para>
+    /// An in-team scope of the same name must not satisfy it either, which is why this asks
+    /// <c>HasSystemScopeAsync</c> rather than checking a claim.
+    /// </para>
     /// </remarks>
-    public async Task AssignOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
+    public async Task<SetOwnerResult> SetOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
     {
-        if (!await _authorizer.HasSystemScopeAsync(SystemTeamScopes.AssignOwner))
+        if (!await _authorizer.HasSystemScopeAsync(SystemTeamScopes.SetOwner))
             throw new UnauthorizedAccessException(
-                $"Assigning an owner to team '{teamKey}' requires the '{SystemTeamScopes.AssignOwner}' system scope.");
+                $"Setting the owner of team '{teamKey}' requires the '{SystemTeamScopes.SetOwner}' system scope.");
 
-        await _inner.AssignOwnerAsync<TMember>(teamKey, newOwnerUserKey);
+        return await _inner.SetOwnerAsync<TMember>(teamKey, newOwnerUserKey);
     }
 
     // Lifecycle.

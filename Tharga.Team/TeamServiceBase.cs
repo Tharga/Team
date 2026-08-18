@@ -641,28 +641,40 @@ public abstract class TeamServiceBase : ITeamService
         return count;
     }
 
-    public async Task AssignOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
+    public async Task<SetOwnerResult> SetOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
     {
         var team = await GetTeamAsync<TMember>(teamKey)
             ?? throw new InvalidOperationException($"Team '{teamKey}' was not found.");
 
         var members = team.Members?.Cast<ITeamMember>().ToArray() ?? [];
 
-        // Refusing loudly on a healthy team matters more than the happy path: this is the one operation
-        // that can hand out Owner without a sitting owner's consent.
-        if (!TeamOwnership.IsOwnerless(members))
-            throw new InvalidOperationException(
-                $"Team '{teamKey}' already has an owner. Assigning an owner repairs an ownerless team; " +
-                $"use {nameof(TransferOwnershipAsync)} to move ownership within a team that has one.");
-
-        if (!TeamOwnership.CanAssign(members, newOwnerUserKey))
+        if (!TeamOwnership.CanSetOwner(members, newOwnerUserKey))
             throw new InvalidOperationException(
                 $"User '{newOwnerUserKey}' is not a member of team '{teamKey}'. An owner is chosen from " +
-                "the team's existing members, so repairing a team cannot introduce someone new to it.");
+                "the team's existing members, so this cannot introduce someone new to it.");
 
+        // Already correct. The caller is typically a sync reconciling teams from another system, where this
+        // is the common case rather than a mistake -- so it returns quietly instead of making every such
+        // caller catch an exception, and writes no audit entry for a change that did not happen.
+        if (TeamOwnership.IsSoleOwner(members, newOwnerUserKey)) return SetOwnerResult.NoChange;
+
+        var demoted = TeamOwnership.OwnersToDemote(members, newOwnerUserKey);
+
+        // Promote before demoting. The reverse order leaves the team momentarily ownerless, and a failure
+        // between the two writes would leave it that way permanently -- the state this operation exists to
+        // repair.
         await SetTeamMemberRoleAsync(teamKey, newOwnerUserKey, AccessLevel.Owner);
         await _cache.RemoveMemberAsync(teamKey, newOwnerUserKey);
+
+        foreach (var owner in demoted)
+        {
+            await SetTeamMemberRoleAsync(teamKey, owner.Key, AccessLevel.Administrator);
+            await _cache.RemoveMemberAsync(teamKey, owner.Key);
+        }
+
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+
+        return new SetOwnerResult(true, demoted.Select(x => x.Key).ToArray());
     }
 
     public async Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember

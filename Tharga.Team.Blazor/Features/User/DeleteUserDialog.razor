@@ -21,7 +21,7 @@
                elsewhere in the sentence. Both variants take the same arguments in the same order. *@
             <RadzenText TextStyle="TextStyle.Body2">
                 @_text.Format(_ownedTeams.Count == 1 ? DeleteUserDialogText.OwnsOneTeam : DeleteUserDialogText.OwnsManyTeams,
-                              UserName, _ownedTeams.Count, SystemTeamScopes.AssignOwner)
+                              UserName, _ownedTeams.Count, SystemTeamScopes.SetOwner)
             </RadzenText>
             <ul>
                 @foreach (var team in _ownedTeams)
