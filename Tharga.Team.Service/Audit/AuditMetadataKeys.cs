@@ -66,6 +66,17 @@ public static class AuditMetadataKeys
     /// <summary>New owner on an ownership transfer.</summary>
     public const string NewOwnerKey = "team.newowner.key";
 
+    /// <summary>
+    /// Owners demoted to Administrator by a set-owner, comma-separated. Empty is never recorded — an
+    /// operation that changed nothing writes no entry at all.
+    /// </summary>
+    /// <remarks>
+    /// Plural on purpose. A team synced from a system permitting several owners is reduced to one in a
+    /// single operation, so "who lost ownership" is a list rather than a value, and recording only the
+    /// first would understate what happened.
+    /// </remarks>
+    public const string DemotedOwnerKeys = "team.demotedowners.keys";
+
     /// <summary>Number of teams a user was removed from, on a remove-from-all-teams operation.</summary>
     public const string MemberTeamCount = "member.teamcount";
 

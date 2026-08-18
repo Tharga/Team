@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using Tharga.Team;
 
 namespace Tharga.Team.Service;
@@ -112,7 +112,7 @@ public class UserManagementService : IUserManagementService
         // Deliberately proceeds when the user is a team's sole owner, rather than refusing. The warning
         // belongs at the confirmation, where GetOwnedTeamsAsync surfaces it and ownership can still be
         // transferred; refusing here would block legitimate cases such as winding up a one-person team,
-        // and the state is now repairable through SystemTeamScopes.AssignOwner.
+        // and the state is now repairable through SystemTeamScopes.SetOwner.
         var removedTeamCount = await _teamService.RemoveUserFromAllTeamsAsync(user.Key);
         await _userService.DeleteUserAsync(user.Key);
 

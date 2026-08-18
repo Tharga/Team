@@ -1,4 +1,4 @@
-namespace Tharga.Team.Blazor.Framework;
+﻿namespace Tharga.Team.Blazor.Framework;
 
 /// <summary>Localizable strings rendered by <c>TeamsListView</c> — the Teams tab of <c>UsersView</c>.</summary>
 /// <remarks>
@@ -29,7 +29,14 @@ public static class TeamsListViewText
     public static readonly TextKey ActionAuditLog = new("team.teamsList.actionAuditLog", "Audit log");
     public static readonly TextKey ActionRename = new("team.teamsList.actionRename", "Rename");
     public static readonly TextKey ActionSetIcon = new("team.teamsList.actionSetIcon", "Set icon");
+    /// <summary>
+    /// Three labels for one operation. The action is the same and so is the grant; only the situation the
+    /// operator is looking at differs, and calling it "Assign owner" on a team that already has one reads
+    /// as though it adds a second.
+    /// </summary>
     public static readonly TextKey ActionAssignOwner = new("team.teamsList.actionAssignOwner", "Assign owner");
+    public static readonly TextKey ActionChangeOwner = new("team.teamsList.actionChangeOwner", "Change owner");
+    public static readonly TextKey ActionReduceOwners = new("team.teamsList.actionReduceOwners", "Reduce to a single owner");
     public static readonly TextKey ActionDelete = new("team.teamsList.actionDelete", "Delete");
 
     public static readonly TextKey TeamKey = new("team.teamsList.teamKey", "Team key");
@@ -46,11 +53,23 @@ public static class TeamsListViewText
     public static readonly TextKey RenameTitle = new("team.teamsList.renameTitle", "Rename {0}");
     public static readonly TextKey IconTitle = new("team.teamsList.iconTitle", "Icon — {0}");
     public static readonly TextKey AssignOwnerTitle = new("team.teamsList.assignOwnerTitle", "Assign owner — {0}");
+    public static readonly TextKey ChangeOwnerTitle = new("team.teamsList.changeOwnerTitle", "Change owner — {0}");
+    public static readonly TextKey ReduceOwnersTitle = new("team.teamsList.reduceOwnersTitle", "Reduce to a single owner — {0}");
 
     public static readonly TextKey OwnerAssigned = new("team.teamsList.ownerAssigned", "Owner assigned");
 
     /// <summary><c>{0}</c> is the team name.</summary>
     public static readonly TextKey OwnerAssignedDetail = new("team.teamsList.ownerAssignedDetail", "'{0}' now has an owner.");
+
+    /// <summary>
+    /// Demotion happened. <c>{0}</c> is the team name, <c>{1}</c> the number of owners demoted — always at
+    /// least one when this is shown, so it needs no zero case.
+    /// </summary>
+    public static readonly TextKey OwnerSetDetail = new("team.teamsList.ownerSetDetail", "'{0}' now has a single owner. {1} previous owner(s) are now administrators.");
+
+    /// <summary>Nothing was written, so saying "owner set" would be a lie. <c>{0}</c> is the team name.</summary>
+    public static readonly TextKey OwnerUnchanged = new("team.teamsList.ownerUnchanged", "No change");
+    public static readonly TextKey OwnerUnchangedDetail = new("team.teamsList.ownerUnchangedDetail", "That member already owns '{0}'.");
 
     public static readonly TextKey CouldNotAssignOwner = new("team.teamsList.couldNotAssignOwner", "Could not assign owner");
 
@@ -82,7 +101,9 @@ public static class TeamsListViewText
         ColumnLastUsed, ColumnConsent, ActionView, ActionAuditLog, ActionRename, ActionSetIcon,
         ActionAssignOwner, ActionDelete, TeamKey, CopyTeamKey, MembersHeading, ShowThisUser, ColumnEmail,
         ColumnRole, ColumnState, ColumnLastSeen, AuditLogTitle, RenameTitle, IconTitle, AssignOwnerTitle,
-        OwnerAssigned, OwnerAssignedDetail, CouldNotAssignOwner, DeleteConfirmOne, DeleteConfirmMany,
+        OwnerAssigned, OwnerAssignedDetail, CouldNotAssignOwner,
+        ActionChangeOwner, ActionReduceOwners, ChangeOwnerTitle, ReduceOwnersTitle,
+        OwnerSetDetail, OwnerUnchanged, OwnerUnchangedDetail, DeleteConfirmOne, DeleteConfirmMany,
         DeleteTitle, DeleteOk, DeleteCancel, TeamDeleted, DeleteFailed
     ];
 }

@@ -1,4 +1,4 @@
-using Tharga.Team.Blazor.Features.Team;
+﻿using Tharga.Team.Blazor.Features.Team;
 
 namespace Tharga.Team.Blazor.Features.User;
 
@@ -28,8 +28,8 @@ public record TeamViewModel
     public string OwnerName { get; init; }
 
     /// <summary>
-    /// Whether the team has no member at <see cref="AccessLevel.Owner"/> — the state
-    /// <see cref="SystemTeamScopes.AssignOwner"/> repairs.
+    /// Whether the team has no member at <see cref="AccessLevel.Owner"/> — one of the two states
+    /// <see cref="SystemTeamScopes.SetOwner"/> repairs.
     /// </summary>
     /// <remarks>
     /// Deliberately not derived from <see cref="OwnerName"/> being null. That is also null for an owner
@@ -37,6 +37,17 @@ public record TeamViewModel
     /// the service refuses.
     /// </remarks>
     public bool IsOwnerless { get; init; }
+
+    /// <summary>
+    /// How many members hold <see cref="AccessLevel.Owner"/>. Normally one.
+    /// </summary>
+    /// <remarks>
+    /// <b>More than one is a real state, not a bug in this view.</b> A team synced from a system whose model
+    /// permits several owners arrives carrying them, and reducing it to one is a case
+    /// <see cref="SystemTeamScopes.SetOwner"/> exists for. The count decides only the <i>wording</i> of the
+    /// action — authorization is the scope alone.
+    /// </remarks>
+    public int OwnerCount { get; init; }
 
     /// <summary>
     /// When anyone last used this team, or null if nobody ever has. Derived from the members'

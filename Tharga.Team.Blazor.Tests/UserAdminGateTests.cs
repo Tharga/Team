@@ -41,29 +41,21 @@ public class UserAdminGateTests
         Assert.Equal(expected, UserAdminGate.CanManageTeams(hasScope));
     }
 
-    /// <summary>The repair case: the scope, on a team that has actually lost its owner.</summary>
-    [Fact]
-    public void CanAssignOwner_ScopedCallerOnAnOwnerlessTeam_IsAllowed()
-    {
-        Assert.True(UserAdminGate.CanAssignOwner(hasAssignOwnerScope: true, teamIsOwnerless: true));
-    }
-
     /// <summary>
-    /// The service refuses on a team that already has an owner, so offering the action there would be a
-    /// control that throws when clicked — the defect per-team action gating already had to fix once.
+    /// The scope alone decides it. <b>Deliberately not conditioned on the owner count any more</b> — the
+    /// operation serves an ownerless team, a team with one owner and a team with several, so a gate keyed
+    /// on ownerless-ness would hide it from the two cases it was widened for.
     /// </summary>
     [Fact]
-    public void CanAssignOwner_TeamThatHasAnOwner_IsHidden()
+    public void CanSetOwner_ScopedCaller_IsAllowed()
     {
-        Assert.False(UserAdminGate.CanAssignOwner(hasAssignOwnerScope: true, teamIsOwnerless: false));
+        Assert.True(UserAdminGate.CanSetOwner(hasSetOwnerScope: true));
     }
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public void CanAssignOwner_WithoutTheScope_IsHidden(bool teamIsOwnerless)
+    [Fact]
+    public void CanSetOwner_WithoutTheScope_IsHidden()
     {
-        Assert.False(UserAdminGate.CanAssignOwner(hasAssignOwnerScope: false, teamIsOwnerless));
+        Assert.False(UserAdminGate.CanSetOwner(hasSetOwnerScope: false));
     }
 
     [Fact]

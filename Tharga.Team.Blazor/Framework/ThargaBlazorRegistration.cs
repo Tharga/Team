@@ -165,6 +165,10 @@ public static class ThargaBlazorRegistration
                 });
             }
 
+            // Fails startup if a host still registers a scope name we retired, naming the replacement.
+            // A renamed scope is invisible to the compiler and silently authorizes nothing.
+            services.AddSingleton<IHostedService>(sp => new RetiredScopeCheck(sp.GetRequiredService<ISystemScopeRegistry>()));
+
             // Built-in system scopes: teams:delete authorizes deleting any team (cross-team), users:manage
             // authorizes user administration. Merge-safe with any consumer ConfigureSystemScopes; grant
             // them via ConfigureSystemRoles or a system API key.
@@ -172,13 +176,14 @@ public static class ThargaBlazorRegistration
             {
                 if (scopes.All.All(s => s.Name != SystemTeamScopes.Delete))
                     scopes.Register(SystemTeamScopes.Delete, "Delete any team (cross-team), regardless of membership or the AllowTeamCreation option.");
+                if (scopes.All.All(s => s.Name != SystemTeamScopes.Purge))
                     scopes.Register(SystemTeamScopes.Purge, "Permanently remove a soft-deleted team and drop its storage. Irreversible, and the only team operation needing the database privilege to drop data.");
                 if (scopes.All.All(s => s.Name != SystemUserScopes.Manage))
                     scopes.Register(SystemUserScopes.Manage, "Administer users (cross-team): verify against the external directory, list directory-only users, and delete users.");
                 if (scopes.All.All(s => s.Name != SystemTeamScopes.Manage))
                     scopes.Register(SystemTeamScopes.Manage, "Rename any team and set its icon (cross-team). Does not grant consent or custom-role changes.");
-                if (scopes.All.All(s => s.Name != SystemTeamScopes.AssignOwner))
-                    scopes.Register(SystemTeamScopes.AssignOwner, "Give an ownerless team an owner, chosen from its existing members. Refused when the team already has one.");
+                if (scopes.All.All(s => s.Name != SystemTeamScopes.SetOwner))
+                    scopes.Register(SystemTeamScopes.SetOwner, "Make any existing member the sole owner of any team, demoting every other owner. Covers a legacy team with several owners, a handover the sitting owner cannot perform, and a team with none.");
             });
 
             services.AddScoped<IUserManagementService>(sp => new UserManagementService(

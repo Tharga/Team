@@ -3,10 +3,15 @@ using Tharga.Team;
 namespace Tharga.Team.Service.Tests;
 
 /// <summary>
-/// The rules behind <see cref="SystemTeamScopes.AssignOwner"/>. They are the entire safety argument for
-/// an operation that hands out <c>Owner</c> with no sitting owner's consent, so they are pinned here
-/// rather than left inside a service method.
+/// The rules behind <see cref="SystemTeamScopes.SetOwner"/>. They are the entire safety argument for an
+/// operation that hands out <c>Owner</c> and takes it away with no sitting owner's consent, so they are
+/// pinned here rather than left inside a service method.
 /// </summary>
+/// <remarks>
+/// The invariant under test throughout: <b>a team ends up with exactly one owner</b>. These rules cannot
+/// enforce that on their own — the service applies them in the right order — but they are what makes it
+/// expressible, and every roster below is one of the ways a team arrives not satisfying it.
+/// </remarks>
 public class TeamOwnershipTests
 {
     private sealed record Member(string Key, AccessLevel AccessLevel) : ITeamMember
@@ -31,6 +36,15 @@ public class TeamOwnershipTests
         new("user-1", AccessLevel.User)
     ];
 
+    /// <summary>What a legacy sync delivers: a source model that permitted several owners.</summary>
+    private static Member[] MultiOwner =>
+    [
+        new("owner-1", AccessLevel.Owner),
+        new("owner-2", AccessLevel.Owner),
+        new("owner-3", AccessLevel.Owner),
+        new("admin-1", AccessLevel.Administrator)
+    ];
+
     [Fact]
     public void IsOwnerless_TeamWithAnOwner_IsFalse()
     {
@@ -51,55 +65,153 @@ public class TeamOwnershipTests
         Assert.True(TeamOwnership.IsOwnerless(useNull ? null : []));
     }
 
-    /// <summary>The repair case: an ownerless team promoting one of its own members.</summary>
+    // CanSetOwner -- one condition only, and the condition that is absent is the point.
+
     [Fact]
-    public void CanAssign_ExistingMemberOfAnOwnerlessTeam_IsAllowed()
+    public void CanSetOwner_ExistingMemberOfAnOwnerlessTeam_IsAllowed()
     {
-        Assert.True(TeamOwnership.CanAssign(Ownerless, "admin-1"));
+        Assert.True(TeamOwnership.CanSetOwner(Ownerless, "admin-1"));
     }
 
     /// <summary>
-    /// The condition that keeps this a repair rather than a takeover. With a sitting owner there is
-    /// somebody to escalate past, which is exactly what <c>SetMemberRoleAsync</c> refuses to allow.
+    /// The case the old <c>CanAssign</c> refused. Deposing a sitting owner is now the operation's whole
+    /// purpose, so a healthy team must not disqualify the candidate.
     /// </summary>
     [Fact]
-    public void CanAssign_TeamThatAlreadyHasAnOwner_IsRefused()
+    public void CanSetOwner_TeamThatAlreadyHasAnOwner_IsAllowed()
     {
-        Assert.False(TeamOwnership.CanAssign(Healthy, "admin-1"));
+        Assert.True(TeamOwnership.CanSetOwner(Healthy, "admin-1"));
+    }
+
+    [Fact]
+    public void CanSetOwner_TeamWithSeveralOwners_IsAllowed()
+    {
+        Assert.True(TeamOwnership.CanSetOwner(MultiOwner, "owner-2"));
     }
 
     /// <summary>
-    /// The condition that keeps a repair from introducing an outsider. The caller is not a member of
-    /// this team, so without it they could add anyone — including themselves.
+    /// The one condition that is load-bearing: the caller holds a system scope precisely because they are
+    /// not a member, so without this they could install anyone -- including themselves.
     /// </summary>
     [Fact]
-    public void CanAssign_SomeoneWhoIsNotAMember_IsRefused()
+    public void CanSetOwner_SomeoneWhoIsNotAMember_IsRefused()
     {
-        Assert.False(TeamOwnership.CanAssign(Ownerless, "stranger"));
+        Assert.False(TeamOwnership.CanSetOwner(Ownerless, "stranger"));
     }
 
-    /// <summary>An ownerless team with nobody in it has nobody to promote.</summary>
     [Fact]
-    public void CanAssign_EmptyTeam_IsRefused()
+    public void CanSetOwner_EmptyTeam_IsRefused()
     {
-        Assert.False(TeamOwnership.CanAssign([], "admin-1"));
+        Assert.False(TeamOwnership.CanSetOwner([], "admin-1"));
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    public void CanAssign_NoCandidate_IsRefused(string candidate)
+    public void CanSetOwner_NoCandidate_IsRefused(string candidate)
     {
-        Assert.False(TeamOwnership.CanAssign(Ownerless, candidate));
+        Assert.False(TeamOwnership.CanSetOwner(Ownerless, candidate));
     }
 
     /// <summary>A null entry in the roster must not be mistaken for a member or crash the check.</summary>
     [Fact]
-    public void CanAssign_RosterWithNulls_IsTolerated()
+    public void CanSetOwner_RosterWithNulls_IsTolerated()
     {
         ITeamMember[] roster = [null, new Member("admin-1", AccessLevel.Administrator), null];
 
-        Assert.True(TeamOwnership.CanAssign(roster, "admin-1"));
-        Assert.False(TeamOwnership.CanAssign(roster, "stranger"));
+        Assert.True(TeamOwnership.CanSetOwner(roster, "admin-1"));
+        Assert.False(TeamOwnership.CanSetOwner(roster, "stranger"));
+    }
+
+    // IsSoleOwner -- what makes a repeated sync idempotent.
+
+    [Fact]
+    public void IsSoleOwner_TheOnlyOwner_IsTrue()
+    {
+        Assert.True(TeamOwnership.IsSoleOwner(Healthy, "owner-1"));
+    }
+
+    /// <summary>
+    /// One of several owners is <b>not</b> the sole owner, so the operation must not read this as "already
+    /// correct" and skip the reduction it exists to perform.
+    /// </summary>
+    [Fact]
+    public void IsSoleOwner_OneOfSeveralOwners_IsFalse()
+    {
+        Assert.False(TeamOwnership.IsSoleOwner(MultiOwner, "owner-2"));
+    }
+
+    [Fact]
+    public void IsSoleOwner_AMemberWhoIsNotTheOwner_IsFalse()
+    {
+        Assert.False(TeamOwnership.IsSoleOwner(Healthy, "admin-1"));
+    }
+
+    [Fact]
+    public void IsSoleOwner_OwnerlessTeam_IsFalse()
+    {
+        Assert.False(TeamOwnership.IsSoleOwner(Ownerless, "admin-1"));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void IsSoleOwner_NoCandidate_IsFalse(string candidate)
+    {
+        Assert.False(TeamOwnership.IsSoleOwner(Healthy, candidate));
+    }
+
+    // OwnersToDemote -- who loses the role.
+
+    [Fact]
+    public void OwnersToDemote_TeamWithSeveralOwners_ReturnsEveryOwnerButTheIncomingOne()
+    {
+        var demoted = TeamOwnership.OwnersToDemote(MultiOwner, "owner-2");
+
+        Assert.Equal(["owner-1", "owner-3"], demoted.Select(x => x.Key));
+    }
+
+    /// <summary>
+    /// Promoting somebody who is not currently an owner displaces the sitting one -- the operator-driven
+    /// transfer.
+    /// </summary>
+    [Fact]
+    public void OwnersToDemote_PromotingANonOwner_DisplacesTheSittingOwner()
+    {
+        var demoted = TeamOwnership.OwnersToDemote(Healthy, "admin-1");
+
+        Assert.Equal(["owner-1"], demoted.Select(x => x.Key));
+    }
+
+    /// <summary>
+    /// An ownerless team demotes nobody. This empty result is <b>not</b> the same as "nothing happened" --
+    /// see <see cref="SetOwnerResult"/>, which is why the service reports the two separately.
+    /// </summary>
+    [Fact]
+    public void OwnersToDemote_OwnerlessTeam_IsEmpty()
+    {
+        Assert.Empty(TeamOwnership.OwnersToDemote(Ownerless, "admin-1"));
+    }
+
+    [Fact]
+    public void OwnersToDemote_TheIncomingOwnerIsNeverInTheList()
+    {
+        Assert.DoesNotContain(TeamOwnership.OwnersToDemote(MultiOwner, "owner-1"), x => x.Key == "owner-1");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void OwnersToDemote_NoRoster_IsEmpty(bool useNull)
+    {
+        Assert.Empty(TeamOwnership.OwnersToDemote(useNull ? null : [], "admin-1"));
+    }
+
+    [Fact]
+    public void OwnersToDemote_RosterWithNulls_IsTolerated()
+    {
+        ITeamMember[] roster = [null, new Member("owner-1", AccessLevel.Owner), null];
+
+        Assert.Equal(["owner-1"], TeamOwnership.OwnersToDemote(roster, "admin-1").Select(x => x.Key));
     }
 }

@@ -477,25 +477,46 @@ public class AuditingTeamServiceDecorator : ITeamService
         => _inner.GetTeamsForUserWithAccessLevelAsync(userKey, accessLevel);
 
     /// <remarks>
-    /// Audited like any ownership change, and for a stronger reason: this one hands out <c>Owner</c>
-    /// with no sitting owner's consent. A refusal is recorded too — an attempt to repair a team that is
-    /// not broken is exactly what someone would try when taking one over.
+    /// Audited like any ownership change, and for a stronger reason: this one hands out <c>Owner</c> and
+    /// takes it away, with no sitting owner's consent. A refusal is recorded too — a rejected attempt on a
+    /// team the caller has no business touching is exactly what taking one over would look like on the way
+    /// in.
+    /// <para>
+    /// <b>A call that changes nothing writes no entry.</b> The caller is typically a sync running on a
+    /// schedule, so recording "ownership set" on every pass would fill the log with events that did not
+    /// happen and bury the ones that did. The demoted list is what distinguishes them, so it is read from
+    /// the return value rather than guessed at.
+    /// </para>
     /// </remarks>
-    public async Task AssignOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
+    public async Task<SetOwnerResult> SetOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
     {
-        var metadata = Meta((AuditMetadataKeys.NewOwnerKey, newOwnerUserKey));
-
         var sw = Stopwatch.StartNew();
         try
         {
-            await _inner.AssignOwnerAsync<TMember>(teamKey, newOwnerUserKey);
+            var result = await _inner.SetOwnerAsync<TMember>(teamKey, newOwnerUserKey);
             sw.Stop();
-            Log("assign-owner", nameof(AssignOwnerAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, metadata: metadata);
+
+            // Changed, not the demoted list. Repairing an ownerless team demotes nobody and is still very
+            // much an event worth recording -- keying on the list would silently stop auditing exactly the
+            // case the operation was originally built for.
+            if (result.Changed)
+            {
+                var metadata = result.DemotedOwnerKeys.Length > 0
+                    ? Meta(
+                        (AuditMetadataKeys.NewOwnerKey, newOwnerUserKey),
+                        (AuditMetadataKeys.DemotedOwnerKeys, string.Join(",", result.DemotedOwnerKeys)))
+                    : Meta((AuditMetadataKeys.NewOwnerKey, newOwnerUserKey));
+
+                Log("set-owner", nameof(SetOwnerAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, metadata: metadata);
+            }
+
+            return result;
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("assign-owner", nameof(AssignOwnerAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, metadata);
+            Log("set-owner", nameof(SetOwnerAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey,
+                Meta((AuditMetadataKeys.NewOwnerKey, newOwnerUserKey)));
             throw;
         }
     }

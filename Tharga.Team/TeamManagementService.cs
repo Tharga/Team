@@ -63,7 +63,7 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     public Task SetMemberLastSeenAsync(string teamKey) => _inner.SetMemberLastSeenAsync(teamKey);
     public Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept) => _inner.SetInvitationResponseAsync(teamKey, userKey, inviteCode, accept);
     public Task SetTeamConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null) => _inner.SetTeamConsentAsync(teamKey, consentedRoles, accessLevel);
-    public Task AssignOwnerAsync(string teamKey, string newOwnerUserKey) => _inner.AssignOwnerAsync<TMember>(teamKey, newOwnerUserKey);
+    public Task<SetOwnerResult> SetOwnerAsync(string teamKey, string newOwnerUserKey) => _inner.SetOwnerAsync<TMember>(teamKey, newOwnerUserKey);
 
     /// <remarks>
     /// Enforced downstream on <see cref="SystemTeamScopes.Read"/> by
