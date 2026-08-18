@@ -342,6 +342,8 @@ else
         _showConsentToggle = BlazorOptions.Value.Consent.ShowToggle;
         _consentRoles = BlazorOptions.Value.Consent.Roles ?? [];
         _consentDefaultLevel = BlazorOptions.Value.Consent.AccessLevel;
+        _memberAccessLevels = AccessLevelVisibility.Apply(AccessLevelVisibility.Member, BlazorOptions.Value.HiddenAccessLevels);
+        _consentLevels = AccessLevelVisibility.Apply(AccessLevelVisibility.Consent, BlazorOptions.Value.HiddenAccessLevels);
         if (_tenantRoleRegistry != null)
             _roleDefinitions = _tenantRoleRegistry.All;
         if (_scopeRegistry != null)
@@ -730,7 +732,7 @@ else
                                 else if (CanManageMembers(team))
                                 {
                                     // Custom hidden until #76 adds member scope/role editing (see InviteUserDialog).
-                                    var accessLevels = Enum.GetValues<AccessLevel>().Where(x => x != AccessLevel.Owner && x != AccessLevel.Custom);
+                                    var accessLevels = _memberAccessLevels;
                                     <RadzenDropDown TValue="AccessLevel" Value="@context.AccessLevel" ValueChanged="@(x => ChangeRole(team, context.Key, x))" Data="@accessLevels"/>
                                 }
                                 else
@@ -997,7 +999,10 @@ else
         await ReloadTeams();
     }
 
-    private readonly AccessLevel[] _consentLevels = [AccessLevel.Viewer, AccessLevel.User, AccessLevel.Administrator];
+    // Both narrowed by ThargaBlazorOptions.HiddenAccessLevels in OnInitializedAsync. Defaulted to the full
+    // sets so a render that beats initialisation offers the built-in lists rather than nothing.
+    private AccessLevel[] _memberAccessLevels = AccessLevelVisibility.Member;
+    private AccessLevel[] _consentLevels = AccessLevelVisibility.Consent;
 
     private async Task SetConsent(ITeam<TMember> team, AccessLevel? level)
     {

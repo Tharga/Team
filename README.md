@@ -1,4 +1,4 @@
-# Tharga Team
+﻿# Tharga Team
 
 A suite of NuGet packages for building multi-tenant Blazor applications with team management, authorization, and API infrastructure.
 
@@ -99,7 +99,16 @@ builder.AddThargaTeam(o =>
     o.ConfigureTenantRoles = roles =>
     {
         roles.Register("Editor", new[] { "orders:read", "orders:write" });
+
+        // A scope named only here and never in ConfigureScopes is "grant-only": it is held solely by
+        // members carrying the role. Every *registered* scope reaches Owner and Administrator
+        // unconditionally, so this is how a sensitive one stays an explicit decision.
+        roles.Register("CaseOfficer", new[] { "case:read" });
     };
+
+    // Hide an access level from the invite, member, API-key and consent pickers. Hidden is not invalid --
+    // members already on the level keep working and keep their badge.
+    // o.Blazor.HiddenAccessLevels = [AccessLevel.Viewer];
 
     // Optional: let team admins define their own custom roles at runtime (assignable to members and
     // API keys via <TenantRoleManager /> and <ApiKeyView ShowRoles="true" />).
