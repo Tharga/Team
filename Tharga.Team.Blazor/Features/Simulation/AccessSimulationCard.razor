@@ -1,4 +1,4 @@
-@using Tharga.Team.Blazor.Features.Simulation
+﻿@using Tharga.Team.Blazor.Features.Simulation
 @inject AccessSimulationState SimulationState
 @inject DialogService DialogService
 @inject IThargaTextProvider TextProvider
@@ -34,6 +34,8 @@ else if (_render)
                 }
                 else
                 {
+                    @if (_canUseDemo)
+                    {
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
                         <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[AccessSimulationCardText.DemoMode]</RadzenText>
                         <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationCardText.DemoDescription]</RadzenText>
@@ -43,6 +45,7 @@ else if (_render)
                                           Variant="Variant.Flat" Click="@StartDemo" />
                         </div>
                     </RadzenStack>
+                    }
 
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
                         <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[AccessSimulationCardText.ViewAsUser]</RadzenText>
@@ -81,7 +84,10 @@ else if (_render)
         // Asked only when nothing is active, exactly as AccessSimulationBar does it: a simulation can
         // remove the scope that authorizes starting one, so gating the exit on it would let someone
         // strand themselves.
-        _render = _active != null || await SimulationState.CanSimulateAsync();
+        // Two separate grants now. Run-as reaches team administrators; demo mode is staff-only, so the card
+        // renders for either and shows only the halves this caller may actually use (Tharga/Team#223).
+        _canUseDemo = _active == null && await SimulationState.CanUseDemoAsync();
+        _render = _active != null || _canUseDemo || await SimulationState.CanSimulateAsync();
 
         if (_render)
         {
@@ -91,6 +97,8 @@ else if (_render)
 
         await base.OnInitializedAsync();
     }
+
+    private bool _canUseDemo;
 
     private Task StartDemo() => SimulationState.StartDemoAsync();
 

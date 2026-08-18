@@ -1,4 +1,4 @@
-using Tharga.Team;
+﻿using Tharga.Team;
 
 namespace Tharga.Team.Blazor.Features.Simulation;
 
@@ -20,7 +20,19 @@ public enum AccessSimulationKind
     Scopes,
 
     /// <summary>An access level.</summary>
-    AccessLevel
+    AccessLevel,
+
+    /// <summary>
+    /// Dropping your own system scopes and application roles, to see the application as an ordinary tenant
+    /// user does.
+    /// </summary>
+    /// <remarks>
+    /// <b>A kind of its own rather than a <see cref="Scopes"/> simulation carrying a known label.</b> It
+    /// used to be the latter, so the only way to tell a demo from any other scope-set simulation was to
+    /// match the string "Demo mode" — and the visibility rules have to tell them apart: a demo shows nothing
+    /// in the navigation bar, because a banner announcing it defeats the point of demonstrating the product.
+    /// </remarks>
+    Demo
 }
 
 /// <summary>

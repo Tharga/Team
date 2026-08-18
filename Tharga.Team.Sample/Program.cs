@@ -4,6 +4,7 @@ using Serilog;
 using Serilog.Events;
 using Tharga.Mcp;
 using Tharga.MongoDB;
+using Tharga.Team.Blazor.Features.Simulation;
 using Tharga.Team.Mcp;
 using Tharga.Team.Sample.Components;
 using Tharga.Team.Sample.Framework;
@@ -136,7 +137,13 @@ builder.AddThargaTeam(o =>
         // consent option grants it — deleting a team is an operator capability, and a team consenting to
         // inbound access says nothing about who may destroy it. A host with an Administrator app role
         // grants it the same way: roles.Map("Administrator", SystemTeamScopes.Delete).
-        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete);
+        //
+        // simulation:demo is a system scope because demo mode drops system scopes and application roles --
+        // it offers nothing to a caller holding none, which is every customer's own team owner. The run-as
+        // half is the separate team scope simulation:use, granted by access level, so a team administrator
+        // keeps "view as another user" without gaining demo mode (Tharga/Team#223). Without this line the
+        // sample would enable simulation and then have no way to reach demo mode at all.
+        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at

@@ -1,4 +1,4 @@
-@using Tharga.Team.Blazor.Features.Simulation
+﻿@using Tharga.Team.Blazor.Features.Simulation
 @inject AccessSimulationState SimulationState
 @inject DialogService DialogService
 @inject IThargaTextProvider TextProvider
@@ -11,7 +11,7 @@
    makes "the way in cannot be wired without the way out" a default rather than a guarantee, so read those
    two parameters before assuming this component is the exit. *@
 
-@if (_active != null && ShowBanner)
+@if (_active != null && _showBanner)
 {
     @* Deliberately loud, and on every page while active. A caller who forgets they are simulating reads
        missing controls as bugs and files them against their own session. *@
@@ -25,7 +25,7 @@
         </RadzenStack>
     </RadzenAlert>
 }
-else if (_canSimulate && ShowEntryPoint)
+else if (_canSimulate && _showEntryPoint)
 {
     <RadzenButton Text="@EntryPointText" Icon="visibility" ButtonStyle="ButtonStyle.Light"
                   Size="ButtonSize.Small" Variant="Variant.Flat" Click="@Open" />
@@ -55,7 +55,7 @@ else if (_canSimulate && ShowEntryPoint)
     /// it also stops the cookie being read and the filter being reached.
     /// </para>
     /// </remarks>
-    [Parameter] public bool ShowEntryPoint { get; set; } = true;
+    [Parameter] public bool? ShowEntryPoint { get; set; }
 
     /// <summary>
     /// Whether the active-simulation banner — and with it the "Return to my access" button — is rendered
@@ -75,10 +75,12 @@ else if (_canSimulate && ShowEntryPoint)
     /// missing controls as bugs and files them against their own session.
     /// </para>
     /// </remarks>
-    [Parameter] public bool ShowBanner { get; set; } = true;
+    [Parameter] public bool? ShowBanner { get; set; }
 
     private AccessSimulation _active;
     private bool _canSimulate;
+    private bool _showEntryPoint;
+    private bool _showBanner;
     private TextSet _text = TextSet.Empty;
     private (string Before, string After) _sentence = AccessSimulationBannerSentence.SplitAround(AccessSimulationBarText.ViewingAs.Default);
 
@@ -94,6 +96,17 @@ else if (_canSimulate && ShowEntryPoint)
         _sentence = AccessSimulationBannerSentence.SplitAround(_text[AccessSimulationBarText.ViewingAs]);
 
         _active = await SimulationState.GetActiveAsync();
+
+        // The parameter wins where a host set it; otherwise the host-level option decides. Null rather than
+        // a `true` default is what makes "set by hand" distinguishable from "left alone" -- with a bool
+        // default there is no way to tell them apart, and the option could never take effect.
+        _showEntryPoint = ShowEntryPoint ?? SimulationState.ShowInNavigation;
+        _showBanner = ShowBanner ?? SimulationState.ShowInNavigation;
+
+        // A demo shows nothing here whatever the host configured. A banner reading "you are in demo mode"
+        // on screen during a demonstration defeats the entire point of the feature, which is why this is a
+        // rule rather than another option (Tharga/Team#223). The way out is the profile card.
+        if (_active?.Kind == AccessSimulationKind.Demo) _showBanner = false;
 
         // Only asked when nothing is active. While simulating, the exit must show regardless of whether
         // the simulation removed the scope that authorizes starting one.

@@ -1,4 +1,4 @@
-using Tharga.Team;
+﻿using Tharga.Team;
 
 namespace Tharga.Team.Blazor.Features.Simulation;
 
@@ -110,7 +110,7 @@ internal static class AccessSimulationTargets
     public static AccessSimulation FromDemo(IEnumerable<string> ownTeamScopes)
         => new()
         {
-            Kind = AccessSimulationKind.Scopes,
+            Kind = AccessSimulationKind.Demo,
             Label = DemoLabel,
             Scopes = [.. ownTeamScopes ?? []],
             DropSystemScopes = true,

@@ -127,17 +127,25 @@ public class AccessSimulationDemoModeTests
     }
 
     /// <summary>
-    /// Recorded as <c>Scopes</c> with the demo label, which is the shape chosen so this adds no public API.
-    /// The label is what makes a demo distinguishable in the audit log, since
-    /// <c>AccessSimulationAuditEnricher</c> writes it to <c>simulation.target</c> — so it is pinned rather
-    /// than left as an incidental string.
+    /// Recorded as its own <see cref="AccessSimulationKind.Demo"/> kind, and still carrying the demo label.
     /// </summary>
+    /// <remarks>
+    /// <b>Changed in Tharga/Team#223, and the reason matters more than the value.</b> A demo used to be
+    /// <c>Scopes</c> plus the label <c>"Demo mode"</c> — a shape chosen to add no public API — so the only
+    /// way to tell a demo from any other scope-set simulation was to match that string. The navigation bar
+    /// now has to tell them apart, because a demo deliberately shows nothing there, and matching a label
+    /// would break the moment a host translates it.
+    /// <para>
+    /// The label is still pinned: <c>AccessSimulationAuditEnricher</c> writes it to
+    /// <c>simulation.target</c>, so it remains what distinguishes a demo in the audit log.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public void Demo_IsRecordedWithADistinguishableLabel()
+    public void Demo_IsRecordedAsItsOwnKind()
     {
         var simulation = AccessSimulationTargets.FromDemo([TeamScope]);
 
-        Assert.Equal(AccessSimulationKind.Scopes, simulation.Kind);
+        Assert.Equal(AccessSimulationKind.Demo, simulation.Kind);
         Assert.Equal(AccessSimulationTargets.DemoLabel, simulation.Label);
     }
 
