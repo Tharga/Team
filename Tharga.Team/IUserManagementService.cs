@@ -1,4 +1,4 @@
-namespace Tharga.Team;
+﻿namespace Tharga.Team;
 
 /// <summary>
 /// User administration operations: directory verification and user deletion. Authorization is enforced
@@ -77,7 +77,7 @@ public interface IUserManagementService
     /// Meant to be asked <b>before</b> confirming a delete, so the operator can transfer ownership
     /// instead of learning afterwards that a team is unrecoverable: <c>TransferOwnershipAsync</c>
     /// requires the caller to be the owner, so once the owner is gone only a holder of
-    /// <see cref="SystemTeamScopes.AssignOwner"/> can repair it.
+    /// <see cref="SystemTeamScopes.SetOwner"/> can repair it.
     /// <para>
     /// On <see cref="IUserManagementService"/> rather than <c>ITeamService</c> deliberately. The question
     /// is "what will deleting this user break", which is user administration; and it keeps the delete

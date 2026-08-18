@@ -715,7 +715,7 @@ public abstract class TeamServiceBase : ITeamService
     /// request once <c>AddThargaDynamicTenantRoles</c> is registered and it reads the whole team document to
     /// answer. <b>The custom roles are cached; the team is not</b> — the team carries the member roster, and
     /// <see cref="SetMemberSuspendedAsync"/>, <see cref="RemoveMemberAsync"/>,
-    /// <see cref="AssignOwnerAsync{TMember}"/> and <see cref="TransferOwnershipAsync{TMember}"/> read it
+    /// <see cref="SetOwnerAsync{TMember}"/> and <see cref="TransferOwnershipAsync{TMember}"/> read it
     /// precisely because they need current state to decide access. Custom roles have one writer and authorize
     /// nothing on their own.
     /// </remarks>

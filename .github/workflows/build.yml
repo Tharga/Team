@@ -106,7 +106,11 @@ jobs:
           fi
 
       - name: Test with coverage
-        run: dotnet test -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+        # Microsoft.Testing.Platform, not VSTest. xunit.v3 4.0 dropped the VSTest bridge on the .NET 10
+        # SDK, so --collect:"XPlat Code Coverage" no longer exists; --coverage comes from
+        # Microsoft.Testing.Extensions.CodeCoverage, and cobertura is the format Codecov reads. The opt-in
+        # that makes dotnet test use MTP at all lives in global.json.
+        run: dotnet test -c Release --no-build --coverage --coverage-output-format cobertura --results-directory ./coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

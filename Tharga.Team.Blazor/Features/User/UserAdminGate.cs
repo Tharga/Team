@@ -93,22 +93,6 @@ public static class UserAdminGate
     /// </para>
     /// </remarks>
     /// <summary>
-    /// Whether the Teams tab offers assigning an owner to this team. Requires the
-    /// <see cref="SystemTeamScopes.AssignOwner"/> system scope <b>and</b> the team currently having no
-    /// owner.
-    /// </summary>
-    /// <remarks>
-    /// Both conditions, and the second is not cosmetic. The service refuses on a team that already has
-    /// an owner, so offering the action there would be a control that throws when clicked — the defect
-    /// per-team action gating already had to fix once. Hiding it also states the rule: this repairs an
-    /// ownerless team, it does not move ownership within a healthy one.
-    /// <para>
-    /// The scope must be a <i>system</i> grant, resolved with <c>TeamScopeGate.HasSystemScope</c> — an
-    /// in-team grant of the same name must not satisfy it, exactly as for
-    /// <see cref="CanDeleteTeams(bool)"/>.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Whether the Teams tab offers renaming a team or changing its icon. Requires the
     /// <see cref="SystemTeamScopes.Manage"/> system scope.
     /// </summary>
