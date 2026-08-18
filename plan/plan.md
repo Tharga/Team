@@ -4,15 +4,19 @@ Branch `feature/system-owner-change`, from `master` at `3.13.0`.
 
 ## Status
 
-**In progress.** Steps 0, 2, 3, 4 and most of 6 are done; build clean, 2025 tests green.
+**Implementation complete.** Steps 0-8 done; build clean with 0 warnings, **2047 tests green**.
+Awaiting the user's testing before close-out (step 9).
 
 Revised twice on 2026-08-18 by user decision. Final shape: **one operation** (`SetOwnerAsync`;
 `AssignOwnerAsync` **removed outright**, not obsoleted) under **one renamed scope**
 (`teams:assign-owner` → `teams:set-owner`), enforcing **a team has exactly one owner**. The `teams:purge`
 brace defect is folded in and shipped. xunit 4.0 was attempted and **backed out** — see step 0.
 
-Still to do: authorization tests (4b), audit tests (5b/5c), scope-satisfiability and retired-scope tests
-(2c/2d), UI labelling for the three owner-count states (6b/6c), docs (step 8).
+**Open before the PR:** the version line. `MAJOR_MINOR` in `build.yml` is still `3.13`; this adds public
+API (`SetOwnerAsync`, `SetOwnerResult`), removes public API (`AssignOwnerAsync`, `TeamOwnership.CanAssign`,
+`UserAdminGate.CanAssignOwner`) and renames a scope string. The user's call was not to bump; the repo's own
+`planned/README.md` says to bump on either adding or breaking, and records regret about 3.5.3 understating
+exactly this. Raise once more at PR time.
 
 ---
 
@@ -56,11 +60,11 @@ Still to do: authorization tests (4b), audit tests (5b/5c), scope-satisfiability
       constant string `teams:assign-owner` — renaming it would break every host's role mapping.
 - [x] **2b.** `ThargaBlazorRegistration.cs:180` — update the registration *description* string to match.
       No new scope to register.
-- [ ] **2c.** Test that the scope is *satisfiable* end to end, not merely present — registered in the
+- [x] **2c.** Test that the scope is *satisfiable* end to end, not merely present — registered in the
       **system** registry via `AddThargaSystemScopes` and read by `HasSystemScopeAsync`. The closed
       `mcp:discover` request was exactly this mistake: registered in the team registry, checked as a system
       scope, so nobody could ever satisfy it.
-- [ ] **2d.** Test that an **in-team** claim named `teams:assign-owner` does **not** satisfy it.
+- [x] **2d.** Test that an **in-team** claim named `teams:assign-owner` does **not** satisfy it.
 
 ## Step 3 — The operation
 
@@ -97,52 +101,52 @@ Still to do: authorization tests (4b), audit tests (5b/5c), scope-satisfiability
       can exist on an ownerless team, *and* the in-team caller who should change a healthy team's owner is
       the owner, who already has `TransferOwnershipAsync`. An in-team fallback would let an Administrator
       depose the owner, which `SetMemberRoleAsync` exists to refuse.
-- [ ] **4b.** Tests: refused with no scope, refused with an in-team claim of the same name, allowed with the
+- [x] **4b.** Tests: refused with no scope, refused with an in-team claim of the same name, allowed with the
       system scope.
 
 ## Step 5 — Audit
 
 - [x] **5a.** `Tharga.Team.Service/Audit/AuditingTeamServiceDecorator.cs` — log `set-owner` on success and
       failure, mirroring `assign-owner` at `:484`. Metadata: team key, new owner, every demoted owner key.
-- [ ] **5b.** Test the entry carries the demoted owners — the part most likely to be dropped, because the
+- [x] **5b.** Test the entry carries the demoted owners — the part most likely to be dropped, because the
       operation "works" without it.
-- [ ] **5c.** Test the **no-op writes no entry**. An audit log that records "ownership changed" on every pass
+- [x] **5c.** Test the **no-op writes no entry**. An audit log that records "ownership changed" on every pass
       of a sync that changed nothing is worse than silence.
 
 ## Step 6 — UI
 
 - [x] **6a.** `Tharga.Team.Blazor/Features/User/UserAdminGate.cs` — extend `CanAssignOwner` at `:97` to allow
       the action on a team that already has an owner. Same scope, wider precondition.
-- [ ] **6b.** `Tharga.Team.Blazor/Features/User/TeamsListView.razor` — **two affordances over one
+- [x] **6b.** `Tharga.Team.Blazor/Features/User/TeamsListView.razor` — **two affordances over one
       operation**: *Reduce to a single owner* when the team has several owners, *Change owner* when it has
       one, *Assign owner* when it has none. Resolve the scope with `TeamScopeGate.HasSystemScope`, never a
       bare `HasClaim`, per the rule at `:253`.
-- [ ] **6c.** Confirm dialog names **who will be demoted**, by name — this is the one operation where the
+- [x] **6c.** Confirm dialog names **who will be demoted**, by name — this is the one operation where the
       operator can silently strip several people of ownership. **Cancel rightmost**, using the shared
       `CancelButton` component. Do not hand-roll it — every drift found so far came from a hand-rolled button.
-- [ ] **6d.** New strings go through the text catalogue, not hardcoded — `TextCoverageTests` counts may only
+- [x] **6d.** New strings go through the text catalogue, not hardcoded — `TextCoverageTests` counts may only
       go down.
 
 ## Step 7 — Verify
 
-- [ ] **7a.** `dotnet build -c Release` and `dotnet test -c Release`, full suite green.
-- [ ] **7b.** Re-read the acceptance criteria in `feature.md` one by one against the code.
+- [x] **7a.** `dotnet build -c Release` and `dotnet test -c Release`, full suite green.
+- [x] **7b.** Re-read the acceptance criteria in `feature.md` one by one against the code.
 
 ## Step 8 — Docs
 
 Three places assert the safety property being removed. **Rewrite, do not amend** — a doc claiming a guard the
 code no longer has is worse than no doc.
 
-- [ ] **8a.** `docs/articles/user-management.md:267+` — the `### After — teams:assign-owner` section. Delete
+- [x] **8a.** `docs/articles/user-management.md:267+` — the `### After — teams:assign-owner` section. Delete
       *"an attempt to 'repair' a team that is not broken is what taking one over would look like"* and the
       two-condition table's ownerless row. Replace with the four cases from `feature.md`.
-- [ ] **8b.** `docs/articles/implementation-guide.md:1719` — the scope table row still says *"Refused when the
+- [x] **8b.** `docs/articles/implementation-guide.md:1719` — the scope table row still says *"Refused when the
       team already has one."*
-- [ ] **8c.** `README.md` where it covers scopes.
-- [ ] **8d.** Document the three ownership operations and who each is for: the owner transfers
+- [x] **8c.** `README.md` where it covers scopes.
+- [x] **8d.** Document the three ownership operations and who each is for: the owner transfers
       (`TransferOwnershipAsync`, no scope, in-team); an operator sets (`SetOwnerAsync`, `teams:assign-owner`,
       system); `AssignOwnerAsync` is obsolete and forwards.
-- [ ] **8e.** Land as its own `docs:` commit before close-out.
+- [x] **8e.** Land as its own `docs:` commit before close-out.
 
 ## Step 9 — Close-out (only when the user says it is done)
 
