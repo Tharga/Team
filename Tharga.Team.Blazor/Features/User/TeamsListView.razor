@@ -105,7 +105,7 @@ else if (_loaded)
                                 }
                                 @if (UserAdminGate.CanSetOwner(_canSetOwner))
                                 {
-                                    <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionAssignOwner]" Value="@AssignOwnerAction" Icon="manage_accounts" />
+                                    <RadzenSplitButtonItem Text="@_text[SetOwnerActionLabel(context.OwnerCount)]" Value="@SetOwnerAction" Icon="manage_accounts" />
                                 }
                                 @if (_canDeleteTeams)
                                 {
@@ -317,6 +317,7 @@ else
                 InvitedCount = invited,
                 OwnerName = TeamActivity.Owner(members)?.Name,
                 IsOwnerless = TeamActivity.Owner(members) == null,
+                OwnerCount = members.Count(m => m.AccessLevel == AccessLevel.Owner),
                 LastUsed = TeamActivity.LastUsed(members),
                 Consent = TeamVisibility.Resolve(t.ConsentedRoles, t.ConsentAccessLevel, BlazorOptions.Value.Consent.AccessLevel),
                 Members = members
@@ -326,7 +327,7 @@ else
 
     private const string AuditAction = "audit";
     private const string DeleteAction = "delete";
-    private const string AssignOwnerAction = "assign-owner";
+    private const string SetOwnerAction = "set-owner";
     private const string RenameAction = "rename";
     private const string SetIconAction = "set-icon";
 
@@ -347,8 +348,8 @@ else
             case DeleteAction:
                 await DeleteTeamAsync(team);
                 break;
-            case AssignOwnerAction:
-                await AssignOwnerAsync(team);
+            case SetOwnerAction:
+                await SetOwnerAsync(team);
                 break;
             case RenameAction:
                 await RenameTeamAsync(team);
@@ -413,13 +414,13 @@ else
 
     /// <summary>
     /// Repairs a team that has lost its owner, authorized by the
-    /// <see cref="SystemTeamScopes.SetOwner"/> system scope. Offered only when the team is actually
+    /// <see cref="SystemTeamScopes.SetOwner"/> system scope. Offered whenever the caller holds it; the
     /// ownerless — the service refuses otherwise, and a control that throws when clicked is worse than
     /// no control.
     /// </summary>
-    private async Task AssignOwnerAsync(TeamViewModel team)
+    private async Task SetOwnerAsync(TeamViewModel team)
     {
-        var newOwnerKey = await DialogService.OpenAsync<AssignOwnerDialog>(_text.Format(TeamsListViewText.AssignOwnerTitle, team.Name),
+        var newOwnerKey = await DialogService.OpenAsync<AssignOwnerDialog>(_text.Format(SetOwnerDialogTitle(team.OwnerCount), team.Name),
             new Dictionary<string, object>
             {
                 { nameof(AssignOwnerDialog.TeamName), team.Name },
@@ -430,15 +431,27 @@ else
 
         try
         {
-            await TeamManagementService.SetOwnerAsync(team.Key, ownerKey);
+            var result = await TeamManagementService.SetOwnerAsync(team.Key, ownerKey);
 
-            // The roster drives both the Owner column and whether this action is offered at all, so the
-            // list has to be rebuilt rather than patched — otherwise the action stays on a repaired team.
+            // The roster drives the Owner column and the action's wording, so the list has to be rebuilt
+            // rather than patched -- otherwise a repaired team keeps offering the label for its old state.
             await LoadDataAsync();
             _selectedTeam = _teamViewModels.FirstOrDefault(t => t.Key == team.Key);
 
-            NotificationService.Notify(NotificationSeverity.Success, _text[TeamsListViewText.OwnerAssigned],
-                _text.Format(TeamsListViewText.OwnerAssignedDetail, team.Name));
+            // Reporting "owner set" for a call that wrote nothing trains an operator to distrust the
+            // message. The service is deliberately idempotent, so this is a normal outcome, not an error.
+            if (!result.Changed)
+            {
+                NotificationService.Notify(NotificationSeverity.Info, _text[TeamsListViewText.OwnerUnchanged],
+                    _text.Format(TeamsListViewText.OwnerUnchangedDetail, team.Name));
+                return;
+            }
+
+            var detail = result.DemotedOwnerKeys.Length > 0
+                ? _text.Format(TeamsListViewText.OwnerSetDetail, team.Name, result.DemotedOwnerKeys.Length)
+                : _text.Format(TeamsListViewText.OwnerAssignedDetail, team.Name);
+
+            NotificationService.Notify(NotificationSeverity.Success, _text[TeamsListViewText.OwnerAssigned], detail);
         }
         catch (Exception ex)
         {
@@ -475,4 +488,27 @@ else
             NotificationService.Notify(NotificationSeverity.Error, _text[TeamsListViewText.DeleteFailed], ex.Message);
         }
     }
+
+    /// <summary>
+    /// Which of the three labels the one operation wears, by how many owners the team currently has.
+    /// </summary>
+    /// <remarks>
+    /// <b>Wording only — never authorization.</b> The gate is the scope alone
+    /// (<c>UserAdminGate.CanSetOwner</c>); deciding visibility from the owner count is what the previous
+    /// assign-owner gate did, and it hid the action from the two states this feature was built for.
+    /// </remarks>
+    private static TextKey SetOwnerActionLabel(int ownerCount) => ownerCount switch
+    {
+        0 => TeamsListViewText.ActionAssignOwner,
+        1 => TeamsListViewText.ActionChangeOwner,
+        _ => TeamsListViewText.ActionReduceOwners
+    };
+
+    /// <inheritdoc cref="SetOwnerActionLabel"/>
+    private static TextKey SetOwnerDialogTitle(int ownerCount) => ownerCount switch
+    {
+        0 => TeamsListViewText.AssignOwnerTitle,
+        1 => TeamsListViewText.ChangeOwnerTitle,
+        _ => TeamsListViewText.ReduceOwnersTitle
+    };
 }
