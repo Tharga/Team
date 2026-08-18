@@ -1377,6 +1377,105 @@ not authorize writing to another.
 
 > **`AccessLevel.Custom` — least-privilege keys/members.** Use `Custom` when a principal should carry *only* its explicitly assigned roles and scope overrides, with nothing inherited from the access-level tier — e.g. a machine API key minted with a single scope. Its effective scopes are exactly `roles ∪ scopeOverrides`. Set it **explicitly**: a key created without an access level still defaults to a non-`Custom` level. `Custom` is surfaced in the `ApiKeyView` create card; it is intentionally hidden from the team-member pickers until member scope/role editing lands ([#76](https://github.com/Tharga/Team/issues/76)).
 
+### Hiding an access level from the pickers
+
+Every scope you register at `Administrator` makes `Viewer` and `User` less distinguishable, and if all of
+them sit there the two levels resolve to exactly the same set. Offering both is then a choice with nothing
+behind it that every team administrator has to reason about.
+
+```csharp
+o.Blazor.HiddenAccessLevels = [AccessLevel.Viewer];
+```
+
+That level stops being offered by the invite dialog, the member editor, the API-key level picker, and the
+consent picker. Default is empty — unset behaves exactly as before.
+
+**Hidden is not invalid.** This governs what a person can *choose*, and nothing else. Members already on the
+level keep working, keep their scopes, and keep rendering their badge; if you sync members from another
+system that still produces the level, they arrive and function normally. Nothing about the model, the claims
+or the display changes.
+
+| Level | Effect of hiding it |
+|---|---|
+| `Viewer`, `User` | Removed from every picker. The common case |
+| `Custom` | Only the API-key picker offers it; hiding it removes the least-privilege machine-key option |
+| `Administrator` | Allowed, but read the note below |
+| `Owner` | **Throws at registration** |
+
+**Hiding `Owner` is refused** because no picker offers it in the first place — ownership moves through
+`TransferOwnershipAsync` and `SetOwnerAsync`, never by choosing a level. Accepting the setting would leave
+you believing a restriction was in force when nothing had changed, so it fails at startup instead.
+
+**Hiding `Administrator` is allowed but consequential.** It is a coherent model — the Owner still manages the
+team — but management can then only be delegated by handing over ownership. Note the domain still *produces*
+Administrators regardless: both ownership operations demote a displaced owner to that level, and those
+members keep working. That is the hidden-is-not-invalid rule doing its job rather than a bug.
+
+**A configuration that empties a picker is refused**, naming the surface it emptied. An invite dialog with
+nothing to choose is broken, not configured.
+
+### Grant-only scopes — keeping one out of the Owner/Administrator grant
+
+Rule 1 above has a consequence worth stating plainly: **every scope registered with `ConfigureScopes` reaches
+Owner and Administrator, unconditionally.** `GetScopesForAccessLevel` returns the whole registry for those two
+levels, `GetEffectiveScopes` unions roles and overrides *in*, and there is no deny list. So a team
+administrator holds every registered scope by virtue of being a team administrator.
+
+That is usually what you want. It is not what you want for a scope that should be held only as a **recorded
+decision** — a scope reaching regulated or classified records, say, where "an administrator gets it
+automatically" is the wrong default.
+
+**Do not register it as a scope. Register it on a role.**
+
+```csharp
+// NOT registered with ConfigureScopes -- registering it is what would grant it to every administrator.
+o.ConfigureRoles(roles =>
+{
+    roles.Register("CaseOfficer", ["case:read"], "May read case records.");
+});
+```
+
+Then use it exactly as any other scope:
+
+```csharp
+[RequireScope("case:read")]
+Task<Case> GetCaseAsync(string teamKey, string caseKey);
+```
+
+This works because nothing in the enforcement path consults the scope registry:
+
+| Step | Behaviour |
+|---|---|
+| `TenantRoleRegistry.Register` | Stores the scope **names**; no validation against `IScopeRegistry` |
+| `GetScopesForRoles` | Returns them as assigned |
+| `GetEffectiveScopes` | Unions role scopes into the effective set |
+| `ScopeProxy` → `TeamScopePolicy.HasTeamScope` | Checks the **claim**, never the registry |
+| `GetScopesForAccessLevel` | Cannot return it — it was never registered |
+
+So the scope is held **only** by members carrying the role, plus anyone given it explicitly through
+`ScopeOverrides`. An Owner or Administrator without the role does not have it.
+
+**A second guard comes free.** `ValidateCustomRoles` rejects any scope that is not app-registered, so a team
+administrator using `<TenantRoleManager />` **cannot** add an unregistered scope to a tenant-defined custom
+role. For a scope of this kind that is exactly right: it cannot be granted from inside the tenant at all,
+only by a code-defined role you ship.
+
+**What you give up**, all of it visibility rather than authorization:
+
+- No entry in the scope catalogue, so **no description** in `<TenantRoleManager />` or the member scope views.
+- Not offered by the per-member scope-override picker, which is populated from the registry. The service path
+  still works; the control just will not list it.
+- **No typo safety.** A misspelled scope name in a role definition grants nothing and nothing reports it — a
+  security scope that quietly stops working looks exactly like one that was never needed. Pin the name with a
+  constant and a test rather than repeating the literal.
+
+> **Do not reach for `AccessLevel.Custom` here.** Registering a scope at `Custom` looks like the natural way
+> to say "no level grants this", and it does the opposite. The levels are `Owner=0, Administrator=1, User=2,
+> Viewer=3, Custom=4`; Owner and Administrator receive *all* registered scopes regardless of
+> `DefaultMinimumLevel`, and the fall-through filter is `DefaultMinimumLevel >= accessLevel`, so `Custom=4`
+> satisfies User and Viewer as well. A scope registered that way is granted to **every** level. The `Custom`
+> guard in `GetScopesForAccessLevel` applies to the *principal's* level, not the scope's.
+
 ### Built-in scopes
 
 | Scope | Kind | Source | Gates |

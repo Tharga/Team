@@ -235,6 +235,41 @@ public record ThargaBlazorOptions : BlazorOptions
     public ConsentOptions Consent { get; set; } = new();
 
     /// <summary>
+    /// Access levels the built-in selectors will not offer. Empty by default, which is exactly today's
+    /// behaviour.
+    /// </summary>
+    /// <remarks>
+    /// <b>Hidden is not invalid.</b> This governs what a person can <i>choose</i> — the invite and member
+    /// dialogs, the API-key level, and the consent picker. It does not change what the model accepts, what a
+    /// claim resolves to, or what <c>AccessLevelBadge</c> renders. A host syncing members from another system
+    /// can still receive a hidden level, and those members keep working and keep showing their level.
+    /// <para>
+    /// The case it was built for: a host whose scopes are all registered at <c>Administrator</c> finds
+    /// <see cref="AccessLevel.Viewer"/> and <see cref="AccessLevel.User"/> resolve to exactly the same
+    /// thing, so offering both is a choice with nothing behind it that every team administrator has to
+    /// reason about (Tharga/Team#232).
+    /// </para>
+    /// <para>
+    /// A collection rather than a flags enum on purpose: <see cref="AccessLevel"/> is not
+    /// <c>[Flags]</c> and <see cref="AccessLevel.Owner"/> is <c>0</c>, which in flag arithmetic means "no
+    /// bits" — it could never be expressed, and a parallel flags enum would be a second list of levels to
+    /// keep in sync.
+    /// </para>
+    /// <para>
+    /// Validated at registration. Hiding <see cref="AccessLevel.Owner"/> throws, because no selector offers
+    /// it and a setting that silently does nothing is worse than an error; so does any configuration that
+    /// leaves a selector with nothing to choose. Hiding <see cref="AccessLevel.Administrator"/> is allowed
+    /// but means management can only be delegated by transferring ownership.
+    /// </para>
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// o.Blazor.HiddenAccessLevels = [AccessLevel.Viewer];
+    /// </code>
+    /// </example>
+    public IReadOnlyCollection<AccessLevel> HiddenAccessLevels { get; set; } = [];
+
+    /// <summary>
     /// Periodic revalidation of team claims for live Blazor Server circuits. Team membership, access
     /// level, tenant-role scopes, and consent-derived access are otherwise computed once when the circuit
     /// is established and stay frozen for its life — so a removed member, a downgraded access level, or a

@@ -6,6 +6,7 @@
 @inject ITeamManagementService TeamManagementService
 @inject IServiceProvider ServiceProvider
 @inject IThargaTextProvider TextProvider
+@inject Microsoft.Extensions.Options.IOptions<Tharga.Team.Blazor.Framework.ThargaBlazorOptions> BlazorOptions
 
 <RadzenTemplateForm TItem="InviteUserModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
     <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
@@ -82,7 +83,8 @@
         };
         // Custom is hidden from the member picker until #76 adds member scope/role editing
         // (a Custom member with no editable grants would be locked out). Keys surface it in ApiKeyView.
-        _accessLevels = Enum.GetValues<AccessLevel>().Where(x => x != AccessLevel.Owner && x != AccessLevel.Custom).ToArray();
+        _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.Apply(
+            Tharga.Team.Blazor.Framework.AccessLevelVisibility.Member, BlazorOptions.Value.HiddenAccessLevels);
         _emailSenderAvailable = ServiceProvider.GetService<ITeamEmailSender>() != null;
 
         await base.OnInitializedAsync();

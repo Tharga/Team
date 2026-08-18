@@ -1,9 +1,10 @@
-@using Microsoft.Extensions.DependencyInjection
+﻿@using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
 @using Tharga.Team.Blazor.Features.Team
 @inject ITeamStateService TeamStateService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IOptions<Tharga.Team.Blazor.Framework.ThargaBlazorOptions> BlazorOptions
 @inject IOptions<ApiKeyOptions> ApiKeyOptionsAccessor
 @inject IServiceProvider ServiceProvider
 @inject IJSRuntime Js
@@ -289,7 +290,9 @@ else
     private string[] _allScopeNames = Array.Empty<string>();
     private IReadOnlyDictionary<string, string> _scopeDescriptions = new Dictionary<string, string>();
     private readonly string _apiKeyMask = "**********";
-    private readonly AccessLevel[] _accessLevels = Enum.GetValues<AccessLevel>().Where(x => x != AccessLevel.Owner).ToArray();
+    // Custom stays on purpose -- a key carrying only its explicit grants is the least-privilege case this
+    // surface exists for, which is why the API-key list is not the member list.
+    private AccessLevel[] _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.ApiKey;
 
     private string _newName = "";
     private AccessLevel _newAccessLevel = AccessLevel.User;
@@ -304,6 +307,9 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.Apply(
+            Tharga.Team.Blazor.Framework.AccessLevelVisibility.ApiKey, BlazorOptions.Value.HiddenAccessLevels);
+
         _apiKeyManagementService = ServiceProvider.GetService<IApiKeyManagementService>();
         if (_apiKeyManagementService == null)
         {

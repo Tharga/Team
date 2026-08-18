@@ -35,6 +35,11 @@ public static class ThargaBlazorRegistration
         var o = new ThargaBlazorOptions();
         options?.Invoke(o);
 
+        // Registration time, not startup: this is static configuration needing nothing from the container,
+        // and the failure it prevents -- a selector with nothing in it -- is one a host would otherwise meet
+        // as an empty dropdown in a dialog rather than as an error naming the setting.
+        AccessLevelVisibility.Validate(o.HiddenAccessLevels);
+
         services.AddThargaBlazor(bo => bo.Title = o.Title, configuration);
 
         // UI string provider — a consumer-supplied provider (via AddTextProvider) localizes the strings;
