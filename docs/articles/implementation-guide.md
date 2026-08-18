@@ -1816,6 +1816,7 @@ The toolkit auto-registers these; grant them through `ConfigureSystemRoles` or a
 | `teams:delete` | Deleting any team, regardless of membership or `AllowTeamCreation`; also restoring a soft-deleted one |
 | `teams:purge` | Permanently removing a soft-deleted team and destroying its stored data |
 | `teams:set-owner` | Making any existing member the **sole owner** of any team, demoting every other owner. Works whatever the current owner count — none, one, or several |
+| `simulation:demo` | Entering **demo mode** — dropping your own system scopes and application roles. The run-as half is the separate *team* scope `simulation:use` |
 | `users:manage` | User administration: the admin lists, verify, rename, delete |
 
 `teams:set-owner` has **no in-team fallback**, unlike `teams:delete` which accepts either a system grant or

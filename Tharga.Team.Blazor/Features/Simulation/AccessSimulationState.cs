@@ -66,6 +66,12 @@ public sealed class AccessSimulationState
     /// <summary>Whether the host turned the feature on.</summary>
     public bool Enabled => _options.Enabled;
 
+    /// <summary>
+    /// The host's default for whether the navigation bar carries the simulation controls. Surfaced here so
+    /// the component does not need its own options injection, exactly as <see cref="Enabled"/> is.
+    /// </summary>
+    public bool ShowInNavigation => _options.ShowInNavigation;
+
     /// <summary>The simulation currently in force, or null.</summary>
     public async Task<AccessSimulation> GetActiveAsync()
     {
@@ -239,8 +245,44 @@ public sealed class AccessSimulationState
     /// <see cref="StopAsync"/>, which restores the system scopes by re-issuing claims through the normal
     /// request path.
     /// </remarks>
+    /// <summary>
+    /// Whether this caller may enter <b>demo mode</b> — a separate grant from
+    /// <see cref="CanSimulateAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>A system grant, resolved as one.</b> Demo mode drops system scopes and application roles, so it is
+    /// meaningless for a caller holding none; asking for a system scope is what confines it to staff rather
+    /// than to every tenant administrator (Tharga/Team#223).
+    /// <para>
+    /// Asked only when nothing is active, exactly as <see cref="CanSimulateAsync"/> is and for the same
+    /// reason: a simulation removes system scopes, so a caller already inside one would answer <c>false</c>
+    /// to their own real grant.
+    /// </para>
+    /// </remarks>
+    public async Task<bool> CanUseDemoAsync()
+    {
+        if (!Enabled) return false;
+
+        var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+
+        if (AccessSimulationCookie.IsActive(state.User)) return false;
+
+        return TeamScopeGate.HasSystemScope(state.User, SimulationScopes.Demo);
+    }
+
+    /// <remarks>
+    /// <b>Checked here, not only in the card.</b> Hiding the control is presentation; refusing the call is
+    /// the rule. The component asks the same question to decide what to draw, but this is what makes the
+    /// answer binding.
+    /// </remarks>
     public async Task StartDemoAsync()
     {
+        if (!await CanUseDemoAsync())
+            throw new UnauthorizedAccessException(
+                $"Demo mode requires the '{SimulationScopes.Demo}' system scope. Holding " +
+                $"'{SimulationScopes.Simulate}' authorizes viewing as another user, which is a different " +
+                "capability and deliberately reaches team administrators.");
+
         var scopes = await GetOwnScopesAsync();
         await StartAsync(AccessSimulationTargets.FromDemo(scopes));
     }

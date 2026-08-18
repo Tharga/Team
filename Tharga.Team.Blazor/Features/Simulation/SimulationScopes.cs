@@ -1,23 +1,34 @@
-namespace Tharga.Team.Blazor.Features.Simulation;
+﻿namespace Tharga.Team.Blazor.Features.Simulation;
 
 /// <summary>
-/// Scope constants for access simulation.
+/// The two grants behind access simulation. They are separate because they are not the same capability.
 /// </summary>
+/// <remarks>
+/// <b>Splitting them is the fix for Tharga/Team#223.</b> Both halves used to sit behind
+/// <see cref="Simulate"/>, registered at <c>AccessLevel.Administrator</c> — and Owner and Administrator
+/// receive every registered scope, so the grant reached every team owner and administrator in every tenant,
+/// with no way for a host to narrow it.
+/// </remarks>
 public static class SimulationScopes
 {
     /// <summary>
-    /// Authorizes starting an access simulation — seeing the application as a less privileged user.
+    /// <b>Run as</b> — view the application as another member, access level, role or scope set. A
+    /// <b>team</b> scope, registered at <c>Administrator</c>, and deliberately so: checking what a Viewer
+    /// sees before inviting one is an ordinary thing for a team owner to want.
+    /// </summary>
+    public const string Simulate = "simulation:use";
+
+    /// <summary>
+    /// <b>Demo mode</b> — drop your own system scopes and application roles. A <b>system</b> scope.
     /// </summary>
     /// <remarks>
-    /// Registered at <see cref="AccessLevel.Administrator"/>, which yields "team Owner and Administrator"
-    /// without naming them: <c>ScopeRegistry.GetScopesForAccessLevel</c> returns every registered scope at
-    /// Administrator and above. Expressed as a scope rather than an access-level check so a host can widen
-    /// it to a tenant role, or withhold it, without a toolkit change.
+    /// <b>System rather than team, because that is what the operation does.</b> It removes system scopes and
+    /// application roles, so for a caller holding none — every customer's own team owner — it offers to drop
+    /// nothing. It was inert for exactly the audience that used to see it.
     /// <para>
-    /// <b>Starting a simulation is gated; ending one is not.</b> A simulation can remove this very scope,
-    /// so gating the exit would let a caller strand themselves. Returning to normal access only restores
-    /// what the caller really holds, so there is nothing to authorize.
+    /// Resolve it with <c>TeamScopeGate.HasSystemScope</c>, never a bare <c>HasClaim</c>: an in-team claim of
+    /// this name must not satisfy it, the same rule <c>teams:delete</c> and <c>teams:set-owner</c> follow.
     /// </para>
     /// </remarks>
-    public const string Simulate = "simulation:use";
+    public const string Demo = "simulation:demo";
 }

@@ -187,6 +187,11 @@ public static class ThargaBlazorRegistration
                     scopes.Register(SystemUserScopes.Manage, "Administer users (cross-team): verify against the external directory, list directory-only users, and delete users.");
                 if (scopes.All.All(s => s.Name != SystemTeamScopes.Manage))
                     scopes.Register(SystemTeamScopes.Manage, "Rename any team and set its icon (cross-team). Does not grant consent or custom-role changes.");
+                // Demo mode. A system grant because the operation drops system scopes and application
+                // roles -- inert for a caller holding none, which is every customer's own team owner. The
+                // run-as half stays a team scope at Administrator (Tharga/Team#223).
+                if (scopes.All.All(s => s.Name != Features.Simulation.SimulationScopes.Demo))
+                    scopes.Register(Features.Simulation.SimulationScopes.Demo, "Drop your own system scopes and application roles, to see the application as an ordinary tenant user does.");
                 if (scopes.All.All(s => s.Name != SystemTeamScopes.SetOwner))
                     scopes.Register(SystemTeamScopes.SetOwner, "Make any existing member the sole owner of any team, demoting every other owner. Covers a legacy team with several owners, a handover the sitting owner cannot perform, and a team with none.");
             });

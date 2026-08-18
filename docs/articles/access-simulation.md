@@ -66,10 +66,41 @@ things elsewhere:
 
 ## Who can use it
 
-Anyone holding the **`simulation:use`** scope, registered at `AccessLevel.Administrator`. Since
-Owner and Administrator are granted every registered scope, that means **team owners and administrators**
-by default — without the toolkit hard-coding either. Widen it by granting the scope to a tenant role, or
-withhold it by re-registering it at a level nobody has.
+**Two capabilities, two grants.** They were one until 3.13.2, which is the fix for
+[#223](https://github.com/Tharga/Team/issues/223).
+
+| Capability | Scope | Kind | Reaches |
+|---|---|---|---|
+| **Run as** — view as another member, access level, role or scope set | `simulation:use` | **team**, at `Administrator` | Team owners and administrators, deliberately |
+| **Demo mode** — drop your own system scopes and application roles | `simulation:demo` | **system** | Only a principal holding a system grant |
+
+Run-as reaching every team owner is intended: checking what a Viewer sees before inviting one is an
+ordinary tenant-owner task. Owner and Administrator are granted every registered scope, so that follows
+without the toolkit hard-coding either level.
+
+**Demo mode is a system scope because of what it does.** It removes system scopes and application roles —
+so for a caller holding none, which is every customer's own team owner, it offered to drop nothing. It was
+inert for exactly the audience that used to see it. Resolve it with `TeamScopeGate.HasSystemScope`, never a
+bare `HasClaim`: an in-team claim spelled `simulation:demo` must not satisfy it.
+
+> **Upgrading from 3.13.1 or earlier?** Both halves used to sit behind `simulation:use`. Nothing is lost
+> silently — demo mode was never usable by a caller without system scopes anyway — but if your **staff**
+> reached demo mode through a team-level grant, they now need `simulation:demo` mapped to a system role or a
+> system API key. Run-as is unchanged.
+
+**Where each one shows.** A run-as simulation puts a banner in the navigation bar, because somebody working
+with a reduced view needs to know. **A demo shows nothing there at all** — a banner reading "demo mode"
+across a customer demonstration defeats the point of it — so the profile card is the way out. That is a rule
+rather than an option; see *Turning either half of the bar off* for the hazard it inherits.
+
+You can also switch the navigation controls off entirely:
+
+```csharp
+o.Blazor.Simulation.ShowInNavigation = false;   // default true
+```
+
+The component's own `ShowEntryPoint` and `ShowBanner` parameters still win where set, so placing the bar by
+hand keeps full control.
 
 **Ending a simulation is never gated.** A simulation can remove `simulation:use` itself, so requiring it
 to stop would let someone strand themselves.
