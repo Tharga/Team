@@ -1716,13 +1716,21 @@ The toolkit auto-registers these; grant them through `ConfigureSystemRoles` or a
 | `teams:read` | Enumerating any team, regardless of membership. Discovery only — selecting a team still yields only what it consented to |
 | `teams:delete` | Deleting any team, regardless of membership or `AllowTeamCreation`; also restoring a soft-deleted one |
 | `teams:purge` | Permanently removing a soft-deleted team and destroying its stored data |
-| `teams:assign-owner` | Giving an **ownerless** team an owner from its existing members. Refused when the team already has one |
+| `teams:set-owner` | Making any existing member the **sole owner** of any team, demoting every other owner. Works whatever the current owner count — none, one, or several |
 | `users:manage` | User administration: the admin lists, verify, rename, delete |
 
-`teams:assign-owner` has **no in-team fallback**, unlike `teams:delete` which accepts either a system
-grant or `team:manage` on the team. A member could not have produced an ownerless team, so there is no
-in-team case to accommodate — see
-[Recovering a team that lost its owner](user-management.md#recovering-a-team-that-lost-its-owner).
+`teams:set-owner` has **no in-team fallback**, unlike `teams:delete` which accepts either a system grant or
+`team:manage` on the team — and for two reasons rather than one. On an ownerless team no in-team caller can
+exist. On a team that has an owner, the in-team caller who should move ownership *is* the owner, and
+`TransferOwnershipAsync` is already their path; an in-team fallback would let an Administrator depose the
+owner, which `SetMemberRoleAsync` exists to refuse. See
+[Choosing who owns a team](user-management.md#choosing-who-owns-a-team).
+
+> **Renamed in 3.14.** This scope was `teams:assign-owner` in 3.9.0–3.13.0, where it authorized only the
+> ownerless-repair case. The name changed with the capability rather than being widened in place, so a host
+> that granted the old string does not silently acquire the ability to depose owners. **Remap it** — the old
+> name now authorizes nothing, and a startup check fails loudly if it is still registered rather than letting
+> holders be refused at the point of use with nothing explaining why.
 
 ### System scopes & privileged users
 

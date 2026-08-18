@@ -185,7 +185,7 @@ doing three different jobs. The complete picture:
 | See teams you are not a member of | `users:manage` + `teams:read` | — |
 | Delete a team | `users:manage` + `teams:delete` | `teams:read` in practice — see below |
 | Delete a user | `users:manage` | never your own row — see below |
-| Assign an owner to an ownerless team | `users:manage` + `teams:assign-owner` | the team must currently have **no** owner |
+| Choose who owns a team | `users:manage` + `teams:set-owner` | the new owner must already be a member |
 | Verify a user against the directory | `users:manage` | a **configured** `IUserDirectoryService` |
 | The directory-only tab | `users:manage` | a **configured** `IUserDirectoryService` |
 | Per-row audit history | `audit:read` | `ShowAuditLogButton="true"` |
@@ -243,7 +243,7 @@ role granted `users:manage` purely to *view* the admin lists can also delete eve
 If that is wider than you intend, do not map `users:manage` to a broad support role — map it only to the
 role you would trust with user deletion.
 
-## Recovering a team that lost its owner
+## Choosing who owns a team
 
 The platform refuses to grant or revoke `Owner` through `SetMemberRoleAsync`, and `TransferOwnershipAsync`
 requires the caller to *be* the current owner. Deleting a user, however, removes them from every team —
@@ -264,29 +264,61 @@ var owned = await userManagementService.GetOwnedTeamsAsync(userKey);
 Deletion is **not refused** for a sole owner. There are legitimate cases — winding up a one-person team —
 and the state is now repairable, so the warning is the right weight.
 
-### After — `teams:assign-owner`
+### Choosing who owns a team — `teams:set-owner`
 
-The **`teams:assign-owner`** system scope authorizes giving an ownerless team an owner, chosen from that
-team's existing members. It appears as **Assign owner** on the Teams tab of `<UsersView />`, and only on
-a team that actually has no owner.
+The **`teams:set-owner`** system scope authorizes making any existing member the **sole owner** of a team,
+demoting every other owner to `Administrator`. It appears on the Teams tab of `<UsersView />` under a label
+that follows the team's current state — **Assign owner**, **Change owner**, or **Reduce to a single owner**.
+One operation, three situations:
 
 ```csharp
-await teamService.AssignOwnerAsync<TMember>(teamKey, newOwnerUserKey);
+var result = await teamService.SetOwnerAsync<TMember>(teamKey, newOwnerUserKey);
 ```
 
-Two conditions are enforced in the service, not just the UI:
+| Starting state | What happens | Why you would do it |
+|---|---|---|
+| No owner | The candidate becomes owner | The owner was deleted — `RemoveUserFromAllTeamsAsync` takes them with everyone else |
+| One owner, someone else | The candidate becomes owner; the sitting owner becomes `Administrator` | A handover the owner cannot perform themselves — they have left, or the account is gone |
+| Several owners | The candidate keeps or gains `Owner`; **all** the others become `Administrator` | A team synced from a system whose model permits several owners |
+| The candidate already owns it alone | Nothing. No write, no audit entry | A sync pass over a team that is already correct |
+
+**A team ends up with exactly one owner.** That is the invariant the operation exists to restore, and it is
+structural rather than checked: `SetMemberRoleAsync` refuses to grant or revoke `Owner` in either direction,
+so no ordinary path can add a second or remove the last, and this operation always promotes before demoting
+— the team is never momentarily ownerless, even if a write fails part-way.
+
+One condition is enforced in the service, not just the UI:
 
 | Condition | Why |
 |---|---|
-| The team currently has **no** member at `Owner` | With no sitting owner there is nobody to escalate past, so the invariant `SetMemberRoleAsync` protects stays intact. On a healthy team the call is refused |
-| The new owner is **already a member** | Keeps this a repair. A caller holding this scope is not a member of the team, so without it they could install anyone — including themselves |
+| The new owner is **already a member** | A caller holding this scope is not a member of the team, so without it they could install anyone — including themselves |
 
-It is a **system** scope with no in-team fallback, deliberately unlike `teams:delete`: a member could not
-have produced this state, so there is no in-team case to accommodate. Both the operation and its refusals
-are audited — an attempt to "repair" a team that is not broken is what taking one over would look like.
+Note what is *not* a condition: the current owner count. Refusing on a team that already has an owner would
+rule out the two cases this exists for.
+
+It is a **system** scope with no in-team fallback, deliberately unlike `teams:delete`, for two reasons. On an
+ownerless team no in-team caller can exist. On a team that has an owner, the in-team caller who should move
+ownership *is* the owner, and `TransferOwnershipAsync` is already their path — an in-team fallback here would
+let an Administrator depose the owner, which `SetMemberRoleAsync` exists to refuse.
+
+**Both the operation and its refusals are audited**, and the entry names every owner demoted, not just the
+one promoted. A call that changed nothing writes no entry at all, so a sync running on a schedule does not
+bury the real events.
+
+`SetOwnerResult` tells the two empty cases apart: `Changed` is false only when nothing was written, while
+`DemotedOwnerKeys` is empty both for a no-op *and* for a genuine repair of an ownerless team.
 
 Invited members are not offered as candidates. They have not accepted, so making one owner would hand the
 team to somebody who may never arrive.
+
+> **Renamed in 3.14, and the capability changed with it.** Through 3.9.0–3.13.0 this was
+> **`teams:assign-owner`**, and it refused outright on a team that already had an owner — it repaired
+> ownerless teams and nothing else. `teams:set-owner` can depose a sitting owner, which is the point, so the
+> grant was renamed rather than widened in place: a host that granted the old string does not silently
+> acquire the larger capability. **The old name now authorizes nothing.** Remap it — a startup check fails
+> with both names rather than leaving holders refused at the point of use with nothing explaining why.
+>
+> `AssignOwnerAsync` is removed. `SetOwnerAsync` covers everything it did.
 
 ## Where names are edited
 
