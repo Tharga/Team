@@ -26,10 +26,12 @@ Branch: `feature/grant-only-scopes` (from `master`)
       - *Behaviour is deliberately unchanged so far* — `GetScopesForAccessLevel` still returns a grant-only
         scope at Owner/Administrator until step 3. This step is the API surface only.
 
-- [ ] **3. Exempt from access-level grants.** Filter `GrantOnly` out of both branches of
-      `GetScopesForAccessLevel` (the Owner/Administrator all-scopes branch and the fall-through). Update
-      the class-level XML summary. Tests: excluded at Owner, Administrator, User, Viewer, Custom; still
-      present in `All`; still resolved by `GetEffectiveScopes` via a role and via an override.
+- [x] **3. Exempt from access-level grants.** Done 2026-08-24. Filtered before *both* branches of
+      `GetScopesForAccessLevel` rather than only the Owner/Administrator one — a grant-only scope carries
+      `DefaultMinimumLevel = Custom`, so the fall-through comparison `DefaultMinimumLevel >= accessLevel`
+      would otherwise have granted it to User (4 >= 2) and Viewer (4 >= 3). That is the same arithmetic
+      the issue's `AccessLevel.Custom` proposal fell foul of, so the `[Theory]` covers all five levels
+      rather than just the two obvious ones. Class-level XML summary updated. 10 tests.
 
 - [ ] **4. Exempt from tenant-defined custom roles.** `AuthorizationTeamServiceDecorator.ValidateCustomRoles`
       rejects a grant-only scope with its own message ("is a grant-only scope and cannot be added to a

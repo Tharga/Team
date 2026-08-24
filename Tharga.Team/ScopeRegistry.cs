@@ -7,6 +7,8 @@ namespace Tharga.Team;
 /// Viewer gets only scopes registered at Viewer level.
 /// Custom gets no base scopes at all (exempt from the Owner/Administrator all-scopes rule);
 /// its effective scopes come solely from roles and scope overrides.
+/// Grant-only scopes (<see cref="RegisterGrantOnly"/>) are granted by no access level, Owner and
+/// Administrator included; they too are held solely through roles and scope overrides.
 /// Role scopes are unioned with access level scopes.
 /// </summary>
 public class ScopeRegistry : IScopeRegistry
@@ -67,10 +69,15 @@ public class ScopeRegistry : IScopeRegistry
         if (accessLevel == AccessLevel.Custom)
             return Array.Empty<string>();
 
-        if (accessLevel <= AccessLevel.Administrator)
-            return _scopes.Select(s => s.Name).ToList();
+        // Filtered before both branches, not just the all-scopes one: a grant-only scope carries
+        // DefaultMinimumLevel = Custom, which the fall-through comparison below would satisfy for User
+        // and Viewer alike.
+        var granted = _scopes.Where(s => !s.GrantOnly);
 
-        return _scopes
+        if (accessLevel <= AccessLevel.Administrator)
+            return granted.Select(s => s.Name).ToList();
+
+        return granted
             .Where(s => s.DefaultMinimumLevel >= accessLevel)
             .Select(s => s.Name)
             .ToList();

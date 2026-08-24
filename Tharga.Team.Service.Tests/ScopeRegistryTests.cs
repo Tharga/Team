@@ -162,4 +162,89 @@ public class ScopeRegistryTests
 
         Assert.Throws<InvalidOperationException>(() => registry.Register("case:read", AccessLevel.Administrator));
     }
+
+    [Theory]
+    [InlineData(AccessLevel.Owner)]
+    [InlineData(AccessLevel.Administrator)]
+    [InlineData(AccessLevel.User)]
+    [InlineData(AccessLevel.Viewer)]
+    [InlineData(AccessLevel.Custom)]
+    public void No_Access_Level_Grants_A_GrantOnly_Scope(AccessLevel accessLevel)
+    {
+        var registry = new ScopeRegistry();
+        registry.RegisterGrantOnly("case:read");
+
+        Assert.DoesNotContain("case:read", registry.GetScopesForAccessLevel(accessLevel));
+    }
+
+    [Fact]
+    public void A_GrantOnly_Scope_Stays_In_The_Catalogue()
+    {
+        var registry = new ScopeRegistry();
+        registry.Register("doc:read", AccessLevel.Viewer);
+        registry.RegisterGrantOnly("case:read");
+
+        Assert.Contains(registry.All, s => s.Name == "case:read");
+    }
+
+    [Fact]
+    public void A_GrantOnly_Scope_Does_Not_Disturb_Ordinary_Level_Resolution()
+    {
+        var registry = new ScopeRegistry();
+        registry.Register("doc:read", AccessLevel.Viewer);
+        registry.Register("doc:delete", AccessLevel.Administrator);
+        registry.RegisterGrantOnly("case:read");
+
+        var admin = registry.GetScopesForAccessLevel(AccessLevel.Administrator);
+        var viewer = registry.GetScopesForAccessLevel(AccessLevel.Viewer);
+
+        Assert.Equal(2, admin.Count);
+        Assert.Contains("doc:read", admin);
+        Assert.Contains("doc:delete", admin);
+        Assert.Single(viewer);
+        Assert.Contains("doc:read", viewer);
+    }
+
+    [Fact]
+    public void A_GrantOnly_Scope_Is_Granted_By_A_Code_Registered_Role()
+    {
+        var registry = new ScopeRegistry();
+        registry.RegisterGrantOnly("case:read");
+
+        var roleRegistry = Substitute.For<ITenantRoleRegistry>();
+        roleRegistry.GetScopesForRoles(Arg.Any<IEnumerable<string>>()).Returns(new[] { "case:read" });
+        registry.SetRoleRegistry(roleRegistry);
+
+        var scopes = registry.GetEffectiveScopes(AccessLevel.User, new[] { "CaseOfficer" });
+
+        Assert.Contains("case:read", scopes);
+    }
+
+    [Fact]
+    public void A_GrantOnly_Scope_Is_Granted_By_An_Explicit_Override()
+    {
+        var registry = new ScopeRegistry();
+        registry.RegisterGrantOnly("case:read");
+
+        var scopes = registry.GetEffectiveScopes(AccessLevel.User, null, new[] { "case:read" });
+
+        Assert.Contains("case:read", scopes);
+    }
+
+    [Fact]
+    public void An_Administrator_Without_The_Role_Does_Not_Hold_A_GrantOnly_Scope()
+    {
+        var registry = new ScopeRegistry();
+        registry.Register("team:manage", AccessLevel.Administrator);
+        registry.RegisterGrantOnly("case:read");
+
+        var roleRegistry = Substitute.For<ITenantRoleRegistry>();
+        roleRegistry.GetScopesForRoles(Arg.Any<IEnumerable<string>>()).Returns(Array.Empty<string>());
+        registry.SetRoleRegistry(roleRegistry);
+
+        var scopes = registry.GetEffectiveScopes(AccessLevel.Administrator, Array.Empty<string>());
+
+        Assert.Contains("team:manage", scopes);
+        Assert.DoesNotContain("case:read", scopes);
+    }
 }
