@@ -80,6 +80,32 @@ public class ApiKeyTeamLifetimeTests
         Assert.True((await Authenticate()).Succeeded);
     }
 
+    /// <summary>
+    /// The liveness check alone does **not** close the reused-team-key crossover, and this is here so nobody
+    /// concludes it does.
+    /// </summary>
+    /// <remarks>
+    /// Purge a team, then create a new team that takes the same key, and the old tenant's key names a team
+    /// that <i>exists again</i> — so it passes the liveness check and authorizes against the new tenant's
+    /// team. The liveness check closes the *deleted* team case; only destroying the keys at purge closes this
+    /// one, which is what <c>ApiKeyPurgeParticipant</c> is for.
+    /// <para>
+    /// Written as an assertion of the behaviour rather than a disabled test, because it is true and must stay
+    /// true: a key whose team exists should authenticate. The protection is that after a purge there is no
+    /// such key left to present.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AKeyNamingAReusedTeamKey_StillAuthenticates_SoPurgeMustDestroyTheKeys()
+    {
+        GivenKey(TeamKey);
+
+        // The original team was purged and a new team has since taken the same key.
+        GivenTeamIsLive(TeamKey);
+
+        Assert.True((await Authenticate()).Succeeded);
+    }
+
     private void GivenKey(string teamKey)
     {
         var key = Substitute.For<IApiKey>();

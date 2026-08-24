@@ -1909,6 +1909,52 @@ A scope name may legitimately appear in both. `audit:read` is registered at `Acc
 
 > **Tip:** drop the `<ScopeView />` component (Tharga.Team.Blazor) on a page to explore the configured **team** scopes interactively. Pick an access level and roles and the scopes a member would have light up while the rest grey out; it defaults to the signed-in member's own access level, roles, and overrides (overrides are highlighted). It builds itself from `IScopeRegistry` / `ITenantRoleRegistry`, so it always matches the running configuration. When the signed-in user holds any **system** scopes, a separate **System scopes** table appears listing them (it's hidden entirely when they hold none; set `ShowSystemScopes="false"` to disable it) — so you can tell at a glance which of your scopes are team vs system.
 
+### What happens to a team's credentials and data when it is deleted
+
+**An API key stops working the moment its team is deleted.** Authentication resolves the key's team and
+refuses the key if it no longer exists, recording the refusal in the audit log as *"API key for a deleted
+team"*. This applies to the ordinary soft delete (`teams:delete`) as well as to a purge — before 3.15.x a
+deleted team's keys kept authenticating and kept carrying that team's scope claims.
+
+- **System keys are unaffected.** They carry no team, so there is nothing to check.
+- **Restoring a team restores its keys.** The check reads the team's current state rather than latching.
+- **A store fault does not refuse keys.** A team lookup that throws is not evidence the team is gone, and
+  refusing every key on a transient fault would be worse than the gap it closes. Only a lookup that
+  successfully returns "no such team" refuses.
+
+**Purging a team destroys the data the toolkit holds for it** — API keys, team icons and support cases. Purge
+drops the *host's* per-team database, which does not reach the toolkit's own shared collections, so each
+store contributes an `ITeamPurgeParticipant` that removes its own records.
+
+Participants run **before** the team record is deleted. If one fails the purge aborts with the team still
+present, so it is visible and can be purged again; the alternative would leave data nothing can find.
+
+> **The upgrade does not repair history.** Teams purged on an earlier version have already left their API
+> keys, icons and cases behind. This release stops it happening again; it does not clean up what is already
+> orphaned. Those keys no longer authenticate — their team is gone — but the records remain until removed.
+
+**Soft delete deliberately does not cascade.** A soft-deleted team can be restored, and a restore that
+brought back a team with no keys, no icons and no history would be a restore in name only.
+
+#### Adding your own participant
+
+A host storing its own per-team data can join the cascade:
+
+```csharp
+public sealed class InvoicePurgeParticipant(IInvoiceStore store) : ITeamPurgeParticipant
+{
+    public string Name => "invoices";
+
+    public Task<int> PurgeTeamDataAsync(string teamKey, CancellationToken cancellationToken = default)
+        => store.DeleteForTeamAsync(teamKey, cancellationToken);
+}
+
+services.AddTransient<ITeamPurgeParticipant, InvoicePurgeParticipant>();
+```
+
+Make it safe to run twice — a purge that failed part-way is retried, so a participant that has already run
+should remove nothing and report zero rather than failing.
+
 ### Built-in system scopes
 
 The toolkit auto-registers these; grant them through `ConfigureSystemRoles` or a system API key.
