@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Tharga.MongoDB;
 
@@ -53,6 +54,14 @@ public static class ThargaTeamRegistration
             services.AddTransient(teamRepositoryInterfaceType, teamRepositoryImplementationType);
             services.AddTransient(teamRepositoryCollectionInterfaceType, teamRepositoryCollectionImplementationType);
             services.TrackMongoCollection(teamRepositoryCollectionInterfaceType, teamRepositoryCollectionImplementationType);
+
+            // Reports members stored with no access level, which are silently being treated as Owner.
+            // Registered only alongside a team repository, because without one there is nothing to read.
+            if (o.CheckMemberAccessLevels)
+            {
+                var checkType = typeof(AccessLevelCompletenessCheck<,>).MakeGenericType(teamEntityType, teamMemberModelType);
+                services.AddSingleton(typeof(IHostedService), checkType);
+            }
         }
     }
 }
