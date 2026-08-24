@@ -25,6 +25,11 @@ public record ThargaTeamOptions
     public string IconCollectionName { get; set; } = "Icon";
 
     /// <summary>
+    /// Collection holding support cases and their transcripts. Default <c>SupportCase</c>.
+    /// </summary>
+    public string SupportCaseCollectionName { get; set; } = "SupportCase";
+
+    /// <summary>
     /// Whether to report, at startup, stored team members that carry no access level and are therefore
     /// being treated as <see cref="AccessLevel.Owner"/>. Default <c>true</c>.
     /// </summary>

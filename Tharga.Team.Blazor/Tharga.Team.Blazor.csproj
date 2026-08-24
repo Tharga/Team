@@ -48,7 +48,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
     <PackageReference Include="System.Linq.Async" Version="7.0.1" />
-    <PackageReference Include="Tharga.Blazor" Version="2.3.2" />
+    <PackageReference Include="Tharga.Blazor" Version="2.3.3" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.11" />

@@ -55,6 +55,12 @@ public static class ThargaTeamRegistration
             services.AddTransient(teamRepositoryCollectionInterfaceType, teamRepositoryCollectionImplementationType);
             services.TrackMongoCollection(teamRepositoryCollectionInterfaceType, teamRepositoryCollectionImplementationType);
 
+            // Support cases. Registered alongside the team repository because a case belongs to a team, and
+            // TryAdd so a host substituting its own store wins.
+            services.AddTransient<ISupportCaseRepositoryCollection, SupportCaseRepositoryCollection>();
+            services.TrackMongoCollection(typeof(ISupportCaseRepositoryCollection), typeof(SupportCaseRepositoryCollection));
+            services.TryAddScoped<ISupportCaseStore, MongoSupportCaseStore>();
+
             // Reports members stored with no access level, which are silently being treated as Owner.
             // Registered only alongside a team repository, because without one there is nothing to read.
             if (o.CheckMemberAccessLevels)

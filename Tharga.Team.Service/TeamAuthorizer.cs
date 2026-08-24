@@ -51,4 +51,61 @@ public sealed class TeamAuthorizer
         var principal = await _principalAccessor.GetCurrentAsync();
         return TeamScopePolicy.HasSystemScope(principal, scope);
     }
+
+    /// <summary>
+    /// True when the caller's <c>TeamKey</c> claim equals <paramref name="teamKey"/> — membership, with no
+    /// scope required.
+    /// </summary>
+    /// <remarks>
+    /// <b>For the operations a member may perform on their own behalf.</b> Raising a support case about your
+    /// own team is one: gating it behind a scope would mean every host granting that scope to everybody, and
+    /// a scope everyone holds checks nothing. <c>shared-instructions.md</c> makes the general point — an
+    /// entry point's check need not be a scope, only a check; the invitation path is the other example.
+    /// <para>
+    /// Still a real boundary: a caller with no team selected, or one whose selected team is a different
+    /// tenant, fails it.
+    /// </para>
+    /// </remarks>
+    public async ValueTask<bool> IsMemberOfAsync(string teamKey)
+    {
+        var principal = await _principalAccessor.GetCurrentAsync();
+
+        if (!(principal?.Identity?.IsAuthenticated ?? false)) return false;
+
+        var claim = principal.FindFirst(TeamClaimTypes.TeamKey)?.Value;
+
+        return !string.IsNullOrEmpty(claim) && claim == teamKey;
+    }
+
+    /// <summary>
+    /// The caller's stable authentication subject, or <c>null</c> when unauthenticated.
+    /// </summary>
+    /// <remarks>
+    /// <b>Deliberately the same value the audit trail records as <c>CallerUserIdentity</c></b> —
+    /// <see cref="ClaimTypes.NameIdentifier"/>, with no fallback chain. Anything that identifies a person
+    /// durably has to agree with the audit trail, or two records of the same act cannot be joined. A
+    /// per-team <c>MemberKey</c> would be wrong here for a second reason: it stops resolving when someone
+    /// leaves the team, and the things keyed on this outlive membership.
+    /// </remarks>
+    public async ValueTask<string> GetSubjectAsync()
+    {
+        var principal = await _principalAccessor.GetCurrentAsync();
+
+        return principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
+
+    /// <summary>
+    /// The caller's display name, for snapshotting into durable history. Falls back through the usual
+    /// chain and finally to the subject, so it is never empty for an authenticated caller.
+    /// </summary>
+    public async ValueTask<string> GetDisplayNameAsync()
+    {
+        var principal = await _principalAccessor.GetCurrentAsync();
+        if (principal == null) return null;
+
+        return principal.FindFirst(ClaimTypes.Name)?.Value
+               ?? principal.Identity?.Name
+               ?? principal.FindFirst(ClaimTypes.Email)?.Value
+               ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+    }
 }
