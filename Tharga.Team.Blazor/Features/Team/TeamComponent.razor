@@ -348,7 +348,7 @@ else
             _roleDefinitions = _tenantRoleRegistry.All;
         if (_scopeRegistry != null)
         {
-            _allScopeNames = _scopeRegistry.All.Select(s => s.Name).ToArray();
+            _allScopeNames = _scopeRegistry.All.Where(s => !s.GrantOnly).Select(s => s.Name).ToArray();
             _scopeDescriptions = _scopeRegistry.All.ToDictionary(s => s.Name, s => s.Description);
         }
 

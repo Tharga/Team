@@ -120,8 +120,10 @@ else
         _teamService = ServiceProvider.GetService<ITeamManagementService>();
         _teamStateService = ServiceProvider.GetService<ITeamStateService>();
 
+        // Grant-only scopes are excluded to match SetTeamCustomRolesAsync, which rejects them: offering one
+        // here would produce a save that always throws.
         if (_scopeRegistry != null)
-            _allScopeNames = _scopeRegistry.All.Select(s => s.Name).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+            _allScopeNames = _scopeRegistry.All.Where(s => !s.GrantOnly).Select(s => s.Name).OrderBy(s => s, StringComparer.Ordinal).ToArray();
         _codeRoleNames = _roleRegistry?.All.Select(r => r.Name).ToList() ?? (IReadOnlyList<string>)[];
 
         _manageScope = ServiceProvider.GetService<DynamicTenantRoleOptions>()?.ManageScope ?? TeamScopes.Manage;

@@ -2,9 +2,14 @@
 @inject IThargaTextProvider TextProvider
 
 @*
-    Scope-override picker (option b): shows ALL scopes; the ones inherited from the principal's access level
-    and roles are pre-checked and disabled, so the operator sees the full effective set and can only toggle
-    the additional override scopes. Persists only the non-inherited selections via OverridesChanged.
+    Scope-override picker (option b): shows the grantable scopes; the ones inherited from the principal's
+    access level and roles are pre-checked and disabled, so the operator sees the full effective set and can
+    only toggle the additional override scopes. Persists only the non-inherited selections via OverridesChanged.
+
+    AllScopes carries what may be *granted* here, which excludes grant-only scopes. Inherited scopes and
+    existing overrides are added to the option list regardless, so a principal already holding a grant-only
+    scope still renders truthfully -- inherited ones disabled, an existing override removable. Removal is
+    de-escalation and stays allowed; it is adding one that this picker does not offer.
 *@
 <RadzenDropDown TValue="IEnumerable<string>"
                 Multiple="true"
@@ -23,7 +28,11 @@
 </RadzenDropDown>
 
 @code {
-    /// <summary>All registered scope names to offer.</summary>
+    /// <summary>
+    /// The scope names that may be granted here. Excludes grant-only scopes, which are held solely through
+    /// a code-registered role. Inherited scopes and existing overrides are shown even when absent from this
+    /// list, so the effective set on screen stays truthful.
+    /// </summary>
     [Parameter] public IReadOnlyCollection<string> AllScopes { get; set; } = Array.Empty<string>();
 
     /// <summary>Scopes the principal already gets from its access level and roles — shown checked + disabled.</summary>
@@ -54,6 +63,9 @@
     {
         var inherited = new HashSet<string>(InheritedScopes ?? Array.Empty<string>());
         _options = (AllScopes ?? Array.Empty<string>())
+            .Concat(inherited)
+            .Concat(Overrides ?? Array.Empty<string>())
+            .Distinct(StringComparer.Ordinal)
             .OrderBy(s => s, StringComparer.Ordinal)
             .Select(s => new ScopeOption(s, inherited.Contains(s), GetDescription(s)))
             .ToList();
