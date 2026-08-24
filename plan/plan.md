@@ -19,12 +19,12 @@ Feature scope: `plan/feature.md`. Conventional-commit prefix: **`feat:`**.
       `ISlackClient` positionally hits the same thing** — a compile error, not a silent change. Call it out in
       the PR description; the 3.16 bump already covers it.
 
-- [ ] **2. `ISupportChannel` in `Tharga.Team`, and the Slack implementation in `Tharga.Team.Support`.**
+- [x] **2. DONE 2026-08-24. `ISupportChannel` in `Tharga.Team`, and the Slack implementation in `Tharga.Team.Support`.**
       Two operations: open a channel projection for a case, and post a message to it. Nothing Slack-shaped in
       the port — `thread_ts` is a Slack detail and belongs behind `SupportChannelBinding.ExternalId`.
       Guard it the way the case contracts are guarded: the port must name no Slack type.
 
-- [ ] **3. Outbound: raising and replying reach the thread.**
+- [x] **3. DONE 2026-08-24. Outbound: raising and replying reach the thread.**
       Raising a case opens the projection and stores the binding; replying posts into the same thread.
       **A case with no channel configured must behave exactly as it does today** — Slack is optional, and the
       zero-binding case is the requirement slice 1 exists to protect. Assert it rather than assume it.
@@ -32,7 +32,7 @@ Feature scope: `plan/feature.md`. Conventional-commit prefix: **`feat:`**.
       case is authoritative and the channel is a projection, so a Slack outage must not stop somebody
       reporting a problem. Log it and leave the case unbound; a later reply can bind it.
 
-- [ ] **4. Inbound: the endpoint, in the order that matters.**
+- [x] **4. DONE 2026-08-24. Inbound: the endpoint, in the order that matters.**
       Build it in this sequence, because each step is independently testable and the later ones are where
       naive implementations fail:
       - **4a. Raw-body capture and signature verification.** HMAC-SHA256 over `v0:{timestamp}:{body}`.
@@ -60,9 +60,15 @@ Feature scope: `plan/feature.md`. Conventional-commit prefix: **`feat:`**.
       Note for the docs: raising it from the inbound path means it fires on a background continuation, not a
       request thread, so a Blazor host must marshal with `InvokeAsync`.
 
-- [ ] **6. Tests.** Every acceptance criterion, and specifically: a stale-but-correctly-signed request is
-      refused; the same `event_id` twice appends one message; a bot message is ignored; an unknown thread is
-      ignored; a case with no binding is unaffected.
+- [x] **6. Tests — DONE 2026-08-24. The outbound gap is closed.**
+      Done: signature verification (10), the inbound handler (9) — challenge, dedup, bot-echo, unknown
+      thread, unsigned refusal.
+      Outbound added (`SupportCaseChannelTests`, 6): raising stores the returned thread id; a reply carries
+      that id rather than starting a new message; delivery is recorded Sent, Pending and Failed on the three
+      paths; and **a case with no channel configured behaves exactly as before**, which is the regression
+      guard for everything the site-only release shipped.
+      **Found by checking rather than assuming** — the outbound path had been written, wired and shipped
+      through three commits with no test touching it, while the inbound half had nineteen.
 
 - [ ] **7. Full test suite.** Green before any commit.
 
