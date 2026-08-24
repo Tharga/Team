@@ -12,7 +12,7 @@ namespace Tharga.Team.Support.Cases;
 /// here is the domain: assigning identity, stamping the author, and composing the operations the store
 /// applies atomically.
 /// </remarks>
-internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer authorizer, TimeProvider timeProvider, ISupportChannel channel = null) : ISupportCaseService
+internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer authorizer, TimeProvider timeProvider, ISupportChannel channel = null, ISupportCaseNotifier notifier = null) : ISupportCaseService
 {
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default)
     {
@@ -51,6 +51,8 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
         // case either way, and an undelivered entry stays visible as Pending rather than being lost.
         await ProjectAsync(supportCase, body, firstMessage.Sequence, cancellationToken);
 
+        Notify(teamKey, supportCase.Id, SupportCaseChange.Raised);
+
         return supportCase;
     }
 
@@ -82,7 +84,22 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
 
         await DeliverAsync(teamKey, caseId, existing, message with { Sequence = (existing?.MessageCount ?? 0) + 1 }, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Replied);
     }
+
+    /// <remarks>
+    /// Raised after the write, never before: a notification for something that then failed to persist would
+    /// send a listener to read a case that does not say what it was told.
+    /// </remarks>
+    private void Notify(string teamKey, string caseId, SupportCaseChange change) =>
+        notifier?.Notify(new SupportCaseUpdatedEventArgs
+        {
+            TeamKey = teamKey,
+            CaseId = caseId,
+            Change = change,
+            FromChannel = false
+        });
 
     /// <summary>
     /// Opens the channel projection for a new case and records whether the opening message got there.
@@ -143,6 +160,8 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
         };
 
         await store.CloseCaseAsync(teamKey, caseId, now, subjectIdentity, closure, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Closed);
     }
 
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)

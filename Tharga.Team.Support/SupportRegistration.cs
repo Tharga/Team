@@ -126,7 +126,8 @@ public static class SupportRegistration
                     sp.GetRequiredService<ISupportCaseStore>(),
                     sp.GetRequiredService<TeamAuthorizer>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetService<ISupportChannel>()),
+                    sp.GetService<ISupportChannel>(),
+                    sp.GetRequiredService<ISupportCaseNotifier>()),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));

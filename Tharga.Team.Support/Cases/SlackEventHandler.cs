@@ -43,6 +43,7 @@ internal sealed class SlackEventHandler(
     ISupportEventLedger ledger,
     IOptions<SupportCaseOptions> options,
     TimeProvider timeProvider,
+    ISupportCaseNotifier notifier = null,
     ILogger<SlackEventHandler> logger = null)
 {
     private const string Source = "slack";
@@ -109,6 +110,16 @@ internal sealed class SlackEventHandler(
         };
 
         await store.AppendMessageAsync(supportCase.TeamKey, supportCase.Id, message, cancellationToken);
+
+        // FromChannel, because this is the case a UI actually wants to react to: somebody outside the
+        // application answered, and nobody inside it knows yet.
+        notifier?.Notify(new SupportCaseUpdatedEventArgs
+        {
+            TeamKey = supportCase.TeamKey,
+            CaseId = supportCase.Id,
+            Change = SupportCaseChange.Replied,
+            FromChannel = true
+        });
 
         return SlackEventOutcome.Ok();
     }
