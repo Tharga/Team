@@ -134,22 +134,48 @@ rather than by a grant.
 
 ## Acceptance criteria
 
-- [ ] A case can be raised, replied to and closed, and its history read back in order.
-- [ ] A case raised on the site is complete and trackable with **zero channel bindings** — the requirement
+- [x] A case can be raised, replied to and closed, and its history read back in order.
+- [x] A case raised on the site is complete and trackable with **zero channel bindings** — the requirement
       this slice exists to prove.
-- [ ] **Deleting the author leaves the case and its full history intact and readable**, with the author's
+- [x] **Deleting the author leaves the case and its full history intact and readable**, with the author's
       name still rendering from the stored snapshot. Same for removing them from the team.
-- [ ] Authorization keys on `TeamKey` alone; no check depends on the author still being a member.
-- [ ] History is paged with an explicit cursor, and no contract exposes `IAsyncEnumerable`, a generic method
+- [x] Authorization keys on `TeamKey` alone; no check depends on the author still being a member.
+- [x] History is paged with an explicit cursor, and no contract exposes `IAsyncEnumerable`, a generic method
       or an interface-typed return — asserted by a test, not by review.
-- [ ] `ISupportCaseStore` exposes no `Tharga.MongoDB` type — asserted by a test.
-- [ ] A member cannot read another member's case without `support:read`; a non-member cannot reach the team's
+- [x] `ISupportCaseStore` exposes no `Tharga.MongoDB` type — asserted by a test.
+- [x] A member cannot read another member's case without `support:read`; a non-member cannot reach the team's
       cases at all.
-- [ ] Every operation is audited with the actor and the case id.
-- [ ] Authorization lives in exactly one place — asserted by the existing internal-service-injection guard
+- [x] Every operation is audited with the actor and the case id.
+- [x] Authorization lives in exactly one place — asserted by the existing internal-service-injection guard
       extended to the new surface.
-- [ ] `Tharga.Team.MongoDB` does **not** reference `Tharga.Team.Support`.
-- [ ] Full test suite green.
+- [x] `Tharga.Team.MongoDB` does **not** reference `Tharga.Team.Support`.
+- [x] Full test suite green - 2148 passed, 0 failed.
+
+## Deferred during the build, with the reason (2026-08-24, user)
+
+**The purge cascade is not wired, and that is a decision rather than an omission.**
+
+Step 1d chose option A — purge calls `ISupportCaseStore` directly, *resolved from the service provider,
+never from a new `TeamServiceRepositoryBase` constructor parameter*, because a subclass that forgets to
+forward an optional parameter silently disables the feature and a silently-skipped purge is far worse than
+a missing icon.
+
+**Option A has nowhere to stand.** `PurgeTeamAsync` lives on `TeamServiceRepositoryBase`, whose constructor
+takes `(IUserService, ITeamRepository, IMongoDbServiceFactory, IIconStore?, ITeamCache?)` — there is no
+service provider at the purge site, and adding one is exactly the trap the decision ruled out. Reaching a
+provider from there requires the seam option B described.
+
+**Why it is deferred rather than bodged:** a purge that half-works is worse than one that visibly does not,
+and the backlog already carries a **Critical** finding that purge does not remove a team's **API keys**
+either — credentials outliving the tenant they authorized. Both are the same missing mechanism. One
+purge-cascade design should fix both, and that is a feature rather than a footnote to this one.
+
+`ISupportCaseStore.DeleteCasesForTeamAsync` exists and is tested; only the wiring is absent. Documented as a
+known limitation with the workaround, so nothing claims behaviour that is not there.
+
+**Also deferred: hiding a soft-deleted team's cases** (step 1c). Enforcing it needs a team lookup on every
+case read, and the only ungated route is the internal service, which support code must not inject. Recorded
+as a limitation rather than silently skipped.
 
 ## Explicitly out of scope
 
