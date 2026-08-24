@@ -30,13 +30,25 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
         var after = int.TryParse(cursor, out var value) ? value : 0;
 
-        var items = (found?.Messages ?? [])
+        var all = found?.Messages ?? [];
+
+        var items = all
             .Where(x => x.Sequence > after)
             .OrderBy(x => x.Sequence)
             .Take(pageSize)
             .ToArray();
 
-        return Task.FromResult(new SupportMessagePage { Items = items });
+        // The cursor has to be produced the same way the real adapter produces it. A fake that returns
+        // items but no cursor makes every paged read restart from the beginning, which reads as a paging
+        // defect in the code under test rather than as a gap in the double.
+        var last = items.Length == 0 ? 0 : items[^1].Sequence;
+        var more = items.Length == pageSize && all.Any(x => x.Sequence > last);
+
+        return Task.FromResult(new SupportMessagePage
+        {
+            Items = items,
+            NextCursor = more ? last.ToString() : null
+        });
     }
 
     public Task AddCaseAsync(SupportCase supportCase, SupportMessage firstMessage, CancellationToken cancellationToken = default)
@@ -81,6 +93,28 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         var removed = _cases.RemoveAll(x => x.Case.TeamKey == teamKey);
 
         return Task.FromResult(removed);
+    }
+
+    /// <summary>
+    /// Pads a case out to <paramref name="messageCount"/> entries, so the full-case limit can be exercised
+    /// without writing five hundred messages through the service.
+    /// </summary>
+    public void Stuff(string teamKey, string caseId, int messageCount)
+    {
+        var found = Require(teamKey, caseId);
+
+        while (found.Messages.Count < messageCount)
+        {
+            found.Messages.Add(new SupportMessage
+            {
+                Sequence = found.Messages.Count + 1,
+                Kind = SupportMessageKind.User,
+                Body = "filler",
+                SentAt = DateTime.UtcNow
+            });
+        }
+
+        Replace(found.Case with { MessageCount = found.Messages.Count }, found.Messages);
     }
 
     private (SupportCase Case, List<SupportMessage> Messages)? Find(string teamKey, string caseId)

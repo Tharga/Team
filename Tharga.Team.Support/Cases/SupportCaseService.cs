@@ -16,6 +16,8 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
 {
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default)
     {
+        RequireWithinLength(body);
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
         var authorName = await authorizer.GetDisplayNameAsync();
@@ -49,6 +51,17 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
 
     public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
     {
+        RequireWithinLength(body);
+
+        // Costs a read before the write, and is worth it: the caller learns the case is full before typing
+        // is discarded, and the limit is checked in the domain so a second adapter inherits it rather than
+        // reimplementing it.
+        var existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        if (existing != null && existing.MessageCount >= SupportCaseLimits.MaxMessagesPerCase)
+            throw new InvalidOperationException(
+                $"Support case '{caseId}' already holds {existing.MessageCount} messages, which is the limit of " +
+                $"{SupportCaseLimits.MaxMessagesPerCase}. Raise a new case rather than extending this one.");
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
         var message = new SupportMessage
@@ -96,4 +109,18 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
 
     public Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => store.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
+
+    /// <remarks>
+    /// <b>Enforced here rather than in the adapter, because the limit is a contract fact.</b>
+    /// <see cref="SupportCaseLimits"/> lives beside the contracts and is documented for callers, so a second
+    /// storage adapter must inherit the rule rather than be trusted to reimplement it. The MongoDB adapter
+    /// keeps its own check as a last-resort backstop for a caller that reaches the port directly.
+    /// </remarks>
+    private static void RequireWithinLength(string body)
+    {
+        if (body != null && body.Length > SupportCaseLimits.MaxMessageLength)
+            throw new InvalidOperationException(
+                $"A support message is {body.Length} characters, which exceeds the limit of " +
+                $"{SupportCaseLimits.MaxMessageLength}. Attach or link long content instead of pasting it.");
+    }
 }
