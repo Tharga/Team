@@ -174,6 +174,14 @@ public static class ThargaBlazorRegistration
             // A renamed scope is invisible to the compiler and silently authorizes nothing.
             services.AddSingleton<IHostedService>(sp => new RetiredScopeCheck(sp.GetRequiredService<ISystemScopeRegistry>()));
 
+            // Warns when a code-registered role names a scope no one registered -- the shape a typo takes,
+            // since role scopes are unvalidated strings. Warn rather than throw: naming an unregistered
+            // scope on a role is the documented pre-3.14 way to get grant-only behaviour.
+            services.AddSingleton<IHostedService>(sp => new UnregisteredRoleScopeCheck(
+                sp.GetService<ITenantRoleRegistry>(),
+                sp.GetService<IScopeRegistry>(),
+                sp.GetService<ILogger<UnregisteredRoleScopeCheck>>()));
+
             // Built-in system scopes: teams:delete authorizes deleting any team (cross-team), users:manage
             // authorizes user administration. Merge-safe with any consumer ConfigureSystemScopes; grant
             // them via ConfigureSystemRoles or a system API key.

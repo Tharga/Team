@@ -6,11 +6,21 @@ namespace Tharga.Team.Blazor.Features.Scopes;
 /// One row of the scope reference: a configured scope, its description, and who grants it
 /// (the access levels and tenant roles).
 /// </summary>
+/// <param name="Name">The scope name.</param>
+/// <param name="Description">Human-readable description, or null when none was registered.</param>
+/// <param name="AccessLevels">The access levels that grant this scope. Always empty for a grant-only scope.</param>
+/// <param name="Roles">The tenant roles that name this scope.</param>
+/// <param name="GrantOnly">
+/// True when the scope is registered grant-only. Such a row exists precisely so the scope is documented:
+/// it is granted by no access level, so without the flag it would read as an ordinary scope that simply
+/// nobody happens to have.
+/// </param>
 public sealed record ScopeRow(
     string Name,
     string Description,
     IReadOnlyList<AccessLevel> AccessLevels,
-    IReadOnlyList<string> Roles);
+    IReadOnlyList<string> Roles,
+    bool GrantOnly = false);
 
 /// <summary>
 /// How a single scope is granted under the current selection: by the selected access level, by one or
@@ -49,7 +59,8 @@ public static class ScopeReference
                 s.Name,
                 s.Description,
                 Levels.Where(l => byLevel[l].Contains(s.Name)).ToList(),
-                roleList.Where(r => r.Scopes != null && r.Scopes.Contains(s.Name)).Select(r => r.Name).ToList()))
+                roleList.Where(r => r.Scopes != null && r.Scopes.Contains(s.Name)).Select(r => r.Name).ToList(),
+                s.GrantOnly))
             .ToList();
     }
 

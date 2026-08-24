@@ -1425,14 +1425,18 @@ That is usually what you want. It is not what you want for a scope that should b
 decision** — a scope reaching regulated or classified records, say, where "an administrator gets it
 automatically" is the wrong default.
 
-**Do not register it as a scope. Register it on a role.**
+**Register it grant-only** (3.14+):
 
 ```csharp
-// NOT registered with ConfigureScopes -- registering it is what would grant it to every administrator.
-o.ConfigureRoles(roles =>
+o.ConfigureScopes = scopes =>
+{
+    scopes.RegisterGrantOnly("case:read", "Read secrecy-classified case records.");
+};
+
+o.ConfigureTenantRoles = roles =>
 {
     roles.Register("CaseOfficer", ["case:read"], "May read case records.");
-});
+};
 ```
 
 Then use it exactly as any other scope:
@@ -1442,32 +1446,40 @@ Then use it exactly as any other scope:
 Task<Case> GetCaseAsync(string teamKey, string caseKey);
 ```
 
-This works because nothing in the enforcement path consults the scope registry:
+#### What grant-only exempts
 
-| Step | Behaviour |
-|---|---|
-| `TenantRoleRegistry.Register` | Stores the scope **names**; no validation against `IScopeRegistry` |
-| `GetScopesForRoles` | Returns them as assigned |
-| `GetEffectiveScopes` | Unions role scopes into the effective set |
-| `ScopeProxy` → `TeamScopePolicy.HasTeamScope` | Checks the **claim**, never the registry |
-| `GetScopesForAccessLevel` | Cannot return it — it was never registered |
+A grant-only scope is excluded from **every path that grants a scope automatically or from inside the
+tenant** — three of them, not one:
 
-So the scope is held **only** by members carrying the role, plus anyone given it explicitly through
-`ScopeOverrides`. An Owner or Administrator without the role does not have it.
+| Path | Behaviour | Why it has to be covered |
+|---|---|---|
+| Access-level grants | `GetScopesForAccessLevel` returns it for **no** level, Owner and Administrator included | The headline rule |
+| Tenant-defined custom roles | `SetTeamCustomRolesAsync` rejects it, and `<TenantRoleManager />` does not offer it | Defining custom roles is authorized by `DynamicTenantRoleOptions.ManageScope` — `team:manage` by default — which every administrator holds |
+| Scope-override pickers | `<TeamComponent ShowScopeOverrides="true" />` and `<ApiKeyView ShowScopeOverrides="true" />` do not offer it | Editing overrides is authorized by `team:member:manage`, which every administrator also holds |
 
-**A second guard comes free.** `ValidateCustomRoles` rejects any scope that is not app-registered, so a team
-administrator using `<TenantRoleManager />` **cannot** add an unregistered scope to a tenant-defined custom
-role. For a scope of this kind that is exactly right: it cannot be granted from inside the tenant at all,
-only by a code-defined role you ship.
+The last two matter more than they look. Exempting only the access level would leave a team administrator
+able to define a role containing the scope, or tick it in the override picker, and grant it to themselves —
+so the scope would be no better protected than before, while *reading* as protected.
 
-**What you give up**, all of it visibility rather than authorization:
+**What still grants it**, and this is the point rather than a gap:
 
-- No entry in the scope catalogue, so **no description** in `<TenantRoleManager />` or the member scope views.
-- Not offered by the per-member scope-override picker, which is populated from the registry. The service path
-  still works; the control just will not list it.
-- **No typo safety.** A misspelled scope name in a role definition grants nothing and nothing reports it — a
-  security scope that quietly stops working looks exactly like one that was never needed. Pin the name with a
-  constant and a test rather than repeating the literal.
+- A **code-registered tenant role** (`ConfigureTenantRoles`). This is the intended grant path.
+- An explicit **`ScopeOverrides`** value set programmatically. Nothing validates overrides against the
+  registry, so your own code can still assign one; it is the *picker* that does not offer it.
+
+A member already holding a grant-only scope still sees it in the override picker, checked and disabled, so
+the effective set on screen stays truthful. An existing override remains removable — removal is
+de-escalation.
+
+#### What you keep by registering it
+
+Registering the scope rather than hiding it is what buys:
+
+- **A catalogue entry with its description**, shown in `<ScopeView />` marked with a lock and granted by no
+  access level.
+- **Typo safety.** A misspelled scope on a role definition grants nothing and matches nothing, which for a
+  security scope is indistinguishable from one nobody needed. `UnregisteredRoleScopeCheck` logs a warning at
+  startup naming any role scope absent from the registry.
 
 > **Do not reach for `AccessLevel.Custom` here.** Registering a scope at `Custom` looks like the natural way
 > to say "no level grants this", and it does the opposite. The levels are `Owner=0, Administrator=1, User=2,
@@ -1475,6 +1487,29 @@ only by a code-defined role you ship.
 > `DefaultMinimumLevel`, and the fall-through filter is `DefaultMinimumLevel >= accessLevel`, so `Custom=4`
 > satisfies User and Viewer as well. A scope registered that way is granted to **every** level. The `Custom`
 > guard in `GetScopesForAccessLevel` applies to the *principal's* level, not the scope's.
+
+#### One limitation
+
+**The toolkit's own scopes cannot be made grant-only.** `team:read`, `team:manage`, `team:member:manage`,
+`apikey:manage`, `audit:read` and `simulation:use` are registered by `AddThargaTeamBlazor` before your
+`ConfigureScopes` runs, and `Register` throws on a duplicate name, so there is no way to relevel them. If you
+need one of those held only by explicit grant, please open an issue describing the case.
+
+#### The pre-3.14 alternative
+
+Before `RegisterGrantOnly` existed, the same authorization outcome was reached by **not registering the scope
+at all** and naming it only on a code-registered role:
+
+```csharp
+// Works on any version. Nothing in the enforcement path consults the scope registry.
+o.ConfigureTenantRoles = roles => roles.Register("CaseOfficer", ["case:read"]);
+```
+
+This still works — `TenantRoleRegistry` stores scope names without validating them, `GetEffectiveScopes`
+unions role scopes in, `ScopeProxy` checks the claim, and `GetScopesForAccessLevel` cannot return a scope
+that was never registered. On 3.14+ prefer `RegisterGrantOnly`: the authorization is the same, and you keep
+the catalogue entry, the description and the typo warning. The startup check will warn about a role scope
+left unregistered this way, which is the nudge to move it across.
 
 ### Built-in scopes
 

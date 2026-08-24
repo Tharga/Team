@@ -26,6 +26,51 @@ public class ScopeReferenceTests
     private static ScopeRow Row(IReadOnlyList<ScopeRow> rows, string name) => rows.Single(r => r.Name == name);
 
     [Fact]
+    public void GrantOnlyScope_AppearsInTheCatalogue_WithItsDescription()
+    {
+        var (scopes, roles) = BuildRegistries();
+        scopes.RegisterGrantOnly("case:read", "Read secrecy-classified case records.");
+
+        var row = Row(ScopeReference.Build(scopes, roles), "case:read");
+
+        Assert.Equal("Read secrecy-classified case records.", row.Description);
+        Assert.True(row.GrantOnly);
+    }
+
+    [Fact]
+    public void GrantOnlyScope_IsGrantedByNoAccessLevel()
+    {
+        var (scopes, roles) = BuildRegistries();
+        scopes.RegisterGrantOnly("case:read");
+
+        var row = Row(ScopeReference.Build(scopes, roles), "case:read");
+
+        Assert.Empty(row.AccessLevels);
+    }
+
+    [Fact]
+    public void GrantOnlyScope_StillNamesTheRolesThatGrantIt()
+    {
+        var scopes = new ScopeRegistry();
+        scopes.RegisterGrantOnly("case:read");
+
+        var roles = new TenantRoleRegistry();
+        roles.Register("CaseOfficer", "case:read");
+
+        var row = Row(ScopeReference.Build(scopes, roles), "case:read");
+
+        Assert.Equal(["CaseOfficer"], row.Roles);
+    }
+
+    [Fact]
+    public void OrdinaryScope_IsNotMarkedGrantOnly()
+    {
+        var (scopes, roles) = BuildRegistries();
+
+        Assert.False(Row(ScopeReference.Build(scopes, roles), "orders:read").GrantOnly);
+    }
+
+    [Fact]
     public void ViewerLevelScope_IsGrantedToAllLevels()
     {
         var (scopes, roles) = BuildRegistries();

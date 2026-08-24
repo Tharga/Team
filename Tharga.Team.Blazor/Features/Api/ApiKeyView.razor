@@ -329,7 +329,7 @@ else
         if (!_hasAccess) { _teamLoaded = true; await base.OnInitializedAsync(); return; }
 
         _scopeRegistry = ServiceProvider.GetService<IScopeRegistry>();
-        _allScopeNames = _scopeRegistry?.All.Select(s => s.Name).ToArray() ?? Array.Empty<string>();
+        _allScopeNames = _scopeRegistry?.All.Where(s => !s.GrantOnly).Select(s => s.Name).ToArray() ?? Array.Empty<string>();
         _scopeDescriptions = _scopeRegistry?.All.ToDictionary(s => s.Name, s => s.Description) ?? new Dictionary<string, string>();
         _tenantRoleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
         _tenantRoleService = ServiceProvider.GetService<ITenantRoleService>();

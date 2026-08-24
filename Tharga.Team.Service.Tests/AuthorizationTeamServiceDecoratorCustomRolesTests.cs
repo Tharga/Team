@@ -158,4 +158,53 @@ public class AuthorizationTeamServiceDecoratorCustomRolesTests
 
         Assert.Same(ValidRoles, result);
     }
+
+    [Fact]
+    public async Task GrantOnlyScope_InACustomRole_Throws()
+    {
+        var scopes = new ScopeRegistry();
+        scopes.Register("case:write", AccessLevel.Custom);
+        scopes.RegisterGrantOnly("case:read");
+
+        var inner = Substitute.For<ITeamService>();
+        var sut = Build(Principal("T1", TeamScopes.Manage), inner, scopes);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sut.SetTeamCustomRolesAsync("T1", ValidRoles));
+
+        Assert.Contains("case:read", ex.Message);
+        Assert.Contains("grant-only", ex.Message);
+        await inner.DidNotReceive().SetTeamCustomRolesAsync(Arg.Any<string>(), Arg.Any<IReadOnlyList<TenantRoleDefinition>>());
+    }
+
+    [Fact]
+    public async Task GrantOnlyScope_IsReportedAsGrantOnly_NotAsUnregistered()
+    {
+        var scopes = new ScopeRegistry();
+        scopes.RegisterGrantOnly("case:read");
+
+        var inner = Substitute.For<ITeamService>();
+        var sut = Build(Principal("T1", TeamScopes.Manage), inner, scopes);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => sut.SetTeamCustomRolesAsync("T1", [new TenantRoleDefinition("Registrar", ["case:read"])]));
+
+        Assert.DoesNotContain("not an app-registered scope", ex.Message);
+    }
+
+    [Fact]
+    public async Task OrdinaryScopes_StillDelegate_WhenAGrantOnlyScopeIsRegistered()
+    {
+        var scopes = new ScopeRegistry();
+        scopes.Register("case:write", AccessLevel.Custom);
+        scopes.RegisterGrantOnly("case:read");
+
+        var inner = Substitute.For<ITeamService>();
+        var sut = Build(Principal("T1", TeamScopes.Manage), inner, scopes);
+        IReadOnlyList<TenantRoleDefinition> roles = [new TenantRoleDefinition("Registrar", ["case:write"])];
+
+        await sut.SetTeamCustomRolesAsync("T1", roles);
+
+        await inner.Received(1).SetTeamCustomRolesAsync("T1", roles);
+    }
 }

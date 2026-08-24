@@ -293,14 +293,22 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
 
     /// <summary>
     /// Guards against privilege escalation and ambiguity when defining custom roles: every scope must be
-    /// app-registered (<see cref="IScopeRegistry"/>), names must be non-empty and unique, and must not
-    /// collide with a code-registered role name.
+    /// app-registered (<see cref="IScopeRegistry"/>) and must not be grant-only, names must be non-empty
+    /// and unique, and must not collide with a code-registered role name.
     /// </summary>
+    /// <remarks>
+    /// The grant-only check is what keeps such a scope out of reach of the very administrators it is meant
+    /// to exclude: defining custom roles is authorized by <c>DynamicTenantRoleOptions.ManageScope</c>
+    /// (<c>team:manage</c> by default), which every team administrator holds, so without it an
+    /// administrator could name the scope in a role of their own and assign it to themselves.
+    /// </remarks>
     private void ValidateCustomRoles(IReadOnlyList<TenantRoleDefinition> customRoles)
     {
         if (customRoles == null) return;
 
         var registeredScopes = _scopeRegistry?.All.Select(s => s.Name).ToHashSet(StringComparer.Ordinal);
+        var grantOnlyScopes = _scopeRegistry?.All.Where(s => s.GrantOnly).Select(s => s.Name).ToHashSet(StringComparer.Ordinal)
+                              ?? [];
         var codeRoleNames = _tenantRoleRegistry?.All.Select(r => r.Name).ToHashSet(StringComparer.Ordinal)
                             ?? [];
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -323,6 +331,10 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
                 if (registeredScopes == null || !registeredScopes.Contains(scope))
                     throw new InvalidOperationException(
                         $"Custom role '{name}' references scope '{scope}', which is not an app-registered scope.");
+
+                if (grantOnlyScopes.Contains(scope))
+                    throw new InvalidOperationException(
+                        $"Custom role '{name}' references scope '{scope}', which is grant-only and cannot be granted by a tenant-defined role. It is held only through a code-registered role.");
             }
         }
     }

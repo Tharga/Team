@@ -34,7 +34,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Tharga.MongoDB" Version="2.15.0" />
+    <PackageReference Include="Tharga.MongoDB" Version="2.15.1" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Tharga.Team.MongoDB.Tests" />
