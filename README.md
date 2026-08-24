@@ -93,16 +93,18 @@ builder.AddThargaTeam(o =>
     {
         scopes.Register("orders:read", AccessLevel.Viewer);
         scopes.Register("orders:write", AccessLevel.Administrator);
+
+        // Grant-only: reaches no access level, not even Owner or Administrator, and cannot be added to a
+        // tenant-defined custom role or a scope override. It is held solely through a role you register
+        // in code, so holding it stays an explicit decision. Registering it keeps its catalogue entry,
+        // description and typo-safety, which the older "just leave it unregistered" trick gives up.
+        scopes.RegisterGrantOnly("case:read", "Read secrecy-classified case records.");
     };
 
     // Named roles that bundle scopes
     o.ConfigureTenantRoles = roles =>
     {
         roles.Register("Editor", new[] { "orders:read", "orders:write" });
-
-        // A scope named only here and never in ConfigureScopes is "grant-only": it is held solely by
-        // members carrying the role. Every *registered* scope reaches Owner and Administrator
-        // unconditionally, so this is how a sensitive one stays an explicit decision.
         roles.Register("CaseOfficer", new[] { "case:read" });
     };
 

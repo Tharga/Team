@@ -84,9 +84,17 @@ Branch: `feature/grant-only-scopes` (from `master`)
 
 - [x] **11. Full build + test suite green.** Done 2026-08-24 — 2106 passed, 0 failed.
 
-- [~] **12. Docs (`docs:` commit).** Rewrite `implementation-guide.md` → *Grant-only scopes* to lead with
-      `RegisterGrantOnly`, keep the role-only approach as the alternative for hosts on ≤ 3.13, and state
-      the three exemptions plus the toolkit-scope limitation. Check README for a scopes section.
+- [x] **12. Docs (`docs:` commit).** Done 2026-08-24. **Both** surfaces updated, per the rule that they
+      are not alternatives:
+      - `docs/articles/implementation-guide.md` → *Grant-only scopes* rewritten to lead with
+        `RegisterGrantOnly`. New subsections: a table of the three exemptions with *why each has to be
+        covered* (the two picker rows are the non-obvious half); what still grants it; what registering
+        buys over hiding; the toolkit-scope limitation; and the pre-3.14 role-only approach kept as a
+        still-working alternative rather than deleted, since hosts on ≤3.13 are following it today. The
+        `AccessLevel.Custom` warning block was kept verbatim.
+      - `README.md` — the scopes example now shows `RegisterGrantOnly`. The old inline comment explaining
+        the unregistered-scope trick moved off `ConfigureTenantRoles`, which is no longer where the
+        mechanism lives.
 
 - [ ] **13. Close-out (only on the user's confirmation).** Update `Requests.md` and the backlog entry
       under *Scopes & roles* (reduce to the deferred toolkit-releveling half), comment on and close #232,
@@ -117,5 +125,8 @@ is a half-built guard that reads as protection.
 Then completed steps 7–11: catalogue visibility, the typo-safety startup warning, the sample, and the
 3.14 version bump. 2106 tests green — the implementation is complete.
 
-**Next: step 12**, the docs rewrite. Then step 13 close-out, which waits on the user confirming the
-feature is done.
+Step 12 (docs) is done as well — implementation guide and README both updated. 2106 tests green.
+
+**The feature is complete and awaiting your testing.** Step 13 close-out — updating `Requests.md` and the
+backlog, commenting on and closing #232, archiving `feature.md`, removing `plan/` and opening the PR —
+starts only once you confirm it is done.
