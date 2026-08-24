@@ -99,6 +99,11 @@ public class McpTeamContextEndToEndTests
 
                     var teamService = Substitute.For<ITeamService>();
                     teamService.GetTeamByKeyAsync(Arg.Any<string>()).Returns((ITeam)null);
+
+                    // The key's own team has to exist. Authentication now refuses a key whose team has been
+                    // deleted, so a fixture where the bound team never existed authenticates nothing.
+                    teamService.GetTeamByKeyAsync(BoundTeam)
+                        .Returns(new FakeTeam(BoundTeam, [], AccessLevel.Administrator));
                     teamService.GetTeamByKeyAsync(ConsentingTeam)
                         .Returns(new FakeTeam(ConsentingTeam, ["Support"], AccessLevel.Administrator));
                     teamService.GetTeamByKeyAsync(ClosedTeam)
