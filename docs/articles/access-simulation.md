@@ -88,6 +88,17 @@ bare `HasClaim`: an in-team claim spelled `simulation:demo` must not satisfy it.
 > reached demo mode through a team-level grant, they now need `simulation:demo` mapped to a system role or a
 > system API key. Run-as is unchanged.
 
+> **Already registering `simulation:demo` yourself? Leave it or delete it — both work.** Before 3.14.0 no
+> library code registered this scope, so a host that wanted demo mode had to register it. From 3.14.0 the
+> library registers it too, and in 3.14.0 exactly that collision threw
+> `System scope 'simulation:demo' is already registered.` at startup
+> ([#237](https://github.com/Tharga/Team/issues/237)).
+>
+> **Fixed in 3.14.1:** registering a system scope that already exists is a no-op, whichever side got there
+> first and whether or not the descriptions match. Your own registration is now harmless, so there is no
+> upgrade step — delete the line if you want the library's catalogue description to show, keep it if you
+> prefer your own wording, since the **first** registration's description is the one that is kept.
+
 **Where each one shows.** A run-as simulation puts a banner in the navigation bar, because somebody working
 with a reduced view needs to know. **A demo shows nothing there at all** — a banner reading "demo mode"
 across a customer demonstration defeats the point of it — so the profile card is the way out. That is a rule

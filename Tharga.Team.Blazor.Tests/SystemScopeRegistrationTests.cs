@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using Tharga.Team.Blazor.Features.Simulation;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Service;
 
@@ -10,14 +11,23 @@ namespace Tharga.Team.Blazor.Tests;
 /// The built-in system scopes must register exactly once, however many times a host wires the library up.
 /// </summary>
 /// <remarks>
-/// <b>Every registration in the block is individually guarded for a reason.</b>
-/// <c>SystemScopeRegistry.Register</c> throws on a duplicate name, and <c>AddThargaSystemScopes</c> reuses
-/// the registry already in the collection rather than making a new one — so an unguarded line throws on the
-/// second pass and takes the host's startup with it.
+/// <b>The guarding moved into the registry, and these tests are why it had to.</b>
+/// <c>SystemScopeRegistry.Register</c> used to throw on a duplicate name while <c>AddThargaSystemScopes</c>
+/// reused the registry already in the collection — so every registration site needed its own
+/// <c>if (scopes.All.All(...))</c>, and a site that forgot one took the host's startup with it. It now skips
+/// a name already present, and the per-site guards are gone.
 /// <para>
-/// <c>teams:purge</c> shipped that way in 3.13.0: the registration sat under the <c>teams:delete</c> guard's
-/// indentation without braces, so it ran unconditionally. Nothing caught it, because no test registered
-/// twice and no test asserted the scope existed at all. These do both.
+/// It failed that way twice. <c>teams:purge</c> shipped unguarded in 3.13.0 — the registration sat under the
+/// <c>teams:delete</c> guard's indentation without braces, so it ran unconditionally. Then 3.14.0 hit the
+/// half a per-site guard can never cover: the library began registering <c>simulation:demo</c>, a name hosts
+/// had been registering themselves, and <b>the unguarded call was in host code</b>
+/// (<a href="https://github.com/Tharga/Team/issues/237">#237</a>). Nothing the library writes can reach
+/// that, which is what made the per-site approach the wrong shape rather than merely error-prone.
+/// </para>
+/// <para>
+/// <b>Team scopes are deliberately not the same.</b> <c>ScopeRegistry.Register</c> still throws, because a
+/// team scope also carries an access level and a grant-only flag that two registrations can genuinely
+/// disagree about. A system scope carries a name and catalogue text, and the name is the identity.
 /// </para>
 /// <para>
 /// Note the <c>RegisterTeamService</c> call in every arrangement — the scope block sits inside
@@ -70,6 +80,93 @@ public class SystemScopeRegistrationTests
 
         Assert.Null(exception);
     }
+
+    /// <summary>
+    /// The reverse order of the test above, and the one Tharga/Team#237 reports: the library registers
+    /// first, then the host registers the same scope under its own name for it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only the library's own registrations are guarded, and it cannot guard the host's.</b> Until 3.14.0
+    /// no library code registered <c>simulation:demo</c>, so a host wanting demo mode had to register it
+    /// itself. Commit <c>fa279ec</c> made the library register it too, which turns every such host's
+    /// pre-existing line into a duplicate.
+    /// </remarks>
+    [Fact]
+    public void AHostRegisteringAScopeTheLibraryAlreadyRegistered_DoesNotThrow()
+    {
+        var services = Arrange();
+
+        var exception = Record.Exception(() => services.AddThargaSystemScopes(scopes =>
+            scopes.Register(SimulationScopes.Demo, HostDescription)));
+
+        Assert.Null(exception);
+    }
+
+    /// <summary>
+    /// The descriptions differ, which is why keying idempotency on name <i>and</i> description would not fix
+    /// the reported failure.
+    /// </summary>
+    /// <remarks>
+    /// The issue proposes making re-registration idempotent "when key and description match, and throw only
+    /// on a genuine conflict". The reporting host describes the scope as <see cref="HostDescription"/>; the
+    /// library describes it as what it does to your claims. A match on both fields is never satisfied here,
+    /// so that rule would leave the failure exactly as it is. This test exists so nobody re-derives that the
+    /// expensive way.
+    /// </remarks>
+    [Fact]
+    public void TheLibraryAndAHostDescribeTheSameScopeDifferently()
+    {
+        var services = Arrange();
+
+        var registry = services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>();
+        var libraryDescription = registry.All.Single(s => s.Name == SimulationScopes.Demo).Description;
+
+        Assert.NotEqual(HostDescription, libraryDescription);
+    }
+
+    /// <summary>
+    /// A duplicate registration must leave one entry, not two — the scope catalogue renders a row per entry.
+    /// </summary>
+    [Fact]
+    public void AScopeRegisteredTwice_AppearsOnceInTheCatalogue()
+    {
+        var services = Arrange();
+
+        services.AddThargaSystemScopes(scopes => scopes.Register(SimulationScopes.Demo, HostDescription));
+
+        var registry = services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>();
+        Assert.Single(registry.All, s => s.Name == SimulationScopes.Demo);
+    }
+
+    /// <summary>
+    /// The consumer's reported shape: the same host built more than once in one process, as
+    /// <c>WebApplicationFactory&lt;Program&gt;</c> does once per test.
+    /// </summary>
+    /// <remarks>
+    /// <b>The host registers before the library here, deliberately.</b> That is the order under which the
+    /// issue reports the first build succeeding, so if this fails on the second call the cause is repeated
+    /// construction rather than registration order — and if it passes, the "first one works" detail is
+    /// explained by ordering inside their host instead. The two are distinguishable only by running both.
+    /// </remarks>
+    [Fact]
+    public void BuildingTheSameHostTwiceInOneProcess_DoesNotThrow()
+    {
+        static void BuildHost()
+        {
+            var services = new ServiceCollection();
+            services.AddThargaSystemScopes(scopes => scopes.Register(SimulationScopes.Demo, HostDescription));
+            services.AddThargaTeamBlazor(o => o.RegisterTeamService<FakeTeamService, FakeUserService>());
+            services.BuildServiceProvider();
+        }
+
+        BuildHost();
+
+        var exception = Record.Exception(BuildHost);
+
+        Assert.Null(exception);
+    }
+
+    private const string HostDescription = "Use demo mode and view-as on the profile page";
 
     private sealed class FakeUserService(AuthenticationStateProvider asp) : UserServiceBase(asp)
     {

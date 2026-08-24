@@ -1845,6 +1845,18 @@ A scope name may legitimately appear in both. `audit:read` is registered at `Acc
 
 The toolkit auto-registers these; grant them through `ConfigureSystemRoles` or a system API key.
 
+> **Registering one of these yourself is safe.** `SystemScopeRegistry.Register` skips a name already
+> present, so a host declaring a scope the library also declares is a no-op rather than an error, in either
+> order. The **first** registration's description wins, so the catalogue text you see depends on which ran
+> first — register nothing you do not need if you care which wording appears.
+>
+> This changed in **3.14.1**. Before it, `Register` threw on a duplicate, and because 3.14.0 started
+> registering `simulation:demo` — a scope hosts had previously been obliged to register themselves — every
+> such host failed at startup with `System scope '…' is already registered.`
+> ([#237](https://github.com/Tharga/Team/issues/237)). **Team** scopes are unchanged and still throw:
+> `ScopeDefinition` also carries an access level and a grant-only flag, which two registrations can
+> genuinely disagree about, so there a duplicate is a real conflict rather than a repetition.
+
 | Scope | Authorizes |
 |---|---|
 | `teams:read` | Enumerating any team, regardless of membership. Discovery only — selecting a team still yields only what it consented to |
