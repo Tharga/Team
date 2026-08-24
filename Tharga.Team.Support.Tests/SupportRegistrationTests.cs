@@ -137,7 +137,7 @@ public class SupportRegistrationTests
     public async Task AnAuditedEvent_ComesOutOfTheFanOutAsASlackPost()
     {
         var slack = Substitute.For<ISlackClient>();
-        slack.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(SlackPostResult.Ok());
+        slack.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(SlackPostResult.Ok());
 
         using var provider = Build(s =>
         {
@@ -169,7 +169,7 @@ public class SupportRegistrationTests
         while (slack.ReceivedCalls().Count() == 0 && !cts.IsCancellationRequested) await Task.Delay(10, CancellationToken.None);
         await sink.StopAsync(CancellationToken.None);
 
-        await slack.Received(1).PostAsync("#team-events", Arg.Is<string>(t => t.Contains("Acme")), Arg.Any<CancellationToken>());
+        await slack.Received(1).PostAsync("#team-events", Arg.Is<string>(t => t.Contains("Acme")), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>A host that wants its own transport can replace it; the sink is written to an interface.</summary>
