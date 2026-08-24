@@ -39,22 +39,28 @@ Feature scope: `plan/feature.md`. Conventional-commit prefix for this branch: **
       Also: `AddCaseAsync(case, firstMessage)` and `CloseCaseAsync(…, closureMessage)` already express step
       3's atomicity requirement in the port's signature, which is where it belongs.
 
-- [ ] **3. Decide and encode atomicity (rule 5) — do not skip because it looks trivial.**
-      Raising a case creates a case *and* its first message. Closing sets a status *and* appends a system
-      message. If those are two writes, the port must be able to express one unit, or a crash leaves a case
-      with no message and the model's central invariant ("a case always has at least one message") is a lie.
-      Preferred: shape the port so each operation is **one document write** — messages embedded in the case
-      document, as members are embedded in a team today. That makes atomicity free rather than transactional,
-      and it is the same trick `TeamEntityBase.Members` already uses.
-      **If embedding is chosen, say what bounds it**: a case with thousands of messages is a growing
-      document. Record the limit and what happens at it.
+- [x] **3. Atomicity — DECIDED 2026-08-24: embed the transcript in the case document.**
+      Creating a case with its first message is one insert; closing sets the status and pushes the closure
+      entry in one update. Neither can half-apply, so the model's promise that a case always has a transcript
+      holds without a transaction. Same trick as `TeamEntityBase.Members`.
+      **What bounds it, with the arithmetic** — `SupportCaseLimits` in `Tharga.Team`:
+      `MaxMessageLength = 10_000` characters and `MaxMessagesPerCase = 500`. Their product is roughly 5 MB of
+      text against MongoDB's 16 MB document limit, so even a case made entirely of maximum-length messages
+      has headroom. Both are enforced in the store with an error naming the limit, not left to hope.
+      **The length cap is not only about document size** — support text is exactly where somebody pastes a
+      log file, so an unbounded body is how one message becomes a megabyte.
+      The limits live beside the contracts rather than in the adapter, because a caller needs to know a reply
+      can be refused before it builds a UI that lets someone type past it.
 
-- [ ] **4. The Mongo adapter, in `Tharga.Team.MongoDB`.**
-      `SupportCaseEntity` + `MongoSupportCaseStore`. Enum persisted **by name**
-      (`[BsonRepresentation(BsonType.String)]`) — `shared-instructions.md` is explicit, and this repo has
-      already been bitten: `SupportCaseStatus` must not be stored as an ordinal. Add it to the existing
-      persisted-enum sweep test rather than asserting it locally.
-      Registration follows `AddThargaTeamRepository`'s existing shape, conditional on the host opting in.
+- [x] **4. The Mongo adapter — DONE 2026-08-24.** `SupportCaseEntity` (+ embedded `SupportMessageEntity`,
+      `SupportChannelBindingEntity`), `SupportCaseRepositoryCollection` with a unique `TeamKey_CaseId` index
+      and an author index, `MongoSupportCaseStore`, `SupportCaseCollectionName`, and registration alongside
+      the team repository with `TryAdd` so a host substituting its own store wins.
+      **Found and fixed a hole in an existing guard while doing it.** `PersistedEnumRepresentationTests`
+      matched only types deriving from `EntityBase` or `TeamMemberBase`, so **embedded documents were swept
+      by nothing** - which is the likeliest place for an ordinal to hide. It now walks the reachable closure
+      from the entity roots, and the self-check asserts the three new embedded enums are found. Any future
+      embedded document is covered on the day it is written.
 
 - [ ] **5. Operations and the single enforcement point, in `Tharga.Team.Support`.**
       `ISupportCaseService` with `RaiseCaseAsync` / `ReplyToCaseAsync` / `CloseCaseAsync` / `GetCaseAsync` /
