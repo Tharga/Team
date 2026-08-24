@@ -106,6 +106,19 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         await UpdateAsync(teamKey, caseId, update);
     }
 
+    public async Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.ElemMatch(
+            x => x.Bindings,
+            Builders<SupportChannelBindingEntity>.Filter.And(
+                Builders<SupportChannelBindingEntity>.Filter.Eq(x => x.ChannelType, channelType),
+                Builders<SupportChannelBindingEntity>.Filter.Eq(x => x.ExternalId, externalId)));
+
+        var entity = await collection.GetOneAsync(filter);
+
+        return entity == null ? null : ToCase(entity);
+    }
+
     public async Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
     {
         await RequireCaseAsync(teamKey, caseId);

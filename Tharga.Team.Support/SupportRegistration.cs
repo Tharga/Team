@@ -98,7 +98,10 @@ public static class SupportRegistration
         // Only when a channel is configured. Without it the case service resolves no channel at all, which
         // is the site-only shape slice 1 shipped -- not a degraded version of this one.
         if (!string.IsNullOrWhiteSpace(caseOptions.SlackChannel))
+        {
             services.TryAddScoped<ISupportChannel, SlackSupportChannel>();
+            services.TryAddScoped<SlackEventHandler>();
+        }
 
         services.TryAddSingleton(TimeProvider.System);
 

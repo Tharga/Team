@@ -40,6 +40,9 @@
       every consumer installs.
     -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
+    <!-- The inbound Slack endpoint is an ASP.NET route. Private, so it does not flow to consumers that
+         only reference this package for the notification sink. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <!-- References the service; nothing references this back, so no consumer acquires it by accident. -->

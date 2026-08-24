@@ -88,6 +88,11 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases
+            .Select(x => x.Case)
+            .FirstOrDefault(c => (c.Bindings ?? []).Any(b => b.ChannelType == channelType && b.ExternalId == externalId)));
+
     public Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

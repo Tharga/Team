@@ -43,6 +43,17 @@ public interface ISupportCaseStore
     /// <summary>Closes a case and records the closure in its transcript, as one unit.</summary>
     Task CloseCaseAsync(string teamKey, string caseId, DateTime closedAt, string closedBy, SupportMessage closureMessage, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// The case projected onto a given channel identifier, or <c>null</c> if no case is bound to it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The only read here that is not scoped by team</b>, and it has to be: an inbound event arrives
+    /// carrying a channel's identifier and nothing else, so the binding is what resolves the team rather
+    /// than something the caller supplies. It is reached only from a channel adapter handling a verified
+    /// event, never from a user-facing path.
+    /// </remarks>
+    Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default);
+
     /// <summary>Records a case's projection onto an external channel.</summary>
     Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default);
 
