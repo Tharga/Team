@@ -21,15 +21,17 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
 {
     private readonly ITeamService _inner;
     private readonly TeamAuthorizer _authorizer;
+    private readonly TeamPurgeCascade _purgeCascade;
     private readonly TeamLifecycleOptions _lifecycle;
     private readonly IScopeRegistry _scopeRegistry;
     private readonly ITenantRoleRegistry _tenantRoleRegistry;
     private readonly string _customRoleManageScope;
 
-    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null)
+    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null, TeamPurgeCascade purgeCascade = null)
     {
         _inner = inner;
         _authorizer = authorizer;
+        _purgeCascade = purgeCascade;
         _lifecycle = lifecycle;
         _scopeRegistry = scopeRegistry;
         _tenantRoleRegistry = tenantRoleRegistry;
@@ -148,6 +150,12 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
             throw new UnauthorizedAccessException(
                 $"Permanently removing team '{teamKey}' requires the '{SystemTeamScopes.Purge}' system scope. " +
                 $"'{SystemTeamScopes.Delete}' authorizes a recoverable delete, not this.");
+
+        // Destroy the toolkit's own per-team data first. Purge drops the host's per-team database, which
+        // does not reach the shared collections holding API keys, icons and support cases -- so without this
+        // a purged tenant's credentials outlive it. Before the record, so a failure leaves a team that is
+        // still visible and still purgeable rather than data nothing can find.
+        if (_purgeCascade != null) await _purgeCascade.RunAsync(teamKey);
 
         await _inner.PurgeTeamAsync<TMember>(teamKey);
     }
