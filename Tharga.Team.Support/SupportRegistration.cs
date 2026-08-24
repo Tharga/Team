@@ -85,8 +85,21 @@ public static class SupportRegistration
     /// there is no unchecked instance in the container for a component to resolve by accident.
     /// </para>
     /// </remarks>
-    public static IServiceCollection AddThargaSupportCases(this IServiceCollection services)
+    public static IServiceCollection AddThargaSupportCases(this IServiceCollection services, Action<SupportCaseOptions> configure = null)
     {
+        var caseOptions = new SupportCaseOptions();
+        configure?.Invoke(caseOptions);
+        services.Configure<SupportCaseOptions>(o =>
+        {
+            o.SlackChannel = caseOptions.SlackChannel;
+            o.SigningSecret = caseOptions.SigningSecret;
+        });
+
+        // Only when a channel is configured. Without it the case service resolves no channel at all, which
+        // is the site-only shape slice 1 shipped -- not a degraded version of this one.
+        if (!string.IsNullOrWhiteSpace(caseOptions.SlackChannel))
+            services.TryAddScoped<ISupportChannel, SlackSupportChannel>();
+
         services.TryAddSingleton(TimeProvider.System);
 
         // Purging a team destroys its cases. The store has exposed DeleteCasesForTeamAsync since the cases
@@ -109,7 +122,8 @@ public static class SupportRegistration
                 new SupportCaseService(
                     sp.GetRequiredService<ISupportCaseStore>(),
                     sp.GetRequiredService<TeamAuthorizer>(),
-                    sp.GetRequiredService<TimeProvider>()),
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetService<ISupportChannel>()),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));

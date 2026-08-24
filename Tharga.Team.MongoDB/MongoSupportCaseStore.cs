@@ -106,6 +106,38 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         await UpdateAsync(teamKey, caseId, update);
     }
 
+    public async Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAsync(teamKey, caseId);
+
+        var update = Builders<SupportCaseEntity>.Update
+            .Push(x => x.Bindings, new SupportChannelBindingEntity
+            {
+                ChannelType = binding.ChannelType,
+                ExternalId = binding.ExternalId
+            });
+
+        await UpdateAsync(teamKey, caseId, update);
+    }
+
+    /// <remarks>
+    /// The transcript is an embedded array, so the entry is rewritten in place by index rather than by a
+    /// positional operator - the sequence is its position, and rewriting the whole array would race with a
+    /// reply arriving at the same moment.
+    /// </remarks>
+    public async Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default)
+    {
+        var entity = await RequireCaseAsync(teamKey, caseId);
+
+        var index = Array.FindIndex(entity.Messages, x => x.Sequence == sequence);
+        if (index < 0) return;
+
+        var update = Builders<SupportCaseEntity>.Update
+            .Set($"Messages.{index}.Delivery", delivery.ToString());
+
+        await UpdateAsync(teamKey, caseId, update);
+    }
+
     public async Task<int> DeleteCasesForTeamAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         var filter = Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey);
@@ -210,7 +242,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorIdentity = entity.AuthorIdentity,
         AuthorName = entity.AuthorName,
         Body = entity.Body,
-        SentAt = entity.SentAt
+        SentAt = entity.SentAt,
+        Delivery = entity.Delivery
     };
 
     private static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -220,6 +253,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorIdentity = message.AuthorIdentity,
         AuthorName = message.AuthorName,
         Body = message.Body,
-        SentAt = message.SentAt
+        SentAt = message.SentAt,
+        Delivery = message.Delivery
     };
 }

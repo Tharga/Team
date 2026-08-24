@@ -43,6 +43,19 @@ public interface ISupportCaseStore
     /// <summary>Closes a case and records the closure in its transcript, as one unit.</summary>
     Task CloseCaseAsync(string teamKey, string caseId, DateTime closedAt, string closedBy, SupportMessage closureMessage, CancellationToken cancellationToken = default);
 
+    /// <summary>Records a case's projection onto an external channel.</summary>
+    Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records whether one transcript entry reached the case's channel.
+    /// </summary>
+    /// <remarks>
+    /// A second write after the message itself, deliberately. The case is written first and is authoritative;
+    /// the channel is a projection, so a channel that is slow or down must not delay or block the record of
+    /// what somebody said.
+    /// </remarks>
+    Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Destroys every case belonging to a team. Backs the purge cascade.
     /// </summary>

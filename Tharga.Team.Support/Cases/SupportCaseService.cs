@@ -12,7 +12,7 @@ namespace Tharga.Team.Support.Cases;
 /// here is the domain: assigning identity, stamping the author, and composing the operations the store
 /// applies atomically.
 /// </remarks>
-internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer authorizer, TimeProvider timeProvider) : ISupportCaseService
+internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer authorizer, TimeProvider timeProvider, ISupportChannel channel = null) : ISupportCaseService
 {
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default)
     {
@@ -46,6 +46,11 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
 
         await store.AddCaseAsync(supportCase, firstMessage, cancellationToken);
 
+        // The case is written first and is authoritative. Projecting it onto a channel comes after, so a
+        // channel that is slow, misconfigured or down cannot stop somebody reporting a problem -- they get a
+        // case either way, and an undelivered entry stays visible as Pending rather than being lost.
+        await ProjectAsync(supportCase, body, firstMessage.Sequence, cancellationToken);
+
         return supportCase;
     }
 
@@ -75,6 +80,48 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+
+        await DeliverAsync(teamKey, caseId, existing, message with { Sequence = (existing?.MessageCount ?? 0) + 1 }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Opens the channel projection for a new case and records whether the opening message got there.
+    /// </summary>
+    private async Task ProjectAsync(SupportCase supportCase, string body, int sequence, CancellationToken cancellationToken)
+    {
+        if (channel == null) return;
+
+        var binding = await channel.OpenAsync(supportCase, body, cancellationToken);
+
+        if (binding == null)
+        {
+            // No channel configured, or it refused. Neither is an error: the case stands on its own, and
+            // Pending marks the entry as something a retry or a reminder can act on.
+            await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence, SupportMessageDelivery.Pending, cancellationToken);
+            return;
+        }
+
+        await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, binding, cancellationToken);
+        await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence, SupportMessageDelivery.Sent, cancellationToken);
+    }
+
+    /// <summary>Posts a reply into the case's existing projection, if it has one.</summary>
+    private async Task DeliverAsync(string teamKey, string caseId, SupportCase existing, SupportMessage message, CancellationToken cancellationToken)
+    {
+        if (channel == null) return;
+
+        var binding = existing?.Bindings?.FirstOrDefault(x => x.ChannelType == channel.ChannelType);
+
+        if (binding == null)
+        {
+            await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence, SupportMessageDelivery.Pending, cancellationToken);
+            return;
+        }
+
+        var delivered = await channel.PostAsync(binding, message, cancellationToken);
+
+        await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence,
+            delivered ? SupportMessageDelivery.Sent : SupportMessageDelivery.Failed, cancellationToken);
     }
 
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)

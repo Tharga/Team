@@ -72,6 +72,9 @@ public record SupportMessageEntity
     public required string Body { get; init; }
 
     public required DateTime SentAt { get; init; }
+
+    [BsonRepresentation(BsonType.String)]
+    public SupportMessageDelivery Delivery { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system. Unused until the channel work lands.</summary>

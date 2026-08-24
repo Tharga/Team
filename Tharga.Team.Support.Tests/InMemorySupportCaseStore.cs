@@ -88,6 +88,29 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+
+        var bindings = (found.Case.Bindings ?? []).Append(binding).ToArray();
+
+        Replace(found.Case with { Bindings = bindings }, found.Messages);
+
+        return Task.CompletedTask;
+    }
+
+    public Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+
+        var index = found.Messages.FindIndex(x => x.Sequence == sequence);
+        if (index >= 0) found.Messages[index] = found.Messages[index] with { Delivery = delivery };
+
+        Replace(found.Case, found.Messages);
+
+        return Task.CompletedTask;
+    }
+
     public Task<int> DeleteCasesForTeamAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         var removed = _cases.RemoveAll(x => x.Case.TeamKey == teamKey);
