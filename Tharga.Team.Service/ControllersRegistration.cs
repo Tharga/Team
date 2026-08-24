@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.OpenApi;
 using Tharga.Toolkit.Password;
 
@@ -100,6 +101,12 @@ public static class ControllersRegistration
         services.AddSystemService<ISystemApiKeyManagementService, SystemApiKeyManagementService>();
         services.AddTransient<IApiKeyRepository, ApiKeyRepository>();
         services.AddTransient<IApiKeyRepositoryCollection, ApiKeyRepositoryCollection>();
+
+        // Purging a team must destroy its API keys. Purge drops the host's per-team database, which does
+        // not reach this shared collection -- so without this a purged tenant's credentials outlive it.
+        services.TryAddSingleton<TeamPurgeCascade>();
+        services.AddTransient<ITeamPurgeParticipant, ApiKeyPurgeParticipant>();
+
         return services;
     }
 

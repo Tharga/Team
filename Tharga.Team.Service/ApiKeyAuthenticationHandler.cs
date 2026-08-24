@@ -17,6 +17,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     private readonly IScopeRegistry _scopeRegistry;
     private readonly IAuditLogger _auditLogger;
     private readonly ITenantRoleService _tenantRoleService;
+    private readonly ITeamService _teamService;
 
     /// <summary>
     /// Creates a new instance of the API key authentication handler.
@@ -28,13 +29,56 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         IApiKeyAdministrationService apiKeyAdministrationService,
         IScopeRegistry scopeRegistry = null,
         CompositeAuditLogger auditLogger = null,
-        ITenantRoleService tenantRoleService = null)
+        ITenantRoleService tenantRoleService = null,
+        ITeamService teamService = null)
         : base(options, logger, encoder)
     {
         _apiKeyAdministrationService = apiKeyAdministrationService;
         _scopeRegistry = scopeRegistry;
         _auditLogger = auditLogger;
         _tenantRoleService = tenantRoleService;
+        _teamService = teamService;
+    }
+
+    /// <summary>
+    /// Whether the team a key belongs to still exists.
+    /// </summary>
+    /// <remarks>
+    /// <b>A key must not outlive its team.</b> Deleting a team soft-deletes it, and every other read in the
+    /// toolkit excludes soft-deleted teams — but authentication used to look at the key alone, so a deleted
+    /// team's keys kept working and kept carrying that team's scope claims. This needs no purge and no key
+    /// reuse: the ordinary <c>teams:delete</c> path was enough.
+    /// <para>
+    /// <b>Read through <see cref="ITeamService"/> on purpose.</b> This is framework code building a
+    /// principal, which is the documented case for the unchecked service — requiring a scope while issuing
+    /// the claims that would grant it is circular.
+    /// </para>
+    /// <para>
+    /// <b>Fails open on a store fault, and that is deliberate.</b> A lookup that throws is not evidence the
+    /// team is gone; treating it as such would turn a transient database blip into every API key on the
+    /// deployment being refused at once. <c>TeamRevalidatingAuthenticationStateProvider.IsDisabledAsync</c>
+    /// reasons the same way for the same reason. A team that is genuinely deleted returns null rather than
+    /// throwing, so the security case is served by the null path.
+    /// </para>
+    /// <para>
+    /// System keys carry no team and skip this entirely — a system grant is not scoped to a tenant, so there
+    /// is nothing to check.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> IsTeamLiveAsync(IApiKey key)
+    {
+        if (key.TeamKey == null) return true;
+        if (_teamService == null) return true;
+
+        try
+        {
+            return await _teamService.GetTeamByKeyAsync(key.TeamKey) != null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not confirm the team behind an API key still exists. Allowing the key rather than refusing every key on a store fault.");
+            return true;
+        }
     }
 
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
@@ -71,6 +115,12 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         {
             LogAuthEvent(key.Name ?? key.TeamKey ?? "system", key.Key, key.TeamKey, false, "Disabled API key");
             return AuthenticateResult.Fail("This API key has been disabled.");
+        }
+
+        if (!await IsTeamLiveAsync(key))
+        {
+            LogAuthEvent(key.Name ?? key.TeamKey, key.Key, key.TeamKey, false, "API key for a deleted team");
+            return AuthenticateResult.Fail("The team this API key belongs to no longer exists.");
         }
 
         var claims = new List<Claim>

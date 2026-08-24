@@ -56,6 +56,10 @@ public static class ThargaBlazorRegistration
         // request and cache nothing across the requests it exists to serve.
         services.TryAddSingleton<ITeamCache, InMemoryTeamCache>();
 
+        // The composition root owns the cascade; each store registers its own ITeamPurgeParticipant. An
+        // adapter package cannot register this - it depends on contracts, not on the domain.
+        services.TryAddSingleton<TeamPurgeCascade>();
+
         if (o._teamService != null)
         {
             services.AddScoped<ITeamStateService, TeamStateService>();
@@ -435,7 +439,8 @@ public static class ThargaBlazorRegistration
             var scopeRegistry = sp.GetService<IScopeRegistry>();
             var tenantRoleRegistry = sp.GetService<ITenantRoleRegistry>();
             var dynamicRoleOptions = sp.GetService<DynamicTenantRoleOptions>();
-            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope);
+            var purgeCascade = sp.GetService<TeamPurgeCascade>();
+            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade);
         });
     }
 

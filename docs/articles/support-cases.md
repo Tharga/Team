@@ -112,16 +112,9 @@ than the case itself.
 | Event | Effect on cases |
 |---|---|
 | The author is deleted, or leaves the team | **Cases and transcripts are kept**, and stay readable with the name they were written with. Nobody then satisfies the authorship check, so such a case is reachable through `support:read` / `support:manage` |
-| The team is soft-deleted | **Cases remain readable to a caller whose team claim still names it.** See the limitation below |
-| The team is **purged** | `ISupportCaseStore.DeleteCasesForTeamAsync` destroys them — **not yet wired into the purge path.** See the limitation below |
+| The team is soft-deleted | **Cases remain readable to a caller whose team claim still names it.** See the limitation below. Restoring the team is unaffected |
+| The team is **purged** | **Cases are destroyed with it**, by a purge participant |
 
-> **Two known limitations in this release, both about team lifetime.**
->
-> **Purge does not yet cascade to cases.** The store exposes `DeleteCasesForTeamAsync` and it is the intended
-> mechanism, but purging a team currently leaves its cases behind. Purge drops the host's per-team database,
-> which does not reach the toolkit's own shared collections. Until this is wired, a host purging a team
-> should call `DeleteCasesForTeamAsync` itself.
->
-> **A soft-deleted team's cases are still readable** to a caller whose `TeamKey` claim still names it, which
-> is inconsistent with every other team read (all of which exclude soft-deleted teams). Restoring the team is
-> unaffected either way.
+> **One known limitation.** A soft-deleted team's cases are still readable to a caller whose `TeamKey` claim
+> still names it, which is inconsistent with every other team read — all of which exclude soft-deleted teams.
+> Purge is unaffected: it destroys the cases either way.

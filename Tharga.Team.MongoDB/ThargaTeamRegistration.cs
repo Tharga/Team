@@ -24,6 +24,10 @@ public static class ThargaTeamRegistration
         services.TrackMongoCollection(typeof(IIconRepositoryCollection), typeof(IconRepositoryCollection));
         services.TryAddScoped<IIconStore, MongoIconStore>();
 
+        // Purging a team destroys its icons too. Hygiene rather than security -- an orphaned icon grants
+        // nothing -- but one seam should cover every per-team store, not the ones somebody remembered.
+        services.AddTransient<ITeamPurgeParticipant, IconPurgeParticipant>();
+
         if (o._userEntity != null)
         {
             var userEntityType = o._userEntity;

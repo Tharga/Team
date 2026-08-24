@@ -89,6 +89,10 @@ public static class SupportRegistration
     {
         services.TryAddSingleton(TimeProvider.System);
 
+        // Purging a team destroys its cases. The store has exposed DeleteCasesForTeamAsync since the cases
+        // shipped; this is the wiring that was missing, because the purge site could not reach the store.
+        services.AddTransient<ITeamPurgeParticipant, SupportCasePurgeParticipant>();
+
         services.AddThargaScopes(scopes =>
         {
             scopes.Register(SupportScopes.Read, AccessLevel.Administrator,
