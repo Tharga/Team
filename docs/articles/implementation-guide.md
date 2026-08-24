@@ -740,6 +740,74 @@ when you want the standard types but different behaviour.
 
 > **Note:** `AddThargaTeamBlazor()` internally calls `AddThargaBlazor()`, so `BreadCrumbService` and `BlazoredLocalStorage` are registered automatically.
 
+### Members with no access level
+
+`AccessLevel` is declared `Owner, Administrator, User, Viewer, Custom`, so **`Owner` is the enum's zero
+value**. A stored member document with no `AccessLevel` field therefore reads back as an **Owner** — and once
+loaded it is indistinguishable from a member deliberately made one, because they are the same value.
+
+Two things produce such a document: it was written before the field existed, or a `CreateTeamMember` override
+returned a member without copying the invited level.
+
+**From 3.14.x the toolkit tells you.** When a team repository is registered, a startup check counts members
+with no stored level and logs a warning naming the affected teams:
+
+```
+3 team(s) contain members with no stored AccessLevel: 'acme', 'globex', 'initech'.
+Those members are being treated as Owner, because Owner is the enum's zero value and an
+absent field cannot be told from a stored one after loading. …
+```
+
+It **warns and never throws** — the condition is pre-existing data, not a wiring mistake, and refusing to
+start would turn a long-standing silent grant into an outage. A healthy deployment costs one count query per
+start. Turn it off once your data is clean:
+
+```csharp
+builder.Services.AddThargaTeamRepository(o =>
+{
+    o.CheckMemberAccessLevels = false;   // default: true
+    o.RegisterTeamRepository<TeamEntity, TeamMember>();
+});
+```
+
+#### Finding and fixing the members
+
+The check names teams, not members, because naming members means reading rosters at startup. To list the
+members themselves, run this in `mongosh` against your database:
+
+```js
+db.Team.aggregate([
+  { $match: { "Members.AccessLevel": { $exists: false } } },
+  { $project: {
+      Key: 1,
+      Members: { $filter: {
+        input: "$Members",
+        cond: { $eq: [ { $type: "$$this.AccessLevel" }, "missing" ] }
+      } }
+  } }
+])
+```
+
+Then set an explicit level on each. **Decide it deliberately — do not bulk-assign.** These members have been
+acting as owners, so some of them may genuinely be owners; a blanket `Viewer` would silently demote whoever
+really was one, and a blanket `Owner` preserves exactly the grant you are investigating. That is why the
+toolkit reports rather than repairs.
+
+```js
+db.Team.updateOne(
+  { Key: "acme" },
+  { $set: { "Members.$[m].AccessLevel": "User" } },
+  { arrayFilters: [ { "m.Key": "the-member-key", "m.AccessLevel": { $exists: false } } ] }
+)
+```
+
+Store the level **by name** (`"User"`), not as a number — every access level in this toolkit is persisted as
+a string.
+
+> **This is migration work, not optional hygiene.** A future major release makes an unset level grant
+> **nothing** instead of granting Owner. Any member you leave unfixed keeps working until then and is
+> **refused** afterwards, so correcting the data now is what makes that upgrade uneventful.
+
 ### Implementing the required types
 
 You need to create entity and service types that extend the base classes:
