@@ -2,7 +2,9 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
+using Tharga.Team.Support.Cases;
 using Tharga.Team.Support.Notifications;
 using Tharga.Team.Support.Slack;
 
@@ -60,6 +62,47 @@ public static class SupportRegistration
         // instance would queue entries nothing drains.
         services.AddSingleton<IAuditLogger>(sp => sp.GetRequiredService<SlackNotificationSink>());
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<SlackNotificationSink>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Registers support cases: a signed-in member can raise a case for their team, reply to it and read its
+    /// history, persisted and authorized.
+    /// </summary>
+    /// <remarks>
+    /// <b>Separate from <see cref="AddThargaSupport"/> on purpose.</b> Notifications must be usable without
+    /// the case machinery — a product that only wants "post to Slack when a team is created" should not
+    /// acquire a case store and a scope pair for it.
+    /// <para>
+    /// <b>Requires a registered <see cref="ISupportCaseStore"/>.</b> `AddThargaTeamRepository` provides the
+    /// MongoDB one when a team repository is registered. Nothing here registers a store, because choosing
+    /// storage is the host's decision and this package must not acquire a database dependency.
+    /// </para>
+    /// <para>
+    /// <b>Nothing else may be registered as <see cref="ISupportCaseService"/>.</b> The only registration is
+    /// the authorizing decorator; the implementation it wraps is internal and unregistered by itself, so
+    /// there is no unchecked instance in the container for a component to resolve by accident.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddThargaSupportCases(this IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+
+        services.AddThargaScopes(scopes =>
+        {
+            scopes.Register(SupportScopes.Read, AccessLevel.Administrator,
+                "Read any support case in the team, not only your own. A case holds whatever a user typed into it.");
+            scopes.Register(SupportScopes.Manage, AccessLevel.Administrator,
+                "Reply to and close any support case in the team.");
+        });
+
+        services.AddScoped<ISupportCaseService>(sp => new AuthorizationSupportCaseServiceDecorator(
+            new SupportCaseService(
+                sp.GetRequiredService<ISupportCaseStore>(),
+                sp.GetRequiredService<TeamAuthorizer>(),
+                sp.GetRequiredService<TimeProvider>()),
+            sp.GetRequiredService<TeamAuthorizer>()));
 
         return services;
     }
