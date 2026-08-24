@@ -30,6 +30,21 @@ public record ThargaTeamOptions
     public string SupportCaseCollectionName { get; set; } = "SupportCase";
 
     /// <summary>
+    /// Collection remembering which inbound channel events have been handled. Default
+    /// <c>SupportEventLedger</c>.
+    /// </summary>
+    public string SupportEventLedgerCollectionName { get; set; } = "SupportEventLedger";
+
+    /// <summary>
+    /// How long a handled event is remembered. Default 24 hours.
+    /// </summary>
+    /// <remarks>
+    /// Only has to outlast the channel's own retry window - Slack gives up long before a day - so this is
+    /// generous. Entries expire by TTL index rather than accumulating.
+    /// </remarks>
+    public TimeSpan SupportEventLedgerRetention { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>
     /// Whether to report, at startup, stored team members that carry no access level and are therefore
     /// being treated as <see cref="AccessLevel.Owner"/>. Default <c>true</c>.
     /// </summary>
