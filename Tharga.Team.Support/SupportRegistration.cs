@@ -97,12 +97,18 @@ public static class SupportRegistration
                 "Reply to and close any support case in the team.");
         });
 
-        services.AddScoped<ISupportCaseService>(sp => new AuthorizationSupportCaseServiceDecorator(
-            new SupportCaseService(
-                sp.GetRequiredService<ISupportCaseStore>(),
-                sp.GetRequiredService<TeamAuthorizer>(),
-                sp.GetRequiredService<TimeProvider>()),
-            sp.GetRequiredService<TeamAuthorizer>()));
+        // Auditing wraps authorization so a refusal is recorded as a failed entry rather than lost, matching
+        // how access-level and scope denials are already audited. Composed the other way round, every
+        // refused attempt would vanish and nothing would fail to compile.
+        services.AddScoped<ISupportCaseService>(sp => new AuditingSupportCaseServiceDecorator(
+            new AuthorizationSupportCaseServiceDecorator(
+                new SupportCaseService(
+                    sp.GetRequiredService<ISupportCaseStore>(),
+                    sp.GetRequiredService<TeamAuthorizer>(),
+                    sp.GetRequiredService<TimeProvider>()),
+                sp.GetRequiredService<TeamAuthorizer>()),
+            sp.GetRequiredService<CompositeAuditLogger>(),
+            sp.GetRequiredService<IAuditEntryFactory>()));
 
         return services;
     }
