@@ -57,24 +57,34 @@ Branch: `feature/grant-only-scopes` (from `master`)
       self-checks that it still finds an assignment in each — a scan matching nothing would otherwise pass
       forever while reading as "everything checked".
 
-- [ ] **7. Keep it visible in the catalogue.** `ScopeRow` gains `GrantOnly`; `ScopeReference.Build` sets it
-      and returns an empty `AccessLevels` list for such a scope. `ScopeView.razor` renders a marker and a
-      short explanation. Tests in `ScopeReferenceTests`.
+- [x] **7. Keep it visible in the catalogue.** Done 2026-08-24. `ScopeRow` gained `GrantOnly`;
+      `ScopeReference.Build` passes it through. The empty `AccessLevels` came for free — `Build` already
+      derives that list from `GetScopesForAccessLevel`, which step 3 taught to exclude grant-only. Without
+      the flag such a row would read as an ordinary scope nobody happens to hold, which is why the marker
+      and not just the empty list is the deliverable. `ScopeView.razor` renders a lock plus a legend line.
+      4 tests.
+      **Hit the #204 text ratchet.** `ScopeView` is an un-migrated component capped at 14 literal strings,
+      and the tooltip made 15. Rather than raise the cap — the test says the number may only go down — the
+      two new strings go through a new `ScopeViewText` catalogue, so the count stays 14 and the component
+      is marginally closer to migration. New work does not get to grow the backlog it should shrink.
 
-- [ ] **8. Typo safety for code-registered roles.** A startup `IHostedService` (shape follows the existing
-      `RetiredScopeCheck`) that **logs a warning** naming any `ITenantRoleRegistry` role scope absent from
-      `IScopeRegistry`. Warn rather than throw: the currently documented role-only workaround deliberately
-      puts unregistered scopes on code roles, and throwing would break every host following the guide as
-      written. Tests.
+- [x] **8. Typo safety for code-registered roles.** Done 2026-08-24. `UnregisteredRoleScopeCheck` follows
+      the `RetiredScopeCheck` shape and **logs a warning** per offending role scope, naming both the role
+      and the scope. Warn rather than throw: naming an unregistered scope on a code role is the documented
+      pre-3.14 way to get grant-only behaviour, so throwing would break every host that followed the guide
+      as written. Registered in `ThargaBlazorRegistration` with `GetService` (both registries are optional)
+      and tolerant of nulls. 6 tests, including one asserting a grant-only scope produces *no* warning —
+      that it is registered is the whole point.
 
-- [ ] **9. Sample.** Demonstrate `RegisterGrantOnly` plus the role that grants it in
-      `Tharga.Team.Sample/Program.cs`.
+- [x] **9. Sample.** Done 2026-08-24. `case:read` registered grant-only, with a `CaseOfficer` role as its
+      only grant path, in `Tharga.Team.Sample/Program.cs`. The sample already enables `EnableDynamicRoles`,
+      so it also demonstrates the exclusion: the scope cannot be picked in `TenantRoleManager`.
 
-- [ ] **10. Version.** `MAJOR_MINOR` 3.13 → 3.14 in the workflow. Additive API, no break.
+- [x] **10. Version.** Done 2026-08-24. `MAJOR_MINOR` 3.13 → 3.14 in the CI workflow.
 
-- [ ] **11. Full build + test suite green.** Commit.
+- [x] **11. Full build + test suite green.** Done 2026-08-24 — 2106 passed, 0 failed.
 
-- [ ] **12. Docs (`docs:` commit).** Rewrite `implementation-guide.md` → *Grant-only scopes* to lead with
+- [~] **12. Docs (`docs:` commit).** Rewrite `implementation-guide.md` → *Grant-only scopes* to lead with
       `RegisterGrantOnly`, keep the role-only approach as the alternative for hosts on ≤ 3.13, and state
       the three exemptions plus the toolkit-scope limitation. Check README for a scopes section.
 
@@ -104,5 +114,8 @@ Steps 4–6 were done as one unit deliberately: with only step 3 in place a gran
 level grants but still reachable by any administrator through a custom role or the override picker, which
 is a half-built guard that reads as protection.
 
-**Next: step 7**, keeping grant-only scopes visible in the `ScopeView` catalogue — the visibility half
-that is the whole point of registering them rather than using the role-only workaround.
+Then completed steps 7–11: catalogue visibility, the typo-safety startup warning, the sample, and the
+3.14 version bump. 2106 tests green — the implementation is complete.
+
+**Next: step 12**, the docs rewrite. Then step 13 close-out, which waits on the user confirming the
+feature is done.

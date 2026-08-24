@@ -4,8 +4,10 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Tharga.Team
 @using Tharga.Team.Blazor.Features.Team
+@using Tharga.Team.Blazor.Framework
 @inject IServiceProvider ServiceProvider
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IThargaTextProvider TextProvider
 
 @*
     Interactive scope explorer: pick an access level and roles to see which scopes a member would have.
@@ -62,6 +64,10 @@
         {
             <text>Pre-selected to your current membership — <b>Override</b> marks your personal scope overrides.</text>
         }
+        @if (_rows.Any(r => r.GrantOnly))
+        {
+            <text>@_text[ScopeViewText.GrantOnlyLegend]</text>
+        }
     </RadzenText>
 
     <RadzenDataGrid Data="@_rows" TItem="ScopeRow"
@@ -78,6 +84,11 @@
                     {
                         <RadzenIcon Icon="star" Style="color: var(--rz-warning); margin-left: .35rem; font-size: 1rem; cursor: help;"
                                     title="You have a personal scope override for this scope." />
+                    }
+                    @if (context.GrantOnly)
+                    {
+                        <RadzenIcon Icon="lock" Style="color: var(--rz-danger); margin-left: .35rem; font-size: 1rem; cursor: help;"
+                                    title="@_text[ScopeViewText.GrantOnlyTooltip]" />
                     }
                 </Template>
             </RadzenDataGridColumn>
@@ -168,9 +179,12 @@
     private IEnumerable<string> _selectedRolesValue = Array.Empty<string>();
     private HashSet<string> _overrides = new();
     private bool _loadedFromMember;
+    private TextSet _text = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(ScopeViewText.All);
+
         var scopeRegistry = ServiceProvider.GetService<IScopeRegistry>();
         var roleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
         var systemRegistry = ServiceProvider.GetService<ISystemScopeRegistry>();

@@ -94,6 +94,11 @@ builder.AddThargaTeam(o =>
         scopes.Register("firewall:open", AccessLevel.Administrator); // no description — shows no tooltip
         scopes.Register("reports:export", AccessLevel.User, "Export reports to file.");
         scopes.Register("billing:manage", AccessLevel.Administrator, "Manage billing and invoices.");
+
+        // Grant-only: reaches no member by access level, not even Owner or Administrator, and cannot be
+        // added to a runtime custom role or a scope override. The only way to hold it is the CaseOfficer
+        // role registered below. Sign in as an owner and open /scopes to see it locked and ungranted.
+        scopes.RegisterGrantOnly("case:read", "Read secrecy-classified case records.");
     };
 
     // Demo tenant roles (bundles of scopes). Assign these to members; their scopes resolve live now that
@@ -102,6 +107,7 @@ builder.AddThargaTeam(o =>
     {
         roles.Register("Editor", ["orders:write", "content:publish", "reports:export"], "Content editors — manage orders and publish content.");
         roles.Register("Support", ["orders:read", "valuegroup:read"]); // no description — tooltip shows scopes only
+        roles.Register("CaseOfficer", ["case:read"], "The only grant path for the grant-only case:read scope.");
     };
 
     // Demo: let team admins define their own custom roles at runtime (see the /roles page → TenantRoleManager).
