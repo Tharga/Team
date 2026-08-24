@@ -114,4 +114,52 @@ public class ScopeRegistryTests
         Assert.DoesNotContain("doc:read", scopes);
         Assert.DoesNotContain("doc:delete", scopes);
     }
+
+    [Fact]
+    public void RegisterGrantOnly_Adds_A_Catalogue_Entry_Marked_GrantOnly()
+    {
+        var registry = new ScopeRegistry();
+        registry.RegisterGrantOnly("case:read", "Read secrecy-classified case records.");
+
+        var definition = Assert.Single(registry.All);
+        Assert.Equal("case:read", definition.Name);
+        Assert.Equal("Read secrecy-classified case records.", definition.Description);
+        Assert.True(definition.GrantOnly);
+    }
+
+    [Fact]
+    public void Register_Leaves_GrantOnly_False()
+    {
+        var registry = new ScopeRegistry();
+        registry.Register("doc:read", AccessLevel.Viewer, "View documents.");
+
+        Assert.False(Assert.Single(registry.All).GrantOnly);
+    }
+
+    [Fact]
+    public void RegisterGrantOnly_Duplicate_Throws()
+    {
+        var registry = new ScopeRegistry();
+        registry.RegisterGrantOnly("case:read");
+
+        Assert.Throws<InvalidOperationException>(() => registry.RegisterGrantOnly("case:read"));
+    }
+
+    [Fact]
+    public void RegisterGrantOnly_Collides_With_An_Ordinary_Registration_Of_The_Same_Name()
+    {
+        var registry = new ScopeRegistry();
+        registry.Register("case:read", AccessLevel.Administrator);
+
+        Assert.Throws<InvalidOperationException>(() => registry.RegisterGrantOnly("case:read"));
+    }
+
+    [Fact]
+    public void Register_Collides_With_A_GrantOnly_Registration_Of_The_Same_Name()
+    {
+        var registry = new ScopeRegistry();
+        registry.RegisterGrantOnly("case:read");
+
+        Assert.Throws<InvalidOperationException>(() => registry.Register("case:read", AccessLevel.Administrator));
+    }
 }

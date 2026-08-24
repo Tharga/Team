@@ -12,15 +12,19 @@ Branch: `feature/grant-only-scopes` (from `master`)
       a Linux-only `BadImageFormatException` in CI. The backlog's own recorded recommendation is "do it as
       its own PR — it needs Linux-side iteration and does not belong inside a feature PR."
 
-- [ ] **2. `ScopeDefinition` + `ScopeRegistry` API.**
-      - Add `bool GrantOnly = false` to the `ScopeDefinition` record (fourth positional, source-compatible).
-      - Add `ScopeRegistry.RegisterGrantOnly(string scopeName, string description = null)`, storing
+- [x] **2. `ScopeDefinition` + `ScopeRegistry` API.** Done 2026-08-24.
+      - `ScopeDefinition` gained `bool GrantOnly = false` as a fourth positional parameter, with `<param>`
+        docs on each member. Source-compatible: every existing construction site still compiles.
+      - `ScopeRegistry.RegisterGrantOnly(string scopeName, string description = null)` stores
         `DefaultMinimumLevel = AccessLevel.Custom, GrantOnly = true`.
         Chosen over a `grantOnly:` flag on `Register` because a grant-only scope has no meaningful minimum
-        level, and requiring one is exactly the `AccessLevel.Custom` trap the issue walked into.
-      - Same duplicate-name guard as `Register`.
-      - XML docs stating what is and is not exempted.
-      - Tests in `ScopeRegistryTests`.
+        level, and requiring one is exactly the `AccessLevel.Custom` trap the issue walked into. The XML
+        `<remarks>` names that trap explicitly, so someone reading only the API doc does not repeat it.
+      - The duplicate-name guard moved into a private `Add`, so `Register` and `RegisterGrantOnly` share
+        one namespace rather than each guarding only against its own kind.
+      - 5 tests in `ScopeRegistryTests`, including both collision directions.
+      - *Behaviour is deliberately unchanged so far* — `GetScopesForAccessLevel` still returns a grant-only
+        scope at Owner/Administrator until step 3. This step is the API surface only.
 
 - [ ] **3. Exempt from access-level grants.** Filter `GrantOnly` out of both branches of
       `GetScopesForAccessLevel` (the Owner/Administrator all-scopes branch and the fall-through). Update
@@ -76,6 +80,7 @@ Branch: `feature/grant-only-scopes` (from `master`)
 
 ## Last session
 
-2026-08-24 — Session start. Verified #232 against the code: part 1 shipped in 3.13.1, part 2 is the
-residual. Branched, applied the MongoDB patch, verified 2072 tests green, wrote the plan. Awaiting
-confirmation before step 2.
+2026-08-24 — Verified #232 against the code: part 1 shipped in 3.13.1, part 2 is the residual. Branched,
+applied the MongoDB patch, wrote the plan (2072 tests green). Then completed step 2, the `GrantOnly`
+registration surface — 2077 tests green. **Next: step 3**, filtering grant-only out of both branches of
+`GetScopesForAccessLevel`, which is where the behaviour actually changes.

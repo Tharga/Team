@@ -23,10 +23,41 @@ public class ScopeRegistry : IScopeRegistry
 
     public void Register(string scopeName, AccessLevel defaultMinimumLevel, string description = null)
     {
-        if (_scopes.Any(s => s.Name == scopeName))
-            throw new InvalidOperationException($"Scope '{scopeName}' is already registered.");
+        Add(new ScopeDefinition(scopeName, defaultMinimumLevel, description));
+    }
 
-        _scopes.Add(new ScopeDefinition(scopeName, defaultMinimumLevel, description));
+    /// <summary>
+    /// Registers a scope that no access level grants. The entry exists for documentation and validation:
+    /// the scope appears in the catalogue with its description and can be validated against, but it is
+    /// exempt from the Owner/Administrator all-scopes rule, rejected in tenant-defined custom roles, and
+    /// not offered by the scope-override pickers.
+    /// </summary>
+    /// <remarks>
+    /// Use this for a scope that should be held only as a recorded decision — one reaching regulated or
+    /// classified records, say, where "a team administrator gets it automatically" is the wrong default.
+    /// Grant it by naming it on a code-registered tenant role (<see cref="ITenantRoleRegistry"/>) or
+    /// through an explicit scope override; enforcement via <see cref="RequireScopeAttribute"/> is
+    /// unchanged, since the scope is checked from the claim rather than from this registry.
+    /// <para>
+    /// Do not attempt the same thing by registering at <see cref="AccessLevel.Custom"/>. That grants the
+    /// scope to <i>every</i> level: Owner and Administrator take all registered scopes regardless of the
+    /// declared minimum, and the fall-through filter <c>DefaultMinimumLevel &gt;= accessLevel</c> is
+    /// satisfied by <c>Custom</c> for User and Viewer too.
+    /// </para>
+    /// </remarks>
+    /// <param name="scopeName">The scope name, as checked by <see cref="RequireScopeAttribute"/>.</param>
+    /// <param name="description">Human-readable description, shown in the scope catalogue.</param>
+    public void RegisterGrantOnly(string scopeName, string description = null)
+    {
+        Add(new ScopeDefinition(scopeName, AccessLevel.Custom, description, GrantOnly: true));
+    }
+
+    private void Add(ScopeDefinition definition)
+    {
+        if (_scopes.Any(s => s.Name == definition.Name))
+            throw new InvalidOperationException($"Scope '{definition.Name}' is already registered.");
+
+        _scopes.Add(definition);
     }
 
     public IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel accessLevel)
