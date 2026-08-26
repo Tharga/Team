@@ -3,10 +3,12 @@
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
 @using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
 @implements IDisposable
 @inject ISupportCaseService SupportCases
 @inject ISupportCaseNotifier Notifier
 @inject ITeamStateService TeamState
+@inject AuthenticationStateProvider AuthState
 
 <PageTitle>Support</PageTitle>
 
@@ -24,6 +26,16 @@
 }
 else
 {
+    @* What a header chip would render. Both come from the public surface -- if this page could not get them
+       without reaching for something internal, the surface would be wrong. *@
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" class="rz-mb-3">
+        <RadzenBadge Text="@($"{_unread} unread")" BadgeStyle="@(_unread > 0 ? BadgeStyle.Warning : BadgeStyle.Light)" />
+        @if (_canSeeSupportCount)
+        {
+            <RadzenBadge Text="@($"{_awaiting} awaiting support")" BadgeStyle="@(_awaiting > 0 ? BadgeStyle.Danger : BadgeStyle.Light)" />
+        }
+    </RadzenStack>
+
     <RadzenStack Orientation="Orientation.Horizontal" Gap="2rem" AlignItems="AlignItems.Start">
 
         <RadzenStack Gap="0.75rem" Style="min-width: 22rem;">
@@ -89,12 +101,20 @@ else
     private bool _busy;
 
     private SupportCase[] _cases = [];
+    private int _unread;
+    private int _awaiting;
+    private bool _canSeeSupportCount;
     private SupportCase _selected;
     private SupportMessage[] _messages = [];
 
     protected override async Task OnInitializedAsync()
     {
         _teamKey = (await TeamState.GetSelectedTeamAsync())?.Key;
+
+        // Rendering only. The service checks the same scope again on the call itself -- a component deciding
+        // what to draw is not a place anything is enforced.
+        var principal = (await AuthState.GetAuthenticationStateAsync()).User;
+        _canSeeSupportCount = _teamKey != null && TeamScopeGate.HasTeamScope(principal, SupportScopes.Read, _teamKey);
 
         Notifier.CaseUpdated += OnCaseUpdated;
 
@@ -174,6 +194,10 @@ else
         if (_teamKey == null) return;
 
         _cases = (await SupportCases.GetMyCasesAsync(_teamKey)).Items;
+
+        _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
+
+        if (_canSeeSupportCount) _awaiting = await SupportCases.GetAwaitingSupportCountAsync(_teamKey);
     }
 
     private async Task SelectAsync(SupportCase supportCase)
@@ -183,6 +207,14 @@ else
         _messages = _selected == null
             ? []
             : (await SupportCases.GetMessagesAsync(_teamKey, _selected.Id)).Items;
+
+        if (_selected == null) return;
+
+        // Opening a case is what clears the indicator. Marked after the transcript is loaded, so the marker
+        // records what was actually put in front of somebody.
+        await SupportCases.MarkReadAsync(_teamKey, _selected.Id);
+
+        _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
     }
 
     private static BadgeStyle DeliveryStyle(SupportMessageDelivery delivery) => delivery switch

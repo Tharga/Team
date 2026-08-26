@@ -191,6 +191,49 @@ logged:
 **A channel being down never blocks a case.** The case is written first and is authoritative; projecting it
 comes after. If Slack refuses, the case still exists and the entry is `Pending`.
 
+## Knowing what needs attention
+
+Two questions, two methods, two different checks — because they serve two audiences and one of them is
+privileged:
+
+| Method | Answers | Requires |
+|---|---|---|
+| `GetMyUnreadCountAsync(teamKey)` | my own cases holding entries I have not read | membership |
+| `GetAwaitingSupportCountAsync(teamKey)` | open cases whose newest entry came from the person who raised them | `support:read` |
+| `MarkReadAsync(teamKey, caseId)` | records that I have read up to the newest entry | the same check as reading that case |
+
+**Not one result carrying both numbers.** That would either show an ordinary member the support-wide figure
+or arrive half-populated — and a half-populated result is what a component renders as a zero.
+
+**These are public API on purpose.** A count chip or a dashboard panel is something you can build yourself
+against exactly this; nothing about it is reserved for a component the toolkit ships.
+
+### How the two behave
+
+**Support's side needs no read state.** A case is awaiting an answer while its newest entry came from its
+author, so the count is correct however many support people look at it, and closing a case removes it from
+the count.
+
+**A user's side does.** Opening a case marks it read; a reply arriving afterwards makes it unread again. Two
+people on one case have independent state, and the marker never moves backwards — a second tab showing an
+older page cannot relight the indicator. Replying counts as reading, so writing a message does not light your
+own chip.
+
+```csharp
+var unread = await support.GetMyUnreadCountAsync(teamKey);
+
+// Gate rendering on the scope with TeamScopeGate; the service checks it again on the call itself.
+if (TeamScopeGate.HasTeamScope(principal, SupportScopes.Read, teamKey))
+{
+    var awaiting = await support.GetAwaitingSupportCountAsync(teamKey);
+}
+```
+
+> **A chip does not update itself across instances.** `ISupportCaseNotifier` is in-process, so on a
+> multi-instance deployment a Slack reply raises the notification on whichever instance handled it — not
+> necessarily the one holding the viewer's circuit. Re-reading the count on navigation always works;
+> live-updating everywhere needs a backplane, which is not built.
+
 ## What happens when things are deleted
 
 | Event | Effect on cases |
