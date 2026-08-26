@@ -17,6 +17,7 @@ using Tharga.Team.MongoDB;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support;
+using Tharga.Team.Support.Cases;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -212,6 +213,14 @@ builder.Services.AddThargaTeamRepository(o =>
     o.RegisterTeamRepository<TeamEntity, TeamMember>();
 });
 
+// Support cases. Registered whether or not Slack is configured -- with no channel the cases are site-only,
+// which is the ordinary shape for a host that never wanted Slack rather than a degraded one.
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.SlackChannel = builder.Configuration["Slack:SupportChannel"];
+    o.SigningSecret = builder.Configuration["Slack:SigningSecret"];
+});
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -227,6 +236,10 @@ app.UseAntiforgery();
 
 app.UseThargaTeam();
 app.UseThargaMcp();
+
+// Where Slack posts thread replies. Public and unauthenticated by design -- Slack cannot present a
+// credential, so the request signature is the credential, verified before the body is read.
+app.MapThargaSupportSlack();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
