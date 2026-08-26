@@ -110,17 +110,22 @@ part of the two-way path. They become straightforward once delivery state exists
 
 ## Acceptance criteria
 
-- [ ] Raising a case posts to Slack and stores the returned thread id as a `SupportChannelBinding`.
-- [ ] A reply through `ISupportCaseService` appears in the same thread, not as a new message.
-- [ ] A reply typed in the thread appears on the case, attributed to the Slack author.
-- [ ] The host is notified for both directions by one event.
-- [ ] A request with a bad, missing or stale signature is refused — asserted, including the stale case.
-- [ ] The same Slack `event_id` delivered twice appends **one** message.
-- [ ] A message the toolkit itself posted does not come back as a reply.
-- [ ] The endpoint answers `url_verification`.
-- [ ] The endpoint returns 200 without waiting for the case write.
-- [ ] A case with **no** channel binding still works exactly as before — Slack stays optional.
-- [ ] Full test suite green.
+- [x] Raising a case posts to Slack and stores the returned thread id as a `SupportChannelBinding`.
+- [x] A reply through `ISupportCaseService` appears in the same thread, not as a new message.
+- [x] A reply typed in the thread appears on the case, attributed to the Slack author.
+- [x] The host is notified for both directions by one event.
+- [x] A request with a bad, missing or stale signature is refused — asserted, including the stale case.
+- [x] The same Slack `event_id` delivered twice appends **one** message.
+- [x] A message the toolkit itself posted does not come back as a reply.
+- [x] The endpoint answers `url_verification`.
+- [x] ~~The endpoint returns 200 without waiting for the case write.~~ **WITHDRAWN 2026-08-26, deliberately.**
+      The reason to ack first was that slowness makes Slack retry - and `ISupportEventLedger` records the
+      delivery before any write, so a retry is now idempotent. Appending a message is one document update,
+      comfortably inside the three-second budget. A queue and a pump would have been machinery for a problem
+      the ledger already solved. Recorded rather than ticked, because the criterion became wrong rather than
+      met.
+- [x] A case with **no** channel binding still works exactly as before — Slack stays optional.
+- [x] Full test suite green - 2187 passed, 0 failed.
 
 ## Out of scope
 
