@@ -51,6 +51,18 @@ public record SupportCaseEntity : EntityBase
 
     public required SupportMessageEntity[] Messages { get; init; }
 
+    /// <summary>
+    /// Whether the newest transcript entry came from the person who raised the case — that is, whether the
+    /// case is waiting on support.
+    /// </summary>
+    /// <remarks>
+    /// <b>Denormalized deliberately.</b> The question is "is the last element of an embedded array authored
+    /// by the same person as this document's author", which cannot be expressed as a cheap indexed filter -
+    /// it needs an aggregation over every case. Maintained at the two places a transcript grows, so the
+    /// awaiting-support count stays a plain filter however many cases a team accumulates.
+    /// </remarks>
+    public bool LastMessageFromAuthor { get; init; }
+
     [BsonIgnoreIfNull]
     public SupportChannelBindingEntity[] Bindings { get; init; }
 

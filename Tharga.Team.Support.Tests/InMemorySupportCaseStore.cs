@@ -12,6 +12,7 @@ namespace Tharga.Team.Support.Tests;
 internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 {
     private readonly List<(SupportCase Case, List<SupportMessage> Messages)> _cases = [];
+    private readonly Dictionary<(string CaseId, string Identity), int> _reads = [];
 
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => Task.FromResult(Find(teamKey, caseId)?.Case);
@@ -87,6 +88,34 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
         return Task.CompletedTask;
     }
+
+    /// <remarks>
+    /// Mirrors the real adapter, including refusing to move the marker backwards and replacing the entry
+    /// rather than appending. A fake that grew the list on every mark would hide exactly the defect the
+    /// idempotency test exists to catch.
+    /// </remarks>
+    public Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+
+        if (_reads.TryGetValue((caseId, identity), out var current) && current >= sequence) return Task.CompletedTask;
+
+        _reads[(caseId, identity)] = sequence;
+
+        return Task.CompletedTask;
+    }
+
+    public Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases
+            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity)
+            .Count(x => (_reads.TryGetValue((x.Case.Id, identity), out var read) ? read : 0) < x.Messages.Count));
+
+    public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases
+            .Where(x => x.Case.TeamKey == teamKey && x.Case.Status == SupportCaseStatus.Open)
+            .Count(x => x.Messages.Count > 0
+                        && x.Messages[^1].Kind == SupportMessageKind.User
+                        && x.Messages[^1].AuthorIdentity == x.Case.AuthorIdentity));
 
     public Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases

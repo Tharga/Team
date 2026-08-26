@@ -176,6 +176,20 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
     public Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => store.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
 
+    public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        if (existing == null) return;
+
+        await store.MarkReadAsync(teamKey, caseId, await authorizer.GetSubjectAsync(), existing.MessageCount, cancellationToken);
+    }
+
+    public async Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => await store.GetUnreadCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
+
+    public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => store.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
+
     /// <remarks>
     /// <b>Enforced here rather than in the adapter, because the limit is a contract fact.</b>
     /// <see cref="SupportCaseLimits"/> lives beside the contracts and is documented for callers, so a second

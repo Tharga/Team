@@ -77,6 +77,37 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
         return await inner.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
     }
 
+    /// <remarks>
+    /// <b>Reuses the case-access check rather than repeating something similar.</b> Marking a case read is a
+    /// write on that case, so it must be exactly as hard as reading it — a second check that merely resembles
+    /// the first is how the two drift apart until one of them is wrong.
+    /// </remarks>
+    public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "mark read");
+
+        await inner.MarkReadAsync(teamKey, caseId, cancellationToken);
+    }
+
+    public async Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+
+        return await inner.GetMyUnreadCountAsync(teamKey, cancellationToken);
+    }
+
+    /// <remarks>
+    /// Counts across every case in the team, including cases the caller did not raise — so it is exactly as
+    /// privileged as reading them, and takes the same scope.
+    /// </remarks>
+    public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+        await RequireScopeAsync(SupportScopes.Read, teamKey);
+
+        return await inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
+    }
+
     private async Task RequireMembershipAsync(string teamKey)
     {
         if (!await authorizer.IsMemberOfAsync(teamKey))

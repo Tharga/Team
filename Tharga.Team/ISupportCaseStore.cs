@@ -54,6 +54,26 @@ public interface ISupportCaseStore
     /// </remarks>
     Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Records that someone has read a case up to <paramref name="sequence"/>.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent, and must not grow the document: one entry per person, updated in place. Somebody opening
+    /// a case fifty times leaves one entry.
+    /// </remarks>
+    Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many of this person's own cases hold entries they have not read.
+    /// </summary>
+    Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many cases in the team are waiting on support — their newest entry came from the person who
+    /// raised them.
+    /// </summary>
+    Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
     /// <summary>Records a case's projection onto an external channel.</summary>
     Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default);
 
