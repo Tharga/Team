@@ -53,6 +53,36 @@ public record SupportCaseEntity : EntityBase
 
     [BsonIgnoreIfNull]
     public SupportChannelBindingEntity[] Bindings { get; init; }
+
+    /// <summary>How far each participant has read. Absent until somebody opens the case.</summary>
+    [BsonIgnoreIfNull]
+    public SupportCaseReadEntity[] Reads { get; init; }
+}
+
+/// <summary>How far one person has read a case's transcript.</summary>
+/// <remarks>
+/// <b>Embedded, and bounded by the number of participants in one case</b> - not one row per user per case
+/// across the whole system, which is what a separate collection would become. Members embed in a team and
+/// the transcript embeds in a case for the same reason.
+/// <para>
+/// <b>Keyed on the sequence, not a timestamp.</b> "Read up to entry seven" is exact; "read at 12:04" has to
+/// agree with clocks it has no reason to trust, and the transcript is already sequenced because paging needs
+/// it to be.
+/// </para>
+/// <para>
+/// <b>Identity is the stable authentication subject</b>, the same value the author fields and the audit trail
+/// use. A per-team member key stops resolving when somebody leaves the team, and a case outlives a
+/// membership - read state keyed on one would become unattributable exactly when the case is still open.
+/// </para>
+/// </remarks>
+public record SupportCaseReadEntity
+{
+    public required string Identity { get; init; }
+
+    /// <summary>The highest transcript sequence this person has seen.</summary>
+    public required int LastReadSequence { get; init; }
+
+    public required DateTime ReadAt { get; init; }
 }
 
 /// <summary>One entry in an embedded transcript.</summary>
