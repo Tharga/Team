@@ -58,17 +58,17 @@ timestamp would need to agree with clocks it has no reason to trust, and "read u
 
 ## Acceptance criteria
 
-- [ ] A case with entries beyond my last-read counts as unread; one I have just opened does not.
-- [ ] `MarkReadAsync` is idempotent — marking twice changes nothing and does not grow the document.
-- [ ] A **new reply arriving after I read** makes the case unread again.
-- [ ] My own reply does not make the case unread to me.
-- [ ] The awaiting-support count includes a case whose last entry is from its author, and excludes one whose
+- [x] A case with entries beyond my last-read counts as unread; one I have just opened does not.
+- [x] `MarkReadAsync` is idempotent — marking twice changes nothing and does not grow the document.
+- [x] A **new reply arriving after I read** makes the case unread again.
+- [x] My own reply does not make the case unread to me.
+- [x] The awaiting-support count includes a case whose last entry is from its author, and excludes one whose
       last entry is a reply or a system entry.
-- [ ] A member without `support:read` cannot obtain the awaiting-support count.
-- [ ] A member cannot mark a case read that they could not read.
-- [ ] Both counts are **public API** a host can call — no calculation that only a shipped component can do.
-- [ ] Read state does not leak across users: two users on one case have independent unread states.
-- [ ] Full test suite green.
+- [x] A member without `support:read` cannot obtain the awaiting-support count.
+- [x] A member cannot mark a case read that they could not read.
+- [x] Both counts are **public API** a host can call — no calculation that only a shipped component can do.
+- [x] Read state does not leak across users: two users on one case have independent unread states.
+- [x] Full test suite green - 2196 passed, 0 failed.
 
 ## Out of scope
 
