@@ -95,6 +95,18 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetCaseAsync(teamKey, caseId, cancellationToken);
 
+    // Reads and counters, not audited - consistent with every other read. Marking a case read is a write,
+    // but it records that somebody looked at something rather than that anything changed, and auditing it
+    // would fill the log with one entry per page view.
+    public Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => inner.MarkReadAsync(teamKey, caseId, cancellationToken);
+
+    public Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetMyUnreadCountAsync(teamKey, cancellationToken);
+
+    public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
+
     public Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => inner.GetCasesAsync(teamKey, cursor, pageSize, cancellationToken);
 

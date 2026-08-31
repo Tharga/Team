@@ -38,7 +38,7 @@ public sealed class SlackClient : ISlackClient
         _logger = logger;
     }
 
-    public async Task<SlackPostResult> PostAsync(string channel, string text, CancellationToken cancellationToken = default)
+    public async Task<SlackPostResult> PostAsync(string channel, string text, string threadId = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(channel)) return SlackPostResult.Failed("No channel.");
         if (string.IsNullOrWhiteSpace(text)) return SlackPostResult.Failed("No message.");
@@ -55,14 +55,14 @@ public sealed class SlackClient : ISlackClient
 
             using var response = await client.PostAsJsonAsync(
                 "chat.postMessage",
-                new SlackPostMessageRequest(channel, text),
+                new SlackPostMessageRequest(channel, text, threadId),
                 SerializerOptions,
                 cancellationToken);
 
             if (!response.IsSuccessStatusCode) return SlackPostResult.Failed($"Slack returned {(int)response.StatusCode}.");
 
             var body = await response.Content.ReadFromJsonAsync<SlackPostMessageResponse>(SerializerOptions, cancellationToken);
-            if (body?.Ok == true) return SlackPostResult.Ok();
+            if (body?.Ok == true) return SlackPostResult.Ok(body.Ts);
 
             return SlackPostResult.Failed(body?.Error ?? "Slack rejected the message without saying why.");
         }
@@ -73,11 +73,17 @@ public sealed class SlackClient : ISlackClient
         }
     }
 
+    /// <remarks>
+    /// <c>thread_ts</c> is omitted when null rather than sent as null - Slack rejects an explicit null, and
+    /// a message with no thread is a new top-level post, which is exactly what a notification wants.
+    /// </remarks>
     private sealed record SlackPostMessageRequest(
         [property: JsonPropertyName("channel")] string Channel,
-        [property: JsonPropertyName("text")] string Text);
+        [property: JsonPropertyName("text")] string Text,
+        [property: JsonPropertyName("thread_ts"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string ThreadTs);
 
     private sealed record SlackPostMessageResponse(
         [property: JsonPropertyName("ok")] bool Ok,
-        [property: JsonPropertyName("error")] string Error);
+        [property: JsonPropertyName("error")] string Error,
+        [property: JsonPropertyName("ts")] string Ts);
 }

@@ -65,6 +65,13 @@ public static class ThargaTeamRegistration
             services.TrackMongoCollection(typeof(ISupportCaseRepositoryCollection), typeof(SupportCaseRepositoryCollection));
             services.TryAddScoped<ISupportCaseStore, MongoSupportCaseStore>();
 
+            // Deduplicates inbound channel events. Shared across instances by virtue of being in the same
+            // database as the cases, with a unique index making the record-or-refuse decision atomic.
+            services.TryAddSingleton(TimeProvider.System);
+            services.AddTransient<ISupportEventLedgerCollection, SupportEventLedgerCollection>();
+            services.TrackMongoCollection(typeof(ISupportEventLedgerCollection), typeof(SupportEventLedgerCollection));
+            services.TryAddScoped<ISupportEventLedger, MongoSupportEventLedger>();
+
             // Reports members stored with no access level, which are silently being treated as Owner.
             // Registered only alongside a team repository, because without one there is nothing to read.
             if (o.CheckMemberAccessLevels)

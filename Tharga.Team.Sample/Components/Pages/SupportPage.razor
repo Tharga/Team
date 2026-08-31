@@ -1,0 +1,226 @@
+@page "/support"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@implements IDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+@inject ITeamStateService TeamState
+@inject AuthenticationStateProvider AuthState
+
+<PageTitle>Support</PageTitle>
+
+<RadzenText TextStyle="TextStyle.Body2" class="rz-mb-3">
+    Raise a support case for the selected team, reply to it, and read its history. When a Slack channel is
+    configured the case opens a thread there, replies go into that thread, and a reply typed in Slack appears
+    here — this page updates itself when one arrives.
+</RadzenText>
+
+@if (_teamKey == null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        Select a team to use support.
+    </RadzenAlert>
+}
+else
+{
+    @* What a header chip would render. Both come from the public surface -- if this page could not get them
+       without reaching for something internal, the surface would be wrong. *@
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" class="rz-mb-3">
+        <RadzenBadge Text="@($"{_unread} unread")" BadgeStyle="@(_unread > 0 ? BadgeStyle.Warning : BadgeStyle.Light)" />
+        @if (_canSeeSupportCount)
+        {
+            <RadzenBadge Text="@($"{_awaiting} awaiting support")" BadgeStyle="@(_awaiting > 0 ? BadgeStyle.Danger : BadgeStyle.Light)" />
+        }
+    </RadzenStack>
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="2rem" AlignItems="AlignItems.Start">
+
+        <RadzenStack Gap="0.75rem" Style="min-width: 22rem;">
+            <RadzenText TextStyle="TextStyle.H6">Raise a case</RadzenText>
+            <RadzenTextBox @bind-Value="_subject" Placeholder="Subject" Style="width: 100%;" />
+            <RadzenTextArea @bind-Value="_body" Placeholder="What is wrong?" Rows="4" Style="width: 100%;" />
+            <RadzenButton Text="Raise" Click="RaiseAsync" Disabled="@(string.IsNullOrWhiteSpace(_subject) || _busy)" />
+
+            <RadzenText TextStyle="TextStyle.H6" class="rz-mt-4">My cases</RadzenText>
+            <RadzenDataList Data="@_cases" TItem="SupportCase" AllowVirtualization="false">
+                <Template Context="item">
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                        <RadzenLink Text="@item.Subject" Click="@(() => SelectAsync(item))" />
+                        <RadzenBadge Text="@item.Status.ToString()"
+                                     BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
+                        <RadzenText TextStyle="TextStyle.Caption">@item.MessageCount msg</RadzenText>
+                    </RadzenStack>
+                </Template>
+            </RadzenDataList>
+        </RadzenStack>
+
+        @if (_selected != null)
+        {
+            <RadzenStack Gap="0.75rem" Style="min-width: 28rem;">
+                <RadzenText TextStyle="TextStyle.H6">@_selected.Subject</RadzenText>
+
+                @foreach (var message in _messages)
+                {
+                    <RadzenCard Variant="Variant.Outlined">
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                            <RadzenText TextStyle="TextStyle.Subtitle2">@message.AuthorName</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Caption">@message.SentAt.ToLocalTime().ToString("g")</RadzenText>
+                            @* Delivery is what tells you whether Slack actually took it. Pending and Failed
+                               are the entries a retry or a reminder would act on. *@
+                            @if (message.Delivery != SupportMessageDelivery.NotApplicable)
+                            {
+                                <RadzenBadge Text="@message.Delivery.ToString()"
+                                             BadgeStyle="@DeliveryStyle(message.Delivery)" />
+                            }
+                        </RadzenStack>
+                        <RadzenText TextStyle="TextStyle.Body2">@message.Body</RadzenText>
+                    </RadzenCard>
+                }
+
+                @if (_selected.Status == SupportCaseStatus.Open)
+                {
+                    <RadzenTextArea @bind-Value="_reply" Placeholder="Reply" Rows="3" Style="width: 100%;" />
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                        <RadzenButton Text="Reply" Click="ReplyAsync" Disabled="@(string.IsNullOrWhiteSpace(_reply) || _busy)" />
+                        <RadzenButton Text="Close case" ButtonStyle="ButtonStyle.Light" Click="CloseAsync" Disabled="_busy" />
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        }
+    </RadzenStack>
+}
+
+@code {
+    private string _teamKey;
+    private string _subject;
+    private string _body;
+    private string _reply;
+    private bool _busy;
+
+    private SupportCase[] _cases = [];
+    private int _unread;
+    private int _awaiting;
+    private bool _canSeeSupportCount;
+    private SupportCase _selected;
+    private SupportMessage[] _messages = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _teamKey = (await TeamState.GetSelectedTeamAsync())?.Key;
+
+        // Rendering only. The service checks the same scope again on the call itself -- a component deciding
+        // what to draw is not a place anything is enforced.
+        var principal = (await AuthState.GetAuthenticationStateAsync()).User;
+        _canSeeSupportCount = _teamKey != null && TeamScopeGate.HasTeamScope(principal, SupportScopes.Read, _teamKey);
+
+        Notifier.CaseUpdated += OnCaseUpdated;
+
+        await ReloadAsync();
+    }
+
+    // The notifier outlives this page, so a subscription that is never detached keeps the component alive
+    // for the lifetime of the application.
+    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <remarks>
+    /// A reply arriving from Slack is handled on the request thread of Slack's POST, not on this circuit, so
+    /// touching component state directly would update off the synchronization context and lose the render.
+    /// InvokeAsync is what puts it back on the circuit.
+    /// </remarks>
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
+    {
+        if (e.TeamKey != _teamKey) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RaiseAsync()
+    {
+        _busy = true;
+        try
+        {
+            var raised = await SupportCases.RaiseCaseAsync(_teamKey, _subject, _body);
+            _subject = null;
+            _body = null;
+            await ReloadAsync();
+            await SelectAsync(raised);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReplyAsync()
+    {
+        _busy = true;
+        try
+        {
+            await SupportCases.ReplyToCaseAsync(_teamKey, _selected.Id, _reply);
+            _reply = null;
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        _busy = true;
+        try
+        {
+            await SupportCases.CloseCaseAsync(_teamKey, _selected.Id);
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (_teamKey == null) return;
+
+        _cases = (await SupportCases.GetMyCasesAsync(_teamKey)).Items;
+
+        _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
+
+        if (_canSeeSupportCount) _awaiting = await SupportCases.GetAwaitingSupportCountAsync(_teamKey);
+    }
+
+    private async Task SelectAsync(SupportCase supportCase)
+    {
+        _selected = await SupportCases.GetCaseAsync(_teamKey, supportCase.Id);
+
+        _messages = _selected == null
+            ? []
+            : (await SupportCases.GetMessagesAsync(_teamKey, _selected.Id)).Items;
+
+        if (_selected == null) return;
+
+        // Opening a case is what clears the indicator. Marked after the transcript is loaded, so the marker
+        // records what was actually put in front of somebody.
+        await SupportCases.MarkReadAsync(_teamKey, _selected.Id);
+
+        _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
+    }
+
+    private static BadgeStyle DeliveryStyle(SupportMessageDelivery delivery) => delivery switch
+    {
+        SupportMessageDelivery.Sent => BadgeStyle.Success,
+        SupportMessageDelivery.Failed => BadgeStyle.Danger,
+        _ => BadgeStyle.Warning
+    };
+}

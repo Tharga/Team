@@ -94,7 +94,7 @@ public sealed class SlackNotificationSink : BackgroundService, IAuditLogger
         {
             try
             {
-                var result = await _slackClient.PostAsync(message.Channel, message.Text, cancellationToken);
+                var result = await _slackClient.PostAsync(message.Channel, message.Text, cancellationToken: cancellationToken);
                 if (!result.Success)
                 {
                     _logger?.LogWarning("Notification to Slack channel {Channel} was not delivered: {Error}", message.Channel, result.Error);

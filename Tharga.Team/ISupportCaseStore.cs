@@ -44,6 +44,50 @@ public interface ISupportCaseStore
     Task CloseCaseAsync(string teamKey, string caseId, DateTime closedAt, string closedBy, SupportMessage closureMessage, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The case projected onto a given channel identifier, or <c>null</c> if no case is bound to it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The only read here that is not scoped by team</b>, and it has to be: an inbound event arrives
+    /// carrying a channel's identifier and nothing else, so the binding is what resolves the team rather
+    /// than something the caller supplies. It is reached only from a channel adapter handling a verified
+    /// event, never from a user-facing path.
+    /// </remarks>
+    Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records that someone has read a case up to <paramref name="sequence"/>.
+    /// </summary>
+    /// <remarks>
+    /// Idempotent, and must not grow the document: one entry per person, updated in place. Somebody opening
+    /// a case fifty times leaves one entry.
+    /// </remarks>
+    Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many of this person's own cases hold entries they have not read.
+    /// </summary>
+    Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many cases in the team are waiting on support — their newest entry came from the person who
+    /// raised them.
+    /// </summary>
+    Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>Records a case's projection onto an external channel.</summary>
+    Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Records whether one transcript entry reached the case's channel.
+    /// </summary>
+    /// <remarks>
+    /// A second write after the message itself, deliberately. The case is written first and is authoritative;
+    /// the channel is a projection, so a channel that is slow or down must not delay or block the record of
+    /// what somebody said.
+    /// </remarks>
+    Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Destroys every case belonging to a team. Backs the purge cascade.
     /// </summary>
     /// <remarks>

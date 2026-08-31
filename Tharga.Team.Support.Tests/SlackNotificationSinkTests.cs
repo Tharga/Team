@@ -24,7 +24,7 @@ public class SlackNotificationSinkTests
     private static (SlackNotificationSink Sink, ISlackClient Client) Build(params NotificationRoute[] routes)
     {
         var client = Substitute.For<ISlackClient>();
-        client.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        client.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(SlackPostResult.Ok());
 
         var router = new NotificationRouter(Options.Create(new NotificationOptions { Routes = routes }));
@@ -38,7 +38,7 @@ public class SlackNotificationSinkTests
 
         await sink.DispatchAsync(Entry());
 
-        await client.Received(1).PostAsync("#teams", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.Received(1).PostAsync("#teams", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -48,7 +48,7 @@ public class SlackNotificationSinkTests
 
         await sink.DispatchAsync(Entry(action: "delete"));
 
-        await client.DidNotReceive().PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.DidNotReceive().PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -60,8 +60,8 @@ public class SlackNotificationSinkTests
 
         await sink.DispatchAsync(Entry());
 
-        await client.Received(1).PostAsync("#teams", Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await client.Received(1).PostAsync("#audit", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.Received(1).PostAsync("#teams", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.Received(1).PostAsync("#audit", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // --- a notification must never become the caller's problem ---
@@ -74,7 +74,7 @@ public class SlackNotificationSinkTests
     public async Task ARejectedPost_DoesNotFailTheOperation()
     {
         var (sink, client) = Build(new NotificationRoute { Event = "team:create", Channel = "#teams" });
-        client.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        client.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(SlackPostResult.Failed("channel_not_found"));
 
         await sink.DispatchAsync(Entry());
@@ -88,7 +88,7 @@ public class SlackNotificationSinkTests
     public async Task ATransportThatThrows_DoesNotFailTheOperation()
     {
         var (sink, client) = Build(new NotificationRoute { Event = "team:create", Channel = "#teams" });
-        client.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+        client.PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<Task<SlackPostResult>>(_ => throw new HttpRequestException("network down"));
 
         await sink.DispatchAsync(Entry());
@@ -101,12 +101,12 @@ public class SlackNotificationSinkTests
         var (sink, client) = Build(
             new NotificationRoute { Event = "team:create", Channel = "#broken" },
             new NotificationRoute { Event = "team:create", Channel = "#working" });
-        client.PostAsync("#broken", Arg.Any<string>(), Arg.Any<CancellationToken>())
+        client.PostAsync("#broken", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns<Task<SlackPostResult>>(_ => throw new HttpRequestException("network down"));
 
         await sink.DispatchAsync(Entry());
 
-        await client.Received(1).PostAsync("#working", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.Received(1).PostAsync("#working", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -121,7 +121,7 @@ public class SlackNotificationSinkTests
 
         sink.Log(Entry());
 
-        await client.DidNotReceive().PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.DidNotReceive().PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>And what it queued is delivered once the pump runs.</summary>
@@ -137,7 +137,7 @@ public class SlackNotificationSinkTests
         while (client.ReceivedCalls().Count() == 0 && !cts.IsCancellationRequested) await Task.Delay(10, CancellationToken.None);
         await sink.StopAsync(CancellationToken.None);
 
-        await client.Received(1).PostAsync("#teams", Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.Received(1).PostAsync("#teams", Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -148,7 +148,7 @@ public class SlackNotificationSinkTests
         sink.Log(null);
         await sink.DispatchAsync(null);
 
-        await client.DidNotReceive().PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await client.DidNotReceive().PostAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>The sink is a write-only sink; audit reads are served by the audit store.</summary>

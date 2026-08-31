@@ -29,4 +29,13 @@ public record SupportMessage
     public required string Body { get; init; }
 
     public required DateTime SentAt { get; init; }
+
+    /// <summary>
+    /// Whether this entry reached the case's external channel.
+    /// </summary>
+    /// <remarks>
+    /// A message that arrived <i>from</i> a channel is <see cref="SupportMessageDelivery.Sent"/> by
+    /// definition — it is already there, and posting it back would echo it.
+    /// </remarks>
+    public SupportMessageDelivery Delivery { get; init; }
 }
