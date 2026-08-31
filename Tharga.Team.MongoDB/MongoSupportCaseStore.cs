@@ -75,7 +75,11 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Subject = supportCase.Subject,
             Status = SupportCaseStatus.Open,
             CreatedAt = supportCase.CreatedAt,
-            Messages = [ToEntity(firstMessage)]
+            Messages = [ToEntity(firstMessage)],
+
+            // A case opens with its author's own message, so it is waiting on support from the moment it
+            // exists.
+            LastMessageFromAuthor = true
         });
     }
 
@@ -87,7 +91,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         RequireRoom(entity);
 
         var update = Builders<SupportCaseEntity>.Update
-            .Push(x => x.Messages, ToEntity(message with { Sequence = NextSequence(entity) }));
+            .Push(x => x.Messages, ToEntity(message with { Sequence = NextSequence(entity) }))
+            .Set(x => x.LastMessageFromAuthor, message.AuthorIdentity == entity.AuthorIdentity);
 
         await UpdateAsync(teamKey, caseId, update);
     }
@@ -101,6 +106,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             .Set(x => x.Status, SupportCaseStatus.Closed)
             .Set(x => x.ClosedAt, closedAt)
             .Set(x => x.ClosedBy, closedBy)
+            .Set(x => x.LastMessageFromAuthor, false)
             .Push(x => x.Messages, ToEntity(closureMessage with { Sequence = NextSequence(entity) }));
 
         await UpdateAsync(teamKey, caseId, update);
@@ -117,6 +123,64 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         var entity = await collection.GetOneAsync(filter);
 
         return entity == null ? null : ToCase(entity);
+    }
+
+    public async Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default)
+    {
+        var entity = await RequireCaseAsync(teamKey, caseId);
+
+        var existing = entity.Reads ?? [];
+        var current = Array.Find(existing, x => x.Identity == identity);
+
+        // Never move backwards. Two tabs open on the same case would otherwise let the one showing an older
+        // page reset the marker and light the indicator again.
+        if (current != null && current.LastReadSequence >= sequence) return;
+
+        var read = new SupportCaseReadEntity
+        {
+            Identity = identity,
+            LastReadSequence = sequence,
+            ReadAt = DateTime.UtcNow
+        };
+
+        // Replaced in place rather than appended, so opening a case repeatedly leaves one entry.
+        var reads = existing.Where(x => x.Identity != identity).Append(read).ToArray();
+
+        await UpdateAsync(teamKey, caseId, Builders<SupportCaseEntity>.Update.Set(x => x.Reads, reads));
+    }
+
+    /// <remarks>
+    /// Counted over this person's own cases rather than as a single server-side filter, and the difference is
+    /// deliberate. "Has entries beyond my last-read marker" is a comparison between two fields of the same
+    /// document, which a plain filter cannot express. The set being scanned is one person's own cases, which
+    /// is small and bounded - unlike the awaiting-support count, which is why that one is denormalized
+    /// instead.
+    /// </remarks>
+    public async Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity));
+
+        var unread = 0;
+        await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
+        {
+            var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity);
+
+            if ((read?.LastReadSequence ?? 0) < entity.Messages.Length) unread++;
+        }
+
+        return unread;
+    }
+
+    public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true));
+
+        return (int)await collection.CountAsync(filter);
     }
 
     public async Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)

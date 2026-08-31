@@ -37,6 +37,30 @@ public interface ISupportCaseService
     /// <summary>The caller's own cases in a team, newest first.</summary>
     Task<SupportCasePage> GetMyCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Records that the caller has read this case up to its newest entry.
+    /// </summary>
+    /// <remarks>
+    /// Authorized exactly as reading the case is — anything weaker would let somebody write to a case they
+    /// cannot see.
+    /// </remarks>
+    Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many of the caller's own cases hold entries they have not read. What a per-user indicator shows.
+    /// </summary>
+    Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many open cases in the team are waiting on an answer — their newest entry came from the person
+    /// who raised them. What a support-side indicator shows.
+    /// </summary>
+    /// <remarks>
+    /// Counts across everybody's cases, so it is exactly as privileged as reading them and requires
+    /// <c>support:read</c>.
+    /// </remarks>
+    Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
     /// <summary>A case's transcript, oldest first.</summary>
     Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default);
 }
