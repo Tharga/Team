@@ -58,7 +58,11 @@ public static class ThargaBlazorRegistration
 
         // The composition root owns the cascade; each store registers its own ITeamPurgeParticipant. An
         // adapter package cannot register this - it depends on contracts, not on the domain.
-        services.TryAddSingleton<TeamPurgeCascade>();
+        //
+        // Scoped, not singleton: every participant reads a store, and those stores are scoped. It is only
+        // ever resolved from the scoped authorization decorator, so there is nothing to gain from a longer
+        // lifetime and a startup failure to lose.
+        services.TryAddScoped<TeamPurgeCascade>();
 
         if (o._teamService != null)
         {

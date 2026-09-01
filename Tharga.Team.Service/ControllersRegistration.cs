@@ -104,7 +104,10 @@ public static class ControllersRegistration
 
         // Purging a team must destroy its API keys. Purge drops the host's per-team database, which does
         // not reach this shared collection -- so without this a purged tenant's credentials outlive it.
-        services.TryAddSingleton<TeamPurgeCascade>();
+        //
+        // Scoped, not singleton: every participant reads a store, and those stores are scoped. A singleton
+        // capturing them fails container validation at startup rather than at purge time.
+        services.TryAddScoped<TeamPurgeCascade>();
         services.AddTransient<ITeamPurgeParticipant, ApiKeyPurgeParticipant>();
 
         return services;

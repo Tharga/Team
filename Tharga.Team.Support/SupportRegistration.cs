@@ -105,6 +105,11 @@ public static class SupportRegistration
 
         services.TryAddSingleton(TimeProvider.System);
 
+        // Singleton, and it has to be: an inbound reply is handled in the poller's or the endpoint's own
+        // scope while the page waiting for it lives in a circuit's. A scoped notifier would raise the event
+        // on an instance nothing is listening to.
+        services.TryAddSingleton<ISupportCaseNotifier, SupportCaseNotifier>();
+
         // Purging a team destroys its cases. The store has exposed DeleteCasesForTeamAsync since the cases
         // shipped; this is the wiring that was missing, because the purge site could not reach the store.
         services.AddTransient<ITeamPurgeParticipant, SupportCasePurgeParticipant>();

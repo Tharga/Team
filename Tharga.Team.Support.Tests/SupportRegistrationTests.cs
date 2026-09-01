@@ -2,7 +2,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
+using Tharga.Team.Support.Cases;
 using Tharga.Team.Support.Notifications;
 using Tharga.Team.Support.Slack;
 
@@ -77,6 +79,73 @@ public class SupportRegistrationTests
 
         Assert.Same(sink, asLogger);
         Assert.Same(sink, asHosted);
+    }
+
+    /// <summary>
+    /// <see cref="ISupportCaseService"/> can actually be resolved, not merely validated.
+    /// </summary>
+    /// <remarks>
+    /// <b>This shipped unresolvable.</b> <c>AddThargaSupportCases</c> built the service in a factory that
+    /// calls <c>GetRequiredService&lt;ISupportCaseNotifier&gt;()</c>, and nothing registered the notifier —
+    /// so every host got <c>No service for type 'ISupportCaseNotifier'</c> the first time a page injected
+    /// the case service, and the support feature could not be used at all.
+    /// <para>
+    /// <b>Container validation cannot catch this, which is the point of the test.</b> <c>ValidateOnBuild</c>
+    /// inspects constructor parameters; a service registered through a factory lambda is opaque to it, and
+    /// every dependency resolved inside that lambda is invisible until something asks for the service. The
+    /// only guard that works is resolving it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheCaseService_Resolves()
+    {
+        using var provider = Build(s =>
+        {
+            // What a host supplies through AddThargaTeam and AddThargaAuditLogging. Everything the support
+            // package itself needs must come from AddThargaSupportCases.
+            s.AddSingleton(Substitute.For<ISupportCaseStore>());
+            s.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
+            s.AddSingleton<TeamAuthorizer>();
+            s.Configure<AuditOptions>(_ => { });
+            s.AddSingleton<CompositeAuditLogger>();
+            s.AddSingleton(Substitute.For<IAuditEntryFactory>());
+
+            s.AddThargaSupportCases();
+        });
+
+        using var scope = provider.CreateScope();
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportCaseService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportCaseNotifier>());
+    }
+
+    /// <summary>
+    /// The notifier outlives every page that listens to it, and an inbound reply is raised from a different
+    /// scope than the circuit waiting for it.
+    /// </summary>
+    [Fact]
+    public void TheNotifier_IsOneInstanceForTheWholeApplication()
+    {
+        using var provider = Build(s =>
+        {
+            // What a host supplies through AddThargaTeam and AddThargaAuditLogging. Everything the support
+            // package itself needs must come from AddThargaSupportCases.
+            s.AddSingleton(Substitute.For<ISupportCaseStore>());
+            s.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
+            s.AddSingleton<TeamAuthorizer>();
+            s.Configure<AuditOptions>(_ => { });
+            s.AddSingleton<CompositeAuditLogger>();
+            s.AddSingleton(Substitute.For<IAuditEntryFactory>());
+
+            s.AddThargaSupportCases();
+        });
+
+        using var first = provider.CreateScope();
+        using var second = provider.CreateScope();
+
+        Assert.Same(
+            first.ServiceProvider.GetRequiredService<ISupportCaseNotifier>(),
+            second.ServiceProvider.GetRequiredService<ISupportCaseNotifier>());
     }
 
     /// <summary>
