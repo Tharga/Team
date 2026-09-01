@@ -14,6 +14,27 @@ recipient filter sorts a shared mailbox into disjoint sets before anything else 
 `Delivered-To` / `X-Original-To` / `Envelope-To` the mailbox's MTA actually adds. The filter's reliability
 depends on it, and it is minutes to check against days to debug.
 
+## Model clarified 2026-09-01 (user) — steps 4 and 5 reopen
+
+**Email is a customer channel; Slack is a support channel.** A customer types on the site or sends mail, and
+is answered the same way they made contact. Support works in the backoffice or in a Slack thread, and never
+touches mail in either direction. Both audiences read the whole history — the customer on the site, support
+in the backoffice.
+
+Steps 1–3 are unaffected. What changes:
+
+- **Step 4 is built backwards** and reopens. `EmailSupportChannel.OpenAsync` mails the author whenever a case
+  is raised *on the site*, which is exactly the case that must be answered on the site. The email projection
+  belongs to a case that *arrived* by mail.
+- **A case records its origin**, and replies route by it rather than by configuration.
+- **Step 5 grows the create path.** Unmatched mail raises a case; see the team table in the spec. The
+  sender-match rule survives, but it governs *replies* only.
+- **Step 7's single-channel question is answered:** `IEnumerable<ISupportChannel>` with a role, because one
+  case can hold an email binding facing the customer and a Slack binding facing support at once.
+- **A new internal read:** resolve an email address to a user. Nothing in the toolkit does this, and inbound
+  mail has no caller, so it is framework code reading on nobody's behalf.
+- **A fallback team becomes required configuration** once the mailbox is read, enforced at startup.
+
 ## Steps
 
 - [x] **0. Package updates and baseline.** `dotnet outdated` across the solution: the only available update
@@ -99,7 +120,7 @@ depends on it, and it is minutes to check against days to debug.
       Suite **2261 passed, 0 failed** (+37).
       **Not registered yet** — that is step 7. Nothing resolves `ISupportMailClient` at this point.
 
-- [x] **4. `EmailSupportChannel : ISupportChannel`.** Done 2026-09-01. Opening mails the case author and
+- [~] **4. `EmailSupportChannel : ISupportChannel`.** REOPENED 2026-09-01 by the clarified model — it mails the author when a case is raised on the site, which is the one case that must be answered on the site. The projection belongs to a case that arrived by mail, and the case must carry its origin. Everything below was true of the first cut and mostly survives the rework. Done 2026-09-01. Opening mails the case author and
       keeps the `Message-ID` as `ExternalId`; replying threads on `In-Reply-To` and `References`. Every
       failure path returns a quiet null or false — unconfigured, no address, refused — because a channel
       being down must never stop a case being raised. Suite **2274 passed, 0 failed** (+13).
@@ -125,7 +146,7 @@ depends on it, and it is minutes to check against days to debug.
       `EverySettableMailOption_IsForwarded` until the test set it. Exactly the silent-drop class it was
       written for, caught one step later.
 
-- [x] **5. Inbound handling.** Done 2026-09-01, as `EmailEventHandler` — the per-message pipeline, fully
+- [~] **5. Inbound handling.** REOPENED 2026-09-01: unmatched mail must now raise a case rather than be dropped, and the sender-match rule narrows to replies only. First cut done 2026-09-01, as `EmailEventHandler` — the per-message pipeline, fully
       tested. Suite **2315 passed, 0 failed** (+41).
       **Split from the hosted service deliberately:** the pipeline is where every decision that can lose or
       leak mail lives, and it is testable as a pure sequence; the poller is a loop around it and belongs with
