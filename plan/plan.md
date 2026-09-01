@@ -31,11 +31,21 @@ Building them last is what makes that test mean anything.
       A single word longer than the limit is cut mid-word rather than discarded: half a word is a poor
       subject, none at all is a worse one.
 
-- [~] **2. Closure reason.** `SupportCaseClosureReason` (`Manual`, `Inactivity`) on `SupportCase`, persisted
-      by name, `[BsonIgnoreIfNull]` so existing documents are untouched. A component has to render the two
-      differently, and parsing a transcript message to tell them apart is not a contract.
+- [x] **2. Closure reason.** Done 2026-09-02. Suite **2220 passed, 0 failed** (+6).
+      **Not stored, and not persisted at all — derived from `ClosedBy`.** The plan assumed a new field on the
+      entity and a reason threaded through `ISupportCaseStore.CloseCaseAsync`. That would have changed a
+      signature hosts implement for their own storage: a compile-time break in somebody else's repository,
+      for a value already recoverable from what the store records. `CloseCaseAsync` already takes `closedBy`,
+      so the sweeper passes `SupportCaseActors.AutoClose` and `SupportCase.ClosedReason` reads it.
+      **No entity change, no migration, no port change.**
+      **The coupling this creates is the right one:** the reason is exactly as trustworthy as the actor, so a
+      case closed by the sweeper is closed for inactivity *by definition* rather than by a flag that could
+      disagree with who closed it.
+      The `system:` prefix on the actor is what keeps it from colliding with a real authentication subject,
+      and a test pins that. An open case reads as having no reason even when a stale actor is left on it,
+      which is the state a reopen produces.
 
-- [ ] **3. Reopen.** `ReopenCaseAsync` on `ISupportCaseService`, authorized exactly as replying is: the author
+- [~] **3. Reopen.** `ReopenCaseAsync` on `ISupportCaseService`, authorized exactly as replying is: the author
       on their own case, or `support:manage` on anybody's. Writes a system entry, clears `ClosedAt`,
       `ClosedBy` and the reason, returns the case to `Open`.
       On the store it arrives as a **default interface member that throws a named `NotSupportedException`** —
