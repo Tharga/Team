@@ -28,7 +28,7 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
             TeamKey = teamKey,
             AuthorIdentity = subjectIdentity,
             AuthorName = authorName,
-            Subject = subject,
+            Subject = string.IsNullOrWhiteSpace(subject) ? SubjectFromMessage.Derive(body) : subject.Trim(),
             Status = SupportCaseStatus.Open,
             CreatedAt = now,
             MessageCount = 1

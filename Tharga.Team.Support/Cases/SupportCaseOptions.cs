@@ -27,4 +27,19 @@ public class SupportCaseOptions
     /// cannot verify a signature must not accept the request rather than trusting it.
     /// </remarks>
     public string SigningSecret { get; set; }
+
+    /// <summary>
+    /// Whether a component asks for a subject when a case is raised. Default <c>false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>A hint to the UI, not a rule the service enforces</b>, and the distinction is deliberate. With this
+    /// off, a component shows no subject field and the message supplies one. With it on, the field appears —
+    /// but a case raised without a subject anyway still gets a derived one, because
+    /// <see cref="SupportCase.Subject"/> is not nullable and a half-filled form must not produce a case that
+    /// renders as a blank line in every list.
+    /// <para>
+    /// So this decides what a person is asked for, never whether the case ends up with a subject.
+    /// </para>
+    /// </remarks>
+    public bool UseSubject { get; set; }
 }

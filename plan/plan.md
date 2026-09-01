@@ -15,14 +15,23 @@ Building them last is what makes that test mean anything.
       pair, the standing hold with its own documented reason and its own PR. **Nothing to apply.** Baseline on
       this branch: build 0 errors, `dotnet test` **2199 passed, 0 failed** across seven projects.
 
-- [~] **1. The optional subject.** `SupportCaseOptions.UseSubject`, default `false`. A `SubjectFromMessage`
-      helper deriving from the first 50 characters, applied in `SupportCaseService.RaiseCaseAsync` so a host
-      writing its own UI gets it too.
-      Cut on a word boundary; collapse newlines and runs of whitespace **first**, or a message opening with a
-      blank line yields an empty subject; mark truncation so a reader can tell the subject is a summary.
-      Pure and fully tested — this is the piece most likely to read badly rather than fail.
+- [x] **1. The optional subject.** Done 2026-09-02. `SupportCaseOptions.UseSubject` (default `false`),
+      `SubjectFromMessage.Derive`, `SupportCaseLimits.DerivedSubjectLength` (50), applied in
+      `SupportCaseService.RaiseCaseAsync`. Suite **2214 passed, 0 failed** (+15).
+      **The option turned out to be a UI hint, not a service rule, and that is a simplification worth
+      keeping.** The service derives a subject whenever one is blank — regardless of `UseSubject` — because
+      `SupportCase.Subject` is not nullable and a half-filled form with the field *shown* must not produce a
+      case that renders as an empty row in every list. So the option decides what a person is *asked* for,
+      never whether the case ends up with a subject. That also means the service needs no access to the
+      option at all.
+      **Whitespace is collapsed before anything is measured**, which is the whole of the derivation: a
+      message opening with a blank line, or one pasted with hard-wrapped newlines, otherwise yields a subject
+      that is empty or full of line breaks — both of which look like a bug in the list rendering them, not in
+      the derivation.
+      A single word longer than the limit is cut mid-word rather than discarded: half a word is a poor
+      subject, none at all is a worse one.
 
-- [ ] **2. Closure reason.** `SupportCaseClosureReason` (`Manual`, `Inactivity`) on `SupportCase`, persisted
+- [~] **2. Closure reason.** `SupportCaseClosureReason` (`Manual`, `Inactivity`) on `SupportCase`, persisted
       by name, `[BsonIgnoreIfNull]` so existing documents are untouched. A component has to render the two
       differently, and parsing a transcript message to tell them apart is not a contract.
 
