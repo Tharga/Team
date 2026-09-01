@@ -42,15 +42,27 @@ depends on it, and it is minutes to check against days to debug.
         the trust decision needs for email.
       - Tests: JSON round-trip; `SupportChannelType` stored by name (assert the BSON type).
 
-- [~] **2. Options.** `SupportCaseOptions` gains a nested `Email` section, including the optional
-      **`Recipients`** list — domains or full addresses; unset accepts everything.
-      **Decision to record in code:** `SlackChannel` and `SigningSecret` stay flat where they are rather than
-      moving into a `Slack` section for symmetry. Reshaping them is a breaking configuration change for any
-      host that has configured them, and symmetry is not worth an outage. The inconsistency with
-      `SupportOptions` (which nests `Slack` and `Notifications`) is visible and harmless; the reshape belongs
-      in plan 05, the breaking batch.
+- [x] **2. Options.** Done 2026-09-01. `MailOptions` + `MailServerOptions` in `Email/`, reached as
+      `SupportCaseOptions.Email` and projected onto their own DI options type exactly as the Slack section is.
+      `SlackChannel` and `SigningSecret` stay flat: moving them for symmetry would break the configuration of
+      every host that has set them, and the reshape belongs in plan 05, the breaking batch.
+      **Where mail is configured, and why it differs from Slack.** On `AddThargaSupportCases`, not
+      `AddThargaSupport`. The Slack *transport* sits on the latter because notifications use it too; nothing
+      but cases sends or reads mail, so putting it there would force a host wanting email cases to register
+      the notification sink and its hosted service for nothing.
+      **Two things pulled forward, because an option nobody can interpret is not worth shipping alone:**
+      - **`RecipientFilter`** — the matcher that gives `Recipients` its meaning: bare domain matches any local
+        part, full address matches only itself, case-insensitive, display-name headers unwrapped, and
+        plus-addressing stripped so the per-case reply-to is not rejected. 13 tests.
+      - **The startup check from step 7**, which refuses a configuration whose own `FromAddress` its filter
+        would reject. Left to step 7 it would have been written after the code that needs it.
+      Suite **2223 passed, 0 failed** (+19).
+      **Also folded in:** `SlackNamespaceIsolationTests` became `TransportNamespaceIsolationTests`, a theory
+      over both transport namespaces. A copied guard is the one that gets extended for one namespace and not
+      the other. Its detector self-check now also asserts a transport type is *not* exempt outside its own
+      namespace, so Slack and email cannot reach into each other by the long route.
 
-- [ ] **3. Mail transport** — `Tharga.Team.Support/Email/`, mirroring `Support/Slack/`. `ISupportMailClient`
+- [~] **3. Mail transport** — `Tharga.Team.Support/Email/`, mirroring `Support/Slack/`. `ISupportMailClient`
       over **MailKit**: SMTP send setting `Message-ID`, `In-Reply-To` and `References`; IMAP fetch; MIME
       parsing. One dependency, in the package that exists to quarantine exactly this.
       **No `Tharga.Team.*` types cross into the folder** — the #142 code-organisation rule, guarded by the
@@ -92,9 +104,9 @@ depends on it, and it is minutes to check against days to debug.
 - [ ] **7. Registration.** Wire the email channel in `SupportRegistration` with `TryAdd` semantics, active
       only when configured. The library registers the complete set — a consumer never enumerates interfaces
       by hand.
-      **Plus a startup check** naming the mismatch when the configured from/reply-to address is not matched by
-      this instance's own recipient filter. Without it the instance drops every reply to its own mail and it
-      looks identical to inbound being broken.
+      ~~**Plus a startup check** naming the from-address/filter mismatch.~~ **Done in step 2** —
+      `RequireSendingAddressIsAccepted`, with tests. What remains here is registering the channel, the poller
+      and the watermark store when mail is configured.
 
 - [ ] **8. Correct the `ITeamEmailSender` remark** so it scopes "the only mail the toolkit sends" to the core
       and points at the support channel.

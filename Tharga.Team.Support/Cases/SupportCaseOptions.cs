@@ -1,3 +1,5 @@
+using Tharga.Team.Support.Email;
+
 namespace Tharga.Team.Support.Cases;
 
 /// <summary>
@@ -6,6 +8,18 @@ namespace Tharga.Team.Support.Cases;
 /// <remarks>
 /// Separate from the notification options on purpose: a host may want Slack notifications without support
 /// cases, or support cases without Slack. Neither should configure the other into existence.
+/// <para>
+/// <b>Why <see cref="Email"/> is a section while the Slack settings are flat.</b> Not taste, and not worth
+/// tidying: <see cref="SlackChannel"/> and <see cref="SigningSecret"/> shipped at this level, and moving them
+/// for symmetry would break the configuration of every host that has set them. A breaking change buys
+/// nothing here. The reshape belongs in the release that is already breaking.
+/// </para>
+/// <para>
+/// <b>Why mail is configured here and Slack's token is not.</b> The Slack transport is configured on
+/// <c>AddThargaSupport</c> because notifications use it too. Nothing but support cases sends or reads mail,
+/// so putting it there would force a host wanting email cases to register the notification module — a sink
+/// and a hosted service it never asked for.
+/// </para>
 /// </remarks>
 public class SupportCaseOptions
 {
@@ -67,4 +81,10 @@ public class SupportCaseOptions
 
     /// <summary>Most cases one sweep will close, so a large backlog cannot become one enormous pass.</summary>
     public int AutoCloseBatchSize { get; set; } = 100;
+
+    /// <summary>
+    /// Reading and sending mail, and which recipients this instance answers for. Leave the hosts unset to
+    /// keep email off.
+    /// </summary>
+    public MailOptions Email { get; } = new();
 }

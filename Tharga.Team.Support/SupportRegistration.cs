@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Support.Email;
 using Tharga.Team.Support.Notifications;
 using Tharga.Team.Support.Slack;
 
@@ -99,6 +100,22 @@ public static class SupportRegistration
             o.AutoCloseBatchSize = caseOptions.AutoCloseBatchSize;
         });
 
+        // Projected onto its own options type for the same reason the Slack section is: the mail transport
+        // depends on what it needs rather than on the whole module, and a later section cannot widen it.
+        services.Configure<MailOptions>(o =>
+        {
+            CopyServer(caseOptions.Email.Imap, o.Imap);
+            CopyServer(caseOptions.Email.Smtp, o.Smtp);
+            o.FromAddress = caseOptions.Email.FromAddress;
+            o.FromName = caseOptions.Email.FromName;
+            o.Folder = caseOptions.Email.Folder;
+            o.PollInterval = caseOptions.Email.PollInterval;
+            o.Timeout = caseOptions.Email.Timeout;
+            o.Recipients = caseOptions.Email.Recipients;
+        });
+
+        RequireSendingAddressIsAccepted(caseOptions.Email);
+
         // Only when the feature is on. Zero means a host that does not want cases closing themselves runs no
         // timer and no query on its behalf, rather than a sweep that finds nothing every hour.
         if (caseOptions.AutoCloseAfter > TimeSpan.Zero)
@@ -156,5 +173,40 @@ public static class SupportRegistration
             sp.GetRequiredService<IAuditEntryFactory>()));
 
         return services;
+    }
+
+    private static void CopyServer(MailServerOptions from, MailServerOptions to)
+    {
+        to.Host = from.Host;
+        to.Port = from.Port;
+        to.UseSsl = from.UseSsl;
+        to.UserName = from.UserName;
+        to.Password = from.Password;
+    }
+
+    /// <summary>
+    /// Refuses a configuration whose own sending address the recipient filter would reject.
+    /// </summary>
+    /// <remarks>
+    /// <b>The failure this prevents is silent and expensive.</b> Every reply to mail the toolkit sent comes
+    /// back addressed to <see cref="MailOptions.FromAddress"/>; if the filter does not accept that address the
+    /// poller discards all of them, and the symptom is a mailbox that appears not to be read at all. Nothing
+    /// throws, nothing logs an error, and the configuration looks reasonable.
+    /// <para>
+    /// Checked at registration rather than on the first poll, so it fails at startup with the two values in
+    /// the message instead of an hour later with none.
+    /// </para>
+    /// </remarks>
+    private static void RequireSendingAddressIsAccepted(MailOptions email)
+    {
+        var filter = new RecipientFilter(email.Recipients);
+
+        if (filter.AcceptsEverything || string.IsNullOrWhiteSpace(email.FromAddress)) return;
+        if (filter.Accepts(email.FromAddress)) return;
+
+        throw new InvalidOperationException(
+            $"Support email is configured to send from '{email.FromAddress}', which its own recipient filter " +
+            $"({string.Join(", ", email.Recipients)}) does not accept. Every reply would be discarded. Add the " +
+            "address or its domain to the filter, or send from an address the filter already covers.");
     }
 }
