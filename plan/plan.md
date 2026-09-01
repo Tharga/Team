@@ -56,7 +56,20 @@ depends on it, and it is minutes to check against days to debug.
         plus-addressing stripped so the per-case reply-to is not rejected. 13 tests.
       - **The startup check from step 7**, which refuses a configuration whose own `FromAddress` its filter
         would reject. Left to step 7 it would have been written after the code that needs it.
-      Suite **2223 passed, 0 failed** (+19).
+      Suite **2224 passed, 0 failed** (+20).
+      **Corrected within the step, prompted by a question about invitation mail.** The projection was first
+      written as twelve hand assignments — the exact pattern `OptionsForwarder` exists to prevent and that has
+      shipped as a bug twice here (Tharga/Team#177): a property added later is accepted from the host and
+      silently discarded. Now copied by reflection, with `EverySettableMailOption_IsForwarded` asserting the
+      *result* — nothing left at its default — so the guard survives someone reverting to assignments.
+      `OptionsForwarder` itself is internal to `Tharga.Team.Blazor`; if a third caller appears, promote it
+      rather than writing a third copy.
+      **Invitation mail stays separate, deliberately.** `ITeamEmailSender` / `EmailOptions` on
+      `AddThargaTeam` is a different contract, options type and SMTP stack. Not unified, and not given a
+      fallback: an invitation is usually sent from `noreply@`, and support mail must come from an address
+      replies return to — inheriting one for the other would send support mail from a no-reply address and
+      lose every reply, while the from-address/filter check validated an address nobody chose. A host wanting
+      one mailbox binds both from the same configuration section, explicitly.
       **Also folded in:** `SlackNamespaceIsolationTests` became `TransportNamespaceIsolationTests`, a theory
       over both transport namespaces. A copied guard is the one that gets extended for one namespace and not
       the other. Its detector self-check now also asserts a transport type is *not* exempt outside its own

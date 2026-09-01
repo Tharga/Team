@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -102,17 +103,7 @@ public static class SupportRegistration
 
         // Projected onto its own options type for the same reason the Slack section is: the mail transport
         // depends on what it needs rather than on the whole module, and a later section cannot widen it.
-        services.Configure<MailOptions>(o =>
-        {
-            CopyServer(caseOptions.Email.Imap, o.Imap);
-            CopyServer(caseOptions.Email.Smtp, o.Smtp);
-            o.FromAddress = caseOptions.Email.FromAddress;
-            o.FromName = caseOptions.Email.FromName;
-            o.Folder = caseOptions.Email.Folder;
-            o.PollInterval = caseOptions.Email.PollInterval;
-            o.Timeout = caseOptions.Email.Timeout;
-            o.Recipients = caseOptions.Email.Recipients;
-        });
+        services.Configure<MailOptions>(o => CopyMail(caseOptions.Email, o));
 
         RequireSendingAddressIsAccepted(caseOptions.Email);
 
@@ -175,13 +166,38 @@ public static class SupportRegistration
         return services;
     }
 
-    private static void CopyServer(MailServerOptions from, MailServerOptions to)
+    /// <summary>
+    /// Forwards the configured mail settings onto the options type the transport resolves.
+    /// </summary>
+    /// <remarks>
+    /// <b>Copied by reflection rather than as a list of assignments</b>, because a named list is how options
+    /// quietly stop working: it is written against the properties that exist that day, one is added later,
+    /// and it is then accepted from the host and silently discarded — the setting looks configured and does
+    /// nothing. That has already shipped twice in this repository (Tharga/Team#177), which is why
+    /// <c>Tharga.Team.Blazor</c> has <c>OptionsForwarder</c> for the same job. This is not that type only
+    /// because it is internal to that assembly; if a third caller appears, promote one of them rather than
+    /// writing a third.
+    /// <para>
+    /// The two server sections are named because they are read-only properties holding their own object, so
+    /// there is no setter to forward. A <i>third</i> section is a visible structural change to
+    /// <see cref="MailOptions"/>, unlike a scalar, and <c>EverySettableMailOption_IsForwarded</c> fails until
+    /// it is handled here.
+    /// </para>
+    /// </remarks>
+    private static void CopyMail(MailOptions from, MailOptions to)
     {
-        to.Host = from.Host;
-        to.Port = from.Port;
-        to.UseSsl = from.UseSsl;
-        to.UserName = from.UserName;
-        to.Password = from.Password;
+        CopySettable(from, to);
+        CopySettable(from.Imap, to.Imap);
+        CopySettable(from.Smtp, to.Smtp);
+    }
+
+    private static void CopySettable<T>(T from, T to) where T : class
+    {
+        foreach (var property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                     .Where(x => x.CanRead && x.SetMethod?.IsPublic == true))
+        {
+            property.SetValue(to, property.GetValue(from));
+        }
     }
 
     /// <summary>
