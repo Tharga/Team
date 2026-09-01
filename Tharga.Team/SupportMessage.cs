@@ -38,4 +38,22 @@ public record SupportMessage
     /// definition — it is already there, and posting it back would echo it.
     /// </remarks>
     public SupportMessageDelivery Delivery { get; init; }
+
+    /// <summary>
+    /// The channel this entry arrived from, or <c>null</c> when it was written through the application
+    /// itself.
+    /// </summary>
+    /// <remarks>
+    /// <b>Where a message came from is not the same question as who wrote it.</b> <see cref="Kind"/> says
+    /// whether a person or the toolkit produced the entry; this says which door it came through, and the two
+    /// vary independently.
+    /// <para>
+    /// <b>It carries how much the attribution can be trusted</b>, which is why it is worth surfacing rather
+    /// than logging. An entry written through the application was authored by an authenticated caller. One
+    /// from <see cref="SupportChannelType.Email"/> was not: mail is accepted on a sender match, because
+    /// nothing about a <c>From:</c> header authenticates anybody. A reader deciding how much weight to put on
+    /// a name needs to be able to tell those apart.
+    /// </para>
+    /// </remarks>
+    public SupportChannelType? Source { get; init; }
 }

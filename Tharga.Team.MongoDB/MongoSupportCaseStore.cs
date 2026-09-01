@@ -409,7 +409,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorName = entity.AuthorName,
         Body = entity.Body,
         SentAt = entity.SentAt,
-        Delivery = entity.Delivery
+        Delivery = entity.Delivery,
+        Source = entity.Source
     };
 
     private static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -420,6 +421,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorName = message.AuthorName,
         Body = message.Body,
         SentAt = message.SentAt,
-        Delivery = message.Delivery
+        Delivery = message.Delivery,
+        Source = message.Source
     };
 }

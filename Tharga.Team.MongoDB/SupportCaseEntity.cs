@@ -134,9 +134,13 @@ public record SupportMessageEntity
 
     [BsonRepresentation(BsonType.String)]
     public SupportMessageDelivery Delivery { get; init; }
+
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.String)]
+    public SupportChannelType? Source { get; init; }
 }
 
-/// <summary>An embedded projection onto an external system. Unused until the channel work lands.</summary>
+/// <summary>An embedded projection onto an external system.</summary>
 public record SupportChannelBindingEntity
 {
     [BsonRepresentation(BsonType.String)]

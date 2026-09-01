@@ -51,6 +51,22 @@ public class SlackEventHandlerTests
         Assert.Equal(SupportMessageDelivery.Sent, messages.Items[^1].Delivery);
     }
 
+    /// <summary>
+    /// A reader cannot otherwise tell a Slack reply from one typed on the site: both are
+    /// <see cref="SupportMessageKind.User"/>, and the only hint is that the author name happens to look like
+    /// a workspace id.
+    /// </summary>
+    [Fact]
+    public async Task AnInboundReply_RecordsTheChannelItCameFrom()
+    {
+        var (handler, store, supportCase) = await BuildAsync();
+
+        await Handle(handler, MessageEvent(ThreadId, "any news?"));
+
+        var messages = await store.GetMessagesAsync(TeamKey, supportCase.Id, null, 50);
+        Assert.Equal(SupportChannelType.Slack, messages.Items[^1].Source);
+    }
+
     [Fact]
     public async Task AnUnsignedRequest_IsRefusedAndChangesNothing()
     {
