@@ -75,13 +75,31 @@ depends on it, and it is minutes to check against days to debug.
       the other. Its detector self-check now also asserts a transport type is *not* exempt outside its own
       namespace, so Slack and email cannot reach into each other by the long route.
 
-- [~] **3. Mail transport** — `Tharga.Team.Support/Email/`, mirroring `Support/Slack/`. `ISupportMailClient`
-      over **MailKit**: SMTP send setting `Message-ID`, `In-Reply-To` and `References`; IMAP fetch; MIME
-      parsing. One dependency, in the package that exists to quarantine exactly this.
-      **No `Tharga.Team.*` types cross into the folder** — the #142 code-organisation rule, guarded by the
-      same reflection-test pattern the Slack folder already has, so lifting it out stays a move.
+- [x] **3. Mail transport.** Done 2026-09-01. MailKit 4.17.0 added to `Tharga.Team.Support` — the first
+      third-party dependency, and the one the package was created in advance to quarantine. The csproj comment
+      claiming "no third-party package" was corrected rather than left contradicting the line beneath it.
+      `ISupportMailClient` / `SupportMailClient` over SMTP and IMAP, never throwing: a failed send is a failed
+      `MailSendResult`, a failed read is an empty fetch at the unchanged position.
+      **The testable logic was factored out of the I/O deliberately**, because a transport tested only against
+      a live server is tested by nobody: `MailMessageFactory` (outgoing headers), `InboundMailReader`
+      (received message → `InboundMail`) and `HtmlText` are pure and carry all 37 new tests. The client itself
+      is thin enough to read.
+      **Three decisions worth keeping:**
+      - **The mailbox is opened `ReadOnly`.** Not a precaution — read-write lets a fetch set `\Seen` as a side
+        effect, which is exactly what hides a message from the other site's instance.
+      - **A connection per operation, not a pooled one.** A long-lived IMAP connection is the process-local
+        state this design rejected when it chose polling over a socket, and it buys nothing at a poll interval
+        in minutes.
+      - **`References` carries the whole chain with the parent appended**, not just `In-Reply-To`. Clients
+        thread on `References`; a reply naming only its parent starts a new conversation in some of them, and
+        the mail is delivered perfectly while doing it.
+      **Two bugs the tests caught before they shipped:** paragraphs were flattening to a single newline so a
+      mail arrived as one run-on block, and a bounce was not recognised because an empty return path is
+      written literally as `<>` rather than as an empty string — the loop-protection case that matters most.
+      Suite **2261 passed, 0 failed** (+37).
+      **Not registered yet** — that is step 7. Nothing resolves `ISupportMailClient` at this point.
 
-- [ ] **4. `EmailSupportChannel : ISupportChannel`.** `OpenAsync` sends the opening mail and returns a binding
+- [~] **4. `EmailSupportChannel : ISupportChannel`.** `OpenAsync` sends the opening mail and returns a binding
       carrying its `Message-ID` as `ExternalId`; `PostAsync` replies into that thread. Returns null rather
       than throwing when unconfigured or refused — a channel being down must never stop a case being raised.
 
