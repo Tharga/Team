@@ -99,11 +99,59 @@ depends on it, and it is minutes to check against days to debug.
       Suite **2261 passed, 0 failed** (+37).
       **Not registered yet** — that is step 7. Nothing resolves `ISupportMailClient` at this point.
 
-- [~] **4. `EmailSupportChannel : ISupportChannel`.** `OpenAsync` sends the opening mail and returns a binding
-      carrying its `Message-ID` as `ExternalId`; `PostAsync` replies into that thread. Returns null rather
-      than throwing when unconfigured or refused — a channel being down must never stop a case being raised.
+- [x] **4. `EmailSupportChannel : ISupportChannel`.** Done 2026-09-01. Opening mails the case author and
+      keeps the `Message-ID` as `ExternalId`; replying threads on `In-Reply-To` and `References`. Every
+      failure path returns a quiet null or false — unconfigured, no address, refused — because a channel
+      being down must never stop a case being raised. Suite **2274 passed, 0 failed** (+13).
+      **`SupportChannelBinding` gained an optional `Address`, and that is the substantive decision here.**
+      A case has no email on it and none should be added: the correspondent is a property of the
+      *projection*, not of the case. A Slack thread is posted into a room anyone can answer, so there is
+      nobody to name; an email thread has exactly one correspondent, and a later reply must go back to them
+      rather than to whoever is signed in. It is additive and nullable, so nothing existing changes.
+      **The address is read from the signed-in user at open time, not looked up.** `GetUserByKeyAsync` carries
+      `[RequireScope(SystemUserScopes.Manage)]`, which somebody raising a case has no reason to hold — routing
+      around that would have been the authorization bypass `shared-instructions.md` warns about. Asking later
+      would answer the wrong question anyway: by the time support replies, the signed-in user is the agent.
+      **`PostAsync` reads the case back by binding** for its subject and id, which neither the binding nor the
+      message carries. Same lookup the inbound path already uses, and a customer reads the subject line even
+      though their client threads on headers.
+      **`PerCaseReplyTo` defaults to off.** A server that rejects a plus-addressed local part bounces the
+      reply back at the customer; with it off a reply is matched on headers, and the rare client that strips
+      those leaves a reply unmatched and logged. A visible miss beats a bounce in front of a customer.
+      **Two echo guards:** a message whose `Source` is `Email` is never mailed back — the provenance field
+      added in step 1 paying for itself — while one from Slack still is, because that is not this channel's
+      echo.
+      **The step-2 guard fired for real:** adding `PerCaseReplyTo` failed
+      `EverySettableMailOption_IsForwarded` until the test set it. Exactly the silent-drop class it was
+      written for, caught one step later.
 
-- [ ] **5. Inbound poller.** A hosted service on a configurable interval, fetching from the instance's own
+- [x] **5. Inbound handling.** Done 2026-09-01, as `EmailEventHandler` — the per-message pipeline, fully
+      tested. Suite **2315 passed, 0 failed** (+41).
+      **Split from the hosted service deliberately:** the pipeline is where every decision that can lose or
+      leak mail lives, and it is testable as a pure sequence; the poller is a loop around it and belongs with
+      the watermark it advances. Step 6 now carries both.
+      **The check order is asserted, not just documented** — `AMailAddressedElsewhere_NeverReachesTheLedger`
+      fails if the recipient filter is ever moved after the ledger, which is the shared-mailbox defect that
+      would otherwise be invisible until the other site started losing mail.
+      **Two things this step needed that were not in the plan:**
+      - **`PerCaseAddress`**, building *and* parsing the `support+{caseId}@…` convention in one place. They
+        are one convention; a build that disagrees with its parse produces replies that arrive and match
+        nothing. `EmailSupportChannel` was rewritten to use it rather than keep its own copy.
+      - **`ISupportCaseStore.GetCaseByIdAsync`**, because the address fallback resolves a case id with no
+        team and the store had no such read. **Added as a default interface member returning null** — a host
+        implementing the port keeps compiling, which is the same reasoning that kept `ITeamEmailSender`
+        un-widened in decision 1. A store that cannot answer is answering honestly; the header path is
+        primary regardless.
+      **`QuotedText` is deliberately conservative:** it cuts only on unambiguous markers and keeps the whole
+      body when it recognises nothing, because keeping too much reads badly while cutting too much silently
+      loses what somebody wrote. A reply that is entirely quote is kept whole rather than stored as an empty
+      entry.
+      **A test caught a locale bug:** the attribution pattern required the verb against the colon, which fits
+      English (`… Support wrote:`) and fails Swedish (`… skrev Support:`) — so Swedish replies would have
+      kept their whole quoted thread.
+
+- [ ] **6. Inbound poller and watermark.** A hosted service on the configured interval, fetching from the
+      instance's own
       stored watermark (UID + `UIDVALIDITY`, reset and re-scan on a validity change). **It never sets `\Seen`
       and never moves a message** — the flag is shared state in a mailbox two applications read, so using it
       as "handled" would hide the other site's mail from it. Then, per message, in this order:
@@ -128,7 +176,7 @@ depends on it, and it is minutes to check against days to debug.
       - **Body:** trim quoted history and signature; flatten HTML to text; record that attachments were
         dropped. Enforce `SupportCaseLimits` — a few quoted round-trips can hit the per-entry cap alone.
 
-- [ ] **6. Watermark store.** A port in `Tharga.Team` with a Mongo implementation, one record per deployment,
+      Watermark store: a port in `Tharga.Team` with a Mongo implementation, one record per deployment,
       holding the last considered UID and its `UIDVALIDITY`. **No new endpoint** — there is no webhook to map,
       which is the one place this transport is cheaper than the rejected one.
 
@@ -138,6 +186,14 @@ depends on it, and it is minutes to check against days to debug.
       ~~**Plus a startup check** naming the from-address/filter mismatch.~~ **Done in step 2** —
       `RequireSendingAddressIsAccepted`, with tests. What remains here is registering the channel, the poller
       and the watermark store when mail is configured.
+      **Blocker found in step 4, decide before writing this:** `SupportCaseService` takes a **single**
+      `ISupportChannel`, and registration uses `TryAdd` — so configuring Slack and email together silently
+      gives whichever registered first, with no warning. A case is modelled to carry several bindings, so the
+      model already disagrees with the wiring. Options: take `IEnumerable<ISupportChannel>` and open a
+      projection per configured channel (the constructor is `internal`, so no public contract changes), or
+      refuse both at startup and say so. **The first is the honest one** — two bindings is what
+      `SupportCase.Bindings` being an array has always meant — but it changes what `RaiseCase` does when one
+      channel accepts and another refuses, which needs stating rather than discovering.
 
 - [ ] **8. Correct the `ITeamEmailSender` remark** so it scopes "the only mail the toolkit sends" to the core
       and points at the support channel.

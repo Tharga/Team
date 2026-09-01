@@ -214,6 +214,15 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return entity == null ? null : ToCase(entity);
     }
 
+    public async Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseId)) return null;
+
+        var entity = await collection.GetOneAsync(Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId));
+
+        return entity == null ? null : ToCase(entity);
+    }
+
     public async Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default)
     {
         var entity = await RequireCaseAsync(teamKey, caseId);
@@ -280,7 +289,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             .Push(x => x.Bindings, new SupportChannelBindingEntity
             {
                 ChannelType = binding.ChannelType,
-                ExternalId = binding.ExternalId
+                ExternalId = binding.ExternalId,
+                Address = binding.Address
             });
 
         await UpdateAsync(teamKey, caseId, update);
@@ -398,7 +408,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         MessageCount = entity.Messages.Length,
         Bindings = entity.Bindings == null
             ? []
-            : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId })]
+            : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })]
     };
 
     private static SupportMessage ToMessage(SupportMessageEntity entity) => new()

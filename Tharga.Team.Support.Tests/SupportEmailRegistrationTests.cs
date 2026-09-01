@@ -29,6 +29,7 @@ public class SupportEmailRegistrationTests
         o.Email.Folder = "Support";
         o.Email.PollInterval = TimeSpan.FromSeconds(30);
         o.Email.Timeout = TimeSpan.FromSeconds(45);
+        o.Email.PerCaseReplyTo = true;
         o.Email.Recipients = ["fortdocs.se"];
     }
 
@@ -49,6 +50,7 @@ public class SupportEmailRegistrationTests
         Assert.Equal("Support", options.Folder);
         Assert.Equal(TimeSpan.FromSeconds(30), options.PollInterval);
         Assert.Equal(TimeSpan.FromSeconds(45), options.Timeout);
+        Assert.True(options.PerCaseReplyTo);
         Assert.Equal(["fortdocs.se"], options.Recipients);
     }
 

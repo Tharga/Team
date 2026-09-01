@@ -124,6 +124,24 @@ public interface ISupportCaseStore
     Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The case with this id whatever team owns it, or <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>For inbound mail that names a case but not a team</b>, which is what a per-case reply address
+    /// (<c>support+{caseId}@…</c>) carries when the sender's client dropped the threading headers. Like
+    /// <see cref="GetCaseByBindingAsync"/> it is not scoped by team and for the same reason: the identifier
+    /// is what resolves the team, not the caller. Reached only from a channel adapter, never from a
+    /// user-facing path.
+    /// <para>
+    /// <b>Defaults to finding nothing</b>, so a store written before this existed keeps compiling and keeps
+    /// working — the threading headers are the primary match and this is only the fallback. A store that
+    /// cannot look up by id alone is answering honestly rather than failing.
+    /// </para>
+    /// </remarks>
+    Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCase>(null);
+
+    /// <summary>
     /// Records that someone has read a case up to <paramref name="sequence"/>.
     /// </summary>
     /// <remarks>

@@ -147,4 +147,7 @@ public record SupportChannelBindingEntity
     public required SupportChannelType ChannelType { get; init; }
 
     public required string ExternalId { get; init; }
+
+    [BsonIgnoreIfNull]
+    public string Address { get; init; }
 }

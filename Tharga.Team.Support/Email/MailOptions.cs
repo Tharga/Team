@@ -36,6 +36,22 @@ public class MailOptions
     public TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 
     /// <summary>
+    /// Whether replies are invited to a per-case address, <c>support+{caseId}@…</c>. Default <c>false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Off by default because the cost of it being wrong is asymmetric.</b> A mail server that does not
+    /// accept plus-addressed local parts rejects every reply, and the sender gets a bounce — a failure in
+    /// front of a customer. With it off, a reply is matched on its threading headers instead; the rare mail
+    /// client that strips those leaves a reply unmatched, which is logged and visible to support rather than
+    /// bounced back at the person who wrote it.
+    /// <para>
+    /// Turn it on once the mailbox is known to accept plus-addressing. It is the more robust of the two
+    /// mechanisms, because a threading header can be dropped by anything in the path.
+    /// </para>
+    /// </remarks>
+    public bool PerCaseReplyTo { get; set; }
+
+    /// <summary>
     /// Domains or full addresses this instance accepts mail for. Empty accepts everything.
     /// </summary>
     /// <remarks>
