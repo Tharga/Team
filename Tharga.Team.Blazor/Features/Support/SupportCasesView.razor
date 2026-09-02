@@ -28,7 +28,21 @@ else
     <RadzenStack Orientation="Orientation.Vertical" Gap="1.5rem">
 
         <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
-            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportCasesViewText.NewCase]</RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
+                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportCasesViewText.NewCase]</RadzenText>
+
+                @* Unknown renders nothing at all -- no badge, no gap. Saying "offline" when the truth is
+                   "Slack would not tell us" discourages somebody from asking for help that is in fact
+                   available. *@
+                @if (_presence == SupportPresenceState.Online)
+                {
+                    <RadzenBadge Text="@_text[SupportCasesViewText.SupportOnline]" BadgeStyle="BadgeStyle.Success" />
+                }
+                else if (_presence == SupportPresenceState.Away)
+                {
+                    <RadzenBadge Text="@_text[SupportCasesViewText.SupportAway]" BadgeStyle="BadgeStyle.Light" />
+                }
+            </RadzenStack>
 
             @if (ShowSubject)
             {
@@ -150,6 +164,15 @@ else
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
+    /// <remarks>
+    /// Resolved through the provider rather than injected directly, because <c>ISupportPresence</c> is
+    /// registered only when a Slack channel is configured — and <c>[Inject]</c> on a missing service fails
+    /// the whole render. Absent means the same as unknown: show nothing.
+    /// </remarks>
+    [Inject] private IServiceProvider Services { get; set; }
+
+    private SupportPresenceState _presence = SupportPresenceState.Unknown;
+
     private TextSet _text = TextSet.Empty;
     private bool _ready;
     private bool _busy;
@@ -188,7 +211,31 @@ else
             }
         }
 
+        // After _ready, deliberately: presence is advisory and must never delay the form being usable.
         _ready = true;
+
+        await RefreshPresenceAsync();
+    }
+
+    /// <remarks>
+    /// Every failure is unknown rather than an error. A support form that will not render because Slack is
+    /// unreachable would be the worst possible trade for a badge.
+    /// </remarks>
+    private async Task RefreshPresenceAsync()
+    {
+        var presence = Services?.GetService(typeof(ISupportPresence)) as ISupportPresence;
+
+        if (presence == null) return;
+
+        try
+        {
+            _presence = await presence.GetAsync();
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+            _presence = SupportPresenceState.Unknown;
+        }
     }
 
     public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;

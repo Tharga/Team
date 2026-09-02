@@ -71,8 +71,26 @@ Feature scope in `plan/feature.md`. Spec:
 - [ ] **5. Tests for every acceptance criterion**, including the two that are about restraint: an unset URL
       template leaves the message intact, and unknown presence renders as nothing.
 
-- [ ] **6. Sample.** Configure it from the manifest, and show presence somewhere honest — next to the support
-      form, where it changes what a customer expects rather than decorating a dashboard.
+- [x] **6. Sample and the deep link.** Done 2026-09-02 while the user installed the app.
+      **`SupportCasesView` gained a `CaseId` parameter** and the sample routes `/support/{CaseId?}`, so a link
+      from Slack opens the conversation rather than the list — which is what makes sending a link worth
+      anything. An unknown or unreadable id falls back to the list rather than erroring: a case id is
+      guessable and a months-old link is ordinary, and the service still authorizes the read.
+      `SelectAsync` now takes an id rather than a whole case, because passing a fabricated `SupportCase` just
+      to carry one was the first draft and read as badly as it sounds.
+      **Presence renders beside the "ask for help" heading**, where it changes what somebody expects rather
+      than decorating a dashboard. Online and away each get a badge; **unknown renders nothing at all** — no
+      badge, no gap.
+      **Resolved through `IServiceProvider`, not `[Inject]`.** `ISupportPresence` exists only when a Slack
+      channel is configured, and `[Inject]` on a missing service fails the entire render — which would mean a
+      host without Slack could not use the support form at all.
+      **Presence is fetched after `_ready`**, so the form is usable before Slack has answered. Advisory means
+      it must never delay anything, and a support form that will not render because Slack is unreachable
+      would be the worst possible trade for a badge.
+
+- [ ] **6b. Setup verified against a real workspace.** The user installed the app from the manifest on
+      2026-09-02 after two rejections — see step 4. Outbound is untested until the token is in place; inbound
+      needs a tunnel. **Do not close this feature until a case has actually reached Slack.**
 
 - [ ] **7. Docs** (own `docs:` commit): the link placeholder and the URL template in
       `docs/articles/notifications.md`; presence and the manifest in `docs/articles/support-cases.md`,
