@@ -102,6 +102,26 @@ Feature scope in `plan/feature.md`. Spec:
       nothing appears, with the reason only in the log.
       **Inbound replies remain untested** — they need a tunnel and event subscriptions (phase two).
 
+- [x] **6c. Inbound verified, and a defect the render tests now guard.** 2026-09-02.
+      **Phase two was verified without a tunnel**, by posting correctly signed requests at the running app:
+      the challenge is echoed verbatim; a wrong secret, a stale timestamp and a missing signature are each
+      401; a reply in a known thread is appended and attributed; **a redelivered `event_id` appends nothing**
+      (8 events, 8 messages); the bot's own message and top-level chatter are ignored.
+      **Cold-start latency exceeds Slack's budget.** Measured: **3434 ms** on the first request after a
+      restart, then 43–57 ms warm, 202 ms for a deduplicated redelivery. The cost is first-touch index
+      assurance on `SupportEventLedger` and `SupportCase`. So the shipped two-way spec's withdrawal of the
+      ack-first criterion — *"comfortably inside the three-second budget"* — is true warm and false cold; what
+      actually makes it safe is the ledger making Slack's retry harmless. **Recommend a startup warm-up**
+      touching both collections; it belongs to the two-way feature rather than this one.
+      **`RadzenLink` has no `Click` parameter.** Both components used one for the case subject, so Blazor
+      captured the handler as an unmatched HTML attribute and rendered a dead one: **neither component could
+      open a case, and it compiled, unit-tested and passed the surface guard**. Now a text-variant
+      `RadzenButton`, which also toggles closed and stays keyboard reachable.
+      **`SupportCasesViewRenderTests` is the guard that was missing**, and it is not vacuous: reverting to
+      `RadzenLink` fails two of its four tests while still compiling cleanly. No assertion about the service
+      could have caught this — only rendering the markup and clicking what a person clicks proves the wiring
+      exists.
+
 - [ ] **7. Docs** (own `docs:` commit): the link placeholder and the URL template in
       `docs/articles/notifications.md`; presence and the manifest in `docs/articles/support-cases.md`,
       including that Slack tokens are per workspace and why there is no shared Tharga app to install.

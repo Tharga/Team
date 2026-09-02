@@ -83,7 +83,11 @@ else
                 {
                     <RadzenCard Variant="Variant.Outlined">
                         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
-                            <RadzenLink Text="@item.Subject" Click="@(() => SelectAsync(item.Id))" />
+                            @* A button, not a RadzenLink: RadzenLink has no Click parameter, so a handler passed to it is
+                               swallowed as an unmatched attribute and silently does nothing — which is how both of these
+                               shipped unable to open a case. A text-variant button also stays keyboard reachable. *@
+                            <RadzenButton Text="@item.Subject" Variant="Variant.Text" Size="ButtonSize.Small"
+                                          Click="@(() => ToggleAsync(item.Id))" />
                             <RadzenBadge Text="@StatusText(item)"
                                          BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
                         </RadzenStack>
@@ -319,6 +323,21 @@ else
         {
             _busy = false;
         }
+    }
+
+    /// <remarks>
+    /// Clicking the open case closes it again, so a long transcript can be put away without leaving the page.
+    /// </remarks>
+    private async Task ToggleAsync(string caseId)
+    {
+        if (_selected?.Id == caseId)
+        {
+            _selected = null;
+            _messages = [];
+            return;
+        }
+
+        await SelectAsync(caseId);
     }
 
     private async Task SelectAsync(string caseId)
