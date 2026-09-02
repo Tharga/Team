@@ -72,7 +72,11 @@ else
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {
-                                <RadzenTextArea @bind-Value="_answer" Placeholder="@_text[SupportQueueViewText.AnswerLabel]"
+                                @* oninput as well as the value binding: Radzen binds on change, so the
+                                   Answer button would stay disabled until the box lost focus. *@
+                                <RadzenTextArea Value="@_answer" ValueChanged="@(v => _answer = v)"
+                                                @oninput="@(e => _answer = e.Value?.ToString())"
+                                                Placeholder="@_text[SupportQueueViewText.AnswerLabel]"
                                                 Rows="3" Style="width: 100%;" aria-label="@_text[SupportQueueViewText.AnswerLabel]" />
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                     <RadzenButton Text="@_text[SupportQueueViewText.AnswerLabel]" Click="AnswerAsync"

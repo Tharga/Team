@@ -36,7 +36,12 @@ else
                                Style="width: 100%;" aria-label="@_text[SupportCasesViewText.SubjectLabel]" />
             }
 
-            <RadzenTextArea @bind-Value="_body" Placeholder="@_text[SupportCasesViewText.MessageLabel]" Rows="4"
+            @* oninput as well as the value binding, because Radzen's binding fires on change — that is,
+               on blur. Without it the Send button stays disabled until the box loses focus, so somebody who
+               types a message and reaches straight for the button finds it dead. *@
+            <RadzenTextArea Value="@_body" ValueChanged="@(v => _body = v)"
+                            @oninput="@(e => _body = e.Value?.ToString())"
+                            Placeholder="@_text[SupportCasesViewText.MessageLabel]" Rows="4"
                             Style="width: 100%;" aria-label="@_text[SupportCasesViewText.MessageLabel]" />
 
             <div>
@@ -84,7 +89,9 @@ else
 
                                 @if (_selected.Status == SupportCaseStatus.Open)
                                 {
-                                    <RadzenTextArea @bind-Value="_reply" Placeholder="@_text[SupportCasesViewText.ReplyLabel]"
+                                    <RadzenTextArea Value="@_reply" ValueChanged="@(v => _reply = v)"
+                                                    @oninput="@(e => _reply = e.Value?.ToString())"
+                                                    Placeholder="@_text[SupportCasesViewText.ReplyLabel]"
                                                     Rows="3" Style="width: 100%;" aria-label="@_text[SupportCasesViewText.ReplyLabel]" />
                                     <div>
                                         <RadzenButton Text="@_text[SupportCasesViewText.ReplyLabel]" Click="ReplyAsync"
