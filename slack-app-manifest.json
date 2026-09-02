@@ -1,0 +1,62 @@
+{
+  "_comment": [
+    "Tharga.Team support integration — a Slack app manifest.",
+    "",
+    "Slack issues tokens per workspace installation, so there is no Tharga-owned app to install: each",
+    "consumer creates their own. This manifest is what makes that a two-minute job rather than an",
+    "afternoon of guessing at scopes.",
+    "",
+    "To use it: Slack API -> Your Apps -> Create New App -> From an app manifest, pick the workspace,",
+    "paste this file, then Install to Workspace. Copy the Bot User OAuth Token (xoxb-...) into",
+    "Slack:BotToken and the Signing Secret into Slack:SigningSecret.",
+    "",
+    "Then invite the bot to the channel: /invite @Tharga Support. It cannot post to a channel it is not in,",
+    "and it cannot read the member list of one either — which is how support presence is determined.",
+    "",
+    "Replace YOUR-HOST below with the public address of your deployment. Slack cannot reach localhost, so",
+    "for local work use a tunnel (ngrok or similar) and update the request URL to match.",
+    "",
+    "Every scope here is required by code in Tharga.Team.Support. If you remove one, the feature that",
+    "needs it stops working silently rather than loudly:",
+    "  chat:write    -> chat.postMessage       posting notifications and case replies",
+    "  users:read    -> users.getPresence      whether anybody on support is active",
+    "  channels:read -> conversations.members  who is on a public support channel",
+    "  groups:read   -> conversations.members  the same, for a private support channel"
+  ],
+  "display_information": {
+    "name": "Tharga Support",
+    "description": "Support cases and notifications from your application.",
+    "background_color": "#2c3e50"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Tharga Support",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "users:read",
+        "channels:read",
+        "groups:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://YOUR-HOST/_tharga/support/slack/events",
+      "bot_events": [
+        "message.channels",
+        "message.groups"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": false
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
