@@ -9,25 +9,28 @@ Feature scope in `plan/feature.md`. Spec:
       Microsoft.Testing.Platform pair, its own PR. **Nothing to apply.** Baseline on this branch: build
       0 errors, **2258 passed, 0 failed**.
 
-- [~] **1. The case link.** A `CaseUrlTemplate` setting plus a `{case.url}` placeholder.
-      The case id needs no work — `NotificationRouter` already falls through to audit metadata, and
-      `support.case.id` is written by the auditing decorator. So this is the template substitution and the
-      one thing the toolkit cannot know: the host's route.
-      Renders **empty rather than broken** when unset, so a message with a link in its template is still
-      readable on a host that has not configured one.
-      Decide where the setting lives: `NotificationOptions` (it is a routing concern) rather than
-      `SupportCaseOptions` (which is about the cases themselves) — the router is what renders it.
+- [x] **1 and 2. The case link and its default route.** Done together 2026-09-02 —
+      `NotificationOptions.CaseUrlTemplate`, a `{case.url}` placeholder, and a built-in `support:raise` route.
+      Suite **2265 passed, 0 failed** (+7), warnings 34 against the limit of 35.
+      **The setting lives on `NotificationOptions`, not `SupportCaseOptions`** — the router renders it, and it
+      is a routing concern rather than something about the cases themselves.
+      **A template, not a base address.** The toolkit has no convention for where a case is shown, so a base
+      address would produce a working link only for hosts whose routing matched a guess. `{caseId}` in a
+      host-written template puts the knowledge where it exists — and the placeholder is matched
+      case-insensitively, because `{caseid}` is what somebody types.
+      **Empty on either half missing**, and both directions are tested: no template configured leaves the
+      rest of the message intact, and an entry that is not about a case emits no link — so a team event
+      borrowing the same wording cannot link to a case that does not exist.
+      **The default route ships with the link in its wording**, which is safe precisely because an unset
+      template renders nothing rather than `http://localhost/support/`.
+      **The guard's emitted list was verified, not appended to.** It was missing all four support events;
+      `support:raise`, `reply`, `close` and `reopen` are emitted by `AuditingSupportCaseServiceDecorator` and
+      are now listed with a note saying where they come from.
+      **One coupling accepted deliberately:** `NotificationRouter` now references
+      `SupportAuditMetadataKeys.CaseId` from the `Cases` namespace. Duplicating the key string would leave two
+      places to keep in step, and a router that renders a *case* URL necessarily knows about cases.
 
-- [ ] **2. A default route for a raised case.** So "notify me when somebody asks for help" needs no
-      hand-written route.
-      **Extend `EveryBuiltInRoute_NamesAnEventTheToolkitEmits`, and verify the list rather than appending to
-      it.** The guard holds a hard-coded set of emitted events; a default naming something nothing raises
-      looks configured and does nothing, which is the failure that test exists to prevent.
-      Note `support:raise` is emitted only when `AddThargaSupportCases` is registered — a notifications-only
-      host simply never triggers it, which is the same harmless shape as a route for an event that has not
-      happened yet.
-
-- [ ] **3. Presence.** `users.getPresence` on `ISlackClient`, needing the `users:read` scope.
+- [~] **3. Presence.** `users.getPresence` on `ISlackClient`, needing the `users:read` scope.
       **Cached, and the cache shared across instances** — Slack rate-limits this endpoint and calling it per
       render is a documented way to get a deployment throttled. `ITeamCache` is deliberately not reused: it is
       purpose-built for three named claims lookups and has no general key/value surface, exactly as

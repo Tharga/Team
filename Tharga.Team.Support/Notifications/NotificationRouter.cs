@@ -1,6 +1,7 @@
 ﻿using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Service.Audit;
+using Tharga.Team.Support.Cases;
 
 namespace Tharga.Team.Support.Notifications;
 
@@ -15,6 +16,9 @@ namespace Tharga.Team.Support.Notifications;
 public sealed partial class NotificationRouter(IOptions<NotificationOptions> options)
 {
     private const string Wildcard = "*";
+
+    /// <summary>What a host writes in <see cref="NotificationOptions.CaseUrlTemplate"/> for the case.</summary>
+    private const string CaseIdPlaceholder = "{caseId}";
 
     private readonly NotificationOptions _options = options?.Value ?? new NotificationOptions();
 
@@ -47,7 +51,7 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
             if (string.IsNullOrWhiteSpace(channel)) continue;
 
             messages ??= [];
-            messages.Add(new NotificationMessage(channel, Render(route.Template, entry, key)));
+            messages.Add(new NotificationMessage(channel, Render(route.Template, entry, key, _options.CaseUrlTemplate)));
         }
 
         return messages ?? (IReadOnlyList<NotificationMessage>)[];
@@ -81,11 +85,11 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
         return string.Equals(pattern, key, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string Render(string template, AuditEntry entry, string key)
+    private static string Render(string template, AuditEntry entry, string key, string caseUrlTemplate)
     {
         if (string.IsNullOrWhiteSpace(template)) return DefaultText(entry, key);
 
-        return PlaceholderPattern.Replace(template, match => Resolve(match.Groups[1].Value, entry, key) ?? string.Empty);
+        return PlaceholderPattern.Replace(template, match => Resolve(match.Groups[1].Value, entry, key, caseUrlTemplate) ?? string.Empty);
     }
 
     /// <remarks>
@@ -107,9 +111,10 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
     /// table to maintain alongside it. The cost is that a typo renders as nothing instead of announcing
     /// itself; the message being visibly wrong in Slack is the feedback.
     /// </remarks>
-    private static string Resolve(string name, AuditEntry entry, string key) => name.ToLowerInvariant() switch
+    private static string Resolve(string name, AuditEntry entry, string key, string caseUrlTemplate) => name.ToLowerInvariant() switch
     {
         "event" => key,
+        "case.url" => CaseUrl(entry, caseUrlTemplate),
         "feature" => entry.Feature,
         "action" => entry.Action,
         "actor" => Actor(entry),
@@ -119,6 +124,32 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
         "error" => entry.ErrorMessage,
         _ => entry.Metadata != null && entry.Metadata.TryGetValue(name, out var value) ? value : null
     };
+
+    /// <summary>
+    /// The configured link to the case this entry is about, or null when there is nothing to link to.
+    /// </summary>
+    /// <remarks>
+    /// <b>Null on either half being missing</b> — no template, or an entry that is not about a case — and
+    /// <see cref="Render"/> turns that into an empty string. So a route worded with a link stays readable on
+    /// a host that has not configured one, and a team event borrowing the same wording does not emit a link
+    /// to a case that does not exist.
+    /// <para>
+    /// The case id is read from the audit metadata the support decorator already writes, which is why this
+    /// needed no new plumbing to reach the router: <see cref="Resolve"/> has always fallen through to
+    /// metadata for unknown names, so <c>{support.case.id}</c> worked before <c>{case.url}</c> existed.
+    /// </para>
+    /// </remarks>
+    private static string CaseUrl(AuditEntry entry, string caseUrlTemplate)
+    {
+        if (string.IsNullOrWhiteSpace(caseUrlTemplate)) return null;
+
+        if (entry.Metadata == null || !entry.Metadata.TryGetValue(SupportAuditMetadataKeys.CaseId, out var caseId))
+            return null;
+
+        return string.IsNullOrWhiteSpace(caseId)
+            ? null
+            : caseUrlTemplate.Replace(CaseIdPlaceholder, Uri.EscapeDataString(caseId), StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string Actor(AuditEntry entry) =>
         !string.IsNullOrWhiteSpace(entry.CallerIdentity) ? entry.CallerIdentity : "an unknown caller";
