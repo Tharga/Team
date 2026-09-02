@@ -74,9 +74,12 @@ Clearing the list turns notifications off entirely without unregistering anythin
 
 ### The built-in routes
 
-`NotificationOptions.DefaultRoutes()` covers a team being created, a member being invited or removed,
-and a user being deleted. They name no channel, so they use `DefaultChannel` — and stay dormant until
-one is set, rather than posting into a channel nobody picked.
+`NotificationOptions.DefaultRoutes()` covers a team being created, a member being invited or removed, a user
+being deleted, and **a support case being raised**. They name no channel, so they use `DefaultChannel` — and
+stay dormant until one is set, rather than posting into a channel nobody picked.
+
+`support:raise` is only ever emitted when `AddThargaSupportCases` is registered, so a host using
+notifications alone simply never triggers it.
 
 Replace the list to take full control, or edit it to add and remove single events.
 
@@ -95,6 +98,27 @@ mapping table to maintain beside it:
 
 A name that resolves to nothing renders as empty rather than leaving braces in the channel — so a typo
 shows up as a gap in the message.
+
+### Linking to a support case
+
+`{case.url}` renders a link to the case an entry is about:
+
+```csharp
+o.Notifications.CaseUrlTemplate = "https://app.example.com/support/{caseId}";
+```
+
+**You supply the template because only you know it.** The toolkit has no convention for where a case is shown
+— `/support` is what the sample happens to choose — and it cannot infer the public address either, since a
+reverse proxy, a custom domain and a container's own hostname all disagree. A guess would produce links that
+work in development and break in production.
+
+**Unset renders nothing rather than something broken**, so a route worded with a link stays readable without
+one — which is why the built-in `support:raise` route can ship with `{case.url}` in its wording. The same
+holds for an entry that is not about a case: a team event borrowing that wording emits no link rather than a
+link to nothing.
+
+The case id itself has always been available as `{support.case.id}`, through the metadata fall-through above.
+`{case.url}` is the template applied to it.
 
 Omit `Template` and the message is built for you: the event, the actor, the team, and the reason if it
 failed.
@@ -120,7 +144,8 @@ new() { Event = "invoice:paid", Channel = "#billing", Template = "Invoice {invoi
 Every mutation the toolkit audits: teams (`team:create`, `team:rename`, `team:delete`,
 `team:transfer-ownership`, `team:icon-set`, …), membership (`team:invite`, `team:remove-member`,
 `team:set-role`, `team:set-tenant-roles`, …), consent (`team:set-consent`), users (`user:verify`,
-`user:delete`, `user:set-user-name`), and API keys.
+`user:delete`, `user:set-user-name`), API keys, and support cases (`support:raise`, `support:reply`,
+`support:close`, `support:reopen`).
 
 **Not yet: user sign-in and user creation.** Neither is an audited event today — the toolkit audits
 API-key authentication but not an interactive logon, and users are created as a side effect of first

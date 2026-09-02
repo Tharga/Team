@@ -63,10 +63,10 @@ Feature scope in `plan/feature.md`. Spec:
       by design.
       **The docs now say plainly that there is no Tharga app to install and cannot be**, with the reasoning,
       because that is the question a consumer asks first and the answer is not obvious.
-      **One criterion is NOT met and needs the user.** "Verified by following it, not by reading it" requires
-      creating an app from the manifest in a real workspace, which cannot be done from here. The manifest's
-      *shape* is right and its scopes are derived from the code; whether Slack accepts the document verbatim
-      is unverified. **Ask before treating this step as finished.**
+      **Verified against a real workspace 2026-09-02** — see step 6b. The first two attempts were rejected,
+      and both were the same mistake in different clothes: a `_comment` block and a placeholder `request_url`,
+      each of them something for a human placed in a document a machine validates strictly. Slack rejects
+      unknown keys outright and *verifies* the request URL rather than storing it.
 
 - [ ] **5. Tests for every acceptance criterion**, including the two that are about restraint: an unset URL
       template leaves the message intact, and unknown presence renders as nothing.
@@ -88,9 +88,19 @@ Feature scope in `plan/feature.md`. Spec:
       it must never delay anything, and a support form that will not render because Slack is unreachable
       would be the worst possible trade for a badge.
 
-- [ ] **6b. Setup verified against a real workspace.** The user installed the app from the manifest on
-      2026-09-02 after two rejections — see step 4. Outbound is untested until the token is in place; inbound
-      needs a tunnel. **Do not close this feature until a case has actually reached Slack.**
+- [x] **6b. Setup verified against a real workspace.** Done 2026-09-02. The manifest created a working app
+      (workspace *Thargelion*, bot `tharga_support`), and **a raised case produced both messages**: the thread
+      in the case channel and the linked notification in the event channel.
+      **What the setup actually cost, worth writing into the docs' expectations:** three rounds of channel
+      naming, because `#support` and `#notifications` were already taken — and each rename is a
+      *configuration* change, not a Slack one. The docs should say to pick the channels first and configure
+      second.
+      **The verification worth keeping as a habit:** `auth.test` plus `conversations.list` with `is_member`,
+      run against the configured values, answered every question before any log was read — token valid, both
+      channels present, bot a member of each. Without it the failure mode is silent: `SlackClient` reports
+      failures rather than throwing, so a bot outside the channel means a case is stored correctly and
+      nothing appears, with the reason only in the log.
+      **Inbound replies remain untested** — they need a tunnel and event subscriptions (phase two).
 
 - [ ] **7. Docs** (own `docs:` commit): the link placeholder and the URL template in
       `docs/articles/notifications.md`; presence and the manifest in `docs/articles/support-cases.md`,
