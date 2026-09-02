@@ -88,6 +88,27 @@ public class CaseUrlPlaceholderTests
         Assert.Contains("https://app.example.com/support/case-1", message.Text);
     }
 
+    /// <summary>
+    /// The built-in route names the case, and the subject has to be there to name it with.
+    /// </summary>
+    /// <remarks>
+    /// <b>It was not.</b> The decorator recorded the *supplied* subject, which is null whenever
+    /// <c>UseSubject</c> is off — the default — so the notification read "New support case ** from …". Found
+    /// by looking at what had actually been written to the audit log rather than at the code.
+    /// </remarks>
+    [Fact]
+    public void TheBuiltInRoute_NamesTheCase()
+    {
+        var options = new NotificationOptions { DefaultChannel = "#support", CaseUrlTemplate = Template };
+
+        var messages = new NotificationRouter(Options.Create(options)).Route(Entry("raise", "case-1"));
+
+        var text = Assert.Single(messages).Text;
+
+        Assert.Contains("Export is empty", text);
+        Assert.DoesNotContain("**", text);
+    }
+
     private static string Single(string template, string caseUrlTemplate, string caseId)
     {
         var options = new NotificationOptions

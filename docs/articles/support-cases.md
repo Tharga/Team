@@ -262,6 +262,44 @@ The manifest asks for exactly four scopes, each required by code:
 **Remove a scope and the feature that needs it stops working quietly**, not loudly — the client reports
 failures rather than throwing, by design, so a missing scope looks like nothing happening.
 
+### In production
+
+**There is no tunnel.** Your application already has a public HTTPS address, so the inbound endpoint is a
+route rather than something to acquire — which is why a webhook was chosen over Socket Mode in the first
+place. The tunnel exists only because Slack cannot reach `localhost`.
+
+Four steps, once per deployment:
+
+1. **Create a Slack app** from the manifest, exactly as for local work.
+2. **Set the request URL** to the real address —
+   `https://app.example.com/_tharga/support/slack/events`.
+3. **Subscribe to `message.channels`** and install to the workspace.
+4. **Put the bot token and signing secret** into that environment's secret store.
+
+The code is identical; only the URL differs.
+
+> **One Slack app per deployment.** An app has exactly one Event Subscriptions request URL, so production and
+> staging cannot share one — and neither can two products in the same workspace. Use the same manifest for
+> each, and give each its own channel so test traffic never reaches real support.
+
+**Three things in the request path break signature verification**, and each fails looking like a wrong
+secret:
+
+- **Anything that alters the body.** The signature covers the exact bytes Slack sent, so a proxy that
+  re-serializes, re-encodes or reformats JSON invalidates every request.
+- **A redirect.** Slack does not follow them, so an HTTP-to-HTTPS jump or a trailing-slash normalisation on
+  that route fails verification.
+- **Stripping `X-` headers.** `X-Slack-Signature` and `X-Slack-Request-Timestamp` *are* the credential.
+
+**Running several instances needs nothing extra.** Inbound is stateless and load-balances like any request,
+and the event ledger deduplicates across instances through a unique index — so whichever instance takes a
+retry, only one reply is appended. Keep
+`ThargaTeamOptions.SupportEventLedgerRetention` (default 24 hours) above Slack's retry horizon.
+
+**Watch the log.** `SlackClient` reports failures rather than throwing, so nothing surfaces in the
+application: alert on its warnings. The two failures that otherwise pass unnoticed are the bot being removed
+from a channel and Slack disabling an event subscription after repeated delivery failures.
+
 ### The four settings
 
 ```csharp

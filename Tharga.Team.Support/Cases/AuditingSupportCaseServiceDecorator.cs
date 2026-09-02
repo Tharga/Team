@@ -43,8 +43,11 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         {
             var raised = await inner.RaiseCaseAsync(teamKey, subject, body, cancellationToken);
 
+            // raised.Subject, not the argument: with UseSubject off the caller supplies none and the service
+            // derives one, so recording the argument records nothing -- and a notification worded around
+            // {support.case.subject} then names the case with an empty string.
             Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, subject)));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject)));
 
             return raised;
         }
