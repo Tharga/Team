@@ -45,14 +45,25 @@ Building them last is what makes that test mean anything.
       and a test pins that. An open case reads as having no reason even when a stale actor is left on it,
       which is the state a reopen produces.
 
-- [~] **3. Reopen.** `ReopenCaseAsync` on `ISupportCaseService`, authorized exactly as replying is: the author
-      on their own case, or `support:manage` on anybody's. Writes a system entry, clears `ClosedAt`,
-      `ClosedBy` and the reason, returns the case to `Open`.
-      On the store it arrives as a **default interface member that throws a named `NotSupportedException`** —
-      `ISupportCaseStore` is host-implementable, so adding a required member would break every host that
-      implemented it. The pattern `UserServiceBase` already uses.
+- [x] **3. Reopen.** Done 2026-09-02. `ReopenCaseAsync` through both decorators, `SupportCaseChange.Reopened`,
+      Mongo and in-memory stores. Suite **2229 passed, 0 failed** (+9).
+      Authorized through the same `RequireCaseAccessAsync` reply and close use, so the rule needed no new
+      thinking: the member who raised it, or a holder of `support:read`/`support:manage`.
+      **Reopening an already-open case does nothing and is not an error.** Two people looking at the same
+      closed case both press the button; the second must see an open case rather than an error about it
+      already being open.
+      **The whole closure is cleared, not just the status** — `ClosedAt`, `ClosedBy` and therefore
+      `ClosedReason`. A case left carrying who closed it would read as having a closure reason while open,
+      which is the state step 2's test already anticipated.
+      **On the store it is a default member that throws.** `ISupportCaseStore` is host-implementable, so a
+      required member would be a compile error in somebody else's repository — but a default that silently did
+      nothing would leave a case closed while telling the caller it had opened, so it throws with the store's
+      own type name in the message.
+      **`StoreWithoutReopen` is a test double worth keeping** (its own file): it implements every required
+      member by hand and leaves only the default alone. That makes it exactly what a host has — so if a future
+      member arrives *without* a default, this file stops compiling and says so before a consumer finds out.
 
-- [ ] **4. The auto-close sweeper.** A hosted service on an interval, closing cases where the newest entry is
+- [~] **4. The auto-close sweeper.** A hosted service on an interval, closing cases where the newest entry is
       **a `User` entry whose author is not the case author** and is older than `AutoCloseAfter` (default 7
       days).
       **The direction is the whole feature and is easy to invert**: a case whose newest entry is the

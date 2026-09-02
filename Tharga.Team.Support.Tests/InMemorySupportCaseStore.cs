@@ -70,6 +70,25 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task ReopenCaseAsync(string teamKey, string caseId, SupportMessage reopenMessage, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+
+        found.Messages.Add(reopenMessage with { Sequence = found.Messages.Count + 1 });
+
+        Replace(
+            found.Case with
+            {
+                Status = SupportCaseStatus.Open,
+                ClosedAt = null,
+                ClosedBy = null,
+                MessageCount = found.Messages.Count
+            },
+            found.Messages);
+
+        return Task.CompletedTask;
+    }
+
     public Task CloseCaseAsync(string teamKey, string caseId, DateTime closedAt, string closedBy, SupportMessage closureMessage, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

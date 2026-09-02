@@ -44,6 +44,28 @@ public interface ISupportCaseStore
     Task CloseCaseAsync(string teamKey, string caseId, DateTime closedAt, string closedBy, SupportMessage closureMessage, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Opens a closed case again and records it in the transcript, as one unit.
+    /// </summary>
+    /// <remarks>
+    /// <b>Clears the closure entirely</b> — status, timestamp and actor. A case left carrying who closed it
+    /// while open would read as closed to anything deriving from that, including
+    /// <see cref="SupportCase.ClosedReason"/>.
+    /// <para>
+    /// <b>Reopening keeps the history.</b> That is the whole point of it existing rather than telling somebody
+    /// to raise a second case: the conversation that explains the problem is the one already written down.
+    /// </para>
+    /// <para>
+    /// <b>Throws rather than defaulting to nothing</b>, because a silent no-op would leave a case closed while
+    /// the caller was told it had reopened. A store written before this existed keeps compiling; it says
+    /// plainly that it cannot do this if asked.
+    /// </para>
+    /// </remarks>
+    Task ReopenCaseAsync(string teamKey, string caseId, SupportMessage reopenMessage, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(ReopenCaseAsync)}. Implement it to let a closed " +
+            "support case be opened again.");
+
+    /// <summary>
     /// The case projected onto a given channel identifier, or <c>null</c> if no case is bound to it.
     /// </summary>
     /// <remarks>

@@ -164,6 +164,32 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
         Notify(teamKey, caseId, SupportCaseChange.Closed);
     }
 
+    public async Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+
+        // Already open is not a failure. Two people looking at the same closed case both press reopen, and
+        // the second one should see an open case rather than an error about it already being open.
+        if (supportCase == null || supportCase.Status != SupportCaseStatus.Closed) return;
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var authorName = await authorizer.GetDisplayNameAsync();
+
+        var reopen = new SupportMessage
+        {
+            Sequence = 0,
+            Kind = SupportMessageKind.System,
+            AuthorIdentity = await authorizer.GetSubjectAsync(),
+            AuthorName = authorName,
+            Body = $"Case reopened by {authorName}.",
+            SentAt = now
+        };
+
+        await store.ReopenCaseAsync(teamKey, caseId, reopen, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Reopened);
+    }
+
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => store.GetCaseAsync(teamKey, caseId, cancellationToken);
 

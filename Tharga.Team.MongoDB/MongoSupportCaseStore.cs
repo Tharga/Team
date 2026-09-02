@@ -112,6 +112,24 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         await UpdateAsync(teamKey, caseId, update);
     }
 
+    public async Task ReopenCaseAsync(string teamKey, string caseId, SupportMessage reopenMessage, CancellationToken cancellationToken = default)
+    {
+        var entity = await RequireCaseAsync(teamKey, caseId);
+        RequireRoom(entity);
+
+        var update = Builders<SupportCaseEntity>.Update
+            .Set(x => x.Status, SupportCaseStatus.Open)
+            .Set(x => x.ClosedAt, null)
+            .Set(x => x.ClosedBy, null)
+
+            // The reopen entry is the toolkit's, not the customer's, so the case is not waiting on support
+            // until somebody actually writes to it.
+            .Set(x => x.LastMessageFromAuthor, false)
+            .Push(x => x.Messages, ToEntity(reopenMessage with { Sequence = NextSequence(entity) }));
+
+        await UpdateAsync(teamKey, caseId, update);
+    }
+
     public async Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
     {
         var filter = Builders<SupportCaseEntity>.Filter.ElemMatch(

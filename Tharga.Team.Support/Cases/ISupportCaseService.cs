@@ -28,6 +28,25 @@ public interface ISupportCaseService
     /// <summary>Closes a case and records who closed it in its transcript.</summary>
     Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Opens a closed case again, keeping its history.
+    /// </summary>
+    /// <remarks>
+    /// <b>Authorized exactly as replying is</b> — the member who raised the case, or a caller holding
+    /// <c>support:read</c> or <c>support:manage</c> on the team. Somebody who could not answer a case has no
+    /// business changing its state.
+    /// <para>
+    /// <b>This is what makes closing safe to do.</b> Without it, closing is a decision somebody has to be
+    /// sure about, and the safe move is to leave cases open forever — which is how a case list stops being
+    /// read. A case that closed too early costs one click to bring back, and it brings the conversation with
+    /// it rather than starting a second case that explains nothing.
+    /// </para>
+    /// <para>
+    /// Reopening an already-open case does nothing and is not an error.
+    /// </para>
+    /// </remarks>
+    Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
+
     /// <summary>One case, or <c>null</c> when the team has no such case.</summary>
     Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 

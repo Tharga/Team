@@ -48,6 +48,13 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
         await inner.CloseCaseAsync(teamKey, caseId, cancellationToken);
     }
 
+    public async Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "reopen");
+
+        await inner.ReopenCaseAsync(teamKey, caseId, cancellationToken);
+    }
+
     public async Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "read");
