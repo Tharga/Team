@@ -130,7 +130,7 @@ public class InactivitySweepTests
         Assert.Equal(1, closedByFirst + closedBySecond);
 
         var messages = await store.GetMessagesAsync(TeamA, raised.Id, null, 50);
-        Assert.Single(messages.Items.Where(x => x.Kind == SupportMessageKind.System));
+        Assert.Single(messages.Items, x => x.Kind == SupportMessageKind.System);
     }
 
     [Fact]

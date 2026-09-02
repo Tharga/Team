@@ -112,7 +112,7 @@ public class SupportComponentSurfaceTests
 
         Assert.DoesNotContain(internalService, PermittedNamespaces);
         Assert.DoesNotContain(internalService, PermittedNamespacePrefixes);
-        Assert.False(PermittedNamespacePrefixes.Any(p => internalService!.StartsWith(p, StringComparison.Ordinal)));
+        Assert.DoesNotContain(PermittedNamespacePrefixes, p => internalService!.StartsWith(p, StringComparison.Ordinal));
     }
 
     [Fact]
