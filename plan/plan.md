@@ -53,11 +53,20 @@ Feature scope in `plan/feature.md`. Spec:
       A semaphore collapses concurrent refreshes, so a page rendering for twenty people asks Slack once, and
       the loop stops at the first active member — one is the whole answer.
 
-- [~] **4. The manifest.** A `slack-app-manifest.json` (or yml) in the repository, declaring exactly the
-      scopes these features need — `chat:write`, `users:read`, and the event subscriptions the inbound
-      endpoint expects.
-      **Verified by following it, not by reading it**: create an app from it and check the resulting scopes
-      match what the code requires, and record the result.
+- [x] **4. The manifest and the setup path.** Done 2026-09-02 — `slack-app-manifest.json` at the repository
+      root, the sample reading `Slack:CaseUrl`, and the docs' setup section rewritten around the manifest.
+      **The four scopes were derived from the call sites, not from memory:** `chat.postMessage`,
+      `conversations.members` and `users.getPresence` are the only Slack endpoints the code touches, giving
+      `chat:write`, `users:read`, `channels:read` and `groups:read` — the last two because a private support
+      channel needs the other one. Documented as a table naming which call needs which, since **removing a
+      scope makes the feature that needs it fail quietly**: the client reports failures rather than throwing,
+      by design.
+      **The docs now say plainly that there is no Tharga app to install and cannot be**, with the reasoning,
+      because that is the question a consumer asks first and the answer is not obvious.
+      **One criterion is NOT met and needs the user.** "Verified by following it, not by reading it" requires
+      creating an app from the manifest in a real workspace, which cannot be done from here. The manifest's
+      *shape* is right and its scopes are derived from the code; whether Slack accepts the document verbatim
+      is unverified. **Ask before treating this step as finished.**
 
 - [ ] **5. Tests for every acceptance criterion**, including the two that are about restraint: an unset URL
       template leaves the message intact, and unknown presence renders as nothing.
