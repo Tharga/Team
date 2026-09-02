@@ -30,15 +30,30 @@ Feature scope in `plan/feature.md`. Spec:
       `SupportAuditMetadataKeys.CaseId` from the `Cases` namespace. Duplicating the key string would leave two
       places to keep in step, and a router that renders a *case* URL necessarily knows about cases.
 
-- [~] **3. Presence.** `users.getPresence` on `ISlackClient`, needing the `users:read` scope.
-      **Cached, and the cache shared across instances** — Slack rate-limits this endpoint and calling it per
-      render is a documented way to get a deployment throttled. `ITeamCache` is deliberately not reused: it is
-      purpose-built for three named claims lookups and has no general key/value surface, exactly as
-      `ISupportEventLedger` records.
-      **Advisory, never a gate.** Unknown renders as nothing rather than "offline", because telling a customer
-      not to bother when support is there is worse than saying nothing. Never on the path that raises a case.
+- [x] **3. Presence.** Done 2026-09-02 — `ISupportPresence` + `SupportPresenceState` in `Tharga.Team`,
+      `SlackSupportPresence` in `Support/Cases`, and two new `ISlackClient` calls. Suite **2275 passed,
+      0 failed** (+10), warnings back to 34.
+      **Who counts as support: members of the configured channel** (user, 2026-09-02). Adding somebody to the
+      channel is how they become support, so there is no second list to drift — chosen over a configured id
+      list, and over a Slack user group, which is tidier but a paid-plan feature.
+      **The contract lives in `Tharga.Team`**, like `ISupportCaseService`, so a component can reach it without
+      `Tharga.Team.Blazor` depending on the package that carries MailKit.
+      **The plan said "shared across instances". That was wrong, and the distinction is worth keeping.** A
+      process-local `ISupportEventLedger` would be a *correctness* defect — two instances would both accept
+      the same retry. A process-local presence cache only costs N times the API calls, still bounded by the
+      TTL, and a stale answer is already handled because presence is advisory. Sharing it would need a
+      backplane that does not exist, to save calls that are not a problem.
+      **Two TTLs, because the two questions change at different rates:** the channel roster for ten minutes,
+      presence for sixty seconds. One TTL would either hammer `conversations.members` or answer from a stale
+      roster.
+      **Three ways it refuses to say "away" when it means "cannot tell":** an unreadable channel keeps the
+      previous roster rather than concluding support is empty; all-unknown presence stays unknown; and a
+      throwing transport is unknown, not an error. Each has a test, because that is the failure that reaches a
+      customer.
+      A semaphore collapses concurrent refreshes, so a page rendering for twenty people asks Slack once, and
+      the loop stops at the first active member — one is the whole answer.
 
-- [ ] **4. The manifest.** A `slack-app-manifest.json` (or yml) in the repository, declaring exactly the
+- [~] **4. The manifest.** A `slack-app-manifest.json` (or yml) in the repository, declaring exactly the
       scopes these features need — `chat:write`, `users:read`, and the event subscriptions the inbound
       endpoint expects.
       **Verified by following it, not by reading it**: create an app from it and check the resulting scopes

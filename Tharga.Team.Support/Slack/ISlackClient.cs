@@ -22,6 +22,33 @@ public interface ISlackClient
     /// <param name="cancellationToken">Abandons the post; the caller is told it did not happen.</param>
     /// <returns>The outcome. Implementations report failure rather than throwing.</returns>
     Task<SlackPostResult> PostAsync(string channel, string text, string threadId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The user ids in <paramref name="channel"/>, or an empty array when they cannot be read.
+    /// </summary>
+    /// <remarks>
+    /// <b>Membership of the channel is what defines support</b>, so adding somebody to it is how they become
+    /// support — there is no second list to keep in step. Needs the <c>channels:read</c> scope (or
+    /// <c>groups:read</c> for a private channel).
+    /// <para>
+    /// Empty on any failure rather than an exception, matching <see cref="PostAsync"/>. A caller that cannot
+    /// learn the membership reports that it does not know, which is a legitimate answer.
+    /// </para>
+    /// </remarks>
+    Task<string[]> GetChannelMembersAsync(string channel, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether one user is active, or <c>null</c> when it cannot be told.
+    /// </summary>
+    /// <remarks>
+    /// <b>Slack rate-limits this endpoint, and it is per user</b> — so a caller asking about a channelful of
+    /// people on every render is how a deployment gets throttled. Cache the answer; see
+    /// <c>ISupportPresence</c>.
+    /// <para>
+    /// Needs the <c>users:read</c> scope.
+    /// </para>
+    /// </remarks>
+    Task<bool?> IsActiveAsync(string userId, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
