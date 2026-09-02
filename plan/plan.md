@@ -109,11 +109,23 @@ Building them last is what makes that test mean anything.
       admit `Tharga.Team.Service` and `Tharga.Team.MongoDB` too. Contract namespaces are matched **exactly**
       and UI ones by prefix, with a test asserting an internal service's namespace satisfies neither.
 
-- [~] **8. The support component** — the team's cases, answer, close, reopen, and the close warning.
-      Advisory: dismissible, never a block.
-
-- [ ] **10. Sample.** Replace the hand-rolled `/support` page with the two components, so the sample
-      demonstrates them rather than duplicating them.
+- [x] **8 and 10. The support component and the sample.** Done 2026-09-02 —
+      `Features/Support/SupportQueueView.razor`, `SupportQueueViewText`, and the sample's `/support` page
+      rebuilt on both components. Suite **2258 passed, 0 failed** (+5).
+      **The close warning suggests the alternative rather than only warning.** A case closed while somebody is
+      still typing reads as being dismissed, and the person best placed to say a problem is solved is the
+      person who had it — so the confirmation offers "answer and let them close it" and its cancel button
+      reads *Leave it open*. Advisory: support can still close a case that is finished.
+      **The sample stopped being a second implementation.** It hand-rolled the whole panel, which had to be
+      kept in step with the components by hand; it now renders them, with the queue gated on `support:read`
+      so a member meets a rendering gate rather than a refusal they can do nothing about.
+      **The compiler caught a cross-branch mistake:** the queue first showed `SupportMessage.Source` as a
+      provenance badge, but that field lives on the email branch, not here. A comment now marks the spot —
+      an email reply is attributed on a sender match rather than an authenticated caller, so that badge is
+      worth having the moment spec 08 lands.
+      **Both components are recorded in `TextCoverageTests.Migrated`**, so the no-literal-text ratchet applies
+      to them. They were written against the catalogue from the start, which is exactly why they belong on
+      that list: a component that never had a literal string must not acquire its first one.
 
 - [ ] **11. Docs** (own `docs:` commit): `docs/articles/support-cases.md` for the subject option, reopen and
       auto-close, plus the components and how to build your own instead.
