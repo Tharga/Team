@@ -42,4 +42,29 @@ public class SupportCaseOptions
     /// </para>
     /// </remarks>
     public bool UseSubject { get; set; }
+
+    /// <summary>
+    /// How long a case waits on the customer before it closes itself. Default 7 days;
+    /// <see cref="TimeSpan.Zero"/> turns it off.
+    /// </summary>
+    /// <remarks>
+    /// <b>The clock runs only while the case is waiting on the *customer*</b> — support answered and nobody
+    /// came back. A case whose newest entry is the customer's is waiting on support, and closing that would
+    /// hide the backlog rather than tidy it.
+    /// <para>
+    /// <b>Zero registers no background work at all</b>, rather than registering a sweep that finds nothing. A
+    /// host that does not want cases closing itself runs nothing on its behalf.
+    /// </para>
+    /// </remarks>
+    public TimeSpan AutoCloseAfter { get; set; } = TimeSpan.FromDays(7);
+
+    /// <summary>How often the sweep runs. Default one hour.</summary>
+    /// <remarks>
+    /// It decides only how promptly a case closes after it becomes eligible, so an hour is generous for a
+    /// span measured in days. Frequent sweeps cost a query and buy nothing.
+    /// </remarks>
+    public TimeSpan AutoCloseSweepInterval { get; set; } = TimeSpan.FromHours(1);
+
+    /// <summary>Most cases one sweep will close, so a large backlog cannot become one enormous pass.</summary>
+    public int AutoCloseBatchSize { get; set; } = 100;
 }

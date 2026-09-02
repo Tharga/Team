@@ -63,25 +63,33 @@ Building them last is what makes that test mean anything.
       member by hand and leaves only the default alone. That makes it exactly what a host has — so if a future
       member arrives *without* a default, this file stops compiling and says so before a consumer finds out.
 
-- [~] **4. The auto-close sweeper.** A hosted service on an interval, closing cases where the newest entry is
-      **a `User` entry whose author is not the case author** and is older than `AutoCloseAfter` (default 7
-      days).
-      **The direction is the whole feature and is easy to invert**: a case whose newest entry is the
-      *customer's* is waiting on support and must never close. A *system* entry must not start the clock
-      either, or a reopen note re-arms it immediately.
-      `LastMessageFromAuthor` is already denormalized on the entity for the awaiting-support count, so the
-      query is a plain filter rather than an aggregation — but it is a `bool`, and "system entry" is a third
-      state it cannot express. **Decide in this step whether to widen it or to check the transcript tail.**
-      Write conditionally on the case still being open, so two instances close it once.
-      `AutoCloseAfter` of `TimeSpan.Zero` registers no hosted service at all.
+- [x] **4 and 5. The auto-close sweep, its store operations and its options.** Done together 2026-09-02 —
+      the sweep and the store work are one decision, and splitting them would have meant writing the query
+      before knowing what it had to answer. Suite **2245 passed, 0 failed** (+16).
+      **The tri-state question, resolved: neither widen the bool nor re-read the candidates.** The transcript
+      is *embedded*, so the store already holds the last entry when it loads a case. So the query narrows on
+      indexed fields (`Status`, `LastMessageFromAuthor`, and a new `LastMessageAt`) and then finishes on the
+      tail in memory — no third state to migrate, and no second read per candidate.
+      **`LastMessageAt` is absent on existing documents, and that is deliberate.** A case last touched before
+      the field existed never auto-closes until somebody writes to it. Applying new behaviour retroactively
+      would close a backlog nobody has looked at, in bulk, on the first sweep after an upgrade.
+      **The store owns the whole predicate**, including the half a filter cannot express. Splitting it — a
+      cheap query plus a caller that re-reads each candidate to inspect it — would turn one query into one
+      query per case.
+      **The conditional write is the concurrency answer**, matching `ISupportEventLedger`:
+      `TryCloseForInactivityAsync` applies only while the case is still open and reports whether *it* closed
+      it, so two instances sweeping together close once. The store also sets the actor itself, so a caller
+      cannot make an automatic closure claim to be a person's.
+      **Both new store members are defaults** — the port is host-implementable — and a store that ignores
+      them simply never auto-closes, which is the safe direction for a read and a write that are both
+      optional.
+      **Two things the tests caught.** `SupportContractShapeTests` rejected `IReadOnlyList<SupportCase>` on
+      the port: target rule 3 forbids interface returns, and the guard was right — it is `SupportCase[]` now.
+      And the sweep's own tests exercise an in-memory double that mirrors the adapter, which would pass
+      just as happily if the two disagreed, so `SupportWroteLast` is now tested against the **real** Mongo
+      adapter as well. That is where the system-entry rule actually lives.
 
-- [ ] **5. Store and options.** `GetCasesForAutoCloseAsync`, the closure-reason writes, and the two new
-      options. Mongo implementation plus the in-memory test store.
-
-- [ ] **6. Tests for every acceptance criterion**, including the three negatives that matter: the customer's
-      own entry never auto-closes, a system entry never auto-closes, and two sweepers close once.
-
-- [ ] **7. The customer component** in `Tharga.Team.Blazor` — my cases, one conversation, reply, reopen.
+- [~] **7. The customer component** in `Tharga.Team.Blazor` — my cases, one conversation, reply, reopen.
       Public surface only.
 
 - [ ] **8. The support component** — the team's cases, answer, close, reopen, and the close warning.

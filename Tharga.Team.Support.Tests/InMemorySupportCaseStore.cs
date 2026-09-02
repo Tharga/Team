@@ -70,6 +70,55 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Mirrors the Mongo store's predicate, including the part a filter cannot express: the newest entry must
+    /// be a person's and not the author's, so a system entry never makes a case eligible.
+    /// </summary>
+    public Task<SupportCase[]> GetCasesForInactivityCloseAsync(DateTime lastActivityBefore, int limit, CancellationToken cancellationToken = default)
+    {
+        var due = new List<SupportCase>();
+
+        foreach (var (supportCase, messages) in _cases.ToArray())
+        {
+            if (supportCase.Status != SupportCaseStatus.Open) continue;
+
+            var last = messages.OrderBy(x => x.Sequence).LastOrDefault();
+
+            if (last == null) continue;
+            if (last.Kind != SupportMessageKind.User) continue;
+            if (last.AuthorIdentity == supportCase.AuthorIdentity) continue;
+            if (last.SentAt >= lastActivityBefore) continue;
+
+            due.Add(supportCase);
+
+            if (due.Count >= limit) break;
+        }
+
+        return Task.FromResult<SupportCase[]>([.. due]);
+    }
+
+    public Task<bool> TryCloseForInactivityAsync(string teamKey, string caseId, DateTime closedAt, SupportMessage closureMessage, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+
+        // Conditional, as the real store is: the second sweep to arrive closes nothing and says so.
+        if (found.Case.Status != SupportCaseStatus.Open) return Task.FromResult(false);
+
+        found.Messages.Add(closureMessage with { Sequence = found.Messages.Count + 1 });
+
+        Replace(
+            found.Case with
+            {
+                Status = SupportCaseStatus.Closed,
+                ClosedAt = closedAt,
+                ClosedBy = SupportCaseActors.AutoClose,
+                MessageCount = found.Messages.Count
+            },
+            found.Messages);
+
+        return Task.FromResult(true);
+    }
+
     public Task ReopenCaseAsync(string teamKey, string caseId, SupportMessage reopenMessage, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

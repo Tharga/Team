@@ -79,7 +79,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
-            LastMessageFromAuthor = true
+            LastMessageFromAuthor = true,
+            LastMessageAt = firstMessage.SentAt
         });
     }
 
@@ -92,7 +93,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
         var update = Builders<SupportCaseEntity>.Update
             .Push(x => x.Messages, ToEntity(message with { Sequence = NextSequence(entity) }))
-            .Set(x => x.LastMessageFromAuthor, message.AuthorIdentity == entity.AuthorIdentity);
+            .Set(x => x.LastMessageFromAuthor, message.AuthorIdentity == entity.AuthorIdentity)
+            .Set(x => x.LastMessageAt, message.SentAt);
 
         await UpdateAsync(teamKey, caseId, update);
     }
@@ -107,6 +109,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             .Set(x => x.ClosedAt, closedAt)
             .Set(x => x.ClosedBy, closedBy)
             .Set(x => x.LastMessageFromAuthor, false)
+            .Set(x => x.LastMessageAt, closureMessage.SentAt)
             .Push(x => x.Messages, ToEntity(closureMessage with { Sequence = NextSequence(entity) }));
 
         await UpdateAsync(teamKey, caseId, update);
@@ -125,9 +128,77 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             // The reopen entry is the toolkit's, not the customer's, so the case is not waiting on support
             // until somebody actually writes to it.
             .Set(x => x.LastMessageFromAuthor, false)
+            .Set(x => x.LastMessageAt, reopenMessage.SentAt)
             .Push(x => x.Messages, ToEntity(reopenMessage with { Sequence = NextSequence(entity) }));
 
         await UpdateAsync(teamKey, caseId, update);
+    }
+
+    /// <remarks>
+    /// Narrowed by indexed fields, then finished on the transcript that came with each document. The final
+    /// check cannot be a filter — it is "what kind of entry is the last element of an array" — but it costs
+    /// nothing here, because the array is already in hand.
+    /// </remarks>
+    public async Task<SupportCase[]> GetCasesForInactivityCloseAsync(DateTime lastActivityBefore, int limit, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+
+            // Support answered, or the toolkit wrote something. The transcript tail below tells the two apart.
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, false),
+            Builders<SupportCaseEntity>.Filter.Lt(x => x.LastMessageAt, lastActivityBefore));
+
+        var due = new List<SupportCase>();
+
+        await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
+        {
+            if (!SupportWroteLast(entity)) continue;
+
+            due.Add(ToCase(entity));
+
+            if (due.Count >= limit) break;
+        }
+
+        return [.. due];
+    }
+
+    /// <summary>
+    /// Whether a person other than the author wrote the newest entry — as opposed to the toolkit itself.
+    /// </summary>
+    internal static bool SupportWroteLast(SupportCaseEntity entity)
+    {
+        var last = entity.Messages.Length == 0
+            ? null
+            : entity.Messages.OrderBy(x => x.Sequence).Last();
+
+        return last is { Kind: SupportMessageKind.User } && last.AuthorIdentity != entity.AuthorIdentity;
+    }
+
+    public async Task<bool> TryCloseForInactivityAsync(string teamKey, string caseId, DateTime closedAt, SupportMessage closureMessage, CancellationToken cancellationToken = default)
+    {
+        var entity = await collection.GetOneAsync(Case(teamKey, caseId));
+
+        if (entity == null || entity.Status != SupportCaseStatus.Open) return false;
+
+        // Conditional on the status this read observed. Two sweeps racing means the second matches nothing
+        // and reports that it closed nothing, rather than appending a second closure entry.
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Case(teamKey, caseId),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open));
+
+        var update = Builders<SupportCaseEntity>.Update
+            .Set(x => x.Status, SupportCaseStatus.Closed)
+            .Set(x => x.ClosedAt, closedAt)
+            .Set(x => x.ClosedBy, SupportCaseActors.AutoClose)
+            .Set(x => x.LastMessageFromAuthor, false)
+            .Set(x => x.LastMessageAt, closureMessage.SentAt)
+            .Push(x => x.Messages, ToEntity(closureMessage with { Sequence = NextSequence(entity) }));
+
+        var result = await collection.UpdateOneAsync(filter, update);
+
+        // The driver reports the document as it was, not a count. No before-image means the filter matched
+        // nothing — which here means another sweep closed it first.
+        return result?.Before != null;
     }
 
     public async Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
