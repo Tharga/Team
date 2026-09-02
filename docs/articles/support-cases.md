@@ -219,15 +219,36 @@ holding your workspace's credentials — and it would not even help, because inb
 
 What we ship instead is a manifest, so this is a short job rather than an afternoon of guessing at scopes.
 
+**Setting up is two phases, and the order matters.** The manifest declares the app and its scopes, which is
+everything the *outbound* half needs. Event subscriptions come after, because Slack verifies the request URL
+the moment you save it — so there has to be something listening first.
+
+**Phase one — the app, and everything outbound:**
+
 1. **Create the app from the manifest.** Slack API → *Your Apps* → *Create New App* → *From an app manifest*,
-   choose the workspace, and paste [`slack-app-manifest.json`](https://github.com/Tharga/Team/blob/master/slack-app-manifest.json)
-   from the repository root. Replace `YOUR-HOST` in it with your public address first.
+   choose the workspace, and paste
+   [`slack-app-manifest.json`](https://github.com/Tharga/Team/blob/master/slack-app-manifest.json) from the
+   repository root, unedited.
 2. **Install to workspace**, then copy the **Bot User OAuth Token** (`xoxb-…`) into `Slack:BotToken` and the
-   **Signing Secret** into `SigningSecret`.
-3. **Invite the bot to the channel** — `/invite @Tharga Support`. It cannot post to a channel it is not in,
+   **Signing Secret** (Basic Information → App Credentials) into `SigningSecret`.
+3. **Invite the bot to each channel** — `/invite @Tharga Support`. It cannot post to a channel it is not in,
    and it cannot read the member list of one either, which is how presence is determined.
-4. Slack sends a one-off verification challenge when event subscriptions are enabled. The endpoint answers it
-   automatically.
+
+At this point notifications and case threads work. Replies typed in Slack do not yet.
+
+**Phase two — inbound replies, once you have a public URL:**
+
+4. **Get a public address.** A deployment already has one; locally you need a tunnel — Visual Studio's *Dev
+   Tunnels* or ngrok. Slack cannot reach `localhost`.
+5. **Event Subscriptions** → enable, and set the request URL to
+   `https://your-host/_tharga/support/slack/events`. Slack sends a one-off challenge as you save; the
+   endpoint answers it automatically, so a green tick here means the whole inbound path is wired.
+6. Under **Subscribe to bot events**, add `message.channels` for a public support channel, or
+   `message.groups` for a private one.
+
+> **The manifest deliberately carries no `request_url` and no comments.** Slack validates the document
+> strictly: an unknown key is rejected outright, and a placeholder URL is rejected because it is *verified*
+> rather than merely stored. The guidance that belongs with a human lives here instead of in the file.
 
 The manifest asks for exactly four scopes, each required by code:
 

@@ -69,7 +69,7 @@ else
                 {
                     <RadzenCard Variant="Variant.Outlined">
                         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
-                            <RadzenLink Text="@item.Subject" Click="@(() => SelectAsync(item))" />
+                            <RadzenLink Text="@item.Subject" Click="@(() => SelectAsync(item.Id))" />
                             <RadzenBadge Text="@StatusText(item)"
                                          BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
                         </RadzenStack>
@@ -133,6 +133,21 @@ else
     /// </remarks>
     [Parameter] public bool ShowSubject { get; set; }
 
+    /// <summary>
+    /// A case to open on first render, or null to show the list. Lets a host route
+    /// <c>/support/{caseId}</c> straight to a conversation.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is what makes a link in a notification worth sending.</b> A link that lands on a list, leaving
+    /// somebody to find the case it was about, is barely better than no link.
+    /// <para>
+    /// <b>An unknown or unreadable id shows the list rather than an error.</b> A case id is guessable, and a
+    /// stale link from a months-old Slack message is ordinary — neither should produce a failure page. The
+    /// service still authorizes the read, so a link to somebody else's case reveals nothing.
+    /// </para>
+    /// </remarks>
+    [Parameter] public string CaseId { get; set; }
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
@@ -158,6 +173,20 @@ else
         Notifier.CaseUpdated += OnCaseUpdated;
 
         if (_teamKey != null) await ReloadAsync();
+
+        // A deep link opens its case. Silently ignored when it names nothing this caller may read, which
+        // covers a stale link, a guessed id and somebody else's case alike.
+        if (_teamKey != null && !string.IsNullOrWhiteSpace(CaseId))
+        {
+            try
+            {
+                await SelectAsync(CaseId);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _selected = null;
+            }
+        }
 
         _ready = true;
     }
@@ -200,7 +229,7 @@ else
             _body = null;
 
             await ReloadAsync();
-            await SelectAsync(raised);
+            await SelectAsync(raised.Id);
         }
         finally
         {
@@ -219,7 +248,7 @@ else
             _reply = null;
 
             await ReloadAsync();
-            await SelectAsync(_selected);
+            await SelectAsync(_selected.Id);
         }
         finally
         {
@@ -237,7 +266,7 @@ else
             await SupportCases.ReopenCaseAsync(_teamKey, _selected.Id);
 
             await ReloadAsync();
-            await SelectAsync(_selected);
+            await SelectAsync(_selected.Id);
         }
         finally
         {
@@ -245,10 +274,10 @@ else
         }
     }
 
-    private async Task SelectAsync(SupportCase item)
+    private async Task SelectAsync(string caseId)
     {
-        _selected = await SupportCases.GetCaseAsync(_teamKey, item.Id);
-        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, item.Id)).Items;
+        _selected = await SupportCases.GetCaseAsync(_teamKey, caseId);
+        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, caseId)).Items;
 
         if (_selected == null) return;
 

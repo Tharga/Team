@@ -201,8 +201,9 @@ builder.Services.AddThargaImageProcessing();
 // unless Slack:BotToken and Slack:Channel are supplied — the point here is that the wiring resolves
 // inside the real application graph. The container-validation test builds a bare collection, and a bare
 // collection is exactly what missed the captive dependency that stopped this sample from starting.
-// Set up with slack-app-manifest.json in the repository root; see docs/articles/support-cases.md for the
-// four settings and where each value comes from.
+// Set up with slack-app-manifest.json in the repository root. Two phases: the manifest gives the app and
+// its scopes (everything outbound), then event subscriptions once a public URL exists -- Slack verifies the
+// request URL as you save it. See docs/articles/support-cases.md.
 builder.Services.AddThargaSupport(o =>
 {
     o.Slack.BotToken = builder.Configuration["Slack:BotToken"];
