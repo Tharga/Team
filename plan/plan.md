@@ -89,14 +89,28 @@ Building them last is what makes that test mean anything.
       just as happily if the two disagreed, so `SupportWroteLast` is now tested against the **real** Mongo
       adapter as well. That is where the system-entry rule actually lives.
 
-- [~] **7. The customer component** in `Tharga.Team.Blazor` — my cases, one conversation, reply, reopen.
-      Public surface only.
+- [x] **7 and 9. The customer component and the surface guard.** Done together 2026-09-02 —
+      `Features/Support/SupportCasesView.razor`, `SupportCasesViewText`, `SupportComponentSurfaceTests`.
+      Suite **2253 passed, 0 failed** (+8).
+      **Decision 4 needed correcting first, and the user agreed (2026-09-02).** `Tharga.Team.Blazor` does not
+      reference `Tharga.Team.Support`, deliberately — "nothing references this back, so no consumer acquires
+      it by accident" — and since step 3 of the email work put MailKit there, a component reaching for
+      `ISupportCaseService` would have made **every** `Tharga.Team.Blazor` consumer download MailKit for a
+      feature they may not use. So `ISupportCaseService` moved to `Tharga.Team`, joining `SupportCase`,
+      `ISupportCaseStore` and `ISupportCaseNotifier`, which were already there — it was the odd one out.
+      **The move breaks nothing:** the namespace is unchanged (namespaces are independent of assemblies), so
+      no `using` breaks, and `TypeForwardedTo` in `Tharga.Team.Support` keeps existing binaries loading. The
+      whole solution rebuilt with no source edits anywhere.
+      **`UseSubject` is a component parameter, not a read of the options.** The options live in
+      `Tharga.Team.Support` and this component depends on contracts only — and a parameter also lets one page
+      ask for a subject while another does not, which reading the options could not.
+      **The guard caught its own rule being too loose.** It first flagged `ISupportCaseNotifier`, which is a
+      legitimate public contract — but the fix is *not* to permit `Tharga.Team` by prefix, because that would
+      admit `Tharga.Team.Service` and `Tharga.Team.MongoDB` too. Contract namespaces are matched **exactly**
+      and UI ones by prefix, with a test asserting an internal service's namespace satisfies neither.
 
-- [ ] **8. The support component** — the team's cases, answer, close, reopen, and the close warning.
+- [~] **8. The support component** — the team's cases, answer, close, reopen, and the close warning.
       Advisory: dismissible, never a block.
-
-- [ ] **9. A guard that the components use only public surface.** Asserted rather than assumed, because the
-      claim is the whole reason a shipped component is acceptable at all.
 
 - [ ] **10. Sample.** Replace the hand-rolled `/support` page with the two components, so the sample
       demonstrates them rather than duplicating them.

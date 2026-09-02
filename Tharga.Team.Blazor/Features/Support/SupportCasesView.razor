@@ -1,0 +1,259 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Blazor.Features.Team
+@implements IDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+@inject ITeamStateService TeamState
+
+@* The customer's side of support: raise a case, read the conversation, reply, reopen.
+
+   Everything here goes through ISupportCaseService and nothing else. That is not a style rule — it is what
+   makes this component a demonstration rather than a privileged path. If it needed something a host cannot
+   reach, the surface would be incomplete and this file would be hiding it. SupportComponentSurfaceTests
+   enforces it. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (_teamKey == null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[SupportCasesViewText.SelectTeam]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1.5rem">
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportCasesViewText.NewCase]</RadzenText>
+
+            @if (ShowSubject)
+            {
+                <RadzenTextBox @bind-Value="_subject" Placeholder="@_text[SupportCasesViewText.SubjectLabel]"
+                               Style="width: 100%;" aria-label="@_text[SupportCasesViewText.SubjectLabel]" />
+            }
+
+            <RadzenTextArea @bind-Value="_body" Placeholder="@_text[SupportCasesViewText.MessageLabel]" Rows="4"
+                            Style="width: 100%;" aria-label="@_text[SupportCasesViewText.MessageLabel]" />
+
+            <div>
+                <RadzenButton Text="@_text[SupportCasesViewText.Send]" Icon="send" Click="RaiseAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(_body) || _busy)" />
+            </div>
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
+                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportCasesViewText.MyCases]</RadzenText>
+                @if (_unread > 0)
+                {
+                    <RadzenBadge Text="@($"{_unread} {_text[SupportCasesViewText.Unread]}")" BadgeStyle="BadgeStyle.Warning" />
+                }
+            </RadzenStack>
+
+            @if (_cases.Length == 0)
+            {
+                <RadzenText TextStyle="TextStyle.Body2">@_text[SupportCasesViewText.NoCases]</RadzenText>
+            }
+            else
+            {
+                foreach (var item in _cases)
+                {
+                    <RadzenCard Variant="Variant.Outlined">
+                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                            <RadzenLink Text="@item.Subject" Click="@(() => SelectAsync(item))" />
+                            <RadzenBadge Text="@StatusText(item)"
+                                         BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
+                        </RadzenStack>
+
+                        @if (_selected?.Id == item.Id)
+                        {
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
+                                @foreach (var message in _messages)
+                                {
+                                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                                            @message.AuthorName — @message.SentAt.ToLocalTime().ToString("g")
+                                        </RadzenText>
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@message.Body</RadzenText>
+                                    </RadzenStack>
+                                }
+
+                                @if (_selected.Status == SupportCaseStatus.Open)
+                                {
+                                    <RadzenTextArea @bind-Value="_reply" Placeholder="@_text[SupportCasesViewText.ReplyLabel]"
+                                                    Rows="3" Style="width: 100%;" aria-label="@_text[SupportCasesViewText.ReplyLabel]" />
+                                    <div>
+                                        <RadzenButton Text="@_text[SupportCasesViewText.ReplyLabel]" Click="ReplyAsync"
+                                                      Disabled="@(string.IsNullOrWhiteSpace(_reply) || _busy)" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    @* Reopening is offered on every closed case, not only an auto-closed one: a
+                                       customer whose problem came back should continue the conversation that
+                                       explains it rather than start one that explains nothing. *@
+                                    <div>
+                                        <RadzenButton Text="@_text[SupportCasesViewText.Reopen]" Icon="refresh"
+                                                      ButtonStyle="ButtonStyle.Light" Click="ReopenAsync" Disabled="_busy" />
+                                    </div>
+                                }
+                            </RadzenStack>
+                        }
+                    </RadzenCard>
+                }
+            }
+        </RadzenStack>
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>
+    /// Whether to ask for a subject. Defaults to <c>false</c>, matching <c>SupportCaseOptions.UseSubject</c>.
+    /// </summary>
+    /// <remarks>
+    /// A parameter rather than a read of the options, because the options live in
+    /// <c>Tharga.Team.Support</c> and this component depends on contracts only. A host that configured
+    /// <c>UseSubject</c> passes the same value here; one that wants a subject on this page and not another
+    /// can differ, which reading the options would not allow.
+    /// <para>
+    /// With no subject asked for, the service derives one from the first words of the message — so a case
+    /// always has a subject whichever way this is set.
+    /// </para>
+    /// </remarks>
+    [Parameter] public bool ShowSubject { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _busy;
+
+    private string _teamKey;
+    private string _subject;
+    private string _body;
+    private string _reply;
+    private int _unread;
+
+    private SupportCase[] _cases = [];
+    private SupportCase _selected;
+    private SupportMessage[] _messages = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportCasesViewText.All);
+
+        _teamKey = TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key;
+
+        Notifier.CaseUpdated += OnCaseUpdated;
+
+        if (_teamKey != null) await ReloadAsync();
+
+        _ready = true;
+    }
+
+    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <remarks>
+    /// The notifier is a singleton raised from whichever scope handled the change — an inbound channel reply,
+    /// or the inactivity sweep. Touching state directly from it would update off this circuit's
+    /// synchronization context and lose the render, so it marshals first.
+    /// </remarks>
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
+    {
+        if (e.TeamKey != _teamKey) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private string StatusText(SupportCase item)
+        => item.Status == SupportCaseStatus.Open
+            ? _text[SupportCasesViewText.Open]
+            : item.ClosedReason == SupportCaseClosureReason.Inactivity
+                ? _text[SupportCasesViewText.ClosedForInactivity]
+                : _text[SupportCasesViewText.Closed];
+
+    private async Task RaiseAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_body)) return;
+
+        _busy = true;
+        try
+        {
+            var raised = await SupportCases.RaiseCaseAsync(_teamKey, _subject, _body);
+
+            _subject = null;
+            _body = null;
+
+            await ReloadAsync();
+            await SelectAsync(raised);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReplyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_reply) || _selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReplyToCaseAsync(_teamKey, _selected.Id, _reply);
+            _reply = null;
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReopenAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReopenCaseAsync(_teamKey, _selected.Id);
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SelectAsync(SupportCase item)
+    {
+        _selected = await SupportCases.GetCaseAsync(_teamKey, item.Id);
+        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, item.Id)).Items;
+
+        if (_selected == null) return;
+
+        // Opening a case is what clears its indicator, which is why read state exists rather than the
+        // indicator being derived from whose entry is newest.
+        await SupportCases.MarkReadAsync(_teamKey, _selected.Id);
+        _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
+    }
+
+    private async Task ReloadAsync()
+    {
+        _cases = (await SupportCases.GetMyCasesAsync(_teamKey)).Items;
+        _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
+    }
+}
