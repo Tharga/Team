@@ -73,6 +73,68 @@ public sealed class SlackClient : ISlackClient
         }
     }
 
+    public async Task<string[]> GetChannelMembersAsync(string channel, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(channel) || string.IsNullOrWhiteSpace(_options.BotToken)) return [];
+
+        try
+        {
+            using var client = Client();
+
+            using var response = await client.GetAsync(
+                $"conversations.members?channel={Uri.EscapeDataString(channel)}&limit=200", cancellationToken);
+
+            if (!response.IsSuccessStatusCode) return [];
+
+            var body = await response.Content.ReadFromJsonAsync<SlackMembersResponse>(SerializerOptions, cancellationToken);
+
+            // Slack reports its own refusals with HTTP 200 and ok:false, so the status code alone proves
+            // nothing -- the same trap PostAsync documents.
+            return body?.Ok == true ? body.Members ?? [] : [];
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Reading the members of Slack channel {Channel} failed.", channel);
+            return [];
+        }
+    }
+
+    public async Task<bool?> IsActiveAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(_options.BotToken)) return null;
+
+        try
+        {
+            using var client = Client();
+
+            using var response = await client.GetAsync(
+                $"users.getPresence?user={Uri.EscapeDataString(userId)}", cancellationToken);
+
+            if (!response.IsSuccessStatusCode) return null;
+
+            var body = await response.Content.ReadFromJsonAsync<SlackPresenceResponse>(SerializerOptions, cancellationToken);
+
+            // Null rather than false when Slack will not say: "cannot tell" and "away" are different answers,
+            // and only one of them should ever be shown to a customer.
+            return body?.Ok == true ? string.Equals(body.Presence, "active", StringComparison.OrdinalIgnoreCase) : null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Reading Slack presence for {UserId} failed.", userId);
+            return null;
+        }
+    }
+
+    private HttpClient Client()
+    {
+        var client = _httpClientFactory.CreateClient(HttpClientName);
+        client.BaseAddress ??= new Uri(_options.ApiBaseAddress);
+        client.Timeout = _options.Timeout;
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.BotToken);
+
+        return client;
+    }
+
     /// <remarks>
     /// <c>thread_ts</c> is omitted when null rather than sent as null - Slack rejects an explicit null, and
     /// a message with no thread is a new top-level post, which is exactly what a notification wants.
@@ -86,4 +148,14 @@ public sealed class SlackClient : ISlackClient
         [property: JsonPropertyName("ok")] bool Ok,
         [property: JsonPropertyName("error")] string Error,
         [property: JsonPropertyName("ts")] string Ts);
+
+    private sealed record SlackMembersResponse(
+        [property: JsonPropertyName("ok")] bool Ok,
+        [property: JsonPropertyName("error")] string Error,
+        [property: JsonPropertyName("members")] string[] Members);
+
+    private sealed record SlackPresenceResponse(
+        [property: JsonPropertyName("ok")] bool Ok,
+        [property: JsonPropertyName("error")] string Error,
+        [property: JsonPropertyName("presence")] string Presence);
 }

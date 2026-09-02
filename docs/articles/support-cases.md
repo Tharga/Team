@@ -212,12 +212,113 @@ this feature — that is the ordinary configuration for a host that does not wan
 
 ### Configuring the Slack app
 
-1. Create a Slack app and install it to the workspace; copy the **bot token** into `Slack:BotToken`
-   (`AddThargaSupport`) and the **signing secret** into `SigningSecret`.
-2. Invite the bot to the support channel — it cannot post to a channel it is not in.
-3. Under **Event Subscriptions**, point the request URL at `/_tharga/support/slack/events` and subscribe to
-   `message.channels` (or `message.groups` for a private channel).
-4. Slack sends a one-off verification challenge when you enable it. The endpoint answers it automatically.
+**There is no Tharga app to install, and there cannot be.** Slack issues tokens per workspace installation,
+so every consumer creates their own app. A distributed app would mean Tharga hosting an OAuth endpoint and
+holding your workspace's credentials — and it would not even help, because inbound events have to reach
+*your* deployment rather than ours.
+
+What we ship instead is a manifest, so this is a short job rather than an afternoon of guessing at scopes.
+
+**Setting up is two phases, and the order matters.** The manifest declares the app and its scopes, which is
+everything the *outbound* half needs. Event subscriptions come after, because Slack verifies the request URL
+the moment you save it — so there has to be something listening first.
+
+**Phase one — the app, and everything outbound:**
+
+1. **Create the app from the manifest.** Slack API → *Your Apps* → *Create New App* → *From an app manifest*,
+   choose the workspace, and paste
+   [`slack-app-manifest.json`](https://github.com/Tharga/Team/blob/master/slack-app-manifest.json) from the
+   repository root, unedited.
+2. **Install to workspace**, then copy the **Bot User OAuth Token** (`xoxb-…`) into `Slack:BotToken` and the
+   **Signing Secret** (Basic Information → App Credentials) into `SigningSecret`.
+3. **Invite the bot to each channel** — `/invite @Tharga Support`. It cannot post to a channel it is not in,
+   and it cannot read the member list of one either, which is how presence is determined.
+
+At this point notifications and case threads work. Replies typed in Slack do not yet.
+
+**Phase two — inbound replies, once you have a public URL:**
+
+4. **Get a public address.** A deployment already has one; locally you need a tunnel — Visual Studio's *Dev
+   Tunnels* or ngrok. Slack cannot reach `localhost`.
+5. **Event Subscriptions** → enable, and set the request URL to
+   `https://your-host/_tharga/support/slack/events`. Slack sends a one-off challenge as you save; the
+   endpoint answers it automatically, so a green tick here means the whole inbound path is wired.
+6. Under **Subscribe to bot events**, add `message.channels` for a public support channel, or
+   `message.groups` for a private one.
+
+> **The manifest deliberately carries no `request_url` and no comments.** Slack validates the document
+> strictly: an unknown key is rejected outright, and a placeholder URL is rejected because it is *verified*
+> rather than merely stored. The guidance that belongs with a human lives here instead of in the file.
+
+The manifest asks for exactly four scopes, each required by code:
+
+| Scope | Used by | For |
+|---|---|---|
+| `chat:write` | `chat.postMessage` | posting notifications and case replies |
+| `users:read` | `users.getPresence` | whether anybody on support is active |
+| `channels:read` | `conversations.members` | who is on a public support channel |
+| `groups:read` | `conversations.members` | the same, for a private channel |
+
+**Remove a scope and the feature that needs it stops working quietly**, not loudly — the client reports
+failures rather than throwing, by design, so a missing scope looks like nothing happening.
+
+### In production
+
+**There is no tunnel.** Your application already has a public HTTPS address, so the inbound endpoint is a
+route rather than something to acquire — which is why a webhook was chosen over Socket Mode in the first
+place. The tunnel exists only because Slack cannot reach `localhost`.
+
+Four steps, once per deployment:
+
+1. **Create a Slack app** from the manifest, exactly as for local work.
+2. **Set the request URL** to the real address —
+   `https://app.example.com/_tharga/support/slack/events`.
+3. **Subscribe to `message.channels`** and install to the workspace.
+4. **Put the bot token and signing secret** into that environment's secret store.
+
+The code is identical; only the URL differs.
+
+> **One Slack app per deployment.** An app has exactly one Event Subscriptions request URL, so production and
+> staging cannot share one — and neither can two products in the same workspace. Use the same manifest for
+> each, and give each its own channel so test traffic never reaches real support.
+
+**Three things in the request path break signature verification**, and each fails looking like a wrong
+secret:
+
+- **Anything that alters the body.** The signature covers the exact bytes Slack sent, so a proxy that
+  re-serializes, re-encodes or reformats JSON invalidates every request.
+- **A redirect.** Slack does not follow them, so an HTTP-to-HTTPS jump or a trailing-slash normalisation on
+  that route fails verification.
+- **Stripping `X-` headers.** `X-Slack-Signature` and `X-Slack-Request-Timestamp` *are* the credential.
+
+**Running several instances needs nothing extra.** Inbound is stateless and load-balances like any request,
+and the event ledger deduplicates across instances through a unique index — so whichever instance takes a
+retry, only one reply is appended. Keep
+`ThargaTeamOptions.SupportEventLedgerRetention` (default 24 hours) above Slack's retry horizon.
+
+**Watch the log.** `SlackClient` reports failures rather than throwing, so nothing surfaces in the
+application: alert on its warnings. The two failures that otherwise pass unnoticed are the bot being removed
+from a channel and Slack disabling an event subscription after repeated delivery failures.
+
+### The four settings
+
+```csharp
+builder.Services.AddThargaSupport(o =>
+{
+    o.Slack.BotToken = config["Slack:BotToken"];                      // xoxb-… from step 2
+    o.Notifications.DefaultChannel = config["Slack:Channel"];          // where event notifications go
+    o.Notifications.CaseUrlTemplate = config["Slack:CaseUrl"];         // https://you.example.com/support/{caseId}
+});
+
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.SlackChannel = config["Slack:SupportChannel"];                   // where case threads go
+    o.SigningSecret = config["Slack:SigningSecret"];                   // from step 2; needed to receive replies
+});
+```
+
+Keep the token and the secret out of source control — `dotnet user-secrets` locally, your platform's secret
+store in a deployment. The sample reads exactly these keys and stays dormant without them.
 
 > **The endpoint is public and unauthenticated, deliberately.** Slack cannot present a credential, so the
 > request signature *is* the credential: every request is verified with HMAC-SHA256 over the raw body before
@@ -276,6 +377,33 @@ logged:
 
 **A channel being down never blocks a case.** The case is written first and is authoritative; projecting it
 comes after. If Slack refuses, the case still exists and the entry is `Pending`.
+
+## Is anybody on support
+
+```csharp
+@inject ISupportPresence Presence      // resolve with GetService: absent when Slack is not configured
+```
+
+`GetAsync` answers `Online`, `Away` or `Unknown`, from **who is active on the configured support channel** —
+so adding somebody to the channel is how they become support, and there is no second list to keep in step.
+
+**`Unknown` must render as nothing, never as "offline".** Telling a customer not to bother when support is in
+fact there is worse than saying nothing, and unknown is what a rate limit, a network blip and an
+unconfigured workspace all produce. Three separate paths preserve that distinction: an unreadable channel
+keeps the previous roster rather than concluding support is empty, all-unknown presence stays unknown, and a
+transport failure is unknown rather than an error.
+
+**Advisory, never a gate.** Nothing that raises a case may wait on this or be refused by it.
+
+**It is cached, and it has to be.** Slack rate-limits `users.getPresence`, and it is per user — so asking
+about a channelful of people on every render is how a deployment gets throttled. The channel roster is
+trusted for ten minutes and presence for sixty seconds, because the two questions change at completely
+different rates.
+
+> **The cache is process-local.** On several instances each keeps its own, so you make that many times the
+> calls — still bounded by the interval, and a stale answer is already harmless because presence is
+> advisory. This is deliberately unlike the inbound event ledger, where process-local state would be a
+> correctness defect rather than a cost.
 
 ## Knowing what needs attention
 

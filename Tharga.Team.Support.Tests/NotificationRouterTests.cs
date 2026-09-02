@@ -347,7 +347,12 @@ public class NotificationRouterTests
             "team:remove-member-all", "team:set-role", "team:set-member-name", "team:set-consent",
             "team:set-tenant-roles", "team:set-scope-overrides", "team:set-custom-roles",
             "team:assign-owner", "team:transfer-ownership", "team:icon-set", "team:icon-clear",
-            "user:verify", "user:verify-all", "user:delete", "user:set-user-name"
+            "user:verify", "user:verify-all", "user:delete", "user:set-user-name",
+
+            // AuditingSupportCaseServiceDecorator, Feature "support". Absent from this list until a default
+            // route named one — which is the point of checking the list against the decorators rather than
+            // appending whatever a new default happens to say.
+            "support:raise", "support:reply", "support:close", "support:reopen"
         ];
 
         Assert.All(NotificationOptions.DefaultRoutes(), route => Assert.Contains(route.Event, emitted));

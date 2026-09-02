@@ -113,6 +113,12 @@ public static class SupportRegistration
         {
             services.TryAddScoped<ISupportChannel, SlackSupportChannel>();
             services.TryAddScoped<SlackEventHandler>();
+
+            // Singleton, because the caches are the point: a scoped presence service would ask Slack about
+            // the whole support channel once per request, which is how a deployment gets rate-limited.
+            // Registered only with a channel, so a host without Slack resolves nothing and its components
+            // render no presence at all rather than "offline".
+            services.TryAddSingleton<ISupportPresence, SlackSupportPresence>();
         }
 
         services.TryAddSingleton(TimeProvider.System);

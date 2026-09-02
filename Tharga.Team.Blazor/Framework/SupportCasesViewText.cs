@@ -52,10 +52,25 @@ public static class SupportCasesViewText
 
     public static readonly TextKey SelectTeam = new("team.support.cases.selectTeam", "Select a team to use support.");
 
+    /// <summary>Shown when somebody on support is active.</summary>
+    public static readonly TextKey SupportOnline = new("team.support.cases.presence.online", "Support is online");
+
+    /// <summary>
+    /// Shown when support is reachable but nobody is active.
+    /// </summary>
+    /// <remarks>
+    /// Says an answer is coming later rather than that nobody is there — the case is still raised and still
+    /// answered, so wording that reads as "do not bother" would be wrong as well as discouraging.
+    /// <para>
+    /// There is deliberately no key for unknown presence. It renders nothing at all.
+    /// </para>
+    /// </remarks>
+    public static readonly TextKey SupportAway = new("team.support.cases.presence.away", "Support will reply later");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         Title, NewCase, SubjectLabel, MessageLabel, Send, MyCases, NoCases, ReplyLabel, Reopen,
-        Open, Closed, ClosedForInactivity, Unread, SelectTeam
+        Open, Closed, ClosedForInactivity, Unread, SelectTeam, SupportOnline, SupportAway
     ];
 }
