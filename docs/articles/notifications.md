@@ -78,8 +78,14 @@ Clearing the list turns notifications off entirely without unregistering anythin
 being deleted, and **a support case being raised**. They name no channel, so they use `DefaultChannel` — and
 stay dormant until one is set, rather than posting into a channel nobody picked.
 
-`support:raise` is only ever emitted when `AddThargaSupportCases` is registered, so a host using
-notifications alone simply never triggers it.
+`support:raise` and `support:reply` are only ever emitted when `AddThargaSupportCases` is registered, so a
+host using notifications alone simply never triggers them.
+
+> **A reply reaches Slack twice, on purpose, and they are not duplicates.** The *notification* goes to
+> `DefaultChannel` for whoever watches for work arriving. The message itself goes into the **case's own
+> thread** in the support channel, through `ISupportChannel` — that thread is the conversation, and a reply
+> typed in it comes back to the site. Point `DefaultChannel` and the support channel at the same channel if
+> you would rather have one place.
 
 Replace the list to take full control, or edit it to add and remove single events.
 

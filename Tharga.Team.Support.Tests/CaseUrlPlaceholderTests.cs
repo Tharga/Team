@@ -109,6 +109,27 @@ public class CaseUrlPlaceholderTests
         Assert.DoesNotContain("**", text);
     }
 
+    /// <summary>
+    /// A reply is notified too, and carries the same link.
+    /// </summary>
+    /// <remarks>
+    /// A case somebody has come back to is waiting on support again, so it is worth the same prompt as the
+    /// first message. The reply also reaches the case's own Slack thread through <c>ISupportChannel</c> —
+    /// these are two different audiences, which is why both exist.
+    /// </remarks>
+    [Fact]
+    public void ReplyingToACase_IsNotifiedByABuiltInRoute()
+    {
+        var options = new NotificationOptions { DefaultChannel = "#support", CaseUrlTemplate = Template };
+
+        var messages = new NotificationRouter(Options.Create(options)).Route(Entry("reply", "case-1"));
+
+        var text = Assert.Single(messages).Text;
+
+        Assert.Contains("case-1", text);
+        Assert.Contains("https://app.example.com/support/case-1", text);
+    }
+
     private static string Single(string template, string caseUrlTemplate, string caseId)
     {
         var options = new NotificationOptions

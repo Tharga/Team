@@ -64,6 +64,10 @@ public class NotificationOptions
         // Somebody asking for help is the one built-in worth answering promptly, so it ships as a default
         // rather than as something a host has to know to add. {case.url} renders empty until a URL template
         // is configured, which leaves the message readable rather than broken.
-        new() { Event = "support:raise", Template = "New support case *{support.case.subject}* from {actor} on team {team}. {case.url}" }
+        new() { Event = "support:raise", Template = "New support case *{support.case.subject}* from {actor} on team {team}. {case.url}" },
+
+        // A reply matters as much as the first message: a case somebody has come back to is waiting on
+        // support again. Worded to be readable in a channel that only ever sees these two events.
+        new() { Event = "support:reply", Template = "Reply on support case {support.case.id} from {actor}. {case.url}" }
     ];
 }
