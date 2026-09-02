@@ -63,6 +63,23 @@ public record SupportCaseEntity : EntityBase
     /// </remarks>
     public bool LastMessageFromAuthor { get; init; }
 
+    /// <summary>
+    /// When the newest transcript entry was written. Absent on cases last written before this existed.
+    /// </summary>
+    /// <remarks>
+    /// <b>Denormalized for the same reason as <see cref="LastMessageFromAuthor"/>:</b> "how old is the last
+    /// element of an embedded array" is not an indexable filter, and the inactivity sweep has to narrow the
+    /// whole collection cheaply before it looks at any transcript.
+    /// <para>
+    /// <b>Absent means never swept, and that is the safe direction.</b> A case last touched before this
+    /// field existed does not auto-close until somebody writes to it — auto-closing is new behaviour, and
+    /// applying it retroactively to a backlog nobody has looked at would close cases in bulk on the first
+    /// sweep after an upgrade.
+    /// </para>
+    /// </remarks>
+    [BsonIgnoreIfNull]
+    public DateTime? LastMessageAt { get; init; }
+
     [BsonIgnoreIfNull]
     public SupportChannelBindingEntity[] Bindings { get; init; }
 

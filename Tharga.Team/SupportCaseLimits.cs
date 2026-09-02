@@ -34,4 +34,14 @@ public static class SupportCaseLimits
     /// honest outcome, since nobody reads a thousand-message thread.
     /// </remarks>
     public const int MaxMessagesPerCase = 500;
+
+    /// <summary>
+    /// How much of the message becomes the subject when a case is raised without one.
+    /// </summary>
+    /// <remarks>
+    /// Long enough to carry a recognisable sentence in a list, short enough that a list of them stays
+    /// scannable. The cut lands on a word boundary, so a derived subject is usually a little shorter than
+    /// this.
+    /// </remarks>
+    public const int DerivedSubjectLength = 50;
 }

@@ -93,7 +93,19 @@ public static class SupportRegistration
         {
             o.SlackChannel = caseOptions.SlackChannel;
             o.SigningSecret = caseOptions.SigningSecret;
+            o.UseSubject = caseOptions.UseSubject;
+            o.AutoCloseAfter = caseOptions.AutoCloseAfter;
+            o.AutoCloseSweepInterval = caseOptions.AutoCloseSweepInterval;
+            o.AutoCloseBatchSize = caseOptions.AutoCloseBatchSize;
         });
+
+        // Only when the feature is on. Zero means a host that does not want cases closing themselves runs no
+        // timer and no query on its behalf, rather than a sweep that finds nothing every hour.
+        if (caseOptions.AutoCloseAfter > TimeSpan.Zero)
+        {
+            services.TryAddScoped<SupportCaseInactivitySweep>();
+            services.AddSingleton<IHostedService, SupportCaseInactivityService>();
+        }
 
         // Only when a channel is configured. Without it the case service resolves no channel at all, which
         // is the site-only shape slice 1 shipped -- not a degraded version of this one.

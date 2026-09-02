@@ -51,9 +51,9 @@ the same reason.
 | Operation | Authorized by |
 |---|---|
 | Raise a case; list your own cases | **Membership.** No scope |
-| Read, reply to or close **your own** case | **Authorship** |
+| Read, reply to, close or **reopen** your own case | **Authorship** |
 | Read or list **anyone's** case | `support:read` |
-| Reply to or close **anyone's** case | `support:manage` |
+| Reply to, close or **reopen** anyone's case | `support:manage` |
 
 **Not everything is a scope, deliberately.** Raising a case about your own team is what an ordinary member
 does; gating it would mean every host granting that scope to everybody, and a scope everyone holds checks
@@ -65,6 +65,92 @@ nothing. Membership and authorship are still *checks* — they are simply not gr
 
 Both scopes are team scopes registered at `Administrator`. A case is always loaded through its team, so
 holding a valid case id from another tenant gains nothing.
+
+## The subject is optional
+
+A subject is a small tax on somebody who has already typed the problem into the box below it, and what it
+usually collects is a worse version of the first sentence. So it is **off by default**:
+
+```csharp
+builder.Services.AddThargaSupportCases(o => o.UseSubject = true);   // default: false
+```
+
+**`UseSubject` decides what a person is asked for, never whether the case ends up with a subject.** With no
+subject supplied, the service derives one from the first 50 characters of the message — cut at a word
+boundary, with whitespace collapsed first and an ellipsis marking the truncation. `SupportCase.Subject` is
+never null, so nothing downstream has to cope with a case that has none.
+
+That means a half-filled form cannot produce a case that renders as an empty row in a list, even with the
+field shown.
+
+## Reopening a case
+
+```csharp
+await supportCases.ReopenCaseAsync(teamKey, caseId);
+```
+
+Authorized exactly as replying is: the member who raised it, or a holder of `support:read` / `support:manage`.
+It writes a system entry, clears the closure, and returns the case to `Open` — **keeping the history**, which
+is the whole reason it exists rather than telling somebody to raise a second case that explains nothing.
+
+**Reopening an already-open case does nothing and is not an error.** Two people looking at the same closed
+case both press the button; the second sees an open case rather than a complaint.
+
+## Closing after inactivity
+
+A case support answered and nobody came back to closes itself after seven days.
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.AutoCloseAfter = TimeSpan.FromDays(7);        // default; Zero turns it off
+    o.AutoCloseSweepInterval = TimeSpan.FromHours(1);
+    o.AutoCloseBatchSize = 100;
+});
+```
+
+**The direction is the important part.** The clock runs only while the case is waiting on the *customer*: the
+newest entry is support's and nobody has replied. A case whose newest entry is the **customer's** never
+closes, however old — that one is waiting on *you*, and closing it would hide your backlog rather than tidy
+it. A *system* entry does not start the clock either, so reopening a case does not immediately re-arm it.
+
+`SupportCase.ClosedReason` distinguishes the two closures — `Manual` or `Inactivity` — so a component can say
+"closed automatically, reopen it if the problem is still there" rather than something that reads as a
+dismissal. It is derived from `ClosedBy`, which the sweep records as `SupportCaseActors.AutoClose`.
+
+**`TimeSpan.Zero` registers no background work at all**, rather than a sweep that finds nothing every hour.
+
+> **Existing cases are not swept until they are next written to.** The sweep needs the last-activity
+> timestamp, which older documents do not carry. That is deliberate: applying new behaviour retroactively
+> would close an untouched backlog in bulk on the first sweep after upgrading.
+
+## Components
+
+Two components ship in `Tharga.Team.Blazor`, and **both are optional**:
+
+```razor
+@* What a team member sees: raise a case, read the conversation, reply, reopen *@
+<SupportCasesView ShowSubject="false" />
+
+@* What support sees: every case in the team, answer, close, reopen *@
+<SupportQueueView />
+```
+
+`SupportQueueView` needs `support:read`, and the service refuses without it — so gate rendering on the scope
+to spare a member a refusal they can do nothing about.
+
+**A host can always build its own instead, and that is the point.** Both components go through
+`ISupportCaseService` and nothing else — no store, no internal service — and a test asserts it. If a shipped
+component needed something you cannot reach, the surface would be incomplete and the component would be
+hiding it.
+
+`ShowSubject` is a parameter rather than a read of `UseSubject`, because the options live in
+`Tharga.Team.Support` while the components depend on contracts only. Pass the same value you configured; or
+differ per page, which reading the options could not express.
+
+**Closing from `SupportQueueView` warns first** and suggests letting the person who raised the case close it
+— they are best placed to say the problem is solved, and a case closed while somebody is still typing reads
+as a dismissal. It is advisory: support can still close a case that is finished.
 
 ## Reading history
 

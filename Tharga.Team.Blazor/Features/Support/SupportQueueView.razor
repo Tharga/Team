@@ -1,0 +1,237 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Blazor.Features.Team
+@implements IDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+@inject ITeamStateService TeamState
+@inject DialogService DialogService
+
+@* The support side: every case in the team, answered, closed and reopened from one place.
+
+   Like SupportCasesView, this goes through ISupportCaseService and nothing else — see the remarks there.
+   Reading other people's cases needs support:read, and the service refuses without it, so a host that places
+   this component where an ordinary member can reach it gets a refusal rather than a leak. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (_teamKey == null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[SupportQueueViewText.SelectTeam]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportQueueViewText.Title]</RadzenText>
+            @if (_awaiting > 0)
+            {
+                <RadzenBadge Text="@($"{_awaiting} {_text[SupportQueueViewText.Awaiting]}")" BadgeStyle="BadgeStyle.Danger" />
+            }
+        </RadzenStack>
+
+        @if (_cases.Length == 0)
+        {
+            <RadzenText TextStyle="TextStyle.Body2">@_text[SupportQueueViewText.NoCases]</RadzenText>
+        }
+        else
+        {
+            foreach (var item in _cases)
+            {
+                <RadzenCard Variant="Variant.Outlined">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                        <RadzenLink Text="@item.Subject" Click="@(() => SelectAsync(item))" />
+                        <RadzenBadge Text="@StatusText(item)"
+                                     BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                            @_text[SupportQueueViewText.RaisedBy] @item.AuthorName
+                        </RadzenText>
+                    </RadzenStack>
+
+                    @if (_selected?.Id == item.Id)
+                    {
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
+                            @foreach (var message in _messages)
+                            {
+                                @* Channel provenance is deliberately not shown yet. SupportMessage.Source
+                                   arrives with the email channel (spec 08), and an email reply is attributed
+                                   on a sender match rather than an authenticated caller — so once it exists
+                                   this is where a support agent needs to see the difference. *@
+                                <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                                        @message.AuthorName — @message.SentAt.ToLocalTime().ToString("g")
+                                    </RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@message.Body</RadzenText>
+                                </RadzenStack>
+                            }
+
+                            @if (_selected.Status == SupportCaseStatus.Open)
+                            {
+                                @* oninput as well as the value binding: Radzen binds on change, so the
+                                   Answer button would stay disabled until the box lost focus. *@
+                                <RadzenTextArea Value="@_answer" ValueChanged="@(v => _answer = v)"
+                                                @oninput="@(e => _answer = e.Value?.ToString())"
+                                                Placeholder="@_text[SupportQueueViewText.AnswerLabel]"
+                                                Rows="3" Style="width: 100%;" aria-label="@_text[SupportQueueViewText.AnswerLabel]" />
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Text="@_text[SupportQueueViewText.AnswerLabel]" Click="AnswerAsync"
+                                                  Disabled="@(string.IsNullOrWhiteSpace(_answer) || _busy)" />
+                                    <RadzenButton Text="@_text[SupportQueueViewText.Close]" ButtonStyle="ButtonStyle.Light"
+                                                  Click="CloseAsync" Disabled="_busy" />
+                                </RadzenStack>
+                            }
+                            else
+                            {
+                                <div>
+                                    <RadzenButton Text="@_text[SupportQueueViewText.Reopen]" Icon="refresh"
+                                                  ButtonStyle="ButtonStyle.Light" Click="ReopenAsync" Disabled="_busy" />
+                                </div>
+                            }
+                        </RadzenStack>
+                    }
+                </RadzenCard>
+            }
+        }
+    </RadzenStack>
+}
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _busy;
+
+    private string _teamKey;
+    private string _answer;
+    private int _awaiting;
+
+    private SupportCase[] _cases = [];
+    private SupportCase _selected;
+    private SupportMessage[] _messages = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportQueueViewText.All);
+
+        _teamKey = TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key;
+
+        Notifier.CaseUpdated += OnCaseUpdated;
+
+        if (_teamKey != null) await ReloadAsync();
+
+        _ready = true;
+    }
+
+    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <remarks>
+    /// Marshals before touching state: the notifier is a singleton raised from whichever scope handled the
+    /// change, which for an inbound channel reply or the inactivity sweep is not this circuit.
+    /// </remarks>
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
+    {
+        if (e.TeamKey != _teamKey) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private string StatusText(SupportCase item)
+        => item.Status == SupportCaseStatus.Open
+            ? _text[SupportQueueViewText.Open]
+            : item.ClosedReason == SupportCaseClosureReason.Inactivity
+                ? _text[SupportQueueViewText.ClosedForInactivity]
+                : _text[SupportQueueViewText.Closed];
+
+    private async Task AnswerAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_answer) || _selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReplyToCaseAsync(_teamKey, _selected.Id, _answer);
+            _answer = null;
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <remarks>
+    /// <b>Advisory, never a block.</b> Support must still be able to close a case that is finished — the
+    /// warning exists because the person best placed to say a problem is solved is the person who had it, not
+    /// because closing is wrong.
+    /// </remarks>
+    private async Task CloseAsync()
+    {
+        if (_selected == null) return;
+
+        var confirmed = await DialogService.Confirm(
+            _text[SupportQueueViewText.ConfirmCloseBody],
+            _text[SupportQueueViewText.ConfirmCloseTitle],
+            new ConfirmOptions
+            {
+                OkButtonText = _text[SupportQueueViewText.ConfirmCloseAccept],
+                CancelButtonText = _text[SupportQueueViewText.ConfirmCloseCancel]
+            });
+
+        if (confirmed != true) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.CloseCaseAsync(_teamKey, _selected.Id);
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReopenAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReopenCaseAsync(_teamKey, _selected.Id);
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SelectAsync(SupportCase item)
+    {
+        _selected = await SupportCases.GetCaseAsync(_teamKey, item.Id);
+        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, item.Id)).Items;
+    }
+
+    private async Task ReloadAsync()
+    {
+        _cases = (await SupportCases.GetCasesAsync(_teamKey)).Items;
+        _awaiting = await SupportCases.GetAwaitingSupportCountAsync(_teamKey);
+    }
+}

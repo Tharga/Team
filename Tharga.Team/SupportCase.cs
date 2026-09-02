@@ -39,7 +39,32 @@ public record SupportCase
     public DateTime? ClosedAt { get; init; }
 
     /// <summary>The stable subject of whoever closed the case, or <c>null</c> while it is open.</summary>
+    /// <remarks>
+    /// May be <see cref="SupportCaseActors.AutoClose"/>, when the case closed itself rather than being closed
+    /// by a person.
+    /// </remarks>
     public string ClosedBy { get; init; }
+
+    /// <summary>
+    /// Why the case is closed, or <c>null</c> while it is open.
+    /// </summary>
+    /// <remarks>
+    /// <b>Derived from <see cref="ClosedBy"/> rather than stored</b>, and deliberately so. The store already
+    /// records who closed a case; adding a reason to <see cref="ISupportCaseStore.CloseCaseAsync"/> would
+    /// change a signature that hosts implement for their own storage, which is a compile-time break in
+    /// somebody else's repository for a value that can be read from what is already there.
+    /// <para>
+    /// It follows that the reason is exactly as trustworthy as the actor, which is the right coupling: a case
+    /// closed by the sweeper is closed for inactivity by definition, not by a flag that could disagree with
+    /// who closed it.
+    /// </para>
+    /// </remarks>
+    public SupportCaseClosureReason? ClosedReason
+        => Status != SupportCaseStatus.Closed
+            ? null
+            : ClosedBy == SupportCaseActors.AutoClose
+                ? SupportCaseClosureReason.Inactivity
+                : SupportCaseClosureReason.Manual;
 
     /// <summary>Number of entries in the transcript, so a list can be rendered without reading it.</summary>
     public required int MessageCount { get; init; }

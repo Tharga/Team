@@ -92,6 +92,24 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    public async Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.ReopenCaseAsync(teamKey, caseId, cancellationToken);
+
+            Log("reopen", nameof(ReopenCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+        }
+        catch (Exception ex)
+        {
+            Log("reopen", nameof(ReopenCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetCaseAsync(teamKey, caseId, cancellationToken);
 

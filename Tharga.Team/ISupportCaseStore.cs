@@ -44,6 +44,75 @@ public interface ISupportCaseStore
     Task CloseCaseAsync(string teamKey, string caseId, DateTime closedAt, string closedBy, SupportMessage closureMessage, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Opens a closed case again and records it in the transcript, as one unit.
+    /// </summary>
+    /// <remarks>
+    /// <b>Clears the closure entirely</b> — status, timestamp and actor. A case left carrying who closed it
+    /// while open would read as closed to anything deriving from that, including
+    /// <see cref="SupportCase.ClosedReason"/>.
+    /// <para>
+    /// <b>Reopening keeps the history.</b> That is the whole point of it existing rather than telling somebody
+    /// to raise a second case: the conversation that explains the problem is the one already written down.
+    /// </para>
+    /// <para>
+    /// <b>Throws rather than defaulting to nothing</b>, because a silent no-op would leave a case closed while
+    /// the caller was told it had reopened. A store written before this existed keeps compiling; it says
+    /// plainly that it cannot do this if asked.
+    /// </para>
+    /// </remarks>
+    Task ReopenCaseAsync(string teamKey, string caseId, SupportMessage reopenMessage, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(ReopenCaseAsync)}. Implement it to let a closed " +
+            "support case be opened again.");
+
+    /// <summary>
+    /// Open cases whose newest entry was written by support before
+    /// <paramref name="lastActivityBefore"/> — the ones the inactivity sweep may close.
+    /// </summary>
+    /// <remarks>
+    /// <b>The store owns the whole predicate, not just the cheap half.</b> "Support wrote the newest entry"
+    /// needs the last element of an embedded transcript, which is not an indexable filter — but the transcript
+    /// arrives with the document, so a store can narrow on indexed fields and then check the tail without a
+    /// second read. Splitting it, so a caller re-reads each candidate to inspect it, would turn one query into
+    /// one query per case.
+    /// <para>
+    /// <b>A system entry is not support answering.</b> A case whose newest entry is the toolkit's own — a
+    /// reopen note — must not be returned, or reopening a case would arm the very clock that closes it.
+    /// </para>
+    /// <para>
+    /// <b>Not team-scoped, because a sweep has no caller and no team.</b> It runs as framework code on
+    /// nobody's behalf; see also <see cref="GetCaseByBindingAsync"/>.
+    /// </para>
+    /// <para>
+    /// <b>Defaults to nothing</b>, so a store written before this existed keeps compiling and simply never
+    /// auto-closes.
+    /// </para>
+    /// </remarks>
+    /// <param name="lastActivityBefore">Cases untouched since this moment are eligible.</param>
+    /// <param name="limit">Most cases to return, so one sweep cannot load an unbounded set.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    Task<SupportCase[]> GetCasesForInactivityCloseAsync(DateTime lastActivityBefore, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCase[]>([]);
+
+    /// <summary>
+    /// Closes a case for inactivity, but only if it is still open. Returns whether this call closed it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The condition is the point.</b> Two instances sweeping together both see the same case; the update
+    /// applies only while the status is still open, so exactly one closes it and the other is told it did
+    /// not. That is the same shape <see cref="ISupportEventLedger"/> uses — let the write decide, rather than
+    /// reading and then acting on what was true a moment ago.
+    /// <para>
+    /// <b>The actor is the store's to set</b>, not the caller's: it records
+    /// <see cref="SupportCaseActors.AutoClose"/>, which is what <see cref="SupportCase.ClosedReason"/> reads.
+    /// A caller that could pass its own actor could make an automatic closure claim to be a person's.
+    /// </para>
+    /// <para><b>Defaults to closing nothing</b>, for the same reason as the query above.</para>
+    /// </remarks>
+    Task<bool> TryCloseForInactivityAsync(string teamKey, string caseId, DateTime closedAt, SupportMessage closureMessage, CancellationToken cancellationToken = default)
+        => Task.FromResult(false);
+
+    /// <summary>
     /// The case projected onto a given channel identifier, or <c>null</c> if no case is bound to it.
     /// </summary>
     /// <remarks>

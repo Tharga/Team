@@ -10,5 +10,8 @@ public enum SupportCaseChange
     Replied,
 
     /// <summary>The case was closed.</summary>
-    Closed
+    Closed,
+
+    /// <summary>A closed case was opened again, keeping its history.</summary>
+    Reopened
 }
