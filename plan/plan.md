@@ -122,6 +122,24 @@ Feature scope in `plan/feature.md`. Spec:
       could have caught this — only rendering the markup and clicking what a person clicks proves the wiring
       exists.
 
+- [x] **6d. The cold-start warm-up, folded in (user, 2026-09-02).** `SupportCollectionWarmUp` in
+      `Tharga.Team.MongoDB`, registered alongside the case store. It opens `SupportCase` and
+      `SupportEventLedger` at startup with a read that matches nothing — the cost being avoided is creating
+      the collection and assuring its indexes, not the query.
+      **Background task, not `StartAsync`.** A host waiting on a warm-up would have traded a slow first
+      request for a slow deployment. Every failure is caught and logged at debug: a database briefly
+      unreachable at startup must not stop the host, and the first request then pays what it would have paid
+      anyway.
+      **A singleton taking `IServiceScopeFactory`**, because the collections are transient and capturing one
+      is the captive dependency that has already stopped this repository's sample from starting once. A test
+      asserts that constructor shape rather than trusting it.
+      **What it does not do**, stated in the code because the distinction matters: it does not make the
+      inbound path safe. The ledger already does, by making Slack's retry idempotent. This removes a wasted
+      delivery per deployment, not a risk of losing a message — and conflating the two is how ack-first
+      machinery gets built for a problem that is already solved.
+      **Not yet measured against a restart.** The registration is tested; the 3.4 s → warm improvement needs
+      the sample restarted, which is the user's to do.
+
 - [ ] **7. Docs** (own `docs:` commit): the link placeholder and the URL template in
       `docs/articles/notifications.md`; presence and the manifest in `docs/articles/support-cases.md`,
       including that Slack tokens are per workspace and why there is no shared Tharga app to install.

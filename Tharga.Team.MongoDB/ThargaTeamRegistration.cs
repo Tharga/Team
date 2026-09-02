@@ -72,6 +72,10 @@ public static class ThargaTeamRegistration
             services.TrackMongoCollection(typeof(ISupportEventLedgerCollection), typeof(SupportEventLedgerCollection));
             services.TryAddScoped<ISupportEventLedger, MongoSupportEventLedger>();
 
+            // Opens both collections at startup. Slack allows three seconds for an inbound event and the
+            // first one after a restart took 3.4 s, all of it creating the ledger and assuring its indexes.
+            services.AddSingleton<IHostedService, SupportCollectionWarmUp>();
+
             // Reports members stored with no access level, which are silently being treated as Owner.
             // Registered only alongside a team repository, because without one there is nothing to read.
             if (o.CheckMemberAccessLevels)
