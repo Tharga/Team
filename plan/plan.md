@@ -369,9 +369,18 @@ puts one customer's problem in another customer's list. This removes the guess r
       why the two mail configurations are not unified and not given a fallback: support mail must come from an
       address replies return to, and an invitation is usually sent from `noreply@`.
 
-- [ ] **9. Tests for every acceptance criterion** in `plan/feature.md`, including the negative ones: stale
-      signature, replayed id, own message returning, auto-responder, wrong sender, oversized quoted reply.
-      Run the full suite before each commit.
+- [x] **9. Tests for every acceptance criterion** in `plan/feature.md`. Done 2026-09-03; each criterion is
+      now marked with what actually holds, and two needed more than a tick:
+      - **One criterion is reversed rather than met**, and says so: raising a case on the site was supposed to
+        open a mail projection. It was built, shipped into this branch, and removed — the person who raised
+        it is looking at the page. The assertion now runs the other way.
+      - **Three had no test at all**: `MailFetchPosition.IsInvalidatedBy`, a rescanned mailbox not
+        duplicating, and the mailbox never being mutated.
+      **The mutation guard scans source, deliberately.** Observing it needs an IMAP server and a second
+      deployment, while the failure is silent permanent mail loss: opening the folder read-write lets a fetch
+      set `\Seen` as a *side effect* that nobody writes a line for, and the message then looks handled to
+      the instance that wanted it. A symbol-keyed guard is weak in general and the right trade here.
+      Suite **2462 passed, 0 failed**, warnings 32.
 
 - [x] **10. Docs.** Done 2026-09-03. An email section in `docs/articles/support-cases.md` — setup, the
       customer/support channel split, the unassigned-team decision, the trust rule, the shared mailbox and

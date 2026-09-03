@@ -55,34 +55,76 @@ Read **and** send. Sending alone is a notification, not a channel.
 
 ## Acceptance criteria
 
-- [ ] Raising a case with the email channel configured sends a mail and stores its `Message-ID` as a
-      `SupportChannelBinding`.
-- [ ] A reply through `ISupportCaseService` is mailed into the same thread, carrying `In-Reply-To` and
+- [~] **REVERSED 2026-09-01 by the clarified model, not met and not to be met.** *Raising a case with the
+      email channel configured sends a mail and stores its `Message-ID` as a `SupportChannelBinding`.*
+      This was built and then removed: it mailed the author whenever a case was raised **on the site**, which
+      is exactly the case that must be answered on the site — the person who raised it is looking at the
+      page. An email projection is opened by mail *arriving*. Asserted the other way round now, by
+      `RaisingACaseOnTheSite_CreatesNoEmailProjection`.
+- [x] A reply through `ISupportCaseService` is mailed into the same thread, carrying `In-Reply-To` and
       `References` — not as a fresh mail.
-- [ ] A mailed reply appears on the case, attributed to the sending address and marked as email-sourced.
-- [ ] The host is notified for both directions by the existing `SupportCaseUpdatedEvent`.
-- [ ] The same inbound `Message-ID` polled twice appends **one** message.
-- [ ] Two concurrent pollers handed the same message append **one** message between them.
-- [ ] The poller never sets `\Seen` and never moves a message; progress is its own stored watermark.
-- [ ] A change in `UIDVALIDITY` resets the watermark and re-scans without appending duplicates.
-- [ ] A mail the toolkit itself sent does not come back as a reply; an auto-response does not either.
-- [ ] A mail from an address the case does not correspond with is dropped and recorded, not appended.
-- [ ] A reply quoting the full thread is trimmed to its new content, and stays inside `SupportCaseLimits`.
-- [ ] A case with **no** email binding still works exactly as before — email stays optional, as Slack is.
-- [ ] **With no recipient filter configured, every addressed mail is accepted** — the filter is optional.
-- [ ] A domain filter of `fortdocs.se` accepts `support@fortdocs.se` and rejects `support@eplicta.se`.
-- [ ] A domain filter accepts the plus-addressed per-case reply-to (`support+{caseId}@fortdocs.se`).
-- [ ] Matching is case-insensitive on both the local part and the domain.
-- [ ] **A rejected mail is not recorded in `ISupportEventLedger`**, so the other instance can still record it.
+- [x] A mailed reply appears on the case, marked as email-sourced and **named** by the sending address —
+      `AuthorName`, never `AuthorIdentity`. Writing an unverified address into the identity field would be
+      wrong twice: it is what authorization compares a caller's subject against, and the inactivity sweep
+      reads "support wrote last" as *the newest entry is not the author's*, so the customer's own reply would
+      have armed the clock that closes their case.
+- [x] The host is notified for both directions by the existing `SupportCaseUpdatedEvent` — including
+      `Raised` with a null team when mail opens a case.
+- [x] The same inbound `Message-ID` polled twice appends **one** message.
+- [x] Two concurrent pollers handed the same message append **one** message between them. The decision is
+      the ledger's insert against a unique index, which is atomic across instances where a read-then-write
+      would not be; the poller is asserted to respect its answer rather than to make one.
+- [x] The poller never sets `\Seen` and never moves a message; progress is its own stored position.
+      **Guarded by a source scan** (`MailboxIsNeverMutatedTests`), because observing it needs an IMAP server
+      and a second deployment, while the failure is silent permanent mail loss: read-write access lets a
+      fetch set `\Seen` as a side effect that nobody wrote a line for.
+- [x] A change in `UIDVALIDITY` resets the position and re-scans without appending duplicates. A generation
+      going *backwards* discards it too — it should not happen, and that is exactly when a stored UID is
+      least worth trusting.
+- [x] A mail the toolkit itself sent does not come back as a reply; an auto-response does not either.
+- [x] A mail from an address the case does not correspond with is dropped and recorded, not appended — and
+      now gets a case of its own instead, which is the only thing an unknown sender can do.
+- [x] A reply quoting the full thread is trimmed to its new content, and stays inside `SupportCaseLimits`.
+      Over-long mail is **trimmed rather than refused**, unlike a reply typed into a form: there is nobody to
+      tell, and the message id is already recorded, so refusing would discard what a customer sent and never
+      ask again.
+- [x] A case with **no** email binding still works exactly as before — email stays optional, as Slack is.
+      Both are live together now, so a case can hold one of each.
+- [x] **With no recipient filter configured, every addressed mail is accepted** — the filter is optional.
+- [x] A domain filter of `fortdocs.se` accepts `support@fortdocs.se` and rejects `support@eplicta.se`.
+- [x] A domain filter accepts the plus-addressed per-case reply-to (`support+{caseId}@fortdocs.se`).
+- [x] Matching is case-insensitive on both the local part and the domain.
+- [x] **A rejected mail is not recorded in `ISupportEventLedger`**, so the other instance can still record
+      it. Asserted as an ordering, so moving the filter after the ledger fails the test rather than only
+      contradicting a comment.
 - [ ] A rejected mail leaves the mailbox untouched — no flag, no move — so the other site's instance still
       finds it.
-- [ ] A startup check names the mismatch when the configured from/reply-to address is not matched by this
+- [x] A startup check names the mismatch when the configured from/reply-to address is not matched by this
       instance's recipient filter.
-- [ ] Contracts round-trip through `System.Text.Json` (target rule 3).
-- [ ] `SupportChannelType` persists by name — asserted on the stored BSON type.
-- [ ] The three stale XML remarks above are corrected.
-- [ ] Docs updated: `docs/articles/support-cases.md` and `Tharga.Team.Support/README.md`.
-- [ ] Full test suite green (baseline: 2196 passed, 0 failed).
+- [x] Contracts round-trip through `System.Text.Json` (target rule 3).
+- [x] `SupportChannelType` persists by name — asserted on the stored BSON type.
+- [x] The stale XML remarks are corrected — **four, not three**: `ITeamEmailSender` had a second copy of
+      its claim in `ThargaBlazorOptions.Email`.
+- [x] Docs updated: `docs/articles/support-cases.md` and `Tharga.Team.Support/README.md`. Three claims in
+      the existing text had become false and were corrected rather than left standing beside the new
+      sections.
+- [x] Full test suite green: **2462 passed, 0 failed** (baseline 2196), warnings 32 against the ratchet
+      of 35.
+
+## Added by spec 10, folded in here because fewer PRs is better
+
+- [x] A case may belong to **no team**, durably — raised, answered, closed and reopened without one.
+- [x] The unassigned queue is governed by **system** scopes, because `support:read` is held against a team
+      and an unassigned case has none. A caller fully privileged in their own team gets nothing.
+- [x] `AssignCaseAsync` is conditional on the case still having no team, and **tells** the operator who lost
+      the race rather than silently doing nothing.
+- [x] Assignment is recorded in the transcript, naming the team and the operator.
+- [x] An assigned case leaves the queue and becomes readable by that team's members.
+- [x] Assigning to no team at all is refused.
+- [x] `GetMyCasesAsync` matches nothing for a caller with no subject, rather than every unattributed case in
+      the team.
+- [x] A back-office component for the queue, offering only teams that exist — nothing validates a team key
+      on the way through, so a free-text field could assign a case to a team that does not exist.
 
 ## Done condition
 

@@ -105,6 +105,48 @@ public class SupportMailPollerTests
     }
 
     /// <summary>
+    /// A mailbox whose UID generation changed is read again, and the mail it re-reads must not land twice.
+    /// </summary>
+    /// <remarks>
+    /// <b>The ledger is what makes the re-read safe</b>, not any care taken here — so this asserts the two
+    /// halves together: the rescan is applied, and a message the ledger has already seen is not applied
+    /// again. Discarding a position that may point at different messages is always the right trade, because
+    /// re-reading costs a pass and skipping loses mail.
+    /// </remarks>
+    [Fact]
+    public async Task ARescannedMailbox_IsReadAgainWithoutAppendingTwice()
+    {
+        var (poller, store, _, client) = Build([Mail("first-1@example.com")], rescanned: true);
+
+        Assert.Equal(1, await poller.PollAsync(CancellationToken.None));
+
+        // The second pass sees the same mail; the ledger refuses it, so nothing is written.
+        Refuse(client);
+
+        Assert.Equal(0, await poller.PollAsync(CancellationToken.None));
+
+        await store.Received(1).AddCaseAsync(Arg.Any<SupportCase>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The same message polled twice reaches a case once. Two instances handed it together are the same
+    /// question, decided by the ledger rather than by either of them.
+    /// </summary>
+    [Fact]
+    public async Task TheSameMessagePolledTwice_ReachesACaseOnce()
+    {
+        var (poller, store, _, client) = Build(Mail("first-1@example.com"));
+
+        Assert.Equal(1, await poller.PollAsync(CancellationToken.None));
+
+        Refuse(client);
+
+        Assert.Equal(0, await poller.PollAsync(CancellationToken.None));
+
+        await store.Received(1).AddCaseAsync(Arg.Any<SupportCase>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// One mail that cannot be handled must not hold back the ones behind it.
     /// </summary>
     [Fact]
@@ -157,14 +199,21 @@ public class SupportMailPollerTests
         Body: "Nothing comes out.",
         SentAt: new DateTimeOffset(2026, 9, 3, 9, 0, 0, TimeSpan.Zero));
 
-    private static (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, ISupportMailClient Client) Build(
+    /// <summary>Makes this instance's ledger report every id as already handled, as a second pass would.</summary>
+    private void Refuse(ISupportMailClient client)
+        => _ledgers[client].TryRecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+
+    private readonly Dictionary<ISupportMailClient, ISupportEventLedger> _ledgers = [];
+
+    private (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, ISupportMailClient Client) Build(
         params InboundMail[] mails)
         => Build(mails, true, true);
 
-    private static (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, ISupportMailClient Client) Build(
+    private (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, ISupportMailClient Client) Build(
         InboundMail[] mails,
         bool withPositionStore = true,
-        bool canRead = true)
+        bool canRead = true,
+        bool rescanned = false)
     {
         var store = Substitute.For<ISupportCaseStore>();
 
@@ -178,7 +227,10 @@ public class SupportMailPollerTests
         client.FetchAsync(Arg.Any<MailFetchPosition>(), Arg.Any<CancellationToken>())
             .Returns(call => new MailFetchResult(
                 new MailFetchPosition(7, mails.Length == 0 ? call.Arg<MailFetchPosition>().LastUid : 42u),
-                mails));
+                mails,
+                rescanned));
+
+        _ledgers[client] = ledger;
 
         var positions = Substitute.For<ISupportMailPositionStore>();
         positions.GetAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(SupportMailPosition.Start);
