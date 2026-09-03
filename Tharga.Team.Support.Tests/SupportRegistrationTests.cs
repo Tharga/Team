@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Support.Email;
 using Tharga.Team.Support.Notifications;
 using Tharga.Team.Support.Slack;
 
@@ -117,6 +118,55 @@ public class SupportRegistrationTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportCaseService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportCaseNotifier>());
+    }
+
+    /// <summary>
+    /// The whole mail path resolves in a real graph: two channels, the poller and the inbound handler.
+    /// </summary>
+    /// <remarks>
+    /// <b>Resolved rather than validated, for the reason the notifier taught.</b> <c>ValidateOnBuild</c>
+    /// cannot see inside a factory lambda, and <c>ISupportCaseService</c> is built by one — so a missing
+    /// dependency of anything it reaches shows up only when something actually asks for it.
+    /// </remarks>
+    [Fact]
+    public void TheMailPath_Resolves()
+    {
+        using var provider = Build(s =>
+        {
+            s.AddSingleton(Substitute.For<ISupportCaseStore>());
+            s.AddSingleton(Substitute.For<ISupportEventLedger>());
+            s.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
+            s.AddSingleton<TeamAuthorizer>();
+            s.Configure<AuditOptions>(_ => { });
+            s.AddSingleton<CompositeAuditLogger>();
+            s.AddSingleton(Substitute.For<IAuditEntryFactory>());
+
+            // Both, as a host configuring a Slack channel for cases must: the transport and its client come
+            // from AddThargaSupport, and the channel that uses them from AddThargaSupportCases.
+            s.AddThargaSupport();
+            s.AddThargaSupportCases(o =>
+            {
+                o.SlackChannel = "#support";
+                o.Email.Imap.Host = "imap.example.com";
+                o.Email.Smtp.Host = "smtp.example.com";
+                o.Email.FromAddress = "support@fortdocs.se";
+            });
+        });
+
+        using var scope = provider.CreateScope();
+
+        var channels = scope.ServiceProvider.GetServices<ISupportChannel>().ToArray();
+
+        Assert.Equal(2, channels.Length);
+        Assert.Contains(channels, x => x.ChannelType == SupportChannelType.Slack);
+        Assert.Contains(channels, x => x.ChannelType == SupportChannelType.Email);
+
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportCaseService>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<EmailEventHandler>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportMailClient>());
+
+        // The poller is a hosted service, so nothing else would ever construct it.
+        Assert.Single(provider.GetServices<IHostedService>().OfType<SupportMailPoller>());
     }
 
     /// <summary>

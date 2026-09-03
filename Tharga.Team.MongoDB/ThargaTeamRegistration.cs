@@ -72,6 +72,13 @@ public static class ThargaTeamRegistration
             services.TrackMongoCollection(typeof(ISupportEventLedgerCollection), typeof(SupportEventLedgerCollection));
             services.TryAddScoped<ISupportEventLedger, MongoSupportEventLedger>();
 
+            // How far this deployment has read the support mailbox. A bookmark rather than a record: losing
+            // it costs a re-read, which the ledger above makes harmless -- which is why the port is
+            // optional and the poller falls back to keeping its position in memory.
+            services.AddTransient<ISupportMailPositionCollection, SupportMailPositionCollection>();
+            services.TrackMongoCollection(typeof(ISupportMailPositionCollection), typeof(SupportMailPositionCollection));
+            services.TryAddScoped<ISupportMailPositionStore, MongoSupportMailPositionStore>();
+
             // Opens both collections at startup. Slack allows three seconds for an inbound event and the
             // first one after a restart took 3.4 s, all of it creating the ledger and assuring its indexes.
             services.AddSingleton<IHostedService, SupportCollectionWarmUp>();

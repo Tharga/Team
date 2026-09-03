@@ -152,6 +152,63 @@ public class SupportEmailRegistrationTests
         Assert.Equal("support@fortdocs.se", options.FromAddress);
     }
 
+    /// <summary>
+    /// A mailbox to read means a poller and a channel; no mailbox means neither.
+    /// </summary>
+    /// <remarks>
+    /// <b>Both channels have to be resolvable at once</b>, because email faces the customer and Slack faces
+    /// support. The service took a single <c>ISupportChannel</c> until 3.18, so configuring both silently
+    /// used whichever registered first — the model and the wiring disagreed and nothing failed to compile.
+    /// </remarks>
+    [Fact]
+    public void WithAMailboxAndASlackChannel_BothChannelsAreLive()
+    {
+        var services = Build(o =>
+        {
+            o.SlackChannel = "#support";
+            o.Email.Imap.Host = "imap.example.com";
+            o.Email.Smtp.Host = "smtp.example.com";
+            o.Email.FromAddress = "support@fortdocs.se";
+        });
+
+        Assert.Equal(2, services.Count(x => x.ServiceType == typeof(ISupportChannel)));
+        Assert.Single(services, x => x.ImplementationType == typeof(SupportMailPoller));
+    }
+
+    /// <summary>
+    /// Sending without reading is a legitimate configuration — replies go out by mail and come back on the
+    /// site — and it must not start a poller against a server nobody configured.
+    /// </summary>
+    [Fact]
+    public void WithSmtpButNoImap_TheChannelIsLiveAndNothingPolls()
+    {
+        var services = Build(o =>
+        {
+            o.Email.Smtp.Host = "smtp.example.com";
+            o.Email.FromAddress = "support@fortdocs.se";
+        });
+
+        Assert.Single(services, x => x.ServiceType == typeof(ISupportChannel));
+        Assert.DoesNotContain(services, x => x.ImplementationType == typeof(SupportMailPoller));
+    }
+
+    [Fact]
+    public void WithNoMailConfigured_NothingMailRelatedIsRegistered()
+    {
+        var services = Build(_ => { });
+
+        Assert.DoesNotContain(services, x => x.ServiceType == typeof(ISupportMailClient));
+        Assert.DoesNotContain(services, x => x.ImplementationType == typeof(SupportMailPoller));
+    }
+
+    private static IServiceCollection Build(Action<SupportCaseOptions> configure)
+    {
+        var services = new ServiceCollection();
+        services.AddThargaSupportCases(configure);
+
+        return services;
+    }
+
     private static MailOptions Configure(Action<SupportCaseOptions> configure)
     {
         var services = new ServiceCollection();

@@ -107,6 +107,26 @@ public static class SupportRegistration
 
         RequireSendingAddressIsAccepted(caseOptions.Email);
 
+        // Mail, when a mailbox is configured. Dormant otherwise: a host that has not set a server resolves
+        // no channel and runs no poller, which is the site-only shape rather than a broken email one.
+        //
+        // TryAddEnumerable, so email and Slack are both live -- a case holds a binding facing the customer
+        // and one facing support at the same time.
+        if (caseOptions.Email.Imap.IsConfigured || caseOptions.Email.Smtp.IsConfigured)
+        {
+            services.TryAddScoped<ISupportMailClient, SupportMailClient>();
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportChannel, EmailSupportChannel>());
+        }
+
+        // Only with a mailbox to read. Sending without reading is a legitimate configuration -- a host that
+        // mails replies out and takes them in on the site -- and it must not start a poller against a
+        // server that was never configured.
+        if (caseOptions.Email.Imap.IsConfigured)
+        {
+            services.TryAddScoped<EmailEventHandler>();
+            services.AddSingleton<IHostedService, SupportMailPoller>();
+        }
+
         // Only when the feature is on. Zero means a host that does not want cases closing themselves runs no
         // timer and no query on its behalf, rather than a sweep that finds nothing every hour.
         if (caseOptions.AutoCloseAfter > TimeSpan.Zero)
@@ -119,7 +139,10 @@ public static class SupportRegistration
         // is the site-only shape slice 1 shipped -- not a degraded version of this one.
         if (!string.IsNullOrWhiteSpace(caseOptions.SlackChannel))
         {
-            services.TryAddScoped<ISupportChannel, SlackSupportChannel>();
+            // TryAddEnumerable rather than TryAdd: a case can hold a binding per channel, so registering
+            // email must not mean Slack loses. It still refuses a second registration of this same
+            // implementation, which is what TryAdd was here for.
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportChannel, SlackSupportChannel>());
             services.TryAddScoped<SlackEventHandler>();
 
             // Singleton, because the caches are the point: a scoped presence service would ask Slack about
@@ -168,7 +191,7 @@ public static class SupportRegistration
                     sp.GetRequiredService<ISupportCaseStore>(),
                     sp.GetRequiredService<TeamAuthorizer>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetService<ISupportChannel>(),
+                    sp.GetServices<ISupportChannel>(),
                     sp.GetRequiredService<ISupportCaseNotifier>()),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),

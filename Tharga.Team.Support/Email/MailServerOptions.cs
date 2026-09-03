@@ -24,4 +24,14 @@ public class MailServerOptions
 
     /// <summary>Password or app password for <see cref="UserName"/>.</summary>
     public string Password { get; set; }
+
+    /// <summary>
+    /// Whether this side of the transport has been configured at all.
+    /// </summary>
+    /// <remarks>
+    /// <b>One definition, so registration and the client cannot disagree.</b> Registration decides whether
+    /// to wire a channel and a poller, and the client decides whether to attempt a connection; the two
+    /// answering that question separately is how a host ends up with a poller that can never read.
+    /// </remarks>
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(Host);
 }

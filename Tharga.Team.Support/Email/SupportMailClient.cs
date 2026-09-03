@@ -29,9 +29,9 @@ internal sealed class SupportMailClient(IOptions<MailOptions> options, ILogger<S
 
     private readonly MailOptions _options = options?.Value ?? new MailOptions();
 
-    public bool CanSend => !string.IsNullOrWhiteSpace(_options.Smtp.Host) && !string.IsNullOrWhiteSpace(_options.FromAddress);
+    public bool CanSend => _options.Smtp.IsConfigured && !string.IsNullOrWhiteSpace(_options.FromAddress);
 
-    public bool CanRead => !string.IsNullOrWhiteSpace(_options.Imap.Host);
+    public bool CanRead => _options.Imap.IsConfigured;
 
     public async Task<MailSendResult> SendAsync(OutboundMail mail, CancellationToken cancellationToken = default)
     {

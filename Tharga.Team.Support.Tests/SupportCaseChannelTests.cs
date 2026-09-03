@@ -117,7 +117,7 @@ public class SupportCaseChannelTests
     public async Task WithNoChannelConfigured_NothingIsPostedAndTheCaseIsUnchanged()
     {
         var store = new InMemorySupportCaseStore();
-        var service = BuildService(store, channel: null);
+        var service = BuildService(store);
 
         var raised = await service.RaiseCaseAsync(TeamKey, "Subject", "Body");
         await service.ReplyToCaseAsync(TeamKey, raised.Id, "Any news?");
@@ -141,7 +141,7 @@ public class SupportCaseChannelTests
         return (BuildService(store, channel), store, slack);
     }
 
-    private static ISupportCaseService BuildService(InMemorySupportCaseStore store, ISupportChannel channel)
+    private static ISupportCaseService BuildService(InMemorySupportCaseStore store, params ISupportChannel[] channels)
     {
         var claims = new List<Claim>
         {
@@ -153,7 +153,7 @@ public class SupportCaseChannelTests
         var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
         var authorizer = new TeamAuthorizer(new FixedPrincipalAccessor(principal));
 
-        return new SupportCaseService(store, authorizer, TimeProvider.System, channel);
+        return new SupportCaseService(store, authorizer, TimeProvider.System, channels);
     }
 
     private sealed class FixedPrincipalAccessor(ClaimsPrincipal principal) : ITeamPrincipalAccessor

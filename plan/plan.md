@@ -120,11 +120,45 @@ puts one customer's problem in another customer's list. This removes the guess r
       unassigned case arrives there with a null team, so an "obvious" tightening to an exists check would
       break all three.
 
-- [ ] **F. `IEnumerable<ISupportChannel>`.** Email is customer-facing and Slack support-facing, so both must
-      be live at once. `SupportCaseService` takes one channel today, which silently gives whichever
-      registered first.
+- [x] **F. `IEnumerable<ISupportChannel>`.** Done 2026-09-03. Email is customer-facing and Slack
+      support-facing, so both are live at once; the service took one channel, and `TryAdd` meant configuring
+      both silently used whichever registered first. Registration is now `TryAddEnumerable`, which still
+      refuses a second registration of the same implementation — what `TryAdd` was there for. 7 tests.
+      **What "delivered" means had to be decided, and it is not obvious.** Delivery is one field on one
+      entry, and the channels are deliberately asymmetric: a case raised on the site opens a Slack thread
+      for support and opens nothing by mail, because the person who typed it is already looking at the site.
+      So *Sent* means it reached at least one channel — requiring all of them would mark a perfectly
+      delivered entry Pending forever. On a reply the three states stay distinct: no binding anywhere is
+      **Pending** (nothing was tried, a projection may yet open), every binding refusing is **Failed**
+      (something went wrong), and one accepting is **Sent**.
+      **Not done, and deliberately not:** cross-posting between channels. A customer mail on a case that also
+      has a Slack thread is written to the case and notified, but not echoed into the thread. Support sees it
+      through the notification; making one channel mirror another is its own feature.
 
-- [ ] **G. The poller and the watermark** (old step 6), and **registration** (old step 7).
+- [x] **G. The poller and the watermark** (old step 6), and **registration** (old step 7). Done
+      2026-09-03. `SupportMailPoller` is a `BackgroundService` around `EmailEventHandler` and nothing more —
+      every decision that can lose or leak mail stays in the handler, which is testable as a pure sequence.
+      `ISupportMailPositionStore` in `Tharga.Team` with a Mongo adapter and a unique index on the key.
+      16 tests; suite **2438 passed, 0 failed**, warnings 32.
+      **The position key is the decision worth recording.** It identifies the *deployment*, not the mailbox,
+      and it is **derived from the recipients the instance answers for** rather than configured. Two sites
+      sharing one `support@` address and one database must not share a position: the first to poll would
+      advance past a message addressed to the second, and the second would never see it — the same
+      shared-mailbox mail loss that made the recipient filter run before the ledger. An option would have
+      been one more thing to set correctly, and setting it wrong loses mail silently; the recipients are
+      exactly what makes the two instances different, so they are the key. Two deployments answering for the
+      same recipients share a position on purpose — they would handle the same mail, and the ledger stops
+      the second applying it twice.
+      **Everything about the position is best-effort, and that is a design claim rather than an excuse.**
+      Losing it costs a re-read, which the ledger makes harmless — so the store is optional (a host without
+      the Mongo package keeps its position in memory and is told so once), every read and write failure is
+      logged rather than thrown, and a duplicate-key race between two instances polling for the first time
+      is a debug line. It is written *after* the mail is handled, never before.
+      **`MailServerOptions.IsConfigured` was added instead of a second copy of the check.** Registration
+      decides whether to wire a channel and a poller; the client decides whether to attempt a connection.
+      Those two answering the question separately is how a host gets a poller that can never read.
+      **Sending without reading stays legitimate** — replies out by mail, answers back on the site — so SMTP
+      alone registers the channel and starts no poller.
 
 - [ ] **H. Components:** unassigned cases in the back office, with the affordance to assign a team or leave
       it. Nothing in the customer view changes.

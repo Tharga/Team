@@ -12,8 +12,21 @@ namespace Tharga.Team.Support.Cases;
 /// here is the domain: assigning identity, stamping the author, and composing the operations the store
 /// applies atomically.
 /// </remarks>
-internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer authorizer, TimeProvider timeProvider, ISupportChannel channel = null, ISupportCaseNotifier notifier = null) : ISupportCaseService
+internal sealed class SupportCaseService(
+    ISupportCaseStore store,
+    TeamAuthorizer authorizer,
+    TimeProvider timeProvider,
+    IEnumerable<ISupportChannel> channels = null,
+    ISupportCaseNotifier notifier = null) : ISupportCaseService
 {
+    /// <remarks>
+    /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
+    /// Slack faces support, so a case can hold a binding for each — which is what
+    /// <see cref="SupportCase.Bindings"/> being an array has always meant. This took a single channel until
+    /// 3.18, so configuring both silently used whichever registered first.
+    /// </remarks>
+    private readonly ISupportChannel[] _channels = channels?.ToArray() ?? [];
+
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default)
     {
         RequireWithinLength(body);
@@ -102,43 +115,75 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
         });
 
     /// <summary>
-    /// Opens the channel projection for a new case and records whether the opening message got there.
+    /// Opens a projection on every configured channel and records whether the opening message got anywhere.
     /// </summary>
+    /// <remarks>
+    /// <b>Delivered means it reached at least one channel, not all of them.</b> Delivery is one field on one
+    /// entry, and channels are asymmetric on purpose: a case raised on the site opens a Slack thread for
+    /// support and opens nothing by mail, because the person who typed it is already looking at the site.
+    /// Requiring every channel to accept would mark a perfectly delivered entry as Pending forever.
+    /// <para>
+    /// <b>A refusal is not a failure.</b> Every channel returning null — none configured, or all of them
+    /// declining — leaves the entry Pending, which is something a retry or a reminder can act on. The case
+    /// itself already stands on its own.
+    /// </para>
+    /// </remarks>
     private async Task ProjectAsync(SupportCase supportCase, string body, int sequence, CancellationToken cancellationToken)
     {
-        if (channel == null) return;
+        if (_channels.Length == 0) return;
 
-        var binding = await channel.OpenAsync(supportCase, body, cancellationToken);
+        var opened = false;
 
-        if (binding == null)
+        foreach (var channel in _channels)
         {
-            // No channel configured, or it refused. Neither is an error: the case stands on its own, and
-            // Pending marks the entry as something a retry or a reminder can act on.
-            await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence, SupportMessageDelivery.Pending, cancellationToken);
-            return;
+            var binding = await channel.OpenAsync(supportCase, body, cancellationToken);
+
+            if (binding == null) continue;
+
+            await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, binding, cancellationToken);
+            opened = true;
         }
 
-        await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, binding, cancellationToken);
-        await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence, SupportMessageDelivery.Sent, cancellationToken);
+        await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence,
+            opened ? SupportMessageDelivery.Sent : SupportMessageDelivery.Pending, cancellationToken);
     }
 
-    /// <summary>Posts a reply into the case's existing projection, if it has one.</summary>
+    /// <summary>Posts a reply into every projection the case has.</summary>
+    /// <remarks>
+    /// <b>Into all of them, because they face different people.</b> Support answering a case that arrived by
+    /// mail has to reach the customer's inbox *and* the Slack thread support is reading, and each channel is
+    /// given only a binding of its own type.
+    /// <para>
+    /// <b>Pending and Failed mean different things, and the difference is worth keeping.</b> No binding at
+    /// all is Pending — nothing has been tried, and a projection may yet open. A binding that refused the
+    /// post is Failed, which is a thing that went wrong. A reply that reached one channel and was refused by
+    /// another counts as Sent: the entry is one field, and it did reach somebody.
+    /// </para>
+    /// </remarks>
     private async Task DeliverAsync(string teamKey, string caseId, SupportCase existing, SupportMessage message, CancellationToken cancellationToken)
     {
-        if (channel == null) return;
+        if (_channels.Length == 0) return;
 
-        var binding = existing?.Bindings?.FirstOrDefault(x => x.ChannelType == channel.ChannelType);
+        var attempted = false;
+        var delivered = false;
 
-        if (binding == null)
+        foreach (var channel in _channels)
         {
-            await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence, SupportMessageDelivery.Pending, cancellationToken);
-            return;
+            var binding = existing?.Bindings?.FirstOrDefault(x => x.ChannelType == channel.ChannelType);
+
+            if (binding == null) continue;
+
+            attempted = true;
+            delivered |= await channel.PostAsync(binding, message, cancellationToken);
         }
 
-        var delivered = await channel.PostAsync(binding, message, cancellationToken);
+        var status = !attempted
+            ? SupportMessageDelivery.Pending
+            : delivered
+                ? SupportMessageDelivery.Sent
+                : SupportMessageDelivery.Failed;
 
-        await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence,
-            delivered ? SupportMessageDelivery.Sent : SupportMessageDelivery.Failed, cancellationToken);
+        await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence, status, cancellationToken);
     }
 
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
