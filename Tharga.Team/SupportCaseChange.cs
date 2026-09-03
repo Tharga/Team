@@ -13,5 +13,8 @@ public enum SupportCaseChange
     Closed,
 
     /// <summary>A closed case was opened again, keeping its history.</summary>
-    Reopened
+    Reopened,
+
+    /// <summary>A case that belonged to no team was given one.</summary>
+    Assigned
 }

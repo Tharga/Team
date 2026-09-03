@@ -22,7 +22,7 @@ namespace Tharga.Team;
 /// <para>
 /// <b>It carries no authorization.</b> Every subscriber is told about every case in every team, because
 /// filtering here would need a caller and a singleton has none. A handler that acts on the notification must
-/// read the case back through <see cref="ISupportCaseService"/>, where the checks are.
+/// read the case back through <see cref="Support.Cases.ISupportCaseService"/>, where the checks are.
 /// </para>
 /// </remarks>
 public interface ISupportCaseNotifier

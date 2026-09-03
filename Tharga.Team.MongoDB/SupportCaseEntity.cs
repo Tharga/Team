@@ -30,7 +30,14 @@ public record SupportCaseEntity : EntityBase
     /// <summary>The case id. Distinct from <see cref="EntityBase.Id"/>, which is the document's ObjectId.</summary>
     public required string CaseId { get; init; }
 
-    public required string TeamKey { get; init; }
+    /// <summary>The owning team, or absent when the case is unassigned.</summary>
+    /// <remarks>
+    /// <c>[BsonIgnoreIfNull]</c> so an unassigned case stores no team at all rather than an empty string —
+    /// a filter for "no team" then means what it says, and cannot accidentally match a case whose key was
+    /// written as blank.
+    /// </remarks>
+    [BsonIgnoreIfNull]
+    public string TeamKey { get; init; }
 
     public required string AuthorIdentity { get; init; }
 

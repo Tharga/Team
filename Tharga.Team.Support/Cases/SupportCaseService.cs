@@ -190,6 +190,38 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
         Notify(teamKey, caseId, SupportCaseChange.Reopened);
     }
 
+    public async Task<bool> AssignCaseAsync(string caseId, string teamKey, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(teamKey)) throw new ArgumentException("A case must be assigned to a team.", nameof(teamKey));
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var actor = await authorizer.GetDisplayNameAsync();
+
+        // In the transcript, because which tenant a case belongs to is part of its history: a case that
+        // changed hands and says nothing about it reads as having always been there.
+        var note = new SupportMessage
+        {
+            Sequence = 0,
+            Kind = SupportMessageKind.System,
+            AuthorIdentity = await authorizer.GetSubjectAsync(),
+            AuthorName = actor,
+            Body = $"Assigned to team {teamKey} by {actor}.",
+            SentAt = now
+        };
+
+        // Conditional in the store, so two agents triaging the same queue do not both assign it. The loser
+        // is told rather than left looking at a button that did nothing -- the case is now somebody else's,
+        // and a queue that silently swallows the second click is how an operator stops trusting it.
+        if (!await store.TryAssignCaseAsync(caseId, teamKey, note, cancellationToken)) return false;
+
+        Notify(teamKey, caseId, SupportCaseChange.Assigned);
+
+        return true;
+    }
+
+    public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+        => store.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
+
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => store.GetCaseAsync(teamKey, caseId, cancellationToken);
 

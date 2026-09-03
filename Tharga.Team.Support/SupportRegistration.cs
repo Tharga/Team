@@ -148,6 +148,17 @@ public static class SupportRegistration
                 "Reply to and close any support case in the team.");
         });
 
+        // The unassigned queue. Registered here rather than in the Blazor platform because these scopes only
+        // mean anything where support cases exist, and a catalogue entry for a capability the host has not
+        // registered is an offer it cannot honour.
+        services.AddThargaSystemScopes(scopes =>
+        {
+            scopes.Register(SystemSupportScopes.Read,
+                "Read and list support cases that belong to no team -- inbound mail from a sender whose team could not be determined. A team scope cannot govern these, because there is no team to hold it against.");
+            scopes.Register(SystemSupportScopes.Manage,
+                "Reply to, close, reopen and assign a support case that belongs to no team. Assigning decides which tenant the case and its whole transcript become part of.");
+        });
+
         // Auditing wraps authorization so a refusal is recorded as a failed entry rather than lost, matching
         // how access-level and scope denials are already audited. Composed the other way round, every
         // refused attempt would vanish and nothing would fail to compile.

@@ -95,6 +95,30 @@ public interface ISupportCaseStore
         => Task.FromResult<SupportCase[]>([]);
 
     /// <summary>
+    /// Cases belonging to no team, newest first, or an empty page when the store cannot answer.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not team-scoped, because there is no team</b> — the same shape as
+    /// <see cref="GetCaseByBindingAsync"/>, and reached only from a caller already checked against
+    /// <see cref="SystemSupportScopes.Read"/>.
+    /// <para><b>Defaults to nothing</b>, so a store written before unassigned cases existed keeps compiling.</para>
+    /// </remarks>
+    Task<SupportCasePage> GetUnassignedCasesAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(new SupportCasePage { Items = [] });
+
+    /// <summary>
+    /// Gives an unassigned case to a team, returning whether this call did it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Conditional on the case still having no team</b>, so two agents triaging the same queue cannot
+    /// both assign it and the second is told it changed nothing. The same shape as
+    /// <see cref="TryCloseForInactivityAsync"/>: let the write decide, rather than reading and then acting
+    /// on what was true a moment ago.
+    /// </remarks>
+    Task<bool> TryAssignCaseAsync(string caseId, string teamKey, SupportMessage assignmentMessage, CancellationToken cancellationToken = default)
+        => Task.FromResult(false);
+
+    /// <summary>
     /// Closes a case for inactivity, but only if it is still open. Returns whether this call closed it.
     /// </summary>
     /// <remarks>

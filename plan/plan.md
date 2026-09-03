@@ -35,6 +35,79 @@ Steps 1–3 are unaffected. What changes:
   mail has no caller, so it is framework code reading on nobody's behalf.
 - **A fallback team becomes required configuration** once the mailbox is read, enforced at startup.
 
+## Scope widened 2026-09-03 (user): the unassigned case lands here too
+
+*"Fewer PRs is better"* — so spec 10's core ships on this branch with email rather than ahead of it. One PR
+carrying an authorization change and a mail transport is harder to review; the user has weighed that and
+chosen it.
+
+**A case may have no team.** Not a staging area — a durable state a case can be raised, answered, closed and
+reopened in. An operator assigns a team when they know which one it is, or leaves it unassigned.
+
+**Every earlier option guessed**, and a guess about which tenant a support case concerns is the guess that
+puts one customer's problem in another customer's list. This removes the guess rather than improving it.
+
+## Revised steps
+
+- [x] **A. Step 4 rework — the channel opens nothing from the site.** Done 2026-09-03. It was built
+      backwards: `OpenAsync` mailed the case author whenever a case was raised *on the site*, which is
+      exactly the case that must be answered on the site. Email now opens a projection only when a case
+      *arrives* by mail, and `PostAsync` posts only into a binding inbound created. The `IUserService`
+      dependency went with it — reading the correspondent from the signed-in user answered the wrong
+      question, because by the time support replies the signed-in user is the agent.
+
+- [x] **B. `SupportCase.TeamKey` becomes nullable.** Done 2026-09-03. Contract and entity, the entity
+      `[BsonIgnoreIfNull]` so an unassigned case has no field at all rather than an explicit null.
+      **The Mongo query is `Exists(TeamKey, false)`, not `Eq(TeamKey, null)`**, which would also match a
+      document written with an explicit null — a state the store never produces and should not start
+      matching by accident.
+
+- [x] **C. A system-wide support scope.** Done 2026-09-03. `SystemSupportScopes.Read` /
+      `.Manage`, registered from `SupportRegistration` rather than the Blazor platform: they mean nothing
+      where support cases are not registered, and a catalogue entry for a capability the host has not
+      registered is an offer it cannot honour.
+
+- [x] **D. `AssignCaseAsync(caseId, teamKey)`.** Done 2026-09-03. An operation, not a property set:
+      authorizable and auditable as one fact (target rule 1). The only way a case gains a team after the
+      fact. Suite **2407 passed, 0 failed** (+9), warnings 32 against the ratchet of 35.
+      **Three decisions this step settled:**
+      - **It returns `bool`, unlike every other write on the service.** The store write is conditional on the
+        case still having no team, so two agents triaging the same queue cannot both assign it — and the
+        loser has to be told. A queue that silently swallows the second click is how an operator stops
+        trusting it. Audited as a successful attempt that changed nothing (`assigned=false`), not as a
+        failure: the caller was authorized and the system behaved correctly.
+      - **An unassigned case is deny-by-default, and reachable by system scope only.** No team means no
+        membership to check, so `RequireCaseAccessAsync` takes the system scope instead — `Read` for a read,
+        `Manage` for a write. **Authorship does not authorize one yet**; spec 10 decision 2 gives the author
+        of a teamless case access, and that arrives with the path that lets a user raise one. Today every
+        teamless case comes from inbound mail, whose sender has no identity to match.
+      - **Assignment is checked against the system scope, never against the receiving team.** A scope on the
+        team a case is moved *into* would let a member of any team pull an unassigned case — which may
+        concern a different tenant entirely — into their own, with its whole transcript.
+      **Two mistakes worth recording, because both were invisible to the compiler.** A new member inserted
+      between an existing doc comment and the member it described stole that documentation — twice, in
+      `ISupportCaseStore` and in the authorization decorator. Only `CS1573` on an unrelated `<param>` tag
+      exposed it. And the fake store's `TryAssignCaseAsync` first called its own `Replace`, which locates a
+      case by `(team, id)` — the one thing this operation changes.
+      **Non-vacuity checked**: disabling the system-scope check fails 4 of the 9 new tests.
+
+- [ ] **E. Step 5 rework — inbound creates an unassigned case** when it matches no thread, rather than
+      dropping it. The sender-match trust rule still governs *replies*.
+      **Created unassigned, always.** Auto-assigning a sender who happens to belong to exactly one team would
+      need an email-to-user lookup that does not exist, and the operator affordance has to exist regardless —
+      so it is a small follow-up rather than a prerequisite.
+
+- [ ] **F. `IEnumerable<ISupportChannel>`.** Email is customer-facing and Slack support-facing, so both must
+      be live at once. `SupportCaseService` takes one channel today, which silently gives whichever
+      registered first.
+
+- [ ] **G. The poller and the watermark** (old step 6), and **registration** (old step 7).
+
+- [ ] **H. Components:** unassigned cases in the back office, with the affordance to assign a team or leave
+      it. Nothing in the customer view changes.
+
+- [ ] **I. Docs and close-out.**
+
 ## Steps
 
 - [x] **0. Package updates and baseline.** `dotnet outdated` across the solution: the only available update

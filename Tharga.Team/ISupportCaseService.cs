@@ -47,6 +47,36 @@ public interface ISupportCaseService
     /// </remarks>
     Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Gives an unassigned case to a team.
+    /// </summary>
+    /// <remarks>
+    /// <b>The only way a case gains a team after the fact</b>, and an operation rather than a property set
+    /// because it is one authorizable, auditable fact: it decides which tenant a case and its entire
+    /// transcript become part of.
+    /// <para>
+    /// <b>Authorized by <see cref="SystemSupportScopes.Manage"/></b>, not by a scope on the receiving team.
+    /// A member of one team must not be able to pull a case that may concern another into their own.
+    /// </para>
+    /// <para>
+    /// <b>Only an unassigned case can be assigned.</b> Moving a case between tenants moves its transcript
+    /// with it, so it is refused rather than treated as a correction — if it is genuinely wrong, that is a
+    /// decision somebody should have to make deliberately, and there is no evidence yet that anybody needs
+    /// to.
+    /// </para>
+    /// </remarks>
+    Task<bool> AssignCaseAsync(string caseId, string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Cases belonging to no team, for whoever triages them.
+    /// </summary>
+    /// <remarks>
+    /// Authorized by <see cref="SystemSupportScopes.Read"/>. Separate from
+    /// <see cref="GetCasesAsync"/> because that one answers "what is happening in this team" and this one
+    /// answers "what has arrived that nobody owns" — different questions, different grants.
+    /// </remarks>
+    Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
+
     /// <summary>One case, or <c>null</c> when the team has no such case.</summary>
     Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 

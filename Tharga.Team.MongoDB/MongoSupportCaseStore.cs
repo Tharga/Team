@@ -201,6 +201,41 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return result?.Before != null;
     }
 
+    public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        // Exists rather than equals-null: TeamKey is [BsonIgnoreIfNull], so an unassigned case has no field
+        // at all. A filter for null would also match one written with an explicit null, which is a state the
+        // store never produces and should not start matching by accident.
+        var filter = Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, false);
+
+        return PageAsync(filter, cursor, pageSize);
+    }
+
+    public async Task<bool> TryAssignCaseAsync(string caseId, string teamKey, SupportMessage assignmentMessage, CancellationToken cancellationToken = default)
+    {
+        var entity = await collection.GetOneAsync(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId));
+
+        if (entity == null || !string.IsNullOrEmpty(entity.TeamKey)) return false;
+
+        RequireRoom(entity);
+
+        // Conditional on the case still having no team, so two agents triaging the same queue cannot both
+        // assign it -- the second matches nothing and reports that it changed nothing.
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId),
+            Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, false));
+
+        var update = Builders<SupportCaseEntity>.Update
+            .Set(x => x.TeamKey, teamKey)
+            .Set(x => x.LastMessageAt, assignmentMessage.SentAt)
+            .Push(x => x.Messages, ToEntity(assignmentMessage with { Sequence = NextSequence(entity) }));
+
+        var result = await collection.UpdateOneAsync(filter, update);
+
+        return result?.Before != null;
+    }
+
     public async Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
     {
         var filter = Builders<SupportCaseEntity>.Filter.ElemMatch(

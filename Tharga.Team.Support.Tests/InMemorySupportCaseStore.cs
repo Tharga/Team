@@ -119,6 +119,30 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.FromResult(true);
     }
 
+    public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(Page(_cases.Where(x => string.IsNullOrEmpty(x.Case.TeamKey)).Select(x => x.Case)));
+
+    /// <summary>
+    /// Mirrors the real adapter, including refusing when the case already has a team — so the
+    /// "two agents triage the same queue" test is about the store's condition rather than the fake's.
+    /// </summary>
+    public Task<bool> TryAssignCaseAsync(string caseId, string teamKey, SupportMessage assignmentMessage, CancellationToken cancellationToken = default)
+    {
+        // By index rather than through Replace, which locates a case by (team, id) -- and the team is the
+        // one thing this operation changes.
+        var index = _cases.FindIndex(x => string.IsNullOrEmpty(x.Case.TeamKey) && x.Case.Id == caseId);
+
+        if (index < 0) return Task.FromResult(false);
+
+        var (supportCase, messages) = _cases[index];
+
+        messages.Add(assignmentMessage with { Sequence = messages.Count + 1 });
+
+        _cases[index] = (supportCase with { TeamKey = teamKey, MessageCount = messages.Count }, messages);
+
+        return Task.FromResult(true);
+    }
+
     public Task ReopenCaseAsync(string teamKey, string caseId, SupportMessage reopenMessage, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

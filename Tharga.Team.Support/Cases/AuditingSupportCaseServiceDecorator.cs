@@ -113,6 +113,36 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>
+    /// Audited like any other access-affecting change: assignment decides which tenant a case and its whole
+    /// transcript belong to, which is exactly the kind of fact somebody asks about six months later.
+    /// </remarks>
+    public async Task<bool> AssignCaseAsync(string caseId, string teamKey, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var assigned = await inner.AssignCaseAsync(caseId, teamKey, cancellationToken);
+
+            // A lost race is recorded as a successful attempt that changed nothing, not as a failure: the
+            // caller was authorized and the system behaved correctly, so calling it a failure would put a
+            // red line in the log for somebody clicking a button twice.
+            Log("assign", nameof(AssignCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), ("assigned", assigned.ToString())));
+
+            return assigned;
+        }
+        catch (Exception ex)
+        {
+            Log("assign", nameof(AssignCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
+    public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+        => inner.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
+
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetCaseAsync(teamKey, caseId, cancellationToken);
 
