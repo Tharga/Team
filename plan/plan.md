@@ -238,6 +238,36 @@ Steps 1–3 are unaffected. What changes:
       #142 and close what this satisfies; move spec 08 to `../done/`; update `planned/README.md`; archive
       `plan/feature.md`; `git rm -r plan`; final commit `feat: support email channel complete`.
 
+## Rebased onto master 2026-09-03
+
+Master had moved by two merged features and two fixes — #244, #245 (3.17.0) and #246 — so this was rebased
+rather than left to rot.
+
+**It went better than the drift suggested.** The two registration fixes that started this branch were
+cherry-picked into #244, and git dropped them as patch-equivalent. Only `SupportCaseOptions.cs` and
+`SupportRegistration.cs` conflicted, both purely additive — each side's members kept, nothing chosen over
+anything. **2403 passed, 0 failed**; warnings 34.
+
+**One thing the rebase unlocked**: `SupportMessage.Source` now exists alongside the components, so
+`SupportQueueView` renders channel provenance — the badge its own comment had been holding a place for.
+
+## Order changed by the model clarification, and by spec 10
+
+**Step 4 is built backwards** and must be reworked before anything else: `EmailSupportChannel.OpenAsync`
+mails the case author whenever a case is raised *on the site*, which is exactly the case that must be
+answered on the site. Email opens a projection when a case *arrives* by mail, never from the site side — so
+`OpenAsync` should open nothing and `PostAsync` should post only into a binding that inbound created.
+
+**Two dependencies that were not visible when this branch was written:**
+
+- **The create path needs spec 10's team resolution.** An inbound mail that matches no thread has to raise a
+  case, and a case needs a team. Spec 10 settled that a case raised with no team selected is owned by the
+  *user*; the same question arrives here through a different door, and answering it twice differently would
+  be worse than answering it once.
+- **`SupportCaseService` takes a single `ISupportChannel`**, and email is customer-facing while Slack is
+  support-facing. Both must be active at once, so `IEnumerable<ISupportChannel>` stopped being a tidy-up and
+  became a prerequisite.
+
 ## Last session
 
 **2026-09-01.** Branch created from a current `master` (fetched, neither ahead nor behind). Decisions 1–3
