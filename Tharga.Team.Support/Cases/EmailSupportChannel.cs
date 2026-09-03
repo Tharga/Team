@@ -15,48 +15,36 @@ namespace Tharga.Team.Support.Cases;
 /// every later reply. Mail has no thread object either, so this is the same shape as Slack's <c>ts</c>.
 /// </para>
 /// <para>
-/// <b>Who the case corresponds with is resolved once, when the projection opens</b>, and stored on the
-/// binding. It is the author's own address, read from the signed-in user rather than looked up by identity —
-/// that lookup needs <c>users:manage</c>, which somebody raising a case has no reason to hold. Asking later
-/// would answer the wrong question anyway: by the time support replies, the signed-in user is the agent.
+/// <b>Who the case corresponds with comes from the mail that created it</b>, and is stored on the binding —
+/// so replying needs no lookup and no signed-in user. By the time support answers, the person at the keyboard
+/// is the agent rather than the correspondent, which is why reading it from the session would be wrong.
 /// </para>
 /// </remarks>
 internal sealed class EmailSupportChannel(
     ISupportMailClient mailClient,
     ISupportCaseStore store,
-    IUserService userService,
     IOptions<MailOptions> options) : ISupportChannel
 {
     public SupportChannelType ChannelType => SupportChannelType.Email;
 
-    public async Task<SupportChannelBinding> OpenAsync(SupportCase supportCase, string openingMessage, CancellationToken cancellationToken = default)
-    {
-        if (!mailClient.CanSend) return null;
-
-        var user = await userService.GetCurrentUserAsync();
-        var correspondent = user?.EMail;
-
-        // Nobody to write to is an ordinary state rather than a failure — a service account, or a directory
-        // record carrying no mail. The case is raised regardless and simply stays on the site.
-        if (string.IsNullOrWhiteSpace(correspondent)) return null;
-
-        var result = await mailClient.SendAsync(
-            new OutboundMail(
-                To: correspondent,
-                Subject: supportCase.Subject,
-                Body: openingMessage,
-                ReplyTo: ReplyToFor(supportCase.Id)),
-            cancellationToken);
-
-        if (!result.Success) return null;
-
-        return new SupportChannelBinding
-        {
-            ChannelType = SupportChannelType.Email,
-            ExternalId = result.MessageId,
-            Address = correspondent
-        };
-    }
+    /// <summary>
+    /// Opens nothing. An email projection is created by mail arriving, never from the site.
+    /// </summary>
+    /// <remarks>
+    /// <b>This returned a binding once, and it was backwards.</b> It mailed the author whenever a case was
+    /// raised on the site — which is exactly the case that must be answered *on the site*, because that is
+    /// where the person who raised it is looking. Email is the channel for somebody who reached us by email.
+    /// <para>
+    /// So the projection is created by <c>EmailEventHandler</c> when a mail arrives, carrying the sender as
+    /// the correspondent. From then on <see cref="PostAsync"/> replies into it.
+    /// </para>
+    /// <para>
+    /// Returning null is the same "not configured, quietly" answer <see cref="SlackSupportChannel"/> gives,
+    /// so a case raised on the site is complete with no email binding and nothing is logged as a failure.
+    /// </para>
+    /// </remarks>
+    public Task<SupportChannelBinding> OpenAsync(SupportCase supportCase, string openingMessage, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportChannelBinding>(null);
 
     public async Task<bool> PostAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {

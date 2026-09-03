@@ -19,51 +19,25 @@ public class EmailSupportChannelTests
     private const string Correspondent = "user@example.com";
     private const string OpeningId = "opening-1@fortdocs.se";
 
-    [Fact]
-    public async Task OpeningAProjection_MailsTheAuthor_AndStoresTheThreadAndAddress()
-    {
-        var (channel, mail, _) = Build();
-        mail.SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>()).Returns(MailSendResult.Ok(OpeningId));
 
-        var binding = await channel.OpenAsync(Case(), "The export is empty.");
 
-        Assert.Equal(SupportChannelType.Email, binding.ChannelType);
-        Assert.Equal(OpeningId, binding.ExternalId);
-        Assert.Equal(Correspondent, binding.Address);
 
-        await mail.Received(1).SendAsync(
-            Arg.Is<OutboundMail>(x => x.To == Correspondent && x.Subject == "Export is empty" && x.Body == "The export is empty."),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task WhenSendingIsNotConfigured_NothingIsProjected()
-    {
-        var (channel, mail, _) = Build(canSend: false);
-
-        Assert.Null(await channel.OpenAsync(Case(), "Anything"));
-        await mail.DidNotReceive().SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>());
-    }
 
     /// <summary>
-    /// A service account, or a directory record with no mail on it. The case is still raised.
+    /// The channel opens nothing from the site.
     /// </summary>
+    /// <remarks>
+    /// <b>It used to, and that was backwards.</b> Mailing the author when a case is raised on the site
+    /// answers, by email, the one person who is already looking at the page. An email projection exists
+    /// because a mail arrived, so <c>EmailEventHandler</c> creates it and this only ever replies into it.
+    /// </remarks>
     [Fact]
-    public async Task WhenTheAuthorHasNoAddress_NothingIsProjected()
-    {
-        var (channel, mail, _) = Build(userEmail: null);
-
-        Assert.Null(await channel.OpenAsync(Case(), "Anything"));
-        await mail.DidNotReceive().SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task WhenTheMailIsRefused_NoBindingIsStored()
+    public async Task RaisingACaseOnTheSite_CreatesNoEmailProjection()
     {
         var (channel, mail, _) = Build();
-        mail.SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>()).Returns(MailSendResult.Failed("no route to host"));
 
-        Assert.Null(await channel.OpenAsync(Case(), "Anything"));
+        Assert.Null(await channel.OpenAsync(Case(), "The export is empty."));
+        await mail.DidNotReceive().SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -148,29 +122,7 @@ public class EmailSupportChannelTests
         await mail.DidNotReceive().SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>());
     }
 
-    [Fact]
-    public async Task PerCaseReplyTo_IsOffUnlessAskedFor()
-    {
-        var (channel, mail, _) = Build();
-        mail.SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>()).Returns(MailSendResult.Ok(OpeningId));
 
-        await channel.OpenAsync(Case(), "Anything");
-
-        await mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x => x.ReplyTo == null), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task PerCaseReplyTo_AddressesTheCaseWhenEnabled()
-    {
-        var (channel, mail, _) = Build(perCaseReplyTo: true);
-        mail.SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>()).Returns(MailSendResult.Ok(OpeningId));
-
-        await channel.OpenAsync(Case(), "Anything");
-
-        await mail.Received(1).SendAsync(
-            Arg.Is<OutboundMail>(x => x.ReplyTo == "support+case-1@fortdocs.se"),
-            Arg.Any<CancellationToken>());
-    }
 
     /// <summary>
     /// The lookup can come back empty — a binding for a case that has since been purged. The mail still has
@@ -229,14 +181,8 @@ public class EmailSupportChannelTests
 
         var store = Substitute.For<ISupportCaseStore>();
 
-        var user = Substitute.For<IUser>();
-        user.EMail.Returns(userEmail);
-
-        var userService = Substitute.For<IUserService>();
-        userService.GetCurrentUserAsync().Returns(user);
-
         var options = new MailOptions { FromAddress = "support@fortdocs.se", PerCaseReplyTo = perCaseReplyTo };
 
-        return (new EmailSupportChannel(mail, store, userService, Options.Create(options)), mail, store);
+        return (new EmailSupportChannel(mail, store, Options.Create(options)), mail, store);
     }
 }
