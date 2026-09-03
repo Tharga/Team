@@ -158,6 +158,46 @@ public class UnassignedCaseTests
     }
 
     /// <summary>
+    /// A caller with no subject claim must be shown nothing, not every unattributed case.
+    /// </summary>
+    /// <remarks>
+    /// A case raised by inbound mail has no author identity, so "my cases" matching on an empty subject
+    /// would list all of them as the caller's own. A principal without a name identifier is a configuration
+    /// a host can produce, so this is a guard rather than a hypothetical.
+    /// </remarks>
+    [Fact]
+    public async Task MyCases_MatchesNothingWhenTheCallerHasNoSubject()
+    {
+        var store = new InMemorySupportCaseStore();
+
+        // An unattributed case that has since been assigned to the team the caller is in.
+        await store.AddCaseAsync(
+            new SupportCase
+            {
+                Id = "case-from-mail",
+                TeamKey = TeamA,
+                AuthorIdentity = null,
+                AuthorName = "stranger@example.com",
+                Subject = "Cannot sign in",
+                Status = SupportCaseStatus.Open,
+                CreatedAt = DateTime.UtcNow,
+                MessageCount = 1
+            },
+            new SupportMessage
+            {
+                Sequence = 1,
+                Kind = SupportMessageKind.User,
+                AuthorName = "stranger@example.com",
+                Body = "It says my key expired.",
+                SentAt = DateTime.UtcNow
+            });
+
+        var anonymous = BuildWithoutSubject(store);
+
+        Assert.Empty((await anonymous.GetMyCasesAsync(TeamA)).Items);
+    }
+
+    /// <summary>
     /// A case arriving with no team, as inbound mail from a sender whose team could not be determined does.
     /// Written straight to the store because no operation raises one yet — step E adds it.
     /// </summary>
@@ -193,6 +233,17 @@ public class UnassignedCaseTests
 
     private static async Task<string> UnassignedCaseId(InMemorySupportCaseStore store)
         => (await store.GetUnassignedCasesAsync(null, 20)).Items[0].Id;
+
+    /// <summary>A signed-in caller whose principal carries no name identifier.</summary>
+    private static ISupportCaseService BuildWithoutSubject(InMemorySupportCaseStore store)
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(TeamClaimTypes.TeamKey, TeamA)], "test"));
+        var authorizer = new TeamAuthorizer(new FixedPrincipalAccessor(principal));
+
+        return new AuthorizationSupportCaseServiceDecorator(
+            new SupportCaseService(store, authorizer, TimeProvider.System),
+            authorizer);
+    }
 
     private static ISupportCaseService Build(
         InMemorySupportCaseStore store,

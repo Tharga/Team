@@ -64,7 +64,11 @@ internal sealed class EmailEventHandler(
 
         var supportCase = await MatchAsync(mail, cancellationToken);
 
-        if (supportCase == null) return EmailHandlingOutcome.Ignored("no matching case");
+        // Mail that belongs to no existing case is somebody asking for help for the first time, so it opens
+        // one rather than being dropped. It opens *unassigned*: which team a sender belongs to is not
+        // knowable from a From header, and guessing which tenant a case concerns is the guess that puts one
+        // customer's problem in another customer's list.
+        if (supportCase == null) return await RaiseAsync(mail, cancellationToken);
 
         var binding = supportCase.Bindings.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email);
 
@@ -86,7 +90,12 @@ internal sealed class EmailEventHandler(
         {
             Sequence = 0,
             Kind = SupportMessageKind.User,
-            AuthorIdentity = mail.From,
+
+            // No account, so no identity -- the address is a display name rather than an identifier. Writing
+            // it here would be wrong twice: it is the field authorization compares a caller's subject
+            // against, and the inactivity sweep reads "support wrote last" as *the newest entry is not the
+            // author's*, so a customer's own reply would arm the clock that closes their case.
+            AuthorIdentity = null,
             AuthorName = mail.From,
             Body = body,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
@@ -106,6 +115,83 @@ internal sealed class EmailEventHandler(
         });
 
         return EmailHandlingOutcome.Applied(supportCase.Id);
+    }
+
+    /// <summary>
+    /// Opens an unassigned case from a mail that matches nothing.
+    /// </summary>
+    /// <remarks>
+    /// <b>Unattributed, and that is the honest record.</b> A <c>From</c> header authenticates nobody, so the
+    /// address becomes the display name and <see cref="SupportCase.AuthorIdentity"/> stays null. An
+    /// unverified address in the identity field would be a claim the product then trusts.
+    /// <para>
+    /// <b>The binding carries the sender as the correspondent</b>, which is what makes the trust rule work
+    /// from the second mail onwards: the case corresponds with exactly one address, so a stranger who learns
+    /// the thread id still cannot write into it.
+    /// </para>
+    /// <para>
+    /// <b>A support mailbox collects spam, and this turns some of it into cases.</b> The recipient filter
+    /// narrows it, the automated-mail check drops responders and the ledger drops repeats -- but mail from a
+    /// person to an address that accepts mail from anyone is a case by definition. Rate limiting is the
+    /// host's, by decision.
+    /// </para>
+    /// </remarks>
+    private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, CancellationToken cancellationToken)
+    {
+        var body = Body(mail);
+
+        if (string.IsNullOrWhiteSpace(body)) return EmailHandlingOutcome.Ignored("empty body");
+
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var caseId = Guid.NewGuid().ToString();
+
+        var supportCase = new SupportCase
+        {
+            Id = caseId,
+            TeamKey = null,
+            AuthorIdentity = null,
+            AuthorName = mail.From,
+            Subject = string.IsNullOrWhiteSpace(mail.Subject) ? SubjectFromMessage.Derive(body) : mail.Subject.Trim(),
+            Status = SupportCaseStatus.Open,
+            CreatedAt = now,
+            MessageCount = 1,
+            Bindings =
+            [
+                new SupportChannelBinding
+                {
+                    ChannelType = SupportChannelType.Email,
+                    ExternalId = mail.MessageId,
+                    Address = mail.From
+                }
+            ]
+        };
+
+        await store.AddCaseAsync(supportCase, new SupportMessage
+        {
+            Sequence = 1,
+            Kind = SupportMessageKind.User,
+            AuthorIdentity = null,
+            AuthorName = mail.From,
+            Body = body,
+            SentAt = now,
+
+            // It arrived through the channel, so it is already delivered. Marking it Pending would have the
+            // reply path mail the customer their own message back.
+            Delivery = SupportMessageDelivery.Sent,
+            Source = SupportChannelType.Email
+        }, cancellationToken);
+
+        notifier?.Notify(new SupportCaseUpdatedEventArgs
+        {
+            TeamKey = null,
+            CaseId = caseId,
+            Change = SupportCaseChange.Raised,
+            FromChannel = true
+        });
+
+        logger?.LogInformation("Opened unassigned support case {CaseId} from a mail sent by {Sender}.", caseId, mail.From);
+
+        return EmailHandlingOutcome.Raised(caseId);
     }
 
     private static bool IsOurOwn(InboundMail mail, MailOptions options)
@@ -153,26 +239,42 @@ internal sealed class EmailEventHandler(
            !string.IsNullOrWhiteSpace(sender) &&
            string.Equals(binding.Address.Trim(), sender.Trim(), StringComparison.OrdinalIgnoreCase);
 
+    /// <remarks>
+    /// <b>Over-long mail is trimmed, not refused.</b> The service throws past
+    /// <see cref="SupportCaseLimits.MaxMessageLength"/>, which is right for somebody typing into a form who
+    /// can shorten it and try again. There is nobody to tell here, and the ledger has already recorded the
+    /// message id -- so refusing would discard what a customer sent and never ask again. A pasted log file is
+    /// a real support case, and the tail of it is the part nobody reads.
+    /// </remarks>
     private static string Body(InboundMail mail)
     {
         var text = QuotedText.Trim(mail.Body);
 
-        return mail.HadAttachments ? $"{text}\n\n[attachments were not stored]".TrimStart() : text;
+        if (mail.HadAttachments) text = $"{text}\n\n[attachments were not stored]".TrimStart();
+
+        if (text.Length <= SupportCaseLimits.MaxMessageLength) return text;
+
+        const string marker = "\n\n[trimmed]";
+
+        return string.Concat(text.AsSpan(0, SupportCaseLimits.MaxMessageLength - marker.Length), marker);
     }
 }
 
 /// <summary>What one received mail resulted in.</summary>
-/// <param name="WasApplied">True when it was appended to a case.</param>
+/// <param name="WasApplied">True when it was written to a case, whether an existing one or a new one.</param>
 /// <param name="CaseId">The case it reached, or null.</param>
 /// <param name="Reason">Why it was ignored, or null when it was applied.</param>
+/// <param name="OpenedCase">True when it opened a case rather than continuing one.</param>
 /// <remarks>
 /// Ignoring is the common outcome and is not a failure: a shared mailbox carries mail for other sites, for
 /// other systems and for people. It is reported rather than thrown so the poller can log a count instead of
 /// treating a busy mailbox as a series of errors.
 /// </remarks>
-internal readonly record struct EmailHandlingOutcome(bool WasApplied, string CaseId, string Reason)
+internal readonly record struct EmailHandlingOutcome(bool WasApplied, string CaseId, string Reason, bool OpenedCase = false)
 {
     public static EmailHandlingOutcome Ignored(string reason) => new(false, null, reason);
 
     public static EmailHandlingOutcome Applied(string caseId) => new(true, caseId, null);
+
+    public static EmailHandlingOutcome Raised(string caseId) => new(true, caseId, null, true);
 }

@@ -402,6 +402,21 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return collection.UpdateOneAsync(Case(teamKey, caseId), update);
     }
 
+    /// <summary>
+    /// One case, keyed on the pair — which is what makes an id from another tenant fail to resolve.
+    /// </summary>
+    /// <remarks>
+    /// <b>A null team is a match rather than a mistake, and that is load-bearing.</b> MongoDB matches a
+    /// missing field against <c>{field: null}</c>, and <see cref="SupportCaseEntity.TeamKey"/> is
+    /// <c>[BsonIgnoreIfNull]</c>, so this reaches an unassigned case with no special case and no second read
+    /// path. Do not "fix" it to an explicit exists check: the reply, close and reopen paths for an
+    /// unassigned case all arrive here with a null team.
+    /// <para>
+    /// The unassigned <i>listing</i> uses <c>Exists(TeamKey, false)</c> instead, which is deliberately
+    /// narrower — it cannot match a document written with an explicit null. The two agree because
+    /// <c>[BsonIgnoreIfNull]</c> means the store never writes one.
+    /// </para>
+    /// </remarks>
     private static FilterDefinition<SupportCaseEntity> Case(string teamKey, string caseId) =>
         Builders<SupportCaseEntity>.Filter.And(
             Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),

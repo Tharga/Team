@@ -228,8 +228,20 @@ internal sealed class SupportCaseService(ISupportCaseStore store, TeamAuthorizer
     public Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => store.GetCasesAsync(teamKey, cursor, pageSize, cancellationToken);
 
+    /// <remarks>
+    /// <b>A caller with no subject is shown nothing, rather than everything unattributed.</b> A case raised
+    /// by inbound mail has no author identity, so matching on an empty subject would list every one of them
+    /// as the caller's own -- and a principal without a name identifier is a configuration a host can
+    /// produce.
+    /// </remarks>
     public async Task<SupportCasePage> GetMyCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
-        => await store.GetCasesByAuthorAsync(teamKey, await authorizer.GetSubjectAsync(), cursor, pageSize, cancellationToken);
+    {
+        var subject = await authorizer.GetSubjectAsync();
+
+        if (string.IsNullOrEmpty(subject)) return new SupportCasePage { Items = [] };
+
+        return await store.GetCasesByAuthorAsync(teamKey, subject, cursor, pageSize, cancellationToken);
+    }
 
     public Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => store.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);

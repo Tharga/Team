@@ -28,8 +28,10 @@ public class EmailEventHandlerTests
         var outcome = await handler.HandleAsync(Mail());
 
         Assert.True(outcome.WasApplied);
+        // Named but not identified: the address is a display name, and AuthorIdentity is the field
+        // authorization compares a caller's subject against.
         await store.Received(1).AppendMessageAsync(TeamKey, CaseId,
-            Arg.Is<SupportMessage>(x => x.Body == "Any news?" && x.AuthorIdentity == Correspondent),
+            Arg.Is<SupportMessage>(x => x.Body == "Any news?" && x.AuthorIdentity == null && x.AuthorName == Correspondent),
             Arg.Any<CancellationToken>());
     }
 
@@ -154,15 +156,109 @@ public class EmailEventHandlerTests
         await store.DidNotReceive().AppendMessageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Somebody asking for help for the first time. It used to be dropped, which meant a customer wrote to
+    /// support and heard nothing.
+    /// </summary>
     [Fact]
-    public async Task AMailNamingNoKnownThread_IsIgnored()
+    public async Task AMailNamingNoKnownThread_OpensAnUnassignedCase()
     {
         var (handler, store, _, _) = Build();
 
-        var outcome = await handler.HandleAsync(Mail() with { InReplyTo = "unknown@example.com", References = [] });
+        var outcome = await handler.HandleAsync(NewThread());
+
+        Assert.True(outcome.WasApplied);
+        Assert.True(outcome.OpenedCase);
+        Assert.NotNull(outcome.CaseId);
+
+        await store.Received(1).AddCaseAsync(
+            Arg.Is<SupportCase>(x =>
+                x.TeamKey == null &&
+                x.AuthorIdentity == null &&
+                x.AuthorName == "stranger@example.com" &&
+                x.Subject == "Export is empty" &&
+                x.Status == SupportCaseStatus.Open),
+            Arg.Is<SupportMessage>(x => x.Body == "Nothing comes out." && x.Source == SupportChannelType.Email),
+            Arg.Any<CancellationToken>());
+
+        // Nothing is appended to anything: the case and its first message are written as one unit.
+        await store.DidNotReceive().AppendMessageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// <b>The binding is what makes the trust rule work from the second mail onwards.</b> The case now
+    /// corresponds with exactly one address, so a stranger who learns the thread id cannot write into it.
+    /// </summary>
+    [Fact]
+    public async Task TheNewCase_CorrespondsWithTheSenderOnItsOwnThread()
+    {
+        var (handler, store, _, _) = Build();
+
+        await handler.HandleAsync(NewThread());
+
+        await store.Received(1).AddCaseAsync(
+            Arg.Is<SupportCase>(x => x.Bindings.Length == 1 &&
+                x.Bindings[0].ChannelType == SupportChannelType.Email &&
+                x.Bindings[0].ExternalId == "first-1@example.com" &&
+                x.Bindings[0].Address == "stranger@example.com"),
+            Arg.Any<SupportMessage>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task OpeningACaseFromMail_IsNotifiedAsRaisedFromTheChannel()
+    {
+        var (handler, _, notifier, _) = Build();
+
+        var outcome = await handler.HandleAsync(NewThread());
+
+        notifier.Received(1).Notify(Arg.Is<SupportCaseUpdatedEventArgs>(x =>
+            x.CaseId == outcome.CaseId && x.TeamKey == null && x.FromChannel && x.Change == SupportCaseChange.Raised));
+    }
+
+    [Fact]
+    public async Task AMailWithNoSubject_TakesOneFromWhatWasWritten()
+    {
+        var (handler, store, _, _) = Build();
+
+        await handler.HandleAsync(NewThread() with { Subject = "  ", Body = "The export button does nothing at all." });
+
+        await store.Received(1).AddCaseAsync(
+            Arg.Is<SupportCase>(x => x.Subject == "The export button does nothing at all."),
+            Arg.Any<SupportMessage>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// <b>Trimmed rather than refused.</b> The service throws past the limit, which is right for somebody
+    /// typing into a form; here there is nobody to tell and the ledger has already recorded the message id,
+    /// so refusing would discard what a customer sent and never ask again.
+    /// </summary>
+    [Fact]
+    public async Task AMailLongerThanTheLimit_IsTrimmedRatherThanRefused()
+    {
+        var (handler, store, _, _) = Build();
+
+        var outcome = await handler.HandleAsync(Mail() with { Body = new string('x', SupportCaseLimits.MaxMessageLength * 2) });
+
+        Assert.True(outcome.WasApplied);
+        await store.Received(1).AppendMessageAsync(TeamKey, CaseId,
+            Arg.Is<SupportMessage>(x => x.Body.Length == SupportCaseLimits.MaxMessageLength && x.Body.EndsWith("[trimmed]")),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A stranger gets their own case; the refusal above is about writing into somebody else's.
+    /// </summary>
+    [Fact]
+    public async Task AStrangerOnAKnownThread_IsStillRefused()
+    {
+        var (handler, store, _, _) = Build();
+
+        var outcome = await handler.HandleAsync(Mail() with { From = "stranger@example.com" });
 
         Assert.False(outcome.WasApplied);
-        await store.DidNotReceive().AppendMessageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
+        await store.DidNotReceive().AddCaseAsync(Arg.Any<SupportCase>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -235,6 +331,17 @@ public class EmailEventHandlerTests
         SentAt: new DateTimeOffset(2026, 9, 1, 9, 0, 0, TimeSpan.Zero),
         InReplyTo: ThreadId,
         References: [ThreadId]);
+
+    /// <summary>A first mail: no thread, from an address the product has never seen.</summary>
+    private static InboundMail NewThread() => Mail() with
+    {
+        MessageId = "first-1@example.com",
+        From = "stranger@example.com",
+        Subject = "Export is empty",
+        Body = "Nothing comes out.",
+        InReplyTo = null,
+        References = []
+    };
 
     private static SupportCase Case() => new()
     {

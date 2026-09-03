@@ -91,11 +91,34 @@ puts one customer's problem in another customer's list. This removes the guess r
       case by `(team, id)` — the one thing this operation changes.
       **Non-vacuity checked**: disabling the system-scope check fails 4 of the 9 new tests.
 
-- [ ] **E. Step 5 rework — inbound creates an unassigned case** when it matches no thread, rather than
-      dropping it. The sender-match trust rule still governs *replies*.
+- [x] **E. Step 5 rework — inbound creates an unassigned case.** Done 2026-09-03. Mail matching no thread
+      opens one instead of being dropped, unattributed and unassigned, with a binding carrying the sender as
+      the correspondent. The sender-match trust rule still governs *replies* — a stranger on a known thread
+      is refused exactly as before, and now simply gets their own case. Suite **2415 passed, 0 failed** (+8),
+      warnings 32.
       **Created unassigned, always.** Auto-assigning a sender who happens to belong to exactly one team would
-      need an email-to-user lookup that does not exist, and the operator affordance has to exist regardless —
-      so it is a small follow-up rather than a prerequisite.
+      need an email-to-user lookup that does not exist, and the operator affordance has to exist regardless.
+      **Three things this step changed that were not on the list, each because writing it exposed a defect:**
+      - **An inbound entry no longer claims an identity.** It carried `AuthorIdentity = mail.From`, and that
+        field is compared two ways: against a caller's subject when authorizing, and against the case's
+        author by the inactivity sweep. The second one bites immediately — `SupportWroteLast` is *the newest
+        entry is not the author's*, so a customer replying by mail counted as **support answering**, and
+        their case would auto-close seven days after they asked for help. Now null on the case and on
+        everything the customer writes, so the two are equal and the clock stays disarmed until an agent with
+        an account answers. Pinned by a theory in `SupportWroteLastTests`, in the adapter where the predicate
+        lives.
+      - **Over-long mail is trimmed rather than refused.** The service throws past
+        `MaxMessageLength`, which is right for somebody typing into a form who can shorten it and try again.
+        There is nobody to tell here and the ledger has already recorded the message id, so refusing would
+        discard what a customer sent and never ask again.
+      - **`GetMyCasesAsync` matches nothing when the caller has no subject.** An unattributed case has no
+        author identity, so an empty subject would have listed every one of them in the team as the caller's
+        own. A principal without a name identifier is a configuration a host can produce.
+      **Also documented, because it is load-bearing and looks like a bug:** `Case(teamKey, caseId)` in the
+      Mongo adapter matches an unassigned case when the team is null, because MongoDB matches a missing field
+      against `{field: null}` and the entity is `[BsonIgnoreIfNull]`. Every reply, close and reopen on an
+      unassigned case arrives there with a null team, so an "obvious" tightening to an exists check would
+      break all three.
 
 - [ ] **F. `IEnumerable<ISupportChannel>`.** Email is customer-facing and Slack support-facing, so both must
       be live at once. `SupportCaseService` takes one channel today, which silently gives whichever
