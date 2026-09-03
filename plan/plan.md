@@ -160,8 +160,26 @@ puts one customer's problem in another customer's list. This removes the guess r
       **Sending without reading stays legitimate** — replies out by mail, answers back on the site — so SMTP
       alone registers the channel and starts no poller.
 
-- [ ] **H. Components:** unassigned cases in the back office, with the affordance to assign a team or leave
-      it. Nothing in the customer view changes.
+- [x] **H. Components:** unassigned cases in the back office. Done 2026-09-03. `SupportUnassignedView`,
+      wired into the sample behind the system scope. Nothing in the customer view changed. 7 render tests;
+      suite **2451 passed, 0 failed**, warnings 32.
+      **Its own component rather than a mode of `SupportQueueView`.** The two are governed differently — one
+      needs a selected team and a team scope, this one has no team and is governed system-wide — so a single
+      component would have had an upper half checked one way and a lower half the other, and its "select a
+      team" state would have had to mean two different things at once.
+      **The assign control offers only teams that exist, and that is a correctness decision.** Nothing
+      validates the key on the way through, so a free-text field would let somebody assign a case to a team
+      that does not exist: out of this queue and into nobody's. The list comes from
+      `ITeamOversightService`, which is its own system grant — so an operator may be able to read the queue
+      and not to list teams, which is a smaller capability rather than a broken one and says so.
+      **It catches the refusal instead of letting the circuit die**, unlike its sibling, because it is a
+      panel beside content the operator can see rather than the whole page. Both behaviours are now
+      documented at the place that chooses them.
+      **`SupportTranscript` extracted** and used by both back-office views. The two render the same
+      transcript for the same reader, and a copy is what gets extended in one place and not the other. The
+      customer view deliberately does not use it — delivery state and read markers are noise to an agent.
+      **Assigning is offered on a closed case too**: which tenant a case belonged to is worth recording after
+      it is answered, and refusing would leave a closed case unassignable forever.
 
 - [ ] **I. Docs and close-out.**
 

@@ -1,0 +1,344 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@implements IDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+@inject IServiceProvider Services
+
+@* Support cases that belong to no team: answer them, and give one a team when you know which it is.
+
+   Separate from SupportQueueView rather than a mode of it, because the two are governed differently. That
+   one requires a selected team and a team scope; this one has no team at all and is governed by the system
+   scopes, so a single component would have had an upper half checked one way and a lower half the other —
+   and its "select a team" state would have had to mean two different things at once.
+
+   Assigning is checked against the system scope and never against the receiving team: a scope on the team a
+   case is moved *into* would let a member of any team pull an unassigned case, which may concern a different
+   tenant entirely, into their own along with its whole transcript. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[SupportUnassignedViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportUnassignedViewText.Title]</RadzenText>
+            @if (_cases.Length > 0)
+            {
+                <RadzenBadge Text="@_cases.Length.ToString()" BadgeStyle="BadgeStyle.Warning" />
+            }
+        </RadzenStack>
+
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[SupportUnassignedViewText.Explanation]</RadzenText>
+
+        @if (_message != null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter"
+                         AllowClose="false">
+                @_message
+            </RadzenAlert>
+        }
+
+        @if (_cases.Length == 0)
+        {
+            <RadzenText TextStyle="TextStyle.Body2">@_text[SupportUnassignedViewText.NoCases]</RadzenText>
+        }
+        else
+        {
+            foreach (var item in _cases)
+            {
+                <RadzenCard Variant="Variant.Outlined">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                        @* A button rather than a RadzenLink, which has no Click parameter and silently
+                           renders a dead one — the defect that shipped in both sibling components. *@
+                        <RadzenButton Text="@item.Subject" Variant="Variant.Text" Size="ButtonSize.Small"
+                                      Click="@(() => ToggleAsync(item.Id))" />
+                        <RadzenBadge Text="@StatusText(item)"
+                                     BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                            @_text[SupportUnassignedViewText.From] @item.AuthorName
+                        </RadzenText>
+                    </RadzenStack>
+
+                    @if (_selected?.Id == item.Id)
+                    {
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
+
+                            <SupportTranscript Messages="_messages" />
+
+                            @if (_selected.Status == SupportCaseStatus.Open)
+                            {
+                                @* oninput as well as the value binding: Radzen binds on change, so the
+                                   Answer button would stay disabled until the box lost focus. *@
+                                <RadzenTextArea Value="@_answer" ValueChanged="@(v => _answer = v)"
+                                                @oninput="@(e => _answer = e.Value?.ToString())"
+                                                Placeholder="@_text[SupportUnassignedViewText.AnswerLabel]"
+                                                Rows="3" Style="width: 100%;" aria-label="@_text[SupportUnassignedViewText.AnswerLabel]" />
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Text="@_text[SupportUnassignedViewText.AnswerLabel]" Click="AnswerAsync"
+                                                  Disabled="@(string.IsNullOrWhiteSpace(_answer) || _busy)" />
+                                    <RadzenButton Text="@_text[SupportUnassignedViewText.Close]" ButtonStyle="ButtonStyle.Light"
+                                                  Click="CloseAsync" Disabled="_busy" />
+                                </RadzenStack>
+                            }
+                            else
+                            {
+                                <div>
+                                    <RadzenButton Text="@_text[SupportUnassignedViewText.Reopen]" Icon="refresh"
+                                                  ButtonStyle="ButtonStyle.Light" Click="ReopenAsync" Disabled="_busy" />
+                                </div>
+                            }
+
+                            @* Assigning is offered on a closed case too: which tenant a case belonged to is
+                               worth recording even after it is answered, and refusing would leave a closed
+                               case unassignable forever. *@
+                            @if (_teams.Length > 0)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                    <RadzenDropDown Data="_teams" TextProperty="Name" ValueProperty="Key"
+                                                    Value="@_assignTo" ValueChanged="@((string v) => _assignTo = v)"
+                                                    TValue="string" AllowClear="true"
+                                                    Placeholder="@_text[SupportUnassignedViewText.AssignLabel]"
+                                                    Style="min-width: 16rem;" aria-label="@_text[SupportUnassignedViewText.AssignLabel]" />
+                                    <RadzenButton Text="@_text[SupportUnassignedViewText.AssignAction]" Click="AssignAsync"
+                                                  Disabled="@(string.IsNullOrWhiteSpace(_assignTo) || _busy)" />
+                                </RadzenStack>
+                            }
+                            else
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                                    @_text[SupportUnassignedViewText.CannotListTeams]
+                                </RadzenText>
+                            }
+                        </RadzenStack>
+                    }
+                </RadzenCard>
+            }
+        }
+    </RadzenStack>
+}
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _busy;
+    private bool _permitted = true;
+
+    private string _answer;
+    private string _assignTo;
+    private string _message;
+
+    private SupportCase[] _cases = [];
+    private SupportCase _selected;
+    private SupportMessage[] _messages = [];
+    private TeamChoice[] _teams = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportUnassignedViewText.All);
+
+        Notifier.CaseUpdated += OnCaseUpdated;
+
+        await ReloadAsync();
+        await LoadTeamsAsync();
+
+        _ready = true;
+    }
+
+    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <remarks>
+    /// An unassigned case is announced with no team, so that is what this listens for — and the queue must
+    /// also refresh when a case <i>gains</i> one, because that is how it leaves.
+    /// </remarks>
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
+    {
+        if (e.TeamKey != null && e.Change != SupportCaseChange.Assigned) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private string StatusText(SupportCase item)
+        => item.Status == SupportCaseStatus.Open
+            ? _text[SupportUnassignedViewText.Open]
+            : item.ClosedReason == SupportCaseClosureReason.Inactivity
+                ? _text[SupportUnassignedViewText.ClosedForInactivity]
+                : _text[SupportUnassignedViewText.Closed];
+
+    /// <remarks>
+    /// <b>The refusal is caught rather than left to take the circuit down.</b> This is a panel on a page
+    /// whose other content the operator can see, so an unhandled exception would cost them the whole page
+    /// over one component they simply do not have a grant for. <c>SupportQueueView</c> lets its refusal
+    /// propagate because there it <i>is</i> the page.
+    /// </remarks>
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            _cases = (await SupportCases.GetUnassignedCasesAsync()).Items;
+            _permitted = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _cases = [];
+            _permitted = false;
+        }
+    }
+
+    /// <remarks>
+    /// <b>Only teams that exist can be offered, which is what makes a typo impossible.</b> Nothing validates
+    /// the key on the way through — the operation takes whatever it is given — so a free-text field would let
+    /// somebody assign a case to a team that does not exist, which loses it out of this queue and into
+    /// nobody's.
+    /// <para>
+    /// Cross-team discovery is its own system grant, so an operator may be able to read this queue and not to
+    /// list teams. That is a smaller capability rather than a broken one: they can still answer and close.
+    /// </para>
+    /// </remarks>
+    private async Task LoadTeamsAsync()
+    {
+        var oversight = Services.GetService(typeof(ITeamOversightService)) as ITeamOversightService;
+
+        if (oversight == null) return;
+
+        try
+        {
+            var found = new List<TeamChoice>();
+
+            await foreach (var team in oversight.GetAllTeamsAsync())
+            {
+                found.Add(new TeamChoice(team.Key, string.IsNullOrWhiteSpace(team.Name) ? team.Key : team.Name));
+            }
+
+            _teams = [.. found.OrderBy(x => x.Name)];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _teams = [];
+        }
+    }
+
+    private async Task AnswerAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_answer) || _selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReplyToCaseAsync(null, _selected.Id, _answer);
+            _answer = null;
+
+            await ReloadAsync();
+            await SelectAsync(_selected.Id);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.CloseCaseAsync(null, _selected.Id);
+
+            await ReloadAsync();
+            await SelectAsync(_selected.Id);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReopenAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReopenCaseAsync(null, _selected.Id);
+
+            await ReloadAsync();
+            await SelectAsync(_selected.Id);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <remarks>
+    /// The case leaves this queue when it succeeds, so the selection is dropped rather than reloaded — there
+    /// is nothing here to go back to. A refusal means another operator was first, and the queue is refreshed
+    /// so the operator sees that rather than a button that did nothing.
+    /// </remarks>
+    private async Task AssignAsync()
+    {
+        if (_selected == null || string.IsNullOrWhiteSpace(_assignTo)) return;
+
+        _busy = true;
+        try
+        {
+            var assigned = await SupportCases.AssignCaseAsync(_selected.Id, _assignTo);
+
+            _message = assigned ? null : _text[SupportUnassignedViewText.AlreadyAssigned];
+
+            _selected = null;
+            _messages = [];
+            _assignTo = null;
+
+            await ReloadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ToggleAsync(string caseId)
+    {
+        if (_selected?.Id == caseId)
+        {
+            _selected = null;
+            _messages = [];
+            return;
+        }
+
+        await SelectAsync(caseId);
+    }
+
+    private async Task SelectAsync(string caseId)
+    {
+        _message = null;
+        _selected = await SupportCases.GetCaseAsync(null, caseId);
+        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(null, caseId)).Items;
+    }
+
+    /// <summary>A team the operator may assign a case to.</summary>
+    /// <remarks>
+    /// A flat record rather than <see cref="ITeam"/> because a dropdown binds to properties by name, and the
+    /// interface carries a roster and a great deal else this needs none of.
+    /// </remarks>
+    private sealed record TeamChoice(string Key, string Name);
+}

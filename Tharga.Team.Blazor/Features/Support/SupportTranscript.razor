@@ -1,0 +1,32 @@
+@* One case's conversation, as the back office reads it.
+
+   Extracted so the team queue and the unassigned queue cannot drift: the two render the same transcript for
+   the same reader, and a copy is what gets extended in one place and not the other. The customer view is
+   deliberately not built on this — it shows a person their own case, with delivery state and read markers
+   that would be noise to an agent. *@
+
+@foreach (var message in Messages ?? [])
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                @message.AuthorName — @message.SentAt.ToLocalTime().ToString("g")
+            </RadzenText>
+
+            @* Which door it came through, which is not the same question as who wrote it. An entry from a
+               channel was attributed on a sender or workspace match rather than by an authenticated caller,
+               and an agent deciding how much weight to put on a name needs to see that. Nothing renders for
+               a message written here. *@
+            @if (message.Source != null)
+            {
+                <RadzenBadge Text="@message.Source.ToString()" BadgeStyle="BadgeStyle.Light" />
+            }
+        </RadzenStack>
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@message.Body</RadzenText>
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>The entries to render, oldest first.</summary>
+    [Parameter] public SupportMessage[] Messages { get; set; } = [];
+}

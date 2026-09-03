@@ -60,26 +60,9 @@ else
                     @if (_selected?.Id == item.Id)
                     {
                         <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
-                            @foreach (var message in _messages)
-                            {
-                                <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
-                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
-                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
-                                            @message.AuthorName — @message.SentAt.ToLocalTime().ToString("g")
-                                        </RadzenText>
-
-                                        @* Which door it came through, which is not the same question as who wrote it.
-                                           An entry from a channel was attributed on a sender or workspace match rather
-                                           than by an authenticated caller, and an agent deciding how much weight to put
-                                           on a name needs to see that. Nothing renders for a message written here. *@
-                                        @if (message.Source != null)
-                                        {
-                                            <RadzenBadge Text="@message.Source.ToString()" BadgeStyle="BadgeStyle.Light" />
-                                        }
-                                    </RadzenStack>
-                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@message.Body</RadzenText>
-                                </RadzenStack>
-                            }
+                            @* Shared with SupportUnassignedView, which renders the same transcript for the
+                               same reader. A copy is what gets extended in one place and not the other. *@
+                            <SupportTranscript Messages="_messages" />
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {

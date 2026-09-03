@@ -55,6 +55,26 @@
             page to see the back-office view.
         </RadzenAlert>
     }
+
+    @if (_canSeeUnassigned)
+    {
+        <RadzenCard>
+            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Without a team</RadzenText>
+
+            @* Mail arrives from senders whose team cannot be determined, so a case can belong to no team at
+               all. Governed by a *system* scope rather than a team one: an unassigned case may concern any
+               tenant or none, so support:read on one team must confer nothing here. *@
+            <SupportUnassignedView />
+        </RadzenCard>
+    }
+    else
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            Cases that belong to no team need the system grant
+            <strong>support:unassigned:read</strong>, and assigning one needs
+            <strong>support:unassigned:manage</strong> plus <strong>teams:read</strong> to list the teams.
+        </RadzenAlert>
+    }
 </RadzenStack>
 
 @code {
@@ -62,6 +82,7 @@
     [Parameter] public string CaseId { get; set; }
 
     private bool _canSeeQueue;
+    private bool _canSeeUnassigned;
 
     protected override async Task OnInitializedAsync()
     {
@@ -69,5 +90,9 @@
         var principal = (await AuthState.GetAuthenticationStateAsync()).User;
 
         _canSeeQueue = teamKey != null && TeamScopeGate.HasTeamScope(principal, SupportScopes.Read, teamKey);
+
+        // No team in the check, because there is no team in the question. This is the whole reason the
+        // unassigned queue needed its own scope: support:read is held against a team.
+        _canSeeUnassigned = TeamScopeGate.HasSystemScope(principal, SystemSupportScopes.Read);
     }
 }
