@@ -3,8 +3,9 @@
 A signed-in member can raise a support case for their team, reply to it, and read its history. Cases are
 persisted, authorized and audited.
 
-> **What this is not, yet.** There is **no Jira link, no AI responder and no UI component**. Slack threads
-> work in both directions; the rest is in [issue #142](https://github.com/Tharga/Team/issues/142).
+> **What this is not, yet.** There is **no Jira link and no AI responder**. Cases work on the site, over
+> Slack threads and by email, all in both directions; the rest is in
+> [issue #142](https://github.com/Tharga/Team/issues/142).
 
 ## Enabling it
 
@@ -26,13 +27,13 @@ choice belongs to the host, and this package must not acquire a database depende
 
 ## The model
 
-A case belongs to a **team**, has an author, a status, and a transcript.
+A case belongs to a **team** — or to no team at all — and has an author, a status, and a transcript.
 
 | | |
 |---|---|
 | `SupportCase` | Header: id, team, author, subject, status, timestamps, message count, channel bindings |
 | `SupportMessage` | One transcript entry: sequence, kind (user or system), author, body, timestamp |
-| `SupportChannelBinding` | A projection onto an external system. **Always empty today** |
+| `SupportChannelBinding` | A projection onto an external system: the Slack thread, the mail conversation. Carries the correspondent's address where there is one |
 
 **The team owns the case; the author is a link that may dangle.** A case is raised by a person but is about
 the team's account, and the team is what still exists a year later. Deleting a user removes their membership
@@ -54,6 +55,8 @@ the same reason.
 | Read, reply to, close or **reopen** your own case | **Authorship** |
 | Read or list **anyone's** case | `support:read` |
 | Reply to, close or **reopen** anyone's case | `support:manage` |
+| Read or list a case with **no team** | `support:unassigned:read` — a **system** scope |
+| Reply to, close, reopen or **assign** a case with no team | `support:unassigned:manage` — a **system** scope |
 
 **Not everything is a scope, deliberately.** Raising a case about your own team is what an ordinary member
 does; gating it would mean every host granting that scope to everybody, and a scope everyone holds checks
@@ -63,8 +66,17 @@ nothing. Membership and authorship are still *checks* — they are simply not gr
 > which is exactly where somebody pastes a password, a token or a customer's details. Grant it as carefully
 > as you grant `audit:read`.
 
-Both scopes are team scopes registered at `Administrator`. A case is always loaded through its team, so
-holding a valid case id from another tenant gains nothing.
+`support:read` and `support:manage` are team scopes registered at `Administrator`. A case with a team is
+always loaded through it, so holding a valid case id from another tenant gains nothing.
+
+**The unassigned scopes are system-wide, and that is not a convenience.** `support:read` is held *against a
+team*, and a case with no team has nothing to hold it against — so widening the team scope to cover these
+would let a member of the smallest team read everything that arrived by mail. Granting these is a decision
+about the whole product, which is what a system scope is for. They are registered by
+`AddThargaSupportCases`, so they appear in the scope catalogue only where support cases exist.
+
+**An unassigned case is deny-by-default.** No grant, no access — authorship does not open one either, because
+every case that has no team today arrived by mail from somebody with no account to match.
 
 ## The subject is optional
 
@@ -126,7 +138,7 @@ dismissal. It is derived from `ClosedBy`, which the sweep records as `SupportCas
 
 ## Components
 
-Two components ship in `Tharga.Team.Blazor`, and **both are optional**:
+Three components ship in `Tharga.Team.Blazor`, and **all are optional**:
 
 ```razor
 @* What a team member sees: raise a case, read the conversation, reply, reopen *@
@@ -134,10 +146,24 @@ Two components ship in `Tharga.Team.Blazor`, and **both are optional**:
 
 @* What support sees: every case in the team, answer, close, reopen *@
 <SupportQueueView />
+
+@* Cases that belong to no team: answer them, and assign a team when you know which it is *@
+<SupportUnassignedView />
 ```
 
 `SupportQueueView` needs `support:read`, and the service refuses without it — so gate rendering on the scope
 to spare a member a refusal they can do nothing about.
+
+`SupportUnassignedView` needs the **system** scopes instead, and behaves differently in two ways worth
+knowing before you place it:
+
+- **It renders a note instead of throwing** when the caller cannot read the queue, because it is a panel
+  beside content they *can* see. `SupportQueueView` lets the refusal propagate, because there it is the page.
+- **Its assign control lists teams through `ITeamOversightService`**, which needs `teams:read`. An operator
+  holding the unassigned scopes but not that one can still answer and close; they simply have nothing to
+  assign to, and the component says so. **This is deliberate rather than a limitation:** nothing validates a
+  team key on the way through, so a free-text field would let somebody assign a case to a team that does not
+  exist — out of the queue and into nobody's.
 
 **A host can always build its own instead, and that is the point.** Both components go through
 `ISupportCaseService` and nothing else — no store, no internal service — and a test asserts it. If a shipped
@@ -377,6 +403,120 @@ logged:
 
 **A channel being down never blocks a case.** The case is written first and is authoritative; projecting it
 comes after. If Slack refuses, the case still exists and the entry is `Pending`.
+
+## Email
+
+A case can arrive by mail, and be answered by mail. **IMAP in, SMTP out, against your own mailbox** — no
+provider account, no public endpoint, no webhook to expose.
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Email.Imap.Host = builder.Configuration["Support:Mail:Imap:Host"];
+    o.Email.Imap.UserName = builder.Configuration["Support:Mail:Imap:UserName"];
+    o.Email.Imap.Password = builder.Configuration["Support:Mail:Imap:Password"];
+    o.Email.Smtp.Host = builder.Configuration["Support:Mail:Smtp:Host"];
+    o.Email.Smtp.UserName = builder.Configuration["Support:Mail:Smtp:UserName"];
+    o.Email.Smtp.Password = builder.Configuration["Support:Mail:Smtp:Password"];
+
+    o.Email.FromAddress = "support@example.com";   // where replies come back to
+});
+```
+
+**Leave the hosts unset and nothing is registered** — no channel, no poller. IMAP alone and SMTP alone are
+both real configurations: read the mailbox without answering by mail, or answer by mail while questions come
+in on the site.
+
+### Email is the customer's channel; Slack is support's
+
+A person is answered the way they made contact. Somebody who wrote to `support@` gets a mail back; somebody
+who typed into the site reads the answer on the site. Support works in the back office or in a Slack thread
+and never touches mail in either direction.
+
+That is why **a case raised on the site opens no mail projection**: the person who raised it is already
+looking at the page. An email projection is opened by mail *arriving*.
+
+Both channels are live at once, so a case that arrived by mail can hold an email binding facing the customer
+and a Slack binding facing support, and an answer reaches both.
+
+### Which team does an emailed case belong to?
+
+**None, until somebody says otherwise.** A `From:` header does not say which tenant a problem concerns, and
+every way of guessing — a fallback team, the sender's only team, a configured default — is the guess that
+puts one customer's problem in another customer's list.
+
+So an inbound case is created **unassigned and unattributed**: no team, no author identity, the sender's
+address as the display name. An operator holding `support:unassigned:manage` assigns a team when they know
+which it is, and **leaving it unassigned forever is a supported state, not a backlog.** The assignment is
+recorded in the transcript, because which tenant a case belongs to is part of its history.
+
+Assignment is conditional: two operators triaging the same queue cannot both assign a case, and
+`AssignCaseAsync` returns `false` to the one who lost rather than silently doing nothing.
+
+### The trust rule
+
+**A `From:` header authenticates nobody.** So:
+
+- Mail that matches an existing case is accepted **only from the address that case already corresponds with**.
+  Anyone else is dropped and logged — otherwise learning a thread id would let a stranger write into a
+  transcript a real person reads and trusts.
+- Mail that matches no case opens a new one, which is the only thing an unknown sender can do.
+- Automated mail — vacation responders, bounces, `Precedence: bulk` — is never acted on. Answering one is how
+  a support mailbox and an out-of-office reply fill each other overnight.
+- Mail this instance sent is never read back as a reply.
+
+> **A support mailbox collects spam, and some of it becomes cases.** Mail from a person to an address that
+> accepts mail from anyone is a case by definition. The recipient filter narrows it and the checks above drop
+> the machinery, but rate limiting is yours.
+
+### One mailbox, two sites
+
+```csharp
+o.Email.Recipients = ["fortdocs.se"];        // this instance answers for this domain only
+```
+
+A bare domain matches any local part; a full address matches only itself; matching is case-insensitive and
+plus-addressing is stripped, so a per-case reply-to is not rejected. Unset accepts everything.
+
+Three things make sharing a mailbox actually safe, and each of them is load-bearing:
+
+- **Nothing is ever flagged or moved.** The mailbox is opened read-only, so a fetch cannot set `\Seen` as a
+  side effect. A flag meaning "handled" to one instance hides the message from the other.
+- **The filter runs before deduplication.** Recording a message id and *then* discarding the mail would leave
+  the instance that wanted it seeing a duplicate and concluding somebody had handled it. Nobody had.
+- **Each instance keeps its own read position**, keyed on the recipients it answers for. Sharing a position
+  would let the first instance to poll advance past a message addressed to the second.
+
+### Reading the mailbox
+
+A background service polls on `o.Email.PollInterval` (default one minute) and applies what arrives. There is
+no endpoint to map and nothing to verify — the cost is latency bounded by the interval.
+
+The read position is a **bookmark, not a record**: it is stored by `ISupportMailPositionStore`
+(`AddThargaTeamRepository` provides the MongoDB one), written only after mail is handled, and losing it costs
+a re-read rather than duplicate cases — the event ledger recognises everything already applied. Without a
+store registered the poller keeps its position in memory and says so once at startup.
+
+A mailbox that reports a new UID generation is re-read from the start, for the same reason: the stored UIDs
+now refer to different messages, so trusting them is the one thing that could lose mail.
+
+### What is trimmed
+
+Quoted history and signatures are cut on unambiguous markers only, and the whole body is kept when nothing is
+recognised — reading too much is untidy, cutting too much silently loses what somebody wrote. HTML is
+flattened to text. Attachments are **not stored**, and the entry says so rather than misrepresenting the
+conversation.
+
+Mail longer than `MaxMessageLength` is **trimmed rather than refused**, unlike a reply typed into a form:
+there is nobody to tell, and the message id has already been recorded, so refusing would discard what a
+customer sent and never ask again.
+
+### Invitation mail is separate, deliberately
+
+`ThargaTeamOptions.Email` configures invitation delivery and nothing else. It is not a fallback for support
+mail and support mail is not a fallback for it: an invitation is usually sent from `noreply@`, while support
+mail must come from an address replies return to. Inheriting one for the other would send support mail from a
+no-reply address and lose every reply. Bind both from the same configuration section if you want one mailbox.
 
 ## Is anybody on support
 

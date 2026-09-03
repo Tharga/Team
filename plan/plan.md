@@ -364,23 +364,33 @@ puts one customer's problem in another customer's list. This removes the guess r
       `SupportCase.Bindings` being an array has always meant — but it changes what `RaiseCase` does when one
       channel accepts and another refuses, which needs stating rather than discovering.
 
-- [ ] **8. Correct the `ITeamEmailSender` remark** so it scopes "the only mail the toolkit sends" to the core
-      and points at the support channel.
+- [x] **8. Correct the `ITeamEmailSender` remark.** Done 2026-09-03, and there were **two** copies of the
+      false claim — `ITeamEmailSender` and `ThargaBlazorOptions.Email`. Both now scope it to the core and say
+      why the two mail configurations are not unified and not given a fallback: support mail must come from an
+      address replies return to, and an invitation is usually sent from `noreply@`.
 
 - [ ] **9. Tests for every acceptance criterion** in `plan/feature.md`, including the negative ones: stale
       signature, replayed id, own message returning, auto-responder, wrong sender, oversized quoted reply.
       Run the full suite before each commit.
 
-- [ ] **10. Docs** (own `docs:` commit): an email section in `docs/articles/support-cases.md` covering
-      provider setup, the reply-to scheme and the trust rule, plus `Tharga.Team.Support/README.md`. State
-      plainly that a public URL is needed and that localhost cannot receive.
+- [x] **10. Docs.** Done 2026-09-03. An email section in `docs/articles/support-cases.md` — setup, the
+      customer/support channel split, the unassigned-team decision, the trust rule, the shared mailbox and
+      the read position — plus the unassigned component and the two new system scopes, and a support-cases
+      section in `Tharga.Team.Support/README.md`.
+      **Three claims in the existing docs had become false** and were corrected rather than left beside the
+      new text: "no UI component", bindings being "always empty today", and a case belonging to a team
+      full stop.
+      **The public-URL warning does not apply and was not written.** That was the webhook transport this
+      design reversed; polling needs no endpoint, which is the one place it is cheaper. Localhost reads a
+      mailbox perfectly well.
 
-- [ ] **11. Sample.** Wire email in `Tharga.Team.Sample/Program.cs` on the Slack pattern — registered
-      unconditionally, dormant without secrets, so the wiring resolves in the real application graph. Show
-      `Source` on `SupportPage`.
+- [x] **11. Sample.** Done 2026-09-03. Mail configured on the Slack pattern — read from configuration,
+      dormant with nothing checked in, so the wiring resolves in the real application graph. `SupportPage`
+      also renders the unassigned queue behind the system scope, and provenance shows on every back-office
+      transcript through `SupportTranscript` rather than only on this page.
 
-- [ ] **12. Version line.** `MAJOR_MINOR` → `3.17` in `.github/workflows/build.yml`, **in this PR**. Nothing
-      in CI does it, and a version-line-only PR queues a content-free release.
+- [x] **12. Version line.** Done 2026-09-03. `MAJOR_MINOR` → **`3.18`**, not 3.17 as this plan said: 3.17
+      shipped from master while this branch was open.
 
 - [ ] **13. Close-out** (only when the user says the feature is done): re-run `dotnet outdated`; comment on
       #142 and close what this satisfies; move spec 08 to `../done/`; update `planned/README.md`; archive
