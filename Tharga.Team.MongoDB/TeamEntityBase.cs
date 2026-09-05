@@ -50,4 +50,20 @@ public abstract record TeamEntityBase<TTeamMemberModel> : EntityBase, ITeam<TTea
     /// </remarks>
     [BsonIgnore]
     public bool IsDeleted => DeletedAt != null;
+
+    /// <summary>The team's <see cref="Name"/>, so a team rendered as text names itself.</summary>
+    /// <remarks>
+    /// Replaces the record dump the compiler would otherwise synthesize. A UI control bound to a team
+    /// falls back to <c>ToString()</c> for the text it cannot get from a display property — Radzen's
+    /// dropdown does exactly this for its hidden accessible input — which put the entity id, the consent
+    /// access level and every property a host had added onto the page (Tharga/Team#254).
+    /// <para>
+    /// <b><c>sealed</c> is load-bearing.</b> A record synthesizes its own <c>ToString()</c> in every
+    /// declaration unless a base declares a sealed override, so without it each host's
+    /// <c>record TeamEntity : TeamEntityBase&lt;TeamMember&gt;;</c> would silently regenerate the dump and
+    /// the fix would reach nobody. The cost is deliberate and worth naming: a host can no longer give its
+    /// team entity a <c>ToString()</c> of its own.
+    /// </para>
+    /// </remarks>
+    public sealed override string ToString() => Name;
 }

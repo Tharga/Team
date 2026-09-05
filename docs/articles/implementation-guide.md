@@ -799,6 +799,13 @@ public class MyTeamService : TeamServiceRepositoryBase<MyTeam, MyMember>
 Everything else stays inherited, and every member is virtual — derive from `DefaultTeamService` instead
 when you want the standard types but different behaviour.
 
+**`ToString()` is the one member you cannot override.** `TeamEntityBase` seals it to return the team's
+`Name`, because a UI control bound to a team falls back to `ToString()` for text it cannot get from a
+display property — Radzen's dropdown does this for its hidden accessible input. Left synthesized, a
+record puts its whole state there: the entity id, the consent access level and every property you added,
+in the DOM of each page showing a team. Sealing is what makes that true for *your* entity rather than
+only the base, since a record otherwise re-synthesizes `ToString()` in every declaration.
+
 > **Custom collection names:** If you need to change the MongoDB collection names (e.g. when sharing a database with a legacy app), set `TeamCollectionName` and `UserCollectionName`:
 > ```csharp
 > builder.Services.AddThargaTeamRepository(o =>
