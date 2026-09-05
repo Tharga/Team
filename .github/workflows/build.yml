@@ -105,8 +105,13 @@ jobs:
             exit 1
           fi
 
+      # Microsoft.Testing.Platform, not VSTest: xunit.v3 4.x drops the bridge, so
+      # --collect:"XPlat Code Coverage" (a VSTest data collector) no longer applies.
+      # --coverage needs Microsoft.Testing.Extensions.CodeCoverage referenced by every
+      # test project; requesting it without that reports "Zero tests ran" and exits 5,
+      # which reads as a fast pass rather than a failure.
       - name: Test with coverage
-        run: dotnet test -c Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+        run: dotnet test -c Release --no-build --verbosity normal --coverage --coverage-output-format cobertura --results-directory ./coverage
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5

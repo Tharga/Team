@@ -56,7 +56,7 @@ public class ApiKeyAuditWiringTests
         services.AddAuditedApiKeyAdministrationService(typeof(ApiKeyAdministrationService));
         services.AddAuditedApiKeyAdministrationService(typeof(ApiKeyAdministrationService));
 
-        Assert.Single(services.Where(d => d.ServiceType == typeof(IApiKeyAdministrationService)));
+        Assert.Single(services, d => d.ServiceType == typeof(IApiKeyAdministrationService));
         var resolved = services.BuildServiceProvider().GetRequiredService<IApiKeyAdministrationService>();
         Assert.IsType<AuditingApiKeyServiceDecorator>(resolved);
     }
