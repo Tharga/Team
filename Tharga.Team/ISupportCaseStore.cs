@@ -95,6 +95,30 @@ public interface ISupportCaseStore
         => Task.FromResult<SupportCase[]>([]);
 
     /// <summary>
+    /// Cases belonging to no team, newest first, or an empty page when the store cannot answer.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not team-scoped, because there is no team</b> — the same shape as
+    /// <see cref="GetCaseByBindingAsync"/>, and reached only from a caller already checked against
+    /// <see cref="SystemSupportScopes.Read"/>.
+    /// <para><b>Defaults to nothing</b>, so a store written before unassigned cases existed keeps compiling.</para>
+    /// </remarks>
+    Task<SupportCasePage> GetUnassignedCasesAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(new SupportCasePage { Items = [] });
+
+    /// <summary>
+    /// Gives an unassigned case to a team, returning whether this call did it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Conditional on the case still having no team</b>, so two agents triaging the same queue cannot
+    /// both assign it and the second is told it changed nothing. The same shape as
+    /// <see cref="TryCloseForInactivityAsync"/>: let the write decide, rather than reading and then acting
+    /// on what was true a moment ago.
+    /// </remarks>
+    Task<bool> TryAssignCaseAsync(string caseId, string teamKey, SupportMessage assignmentMessage, CancellationToken cancellationToken = default)
+        => Task.FromResult(false);
+
+    /// <summary>
     /// Closes a case for inactivity, but only if it is still open. Returns whether this call closed it.
     /// </summary>
     /// <remarks>
@@ -122,6 +146,24 @@ public interface ISupportCaseStore
     /// event, never from a user-facing path.
     /// </remarks>
     Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The case with this id whatever team owns it, or <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>For inbound mail that names a case but not a team</b>, which is what a per-case reply address
+    /// (<c>support+{caseId}@…</c>) carries when the sender's client dropped the threading headers. Like
+    /// <see cref="GetCaseByBindingAsync"/> it is not scoped by team and for the same reason: the identifier
+    /// is what resolves the team, not the caller. Reached only from a channel adapter, never from a
+    /// user-facing path.
+    /// <para>
+    /// <b>Defaults to finding nothing</b>, so a store written before this existed keeps compiling and keeps
+    /// working — the threading headers are the primary match and this is only the fallback. A store that
+    /// cannot look up by id alone is answering honestly rather than failing.
+    /// </para>
+    /// </remarks>
+    Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCase>(null);
 
     /// <summary>
     /// Records that someone has read a case up to <paramref name="sequence"/>.

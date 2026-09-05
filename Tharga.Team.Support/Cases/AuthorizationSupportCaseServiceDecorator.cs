@@ -48,6 +48,25 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
         await inner.CloseCaseAsync(teamKey, caseId, cancellationToken);
     }
 
+    /// <remarks>
+    /// <b>Checked against the system scope, never against the receiving team.</b> A scope on the team a case
+    /// is being moved *into* would let a member of any team pull an unassigned case — which may concern a
+    /// different tenant entirely — into their own, along with its whole transcript.
+    /// </remarks>
+    public async Task<bool> AssignCaseAsync(string caseId, string teamKey, CancellationToken cancellationToken = default)
+    {
+        await RequireSystemScopeAsync(SystemSupportScopes.Manage, "assign");
+
+        return await inner.AssignCaseAsync(caseId, teamKey, cancellationToken);
+    }
+
+    public async Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+    {
+        await RequireSystemScopeAsync(SystemSupportScopes.Read, "list unassigned support cases for");
+
+        return await inner.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
+    }
+
     public async Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "reopen");
@@ -57,7 +76,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
 
     public async Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "read");
+        await RequireCaseAccessAsync(teamKey, caseId, "read", SystemSupportScopes.Read);
 
         return await inner.GetCaseAsync(teamKey, caseId, cancellationToken);
     }
@@ -79,7 +98,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
 
     public async Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "read");
+        await RequireCaseAccessAsync(teamKey, caseId, "read", SystemSupportScopes.Read);
 
         return await inner.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
     }
@@ -91,7 +110,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// </remarks>
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "mark read");
+        await RequireCaseAccessAsync(teamKey, caseId, "mark read", SystemSupportScopes.Read);
 
         await inner.MarkReadAsync(teamKey, caseId, cancellationToken);
     }
@@ -129,6 +148,19 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
                 $"This operation on team '{teamKey}' requires the '{scope}' scope on that team.");
     }
 
+    /// <remarks>
+    /// <b>A system scope, not a team one, and the difference is the whole point.</b> An unassigned case may
+    /// concern any tenant or none, so holding <c>support:read</c> on one team must confer nothing here —
+    /// otherwise a member of the smallest team could read everything that arrived by mail.
+    /// </remarks>
+    private async Task RequireSystemScopeAsync(string scope, string verb)
+    {
+        if (await authorizer.HasSystemScopeAsync(scope)) return;
+
+        throw new UnauthorizedAccessException(
+            $"Only a caller holding the system scope '{scope}' may {verb} a support case that belongs to no team.");
+    }
+
     /// <summary>
     /// The caller may act on this case if they raised it, or if they hold the managing scope for the team.
     /// </summary>
@@ -140,9 +172,24 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// A missing case and an inaccessible one are reported the same way on purpose: telling an unauthorized
     /// caller that a case exists is itself a disclosure.
     /// </para>
+    /// <para>
+    /// <b>No team means no membership to check, so <c>systemScope</c> is the whole check</b> —
+    /// <see cref="SystemSupportScopes.Read"/> for a read, <see cref="SystemSupportScopes.Manage"/> for a
+    /// write. That makes an
+    /// unassigned case deny-by-default: nobody reaches it without a grant naming the unassigned queue.
+    /// <b>Authorship does not authorize one yet</b> — spec 10 decision 2 gives the author of a teamless case
+    /// access, and that arrives with the path that lets a user raise one; today every teamless case comes
+    /// from inbound mail, whose sender has no identity to match.
+    /// </para>
     /// </remarks>
-    private async Task RequireCaseAccessAsync(string teamKey, string caseId, string verb)
+    private async Task RequireCaseAccessAsync(string teamKey, string caseId, string verb, string systemScope = SystemSupportScopes.Manage)
     {
+        if (string.IsNullOrEmpty(teamKey))
+        {
+            await RequireSystemScopeAsync(systemScope, verb);
+            return;
+        }
+
         await RequireMembershipAsync(teamKey);
 
         if (await authorizer.HasTeamScopeAsync(SupportScopes.Manage, teamKey)) return;

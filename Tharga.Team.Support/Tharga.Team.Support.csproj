@@ -34,11 +34,16 @@
   </ItemGroup>
   <ItemGroup>
     <!--
-      No third-party package. Slack is an HTTPS endpoint that takes JSON, so the transport needs
-      IHttpClientFactory and nothing else. The package exists to quarantine the dependencies that
-      later capabilities bring (email, Tharga.Neurolito.Client) out of Tharga.Team.Service, which
-      every consumer installs.
+      This package exists to quarantine dependencies out of Tharga.Team.Service, which every consumer
+      installs. MailKit is the first one to arrive, and the reason the quarantine was set up in advance.
+      It is the mail stack for the email support channel: IMAP for reading, SMTP for sending, and MIME
+      parsing, which is needed regardless because inbound mail is multipart. The BCL has no IMAP client,
+      and taking MailKit for reading makes a second SMTP stack pointless.
+
+      Slack still needs no third-party package of its own — it is an HTTPS endpoint that takes JSON, so
+      IHttpClientFactory covers it.
     -->
+    <PackageReference Include="MailKit" Version="4.17.0" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.11" />
     <!-- The inbound Slack endpoint is an ASP.NET route. Private, so it does not flow to consumers that
          only reference this package for the notification sink. -->

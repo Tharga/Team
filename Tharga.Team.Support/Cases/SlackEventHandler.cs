@@ -106,7 +106,9 @@ internal sealed class SlackEventHandler(
 
             // It came from the channel, so it is already there. Posting it back would echo it into the
             // thread it arrived from.
-            Delivery = SupportMessageDelivery.Sent
+            Delivery = SupportMessageDelivery.Sent,
+
+            Source = SupportChannelType.Slack
         };
 
         await store.AppendMessageAsync(supportCase.TeamKey, supportCase.Id, message, cancellationToken);

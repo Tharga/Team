@@ -54,6 +54,9 @@ public class PersistedEnumRepresentationTests
         Assert.Contains("SupportCaseEntity.Status", found);
         Assert.Contains("SupportMessageEntity.Kind", found);
         Assert.Contains("SupportChannelBindingEntity.ChannelType", found);
+
+        // Nullable, and therefore the shape most likely to slip past a sweep that forgets to unwrap.
+        Assert.Contains("SupportMessageEntity.Source", found);
     }
 
     /// <summary>

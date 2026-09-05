@@ -36,6 +36,12 @@ public record ThargaTeamOptions
     public string SupportEventLedgerCollectionName { get; set; } = "SupportEventLedger";
 
     /// <summary>
+    /// Collection remembering how far the support mailbox has been read. Default
+    /// <c>SupportMailPosition</c>.
+    /// </summary>
+    public string SupportMailPositionCollectionName { get; set; } = "SupportMailPosition";
+
+    /// <summary>
     /// How long a handled event is remembered. Default 24 hours.
     /// </summary>
     /// <remarks>

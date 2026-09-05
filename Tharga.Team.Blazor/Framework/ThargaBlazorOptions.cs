@@ -55,8 +55,10 @@ public record ThargaBlazorOptions : BlazorOptions
     /// <see cref="ITeamEmailSender"/>. Leave null to send no email.
     /// </summary>
     /// <remarks>
-    /// <b>Invitations are the only mail the toolkit sends</b> (<see cref="ITeamEmailSender.SendInviteAsync"/>),
-    /// so configuring this is a decision about invitation delivery only — not about adopting a mail pipeline.
+    /// <b>This is invitation delivery and nothing else</b>
+    /// (<see cref="ITeamEmailSender.SendInviteAsync"/>) — not a mail pipeline the rest of the toolkit shares.
+    /// Support cases send and read mail through their own configuration in <c>Tharga.Team.Support</c>;
+    /// setting this does not give them a mailbox, and setting theirs does not send invitations.
     /// <para>
     /// <see cref="EmailOptions.FromName"/> falls back to the application <c>Title</c> when not set.
     /// </para>

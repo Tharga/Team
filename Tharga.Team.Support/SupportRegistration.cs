@@ -1,10 +1,12 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Support.Email;
 using Tharga.Team.Support.Notifications;
 using Tharga.Team.Support.Slack;
 
@@ -99,6 +101,32 @@ public static class SupportRegistration
             o.AutoCloseBatchSize = caseOptions.AutoCloseBatchSize;
         });
 
+        // Projected onto its own options type for the same reason the Slack section is: the mail transport
+        // depends on what it needs rather than on the whole module, and a later section cannot widen it.
+        services.Configure<MailOptions>(o => CopyMail(caseOptions.Email, o));
+
+        RequireSendingAddressIsAccepted(caseOptions.Email);
+
+        // Mail, when a mailbox is configured. Dormant otherwise: a host that has not set a server resolves
+        // no channel and runs no poller, which is the site-only shape rather than a broken email one.
+        //
+        // TryAddEnumerable, so email and Slack are both live -- a case holds a binding facing the customer
+        // and one facing support at the same time.
+        if (caseOptions.Email.Imap.IsConfigured || caseOptions.Email.Smtp.IsConfigured)
+        {
+            services.TryAddScoped<ISupportMailClient, SupportMailClient>();
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportChannel, EmailSupportChannel>());
+        }
+
+        // Only with a mailbox to read. Sending without reading is a legitimate configuration -- a host that
+        // mails replies out and takes them in on the site -- and it must not start a poller against a
+        // server that was never configured.
+        if (caseOptions.Email.Imap.IsConfigured)
+        {
+            services.TryAddScoped<EmailEventHandler>();
+            services.AddSingleton<IHostedService, SupportMailPoller>();
+        }
+
         // Only when the feature is on. Zero means a host that does not want cases closing themselves runs no
         // timer and no query on its behalf, rather than a sweep that finds nothing every hour.
         if (caseOptions.AutoCloseAfter > TimeSpan.Zero)
@@ -111,7 +139,10 @@ public static class SupportRegistration
         // is the site-only shape slice 1 shipped -- not a degraded version of this one.
         if (!string.IsNullOrWhiteSpace(caseOptions.SlackChannel))
         {
-            services.TryAddScoped<ISupportChannel, SlackSupportChannel>();
+            // TryAddEnumerable rather than TryAdd: a case can hold a binding per channel, so registering
+            // email must not mean Slack loses. It still refuses a second registration of this same
+            // implementation, which is what TryAdd was here for.
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportChannel, SlackSupportChannel>());
             services.TryAddScoped<SlackEventHandler>();
 
             // Singleton, because the caches are the point: a scoped presence service would ask Slack about
@@ -140,6 +171,17 @@ public static class SupportRegistration
                 "Reply to and close any support case in the team.");
         });
 
+        // The unassigned queue. Registered here rather than in the Blazor platform because these scopes only
+        // mean anything where support cases exist, and a catalogue entry for a capability the host has not
+        // registered is an offer it cannot honour.
+        services.AddThargaSystemScopes(scopes =>
+        {
+            scopes.Register(SystemSupportScopes.Read,
+                "Read and list support cases that belong to no team -- inbound mail from a sender whose team could not be determined. A team scope cannot govern these, because there is no team to hold it against.");
+            scopes.Register(SystemSupportScopes.Manage,
+                "Reply to, close, reopen and assign a support case that belongs to no team. Assigning decides which tenant the case and its whole transcript become part of.");
+        });
+
         // Auditing wraps authorization so a refusal is recorded as a failed entry rather than lost, matching
         // how access-level and scope denials are already audited. Composed the other way round, every
         // refused attempt would vanish and nothing would fail to compile.
@@ -149,12 +191,72 @@ public static class SupportRegistration
                     sp.GetRequiredService<ISupportCaseStore>(),
                     sp.GetRequiredService<TeamAuthorizer>(),
                     sp.GetRequiredService<TimeProvider>(),
-                    sp.GetService<ISupportChannel>(),
+                    sp.GetServices<ISupportChannel>(),
                     sp.GetRequiredService<ISupportCaseNotifier>()),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
 
         return services;
+    }
+
+    /// <summary>
+    /// Forwards the configured mail settings onto the options type the transport resolves.
+    /// </summary>
+    /// <remarks>
+    /// <b>Copied by reflection rather than as a list of assignments</b>, because a named list is how options
+    /// quietly stop working: it is written against the properties that exist that day, one is added later,
+    /// and it is then accepted from the host and silently discarded — the setting looks configured and does
+    /// nothing. That has already shipped twice in this repository (Tharga/Team#177), which is why
+    /// <c>Tharga.Team.Blazor</c> has <c>OptionsForwarder</c> for the same job. This is not that type only
+    /// because it is internal to that assembly; if a third caller appears, promote one of them rather than
+    /// writing a third.
+    /// <para>
+    /// The two server sections are named because they are read-only properties holding their own object, so
+    /// there is no setter to forward. A <i>third</i> section is a visible structural change to
+    /// <see cref="MailOptions"/>, unlike a scalar, and <c>EverySettableMailOption_IsForwarded</c> fails until
+    /// it is handled here.
+    /// </para>
+    /// </remarks>
+    private static void CopyMail(MailOptions from, MailOptions to)
+    {
+        CopySettable(from, to);
+        CopySettable(from.Imap, to.Imap);
+        CopySettable(from.Smtp, to.Smtp);
+    }
+
+    private static void CopySettable<T>(T from, T to) where T : class
+    {
+        foreach (var property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+                     .Where(x => x.CanRead && x.SetMethod?.IsPublic == true))
+        {
+            property.SetValue(to, property.GetValue(from));
+        }
+    }
+
+    /// <summary>
+    /// Refuses a configuration whose own sending address the recipient filter would reject.
+    /// </summary>
+    /// <remarks>
+    /// <b>The failure this prevents is silent and expensive.</b> Every reply to mail the toolkit sent comes
+    /// back addressed to <see cref="MailOptions.FromAddress"/>; if the filter does not accept that address the
+    /// poller discards all of them, and the symptom is a mailbox that appears not to be read at all. Nothing
+    /// throws, nothing logs an error, and the configuration looks reasonable.
+    /// <para>
+    /// Checked at registration rather than on the first poll, so it fails at startup with the two values in
+    /// the message instead of an hour later with none.
+    /// </para>
+    /// </remarks>
+    private static void RequireSendingAddressIsAccepted(MailOptions email)
+    {
+        var filter = new RecipientFilter(email.Recipients);
+
+        if (filter.AcceptsEverything || string.IsNullOrWhiteSpace(email.FromAddress)) return;
+        if (filter.Accepts(email.FromAddress)) return;
+
+        throw new InvalidOperationException(
+            $"Support email is configured to send from '{email.FromAddress}', which its own recipient filter " +
+            $"({string.Join(", ", email.Recipients)}) does not accept. Every reply would be discarded. Add the " +
+            "address or its domain to the filter, or send from an address the filter already covers.");
     }
 }

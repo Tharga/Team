@@ -18,8 +18,26 @@ public record SupportCase
 {
     public required string Id { get; init; }
 
-    /// <summary>The owning team. Every read is scoped by it; an id alone never identifies a case.</summary>
-    public required string TeamKey { get; init; }
+    /// <summary>
+    /// The owning team, or <c>null</c> when the case is not assigned to one.
+    /// </summary>
+    /// <remarks>
+    /// <b>Unassigned is a durable state, not a staging area.</b> A case that arrived by mail from somebody
+    /// who belongs to several teams — or to none the toolkit can see — belongs to no team until a support
+    /// agent says which, and it can be answered, closed and reopened meanwhile. The person who knows which
+    /// tenant a problem concerns is a human reading it, not an algorithm reading a <c>From:</c> header.
+    /// <para>
+    /// <b>The invariant it replaces still holds where there is a team.</b> A case with one is loaded through
+    /// it and authorized by membership exactly as before, so holding a case id from another tenant still
+    /// gains nothing. What changed is that "no team" became expressible, not that team scoping became
+    /// optional.
+    /// </para>
+    /// <para>
+    /// <b>An unassigned case is governed system-wide</b>, because a team scope has no team to be held
+    /// against. See <see cref="Support.Cases.ISupportCaseService.AssignCaseAsync"/>.
+    /// </para>
+    /// </remarks>
+    public string TeamKey { get; init; }
 
     /// <summary>
     /// The stable authentication subject of whoever raised the case. May no longer resolve to a user or a

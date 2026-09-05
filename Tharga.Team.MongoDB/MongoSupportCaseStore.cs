@@ -201,6 +201,41 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return result?.Before != null;
     }
 
+    public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        // Exists rather than equals-null: TeamKey is [BsonIgnoreIfNull], so an unassigned case has no field
+        // at all. A filter for null would also match one written with an explicit null, which is a state the
+        // store never produces and should not start matching by accident.
+        var filter = Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, false);
+
+        return PageAsync(filter, cursor, pageSize);
+    }
+
+    public async Task<bool> TryAssignCaseAsync(string caseId, string teamKey, SupportMessage assignmentMessage, CancellationToken cancellationToken = default)
+    {
+        var entity = await collection.GetOneAsync(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId));
+
+        if (entity == null || !string.IsNullOrEmpty(entity.TeamKey)) return false;
+
+        RequireRoom(entity);
+
+        // Conditional on the case still having no team, so two agents triaging the same queue cannot both
+        // assign it -- the second matches nothing and reports that it changed nothing.
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId),
+            Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, false));
+
+        var update = Builders<SupportCaseEntity>.Update
+            .Set(x => x.TeamKey, teamKey)
+            .Set(x => x.LastMessageAt, assignmentMessage.SentAt)
+            .Push(x => x.Messages, ToEntity(assignmentMessage with { Sequence = NextSequence(entity) }));
+
+        var result = await collection.UpdateOneAsync(filter, update);
+
+        return result?.Before != null;
+    }
+
     public async Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
     {
         var filter = Builders<SupportCaseEntity>.Filter.ElemMatch(
@@ -210,6 +245,15 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
                 Builders<SupportChannelBindingEntity>.Filter.Eq(x => x.ExternalId, externalId)));
 
         var entity = await collection.GetOneAsync(filter);
+
+        return entity == null ? null : ToCase(entity);
+    }
+
+    public async Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseId)) return null;
+
+        var entity = await collection.GetOneAsync(Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId));
 
         return entity == null ? null : ToCase(entity);
     }
@@ -280,7 +324,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             .Push(x => x.Bindings, new SupportChannelBindingEntity
             {
                 ChannelType = binding.ChannelType,
-                ExternalId = binding.ExternalId
+                ExternalId = binding.ExternalId,
+                Address = binding.Address
             });
 
         await UpdateAsync(teamKey, caseId, update);
@@ -357,6 +402,21 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return collection.UpdateOneAsync(Case(teamKey, caseId), update);
     }
 
+    /// <summary>
+    /// One case, keyed on the pair — which is what makes an id from another tenant fail to resolve.
+    /// </summary>
+    /// <remarks>
+    /// <b>A null team is a match rather than a mistake, and that is load-bearing.</b> MongoDB matches a
+    /// missing field against <c>{field: null}</c>, and <see cref="SupportCaseEntity.TeamKey"/> is
+    /// <c>[BsonIgnoreIfNull]</c>, so this reaches an unassigned case with no special case and no second read
+    /// path. Do not "fix" it to an explicit exists check: the reply, close and reopen paths for an
+    /// unassigned case all arrive here with a null team.
+    /// <para>
+    /// The unassigned <i>listing</i> uses <c>Exists(TeamKey, false)</c> instead, which is deliberately
+    /// narrower — it cannot match a document written with an explicit null. The two agree because
+    /// <c>[BsonIgnoreIfNull]</c> means the store never writes one.
+    /// </para>
+    /// </remarks>
     private static FilterDefinition<SupportCaseEntity> Case(string teamKey, string caseId) =>
         Builders<SupportCaseEntity>.Filter.And(
             Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
@@ -398,7 +458,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         MessageCount = entity.Messages.Length,
         Bindings = entity.Bindings == null
             ? []
-            : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId })]
+            : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })]
     };
 
     private static SupportMessage ToMessage(SupportMessageEntity entity) => new()
@@ -409,7 +469,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorName = entity.AuthorName,
         Body = entity.Body,
         SentAt = entity.SentAt,
-        Delivery = entity.Delivery
+        Delivery = entity.Delivery,
+        Source = entity.Source
     };
 
     private static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -420,6 +481,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorName = message.AuthorName,
         Body = message.Body,
         SentAt = message.SentAt,
-        Delivery = message.Delivery
+        Delivery = message.Delivery,
+        Source = message.Source
     };
 }

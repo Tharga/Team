@@ -60,19 +60,9 @@ else
                     @if (_selected?.Id == item.Id)
                     {
                         <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
-                            @foreach (var message in _messages)
-                            {
-                                @* Channel provenance is deliberately not shown yet. SupportMessage.Source
-                                   arrives with the email channel (spec 08), and an email reply is attributed
-                                   on a sender match rather than an authenticated caller — so once it exists
-                                   this is where a support agent needs to see the difference. *@
-                                <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
-                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
-                                        @message.AuthorName — @message.SentAt.ToLocalTime().ToString("g")
-                                    </RadzenText>
-                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@message.Body</RadzenText>
-                                </RadzenStack>
-                            }
+                            @* Shared with SupportUnassignedView, which renders the same transcript for the
+                               same reader. A copy is what gets extended in one place and not the other. *@
+                            <SupportTranscript Messages="_messages" />
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {

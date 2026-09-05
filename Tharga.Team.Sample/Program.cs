@@ -227,6 +227,29 @@ builder.Services.AddThargaSupportCases(o =>
 {
     o.SlackChannel = builder.Configuration["Slack:SupportChannel"];
     o.SigningSecret = builder.Configuration["Slack:SigningSecret"];
+
+    // The support mailbox, on the same terms as Slack: read from configuration, so it stays dormant with
+    // nothing checked in and the wiring still resolves in the real application graph. With no host set,
+    // no channel and no poller are registered at all.
+    //
+    // Two mail servers rather than one setting, because the hosts routinely differ -- and IMAP alone or
+    // SMTP alone are both real configurations: read without answering by mail, or answer by mail and take
+    // questions on the site.
+    o.Email.Imap.Host = builder.Configuration["Support:Mail:Imap:Host"];
+    o.Email.Imap.UserName = builder.Configuration["Support:Mail:Imap:UserName"];
+    o.Email.Imap.Password = builder.Configuration["Support:Mail:Imap:Password"];
+    o.Email.Smtp.Host = builder.Configuration["Support:Mail:Smtp:Host"];
+    o.Email.Smtp.UserName = builder.Configuration["Support:Mail:Smtp:UserName"];
+    o.Email.Smtp.Password = builder.Configuration["Support:Mail:Smtp:Password"];
+
+    // The address replies come back to. Not the invitation sender's noreply@ address: support mail has to
+    // come from somewhere a customer can answer, which is why the two configurations stay separate.
+    o.Email.FromAddress = builder.Configuration["Support:Mail:FromAddress"];
+
+    // One mailbox can serve two sites. Each instance takes only the mail addressed to its own domain, and
+    // leaves the rest where the other instance will find it -- nothing is flagged or moved, so a drop is
+    // invisible to the other reader. Unset means every address is accepted.
+    o.Email.Recipients = builder.Configuration.GetSection("Support:Mail:Recipients").Get<string[]>() ?? [];
 });
 
 var app = builder.Build();

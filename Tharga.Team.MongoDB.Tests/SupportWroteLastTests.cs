@@ -102,4 +102,26 @@ public class SupportWroteLastTests
     {
         Assert.False(MongoSupportCaseStore.SupportWroteLast(Case(Message(1, SupportMessageKind.User, Author))));
     }
+
+    /// <summary>
+    /// A case that arrived by mail: nobody involved has an account, so the author identity is null on the
+    /// case and on everything the customer writes.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is why an inbound entry carries no identity.</b> The predicate is "the newest entry is not the
+    /// author's", so if a customer mail arrived carrying its own address as the identity, that address would
+    /// never equal the case's null author — and the customer writing in would count as support answering,
+    /// closing their case seven days after they asked for help.
+    /// </remarks>
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(Support, true)]
+    public void OnACaseFromMail_OnlyAnAnswerWithAnIdentityCounts(string lastAuthor, bool expected)
+    {
+        var fromMail = Case(
+            Message(1, SupportMessageKind.User, null),
+            Message(2, SupportMessageKind.User, lastAuthor)) with { AuthorIdentity = null };
+
+        Assert.Equal(expected, MongoSupportCaseStore.SupportWroteLast(fromMail));
+    }
 }

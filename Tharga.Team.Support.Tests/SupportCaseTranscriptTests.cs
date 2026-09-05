@@ -54,6 +54,22 @@ public class SupportCaseTranscriptTests
         Assert.Equal([1, 2], messages.Items.Select(x => x.Sequence));
     }
 
+    /// <summary>
+    /// Provenance is null for anything written through the application, which is what makes a non-null value
+    /// mean something: it says the entry came in through a door where the author was not authenticated.
+    /// </summary>
+    [Fact]
+    public async Task AMessageWrittenThroughTheService_RecordsNoChannelSource()
+    {
+        var service = Build();
+        var raised = await service.RaiseCaseAsync(TeamA, "Subject", "First");
+        await service.ReplyToCaseAsync(TeamA, raised.Id, "Second");
+
+        var messages = await service.GetMessagesAsync(TeamA, raised.Id);
+
+        Assert.All(messages.Items, x => Assert.Null(x.Source));
+    }
+
     [Fact]
     public async Task AMessageLongerThanTheLimit_IsRefused()
     {

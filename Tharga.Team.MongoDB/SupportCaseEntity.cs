@@ -30,7 +30,14 @@ public record SupportCaseEntity : EntityBase
     /// <summary>The case id. Distinct from <see cref="EntityBase.Id"/>, which is the document's ObjectId.</summary>
     public required string CaseId { get; init; }
 
-    public required string TeamKey { get; init; }
+    /// <summary>The owning team, or absent when the case is unassigned.</summary>
+    /// <remarks>
+    /// <c>[BsonIgnoreIfNull]</c> so an unassigned case stores no team at all rather than an empty string —
+    /// a filter for "no team" then means what it says, and cannot accidentally match a case whose key was
+    /// written as blank.
+    /// </remarks>
+    [BsonIgnoreIfNull]
+    public string TeamKey { get; init; }
 
     public required string AuthorIdentity { get; init; }
 
@@ -134,13 +141,20 @@ public record SupportMessageEntity
 
     [BsonRepresentation(BsonType.String)]
     public SupportMessageDelivery Delivery { get; init; }
+
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.String)]
+    public SupportChannelType? Source { get; init; }
 }
 
-/// <summary>An embedded projection onto an external system. Unused until the channel work lands.</summary>
+/// <summary>An embedded projection onto an external system.</summary>
 public record SupportChannelBindingEntity
 {
     [BsonRepresentation(BsonType.String)]
     public required SupportChannelType ChannelType { get; init; }
 
     public required string ExternalId { get; init; }
+
+    [BsonIgnoreIfNull]
+    public string Address { get; init; }
 }
