@@ -21,5 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team.Blazor\Tharga.Team.Blazor.csproj" />
+    <!-- For the #254 render guard: the real stored team entity, whose ToString the DOM depends on. -->
+    <ProjectReference Include="..\Tharga.Team.MongoDB\Tharga.Team.MongoDB.csproj" />
   </ItemGroup>
 </Project>
