@@ -600,6 +600,32 @@ for a key the question is whether the team consented — and the **consented lev
 Denials are `403`, never `404` — a `404` would confirm whether a team exists to a caller not allowed to
 know that.
 
+### Reading a team is decided the same way as changing one
+
+`ITeamManagementService`'s reads — `GetTeamAsync`, `GetTeamByKeyAsync`, `GetMembersAsync`,
+`GetTeamMemberAsync`, `GetTeamCustomRolesAsync` — require `team:read` on the team named in the call, and
+resolve it exactly as the mutations beside them do: **membership if the caller has it, the team's consent if
+they do not.** So all three of these reach a team's roster, and for the same reason they may change it:
+
+| Caller | Reaches the team because |
+|---|---|
+| A member at `Viewer` or above | `team:read` sits at `Viewer`, so every level above inherits it |
+| A member at `Custom` holding a tenant role that grants `team:read` | the role's scopes count, per-team custom roles included |
+| A non-member holding a role the team consented to | the consented level carries `team:read` |
+
+**A suspended member reaches nothing**, whichever of those would otherwise apply. Suspension is not a
+reduction in level — it withdraws the grant.
+
+> **Changed in 3.18.** Before that release these reads were resolved from the caller's member row alone, so
+> consent, tenant roles and suspension were all invisible to them. Three consequences, and they did not all
+> point the same way: a consent-based operator was refused a read they were entitled to — visibly, since an
+> invite would be created and the operation would still report *"Access denied"* — a `Custom` member's tenant
+> role did not grant the read it named, and a **suspended member kept full read access**. If you worked
+> around the first by granting the operator membership, that workaround can now go.
+
+`GetTeamsAsync` filters the caller's own teams by the same rule, so a team it lists is a team the
+single-team reads will return, and one it omits is one they refuse.
+
 ### Usage
 
 Create controllers as usual:
