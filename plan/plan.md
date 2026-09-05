@@ -39,11 +39,17 @@ than skipped silently, because "nothing to do" and "nobody looked" read identica
 - [x] **6. Bump `MAJOR_MINOR` to `3.19`** in `build.yml`. Consumers must register a post-logout redirect URI,
   and a release that needs a consumer action is not a patch.
 
-- [~] **7. Docs — and there is a gap here, not just an edit.** `implementation-guide.md` documents the
+- [x] **7. Docs — and there is a gap here, not just an edit.** `implementation-guide.md` documents the
   `AzureAd` config section (Authority / ClientId / TenantId / CallbackPath) but **never mentions redirect URI
   registration at all**, so the new required post-logout entry has no existing home to go in. Add the
   app-registration step, document both new options, and state the failure mode if the URI is missing. Land as
   its own `docs:` commit.
+  **Done.** A new *Redirect URIs on the app registration* section covers both entries — the sign-in callback
+  that was already implied and the post-logout one that is new and required — and names the failure mode:
+  nothing throws, the provider signs the user out and shows its own page instead of coming back. Two option
+  subsections explain why the defaults differ, with a "Changed in 3.19" note telling upgraders to register
+  the URI **before** deploying. **README needs no change** — it documents claim revalidation, not the auth
+  setup, which lives entirely in the implementation guide.
 
 - [ ] **8. Close-out.** Comment on and close #250 citing the type, member and test; sweep `Requests.md` and
   the backlog; archive `plan/feature.md` to the Plan directory `done/`; `git rm -r plan`; final commit

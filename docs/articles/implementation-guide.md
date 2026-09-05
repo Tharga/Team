@@ -202,6 +202,24 @@ Add an `AzureAd` section to `appsettings.json`. Values are environment-specific:
 > **Secrets:** `ClientId` and `TenantId` may be considered sensitive depending on your environment.
 > Put them in **Manage User Secrets** if you prefer not to commit them.
 
+### Redirect URIs on the app registration
+
+Two entries are needed, and they are different kinds. Both live on the app registration, not in
+`appsettings.json`:
+
+| Entry | Value | Why |
+|---|---|---|
+| **Redirect URI** | your `CallbackPath`, e.g. `https://your-host/signin-oidc` | Where the provider returns after sign-**in** |
+| **Front-channel logout / post-logout redirect URI** | `https://your-host/signout-callback-oidc` | Where the provider returns after sign-**out** |
+
+`/signout-callback-oidc` is the OpenID Connect handler's `SignedOutCallbackPath` default; if you changed it,
+register what you changed it to.
+
+> **If the post-logout entry is missing, nothing throws.** The provider still signs the user out — the
+> security-relevant half happens — but it shows its own "you have signed out" page instead of returning to
+> your application. A dead end rather than an exception, which is why it is easy to miss and worth setting up
+> before you first test sign-out.
+
 ### Program.cs
 
 ```csharp
@@ -222,8 +240,36 @@ builder.AddThargaAuth(o =>
     o.LoginPath = "/sign-in";              // default: "/login"
     o.LogoutPath = "/sign-out";            // default: "/logout"
     o.ValidateConfiguration = false;       // default: true — throws at startup if AzureAd section is missing
+    o.FederatedSignOut = false;            // default: true — see below, this one is a security setting
+    o.PromptForAccount = true;             // default: false — ask which account to sign in with
 });
 ```
+
+#### Signing out ends the provider session
+
+**`FederatedSignOut` is on by default and should stay on.** Signing out clears the local cookie *and* sends
+the browser to the provider's end-session endpoint, so the session that would otherwise sign the next visitor
+straight back in is gone.
+
+Turning it off restores a sign-out that clears the local cookie only. The application then renders as signed
+out while the provider session stays alive, and the next sign-in silently returns the same user with no
+prompt — on a shared machine, a usable session left behind a Logout button. The escape hatch exists for a host
+that cannot register the post-logout redirect URI yet and would rather make that trade knowingly.
+
+> **Changed in 3.19.** Before that release this was the *only* behaviour, and it was not a setting. Sign-out
+> built the provider's end-session redirect and then overwrote it with a local one, so the provider session
+> always survived. If you are upgrading, register the post-logout redirect URI above **before** you deploy —
+> that is the one action this release asks of you.
+
+#### Choosing an account
+
+**`PromptForAccount` is off by default**, because it is not what fixes sign-out. With federated sign-out on,
+signing out ends the provider session and the next sign-in prompts anyway. This option only matters when the
+browser holds a live single-sign-on session from somewhere else entirely — and turning it on costs every user
+a click on every sign-in.
+
+Turn it on where signing in as a different person is routine rather than exceptional: a shared machine, or
+support staff who hold more than one account.
 
 ### _Imports.razor
 
