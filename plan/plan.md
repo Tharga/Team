@@ -73,6 +73,19 @@ against it.
 
 ## Last session
 
-2026-09-05 — Branch cut from a freshly-merged master (#251 and #252 both in, `plan/` gone from master,
-merged branches deleted). Defect verified against the code, packages checked, plan written. **Nothing
-implemented yet**; step 1 is next and needs the plan confirmed first.
+2026-09-05 — **Steps 1-7 done; implementation complete and green (2490 tests, 0 failed, +9).** Two commits on
+`feature/federated-signout`: the fix with its tests, and the docs.
+
+Done red-first this time, unlike the previous feature: the new tests failed 4 of 6 against the original code,
+and the two that passed were the ones that should have (login was never broken, and both schemes *were* being
+signed out — just in the order that discards the result).
+
+`MAJOR_MINOR` is now **3.19**, because the release asks consumers to register a post-logout redirect URI.
+
+**Not yet done — step 8, which waits on the user confirming the feature is done:** close #250, sweep records,
+archive `feature.md`, `git rm -r plan`, final commit, push, open the PR. **The branch is not pushed** —
+pushing needs explicit approval.
+
+**The open question is unchanged and cannot be closed from here:** what a real Entra/CIAM tenant does when
+`post_logout_redirect_uri` is not registered. Documented as "signs out, shows its own page", which is the
+behaviour the design leans on. The reporter offered `quilt4net.ciamlogin.com`; that is what would settle it.
