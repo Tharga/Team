@@ -1,4 +1,8 @@
 ﻿using System.Text.Json;
+using Microsoft.Extensions.Options;
+// ITeamPrincipalAccessor keeps its original namespace so no consumer's using breaks; it now lives in this
+// assembly, because this is where team reads are gated and the gate needs the caller's claims.
+using Tharga.Team.Service;
 
 namespace Tharga.Team;
 
@@ -26,6 +30,9 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     private readonly ITeamService _inner;
     private readonly IUserService _userService;
     private readonly IScopeRegistry _scopeRegistry;
+    private readonly ITeamPrincipalAccessor _principalAccessor;
+    private readonly ConsentOptions _consent;
+    private readonly TeamGrantResolver _grants;
 
     public TeamManagementService(ITeamService inner)
         : this(inner, null, null)
@@ -38,10 +45,34 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     /// registered — an app not using scopes must not start refusing reads.
     /// </summary>
     public TeamManagementService(ITeamService inner, IUserService userService, IScopeRegistry scopeRegistry)
+        : this(inner, userService, scopeRegistry, null, null, null)
+    {
+    }
+
+    /// <summary>
+    /// The full form, used by the Blazor registration. Without
+    /// <paramref name="principalAccessor"/> the read gate can see membership but not consent, and without
+    /// <paramref name="tenantRoleService"/> it can see access levels but not per-team custom roles.
+    /// </summary>
+    /// <remarks>
+    /// <b>Every added dependency is optional, and each one only widens what a caller may read.</b> A host
+    /// that supplies none gets the membership-and-access-level answer this service has always given, so an
+    /// upgrade cannot start refusing a read that used to succeed.
+    /// </remarks>
+    public TeamManagementService(
+        ITeamService inner,
+        IUserService userService,
+        IScopeRegistry scopeRegistry,
+        ITeamPrincipalAccessor principalAccessor,
+        ITenantRoleService tenantRoleService,
+        IOptions<ConsentOptions> consentOptions)
     {
         _inner = inner;
         _userService = userService;
         _scopeRegistry = scopeRegistry;
+        _principalAccessor = principalAccessor;
+        _consent = consentOptions?.Value ?? new ConsentOptions();
+        _grants = new TeamGrantResolver(inner, scopeRegistry, tenantRoleService);
     }
 
     public Task<ITeam> CreateTeamAsync(string name = null) => _inner.CreateTeamAsync(name);
@@ -83,10 +114,15 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     /// from the first argument. A principal also only ever holds scope claims for the *selected* team, so
     /// there is nothing in the claims to check the others against.
     /// <para>
-    /// So the scopes are recomputed per team from the caller's membership in that team — the same inputs
-    /// the claims builder uses. A team whose membership does not grant <c>team:read</c> is omitted rather
-    /// than returned without its roster: the scope covers "team details and members" together, and a
-    /// half-visible team would be a third state nothing else in the model has.
+    /// So the scopes are resolved per team, by the same <see cref="TeamGrantResolver"/> that decides
+    /// <see cref="RequireTeamReadAsync"/> — through the overload that takes the member already loaded on
+    /// the team, so this stays one query rather than one per team. A team whose membership does not grant
+    /// <c>team:read</c> is omitted rather than returned without its roster: the scope covers "team details
+    /// and members" together, and a half-visible team would be a third state nothing else in the model has.
+    /// </para>
+    /// <para>
+    /// Consent needs no branch here. This lists the caller's <i>own</i> teams, and a team reached through
+    /// consent is by definition one they are not a member of.
     /// </para>
     /// </remarks>
     public async IAsyncEnumerable<ITeam<T>> GetTeamsAsync<T>() where T : ITeamMember
@@ -95,7 +131,20 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
 
         await foreach (var team in _inner.GetTeamsAsync<T>())
         {
-            if (GrantsTeamRead(team, user)) yield return team;
+            // No registry means the app does not use scopes; filtering here would refuse reads it never gated.
+            if (_scopeRegistry == null || user == null)
+            {
+                yield return team;
+                continue;
+            }
+
+            var member = team.Members == null
+                ? null
+                : team.Members.Select(x => (ITeamMember)x).FirstOrDefault(x => x.Key == user.Key);
+
+            var grant = await _grants.ResolveFromMemberAsync(team.Key, member);
+
+            if (grant?.Scopes.Contains(TeamScopes.Read) == true) yield return team;
         }
     }
 
@@ -122,26 +171,6 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
         return member?.SuspendedAt != null;
     }
 
-    private bool GrantsTeamRead<T>(ITeam<T> team, IUser user) where T : ITeamMember
-    {
-        // No registry means the app does not use scopes; filtering here would refuse reads it never gated.
-        if (_scopeRegistry == null || user == null) return true;
-
-        var members = team.Members;
-        if (members == null) return false;
-
-        var member = members.Where(x => x.Key == user.Key).Select(x => (ITeamMember)x).FirstOrDefault();
-        return GrantsTeamRead(member);
-    }
-
-    private bool GrantsTeamRead(ITeamMember member)
-    {
-        if (member == null) return false;
-
-        return _scopeRegistry
-            .GetEffectiveScopes(member.AccessLevel, member.TenantRoles, member.ScopeOverrides)
-            .Contains(TeamScopes.Read);
-    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -183,9 +212,17 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     /// <see cref="TeamScopes.Read"/>.
     /// </summary>
     /// <remarks>
-    /// Reads the caller's <b>own membership</b> rather than the whole roster: it carries the access level,
-    /// tenant roles and scope overrides the decision needs, and costs one lookup instead of loading every
-    /// member of the team on each read.
+    /// <b>Decided by <see cref="TeamGrantResolver"/>, the one copy of that rule.</b> Membership if the
+    /// caller has it, the team's consent if they do not, and nothing if neither — the same answer, from the
+    /// same code, that issued the caller's claims in the first place.
+    /// <para>
+    /// It did not always. This gate used to recompute the caller's scopes from their member row, which made
+    /// two kinds of legitimate access invisible to it: a non-member reaching the team through consent, and a
+    /// member whose <b>tenant role</b> grants the scope. Mutations never had the problem, because
+    /// <c>AuthorizationTeamServiceDecorator</c> reads claims. So a consent-based operator could invite a
+    /// member and then be refused the read that followed — the write landing and the operation still
+    /// reporting "Access denied" (Tharga/Team#248).
+    /// </para>
     /// <para>
     /// <b>Two escapes, and they are not the same.</b> No <see cref="IScopeRegistry"/> or no
     /// <see cref="IUserService"/> means the application does not use scopes at all — enforcing would
@@ -207,8 +244,10 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
             throw new UnauthorizedAccessException(
                 $"Reading team '{teamKey}' requires an authenticated caller holding '{TeamScopes.Read}'.");
 
-        var member = await _inner.GetTeamMemberAsync(teamKey, user.Key);
-        if (!GrantsTeamRead(member))
+        var principal = _principalAccessor == null ? null : await _principalAccessor.GetCurrentAsync();
+        var grant = await _grants.ResolveAsync(principal, user.Key, teamKey, _consent.AccessLevel);
+
+        if (grant?.Scopes.Contains(TeamScopes.Read) != true)
             throw new UnauthorizedAccessException(
                 $"Reading team '{teamKey}' requires the '{TeamScopes.Read}' scope on that team.");
     }
