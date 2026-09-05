@@ -255,7 +255,7 @@ public class AddThargaTeamTests
         Assert.Contains(builder.Services, d =>
             d.ServiceType == typeof(IApiKeyLifecycleHandler) && d.ImplementationType == typeof(TestLifecycleHandler));
         // Decoration replaces the IApiKeyAdministrationService registration with a factory.
-        var admin = Assert.Single(builder.Services.Where(d => d.ServiceType == typeof(IApiKeyAdministrationService)));
+        var admin = Assert.Single(builder.Services, d => d.ServiceType == typeof(IApiKeyAdministrationService));
         Assert.NotNull(admin.ImplementationFactory);
     }
 
@@ -273,7 +273,7 @@ public class AddThargaTeamTests
         var builder = CreateBuilder();
         builder.AddThargaTeam(o => o.Audit = new AuditOptions());
 
-        var admin = Assert.Single(builder.Services.Where(d => d.ServiceType == typeof(IApiKeyAdministrationService)));
+        var admin = Assert.Single(builder.Services, d => d.ServiceType == typeof(IApiKeyAdministrationService));
         Assert.NotNull(admin.ImplementationFactory);
         Assert.Null(admin.ImplementationType);
     }
