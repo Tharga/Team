@@ -8,6 +8,7 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
 {
     private readonly ITeamRepository<TTeamEntity, TMember> _teamRepository;
     private readonly IMongoDbServiceFactory _mongoDbServiceFactory;
+    private readonly InvitationOptions _invitationOptions;
 
     /// <param name="userService">Resolves the calling user.</param>
     /// <param name="teamRepository">The team collection this service reads and writes.</param>
@@ -18,11 +19,17 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
     /// left unforwarded, the claims-path lookups fall back to a process-local cache that cannot see another
     /// instance's writes. See <see cref="ITeamCache"/>.
     /// </param>
-    protected TeamServiceRepositoryBase(IUserService userService, ITeamRepository<TTeamEntity, TMember> teamRepository, IMongoDbServiceFactory mongoDbServiceFactory, IIconStore iconStore = null, ITeamCache cache = null)
-        : base(userService, iconStore: iconStore, cache: cache)
+    /// <param name="invitationOptions">
+    /// Optional. <b>Forward it from your own service's constructor</b> if you configure an invitation
+    /// lifetime — left unforwarded, this base receives the defaults and invitations never expire however the
+    /// host configured them. The same forwarding hazard as <paramref name="cache"/>.
+    /// </param>
+    protected TeamServiceRepositoryBase(IUserService userService, ITeamRepository<TTeamEntity, TMember> teamRepository, IMongoDbServiceFactory mongoDbServiceFactory, IIconStore iconStore = null, ITeamCache cache = null, InvitationOptions invitationOptions = null)
+        : base(userService, iconStore: iconStore, cache: cache, invitationOptions: invitationOptions)
     {
         _teamRepository = teamRepository;
         _mongoDbServiceFactory = mongoDbServiceFactory;
+        _invitationOptions = invitationOptions ?? new InvitationOptions();
     }
 
     protected abstract Task<TTeamEntity> CreateTeam(string teamKey, string name, IUser user, string displayName);
@@ -154,7 +161,10 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
                 {
                     EMail = model.Email,
                     InviteKey = Guid.NewGuid().ToString(),
-                    InviteTime = DateTime.UtcNow
+                    InviteTime = DateTime.UtcNow,
+                    ExpiresAt = _invitationOptions.Lifetime == null
+                        ? null
+                        : DateTime.UtcNow + _invitationOptions.Lifetime.Value
                 }
             };
         }
@@ -180,9 +190,25 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
 
     protected override async Task<string> GetInvitedMemberNameAsync(string teamKey, string inviteKey)
     {
-        var team = await _teamRepository.GetAsync(teamKey);
-        var member = team?.Members.FirstOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey);
+        var member = await GetInvitedMemberAsync(teamKey, inviteKey);
         return member?.Name;
+    }
+
+    protected override async Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
+    {
+        var member = await GetInvitedMemberAsync(teamKey, inviteKey);
+        return member?.Invitation;
+    }
+
+    protected override Task SetTeamMemberInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
+    {
+        return _teamRepository.SetInvitationExpiryAsync(teamKey, inviteKey, expiresAt);
+    }
+
+    private async Task<TMember> GetInvitedMemberAsync(string teamKey, string inviteKey)
+    {
+        var team = await _teamRepository.GetAsync(teamKey);
+        return team?.Members.FirstOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey);
     }
 
     protected override Task SetTeamMemberLastSeenAsync(string teamKey, string userKey)

@@ -21,6 +21,17 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides);
     Task SetMemberNameAsync(string teamKey, string userKey, string name);
     Task<ITeam> SetInvitationResponseAsync(string teamKey, string userKey, string inviteKey, bool accept);
+
+    /// <summary>
+    /// Sets the expiry of the invitation matching <paramref name="inviteKey"/>, leaving the code itself
+    /// untouched so an already-mailed link keeps working.
+    /// </summary>
+    /// <remarks>
+    /// A default interface method that no-ops, so a host with its own repository keeps compiling. The base
+    /// service that calls it throws when it is not overridden, so the gap surfaces as an error at the point
+    /// of use rather than as an extension that quietly did nothing.
+    /// </remarks>
+    Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt) => Task.CompletedTask;
     Task SetConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null);
     Task SetCustomRolesAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles);
     IAsyncEnumerable<TTeamEntity> GetTeamsByConsentAsync(string[] roles);

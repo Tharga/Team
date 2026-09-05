@@ -102,6 +102,27 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         await _collection.UpdateOneAsync(filter, update);
     }
 
+    public async Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
+    {
+        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
+
+        var target = team?.Members.PickOneOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey, _logger, teamKey, inviteKey);
+        if (target == null) return;
+
+        // The invitation is replaced whole rather than the expiry set in place, because Invitation is a
+        // record with required members -- and InviteKey is copied across unchanged, which is the property
+        // that makes an already-mailed link survive an extension.
+        var updated = target with { Invitation = target.Invitation with { ExpiresAt = expiresAt } };
+        var members = team.Members.ReplaceByReference(target, updated);
+
+        var filter = new FilterDefinitionBuilder<TTeamEntity>()
+            .Eq(x => x.Key, teamKey);
+        var update = new UpdateDefinitionBuilder<TTeamEntity>()
+            .Set(x => x.Members, members);
+
+        await _collection.UpdateOneAsync(filter, update);
+    }
+
     public async Task SetMemberSuspendedAsync(string teamKey, string userKey, DateTime? suspendedAt, string suspendedBy)
     {
         var team = await _collection.GetOneAsync(x => x.Key == teamKey);

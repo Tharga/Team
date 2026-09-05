@@ -7,7 +7,35 @@ internal class TestTeamService : TeamServiceBase
 {
     private readonly Dictionary<string, TestTeam> _teams = new();
 
-    public TestTeamService(IUserService userService, ITeamCache cache = null) : base(userService, cache: cache) { }
+    public TestTeamService(IUserService userService, ITeamCache cache = null, InvitationOptions invitationOptions = null)
+        : base(userService, cache: cache, invitationOptions: invitationOptions) { }
+
+    /// <summary>Counts calls so a test can tell "renewed the existing invitation" from "added a second one".</summary>
+    public int AddTeamMemberCallCount { get; private set; }
+
+    protected override Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
+    {
+        _teams.TryGetValue(teamKey, out var team);
+        var member = team?.Members?.FirstOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey);
+        return Task.FromResult(member?.Invitation);
+    }
+
+    protected override Task SetTeamMemberInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
+    {
+        _teams.TryGetValue(teamKey, out var team);
+        if (team?.Members == null) return Task.CompletedTask;
+
+        var index = Array.FindIndex(team.Members, x => x.Invitation != null && x.Invitation.InviteKey == inviteKey);
+        if (index >= 0)
+        {
+            team.Members[index] = team.Members[index] with
+            {
+                Invitation = team.Members[index].Invitation with { ExpiresAt = expiresAt }
+            };
+        }
+
+        return Task.CompletedTask;
+    }
 
     public void AddTeam(string teamKey, string name, params TestMember[] members)
     {
@@ -40,7 +68,11 @@ internal class TestTeamService : TeamServiceBase
 
     protected override Task SetTeamNameAsync(string teamKey, string name) => Task.CompletedTask;
     protected override Task DeleteTeamAsync(string teamKey) { _teams.Remove(teamKey); return Task.CompletedTask; }
-    protected override Task AddTeamMemberAsync(string teamKey, InviteUserModel model) => Task.CompletedTask;
+    protected override Task AddTeamMemberAsync(string teamKey, InviteUserModel model)
+    {
+        AddTeamMemberCallCount++;
+        return Task.CompletedTask;
+    }
     protected override Task RemoveTeamMemberAsync(string teamKey, string userKey) => Task.CompletedTask;
 
     protected override Task<ITeam> SetTeamMemberInvitationResponseAsync(string teamKey, string userKey, string inviteKey, bool accept)

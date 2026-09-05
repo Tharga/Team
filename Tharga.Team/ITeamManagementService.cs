@@ -50,6 +50,26 @@ public interface ITeamManagementService
     [RequireScope(TeamScopes.MemberManage)]
     Task SetMemberSuspendedAsync(string teamKey, string userKey, bool suspended);
 
+    /// <summary>
+    /// Gives an outstanding invitation a fresh lifetime, <b>keeping its code</b>.
+    /// </summary>
+    /// <remarks>
+    /// <b>The point is what it does not do: mint a new code.</b> A link that has already been mailed keeps
+    /// working, so extending an invitation costs the recipient nothing and needs no second message. That is
+    /// only possible because the expiry lives on the invitation record rather than being derived from its
+    /// creation time — see <see cref="Invitation.ExpiresAt"/>.
+    /// <para>
+    /// An operation rather than a settable expiry, so it can be authorized and audited as one fact.
+    /// </para>
+    /// <para>
+    /// The new expiry is <c>now</c> plus the configured <see cref="InvitationOptions.Lifetime"/>. Where no
+    /// lifetime is configured invitations do not expire, and extending clears any expiry the invitation was
+    /// carrying.
+    /// </para>
+    /// </remarks>
+    [RequireScope(TeamScopes.MemberManage)]
+    Task ExtendInvitationAsync(string teamKey, string inviteKey);
+
     [RequireScope(TeamScopes.MemberManage)]
     Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles);
 

@@ -32,6 +32,7 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     private readonly IScopeRegistry _scopeRegistry;
     private readonly ITeamPrincipalAccessor _principalAccessor;
     private readonly ConsentOptions _consent;
+    private readonly InvitationOptions _invitation;
     private readonly TeamGrantResolver _grants;
 
     public TeamManagementService(ITeamService inner)
@@ -65,13 +66,15 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
         IScopeRegistry scopeRegistry,
         ITeamPrincipalAccessor principalAccessor,
         ITenantRoleService tenantRoleService,
-        IOptions<ConsentOptions> consentOptions)
+        IOptions<ConsentOptions> consentOptions,
+        IOptions<InvitationOptions> invitationOptions = null)
     {
         _inner = inner;
         _userService = userService;
         _scopeRegistry = scopeRegistry;
         _principalAccessor = principalAccessor;
         _consent = consentOptions?.Value ?? new ConsentOptions();
+        _invitation = invitationOptions?.Value ?? new InvitationOptions();
         _grants = new TeamGrantResolver(inner, scopeRegistry, tenantRoleService);
     }
 
@@ -84,6 +87,7 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
         => _inner.SetMemberSuspendedAsync(teamKey, userKey, suspended);
 
     public Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel) => _inner.SetMemberRoleAsync(teamKey, userKey, accessLevel);
+    public Task ExtendInvitationAsync(string teamKey, string inviteKey) => _inner.ExtendInvitationAsync(teamKey, inviteKey);
     public Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles) => _inner.SetMemberTenantRolesAsync(teamKey, userKey, tenantRoles);
     public Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides) => _inner.SetMemberScopeOverridesAsync(teamKey, userKey, scopeOverrides);
     public Task SetMemberNameAsync(string teamKey, string userKey, string name) => _inner.SetMemberNameAsync(teamKey, userKey, name);
@@ -204,7 +208,15 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
         var alreadyMember = user != null &&
             team.Members.Any(x => x.Key == user.Key && x.Invitation == null);
 
-        return new TeamInvitation(team.Key, team.Name, invited.Invitation?.EMail, alreadyMember);
+        // Reported rather than hidden: the screen can say "expired" and offer to ask for a new one, instead
+        // of showing a join button that throws. Refusing the accept is TeamServiceBase's job, and both read
+        // the same rule from InvitationPolicy so they cannot disagree.
+        var expired = InvitationPolicy.HasExpired(invited.Invitation, _invitation.Lifetime, DateTime.UtcNow);
+
+        return new TeamInvitation(team.Key, team.Name, invited.Invitation?.EMail, alreadyMember)
+        {
+            Status = expired ? InvitationStatus.Expired : InvitationStatus.Open
+        };
     }
 
     /// <summary>

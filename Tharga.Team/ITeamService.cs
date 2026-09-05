@@ -93,6 +93,10 @@ public interface ITeamService
     Task SetMemberSuspendedAsync(string teamKey, string userKey, bool suspended)
         => throw new NotSupportedException(
             $"'{GetType().Name}' does not implement {nameof(SetMemberSuspendedAsync)}.");
+    /// <inheritdoc cref="ITeamManagementService.ExtendInvitationAsync"/>
+    Task ExtendInvitationAsync(string teamKey, string inviteKey)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(ExtendInvitationAsync)}.");
     Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles);
     Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides);
     Task SetMemberNameAsync(string teamKey, string userKey, string name);

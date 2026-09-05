@@ -205,6 +205,12 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
         await _inner.SetMemberSuspendedAsync(teamKey, userKey, suspended);
     }
 
+    public async Task ExtendInvitationAsync(string teamKey, string inviteKey)
+    {
+        await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
+        await _inner.ExtendInvitationAsync(teamKey, inviteKey);
+    }
+
     public async Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles)
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
