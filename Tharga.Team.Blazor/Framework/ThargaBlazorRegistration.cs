@@ -131,7 +131,20 @@ public static class ThargaBlazorRegistration
             if (o._memberType != null)
             {
                 var managementServiceType = typeof(TeamManagementService<>).MakeGenericType(o._memberType);
-                services.AddScoped(managementServiceType);
+
+                // Constructed explicitly rather than by container constructor selection. The gate needs the
+                // principal accessor and the tenant-role service to see consent and custom roles, but both
+                // are optional -- and the container picks the greediest constructor it can *fully* satisfy,
+                // so one unregistered dependency would silently select a lesser overload and quietly go back
+                // to refusing reads it should allow. GetService returns null for the absent ones instead.
+                services.AddScoped(managementServiceType, sp => Activator.CreateInstance(
+                    managementServiceType,
+                    sp.GetRequiredService<ITeamService>(),
+                    sp.GetService<IUserService>(),
+                    sp.GetService<IScopeRegistry>(),
+                    sp.GetService<ITeamPrincipalAccessor>(),
+                    sp.GetService<ITenantRoleService>(),
+                    sp.GetService<IOptions<ConsentOptions>>()));
 
                 // TryAdd, so a host substituting or decorating one facet keeps its own. That is the one
                 // legitimate reason this was ever left to the host, and it is answered here rather than

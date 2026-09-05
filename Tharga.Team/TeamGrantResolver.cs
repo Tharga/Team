@@ -1,7 +1,9 @@
 using System.Security.Claims;
-using Tharga.Team;
 
-namespace Tharga.Team.Service;
+// Namespace Tharga.Team rather than Tharga.Team.Service, which is where this used to live: both types are
+// internal, so nothing outside can name them, and every existing call site sits in a namespace nested under
+// this one and resolves them without a using.
+namespace Tharga.Team;
 
 /// <summary>
 /// What one caller may do in one team: membership if they have it, consent if they do not, and nothing
@@ -74,16 +76,7 @@ internal sealed class TeamGrantResolver
             ? null
             : await _teamService.GetTeamMemberAsync(teamKey, userKey);
 
-        if (member?.SuspendedAt != null) return null;
-
-        if (member != null)
-        {
-            var scopes = _tenantRoleService != null
-                ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, member.AccessLevel, member.TenantRoles, member.ScopeOverrides)
-                : _scopeRegistry?.GetEffectiveScopes(member.AccessLevel, member.TenantRoles, member.ScopeOverrides) ?? [];
-
-            return new TeamGrant(member.AccessLevel, [.. scopes], member.Key, IsMember: true);
-        }
+        if (member != null) return await ResolveFromMemberAsync(teamKey, member);
 
         // Not a member — the caller may still reach the team through a global role it consented to.
         var roles = principal?.Claims
@@ -102,5 +95,28 @@ internal sealed class TeamGrantResolver
         var consentScopes = _scopeRegistry?.GetEffectiveScopes(level, [], []) ?? [];
 
         return new TeamGrant(level, [.. consentScopes], MemberKey: null, IsMember: false);
+    }
+
+    /// <summary>
+    /// The membership half of <see cref="ResolveAsync"/>, for a caller who already holds the member — the
+    /// team-list filter reads it straight off the team it is deciding about. Null when
+    /// <paramref name="member"/> is null or suspended, matching what <see cref="ResolveAsync"/> answers.
+    /// </summary>
+    /// <remarks>
+    /// <b>Exists so the scope computation has one copy, not two.</b> The caller that has a member in hand
+    /// would otherwise recompute effective scopes itself and drift — which is exactly how the gate on
+    /// <c>ITeamManagementService</c>'s reads came to ignore tenant roles and consent alike
+    /// (Tharga/Team#248). Refetching the member instead would answer correctly but turn one list into one
+    /// query per team.
+    /// </remarks>
+    public async Task<TeamGrant> ResolveFromMemberAsync(string teamKey, ITeamMember member)
+    {
+        if (member == null || member.SuspendedAt != null) return null;
+
+        var scopes = _tenantRoleService != null
+            ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, member.AccessLevel, member.TenantRoles, member.ScopeOverrides)
+            : _scopeRegistry?.GetEffectiveScopes(member.AccessLevel, member.TenantRoles, member.ScopeOverrides) ?? [];
+
+        return new TeamGrant(member.AccessLevel, [.. scopes], member.Key, IsMember: true);
     }
 }
