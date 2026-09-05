@@ -219,6 +219,39 @@ To persist any of it, declare the properties on your entity (`DisabledAt`/`Disab
 `SuspendedAt`/`SuspendedBy` on the member) and implement the matching hook. Both are opt-in by shape, as
 `Icon` and `LastSeen` are. See [Suspending instead of deleting](docs/articles/user-management.md#suspending-instead-of-deleting).
 
+## Invitations
+
+An invitation link carries a short opaque token and nothing else:
+
+```
+https://your-host/invitation?tic=84Fb6G_8BbXE
+```
+
+**Changed in 3.20.** Links used to carry base64 of `{"TeamKey":…,"Code":…}` — an encoding, not encryption, so
+the team key was readable by any mail relay, helpdesk ticket or forwarded message the link passed through. It
+is no longer in the link at all. Links already sent keep working; only new ones use the short form.
+
+Invitations can expire, off by default because they never used to:
+
+```csharp
+builder.Services.Configure<InvitationOptions>(o => o.Lifetime = TimeSpan.FromDays(14));
+```
+
+An expired invitation is refused at acceptance and reported as *expired* rather than as an invalid code —
+the difference between asking for a new link and retrying something that will never work.
+
+**Extending one keeps its code**, which is the point: someone who has already mailed a link can give it more
+time without the recipient's link dying. Re-inviting the same address does the same thing rather than issuing
+a second live code for one seat.
+
+```csharp
+await teamManagementService.ExtendInvitationAsync(teamKey, inviteKey);
+```
+
+A host with its own team store implements one method to resolve a token without its team, and one to move an
+expiry. Skip the first and links naming their team still work; see
+[the implementation guide](docs/articles/implementation-guide.md#what-an-invitation-link-looks-like).
+
 ## Advanced Usage
 
 Individual `Add*` methods remain available for partial/custom setups. See the **[Implementation Guide](docs/articles/implementation-guide.md)** for step-by-step instructions.

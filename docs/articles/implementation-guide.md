@@ -986,7 +986,7 @@ public class MyTeamService : TeamServiceRepositoryBase<TeamEntity, TeamMember>
 }
 ```
 
-> **Auto-generated fields:** When `CreateTeamMember` returns a member without `Invitation`, the base class auto-generates it using the model's email, a new GUID invite key, and the current timestamp. Similarly, `State` defaults to `MembershipState.Invited` if not set. You can still set these explicitly if you need custom behavior.
+> **Auto-generated fields:** When `CreateTeamMember` returns a member without `Invitation`, the base class auto-generates it using the model's email, a new invite token, and the current timestamp — plus an expiry when an invitation lifetime is configured. Similarly, `State` defaults to `MembershipState.Invited` if not set. You can still set these explicitly if you need custom behavior.
 
 ### _Imports.razor
 
@@ -1428,6 +1428,59 @@ can rewrite what an administrator copies to the clipboard. Unset, links point at
 
 The route name is yours; `/invitation` above is only an example, and worth checking against whatever your
 own stack already serves.
+
+### What an invitation link looks like
+
+```
+https://your-host/invitation?tic=84Fb6G_8BbXE
+```
+
+A twelve-character opaque token and nothing else. The store resolves it to its team.
+
+> **Changed in 3.20.** Links used to carry `?TeamInviteCode=` holding base64 of `{"TeamKey":…,"Code":…}`.
+> Base64 is an encoding, not encryption, so **the team key was readable by anything the link passed through** —
+> a mail relay, a helpdesk ticket, a forwarded message. The team key is no longer in the link at all.
+>
+> **Links already sent keep working.** The old parameter and payload are still accepted, so invitations
+> sitting unopened in an inbox are unaffected. Only newly generated links use the short form.
+
+**A host with its own team store gets this only if it can look an invitation up without its team.** That is
+one method — `TeamServiceBase.GetTeamKeyByInviteKeyInternalAsync` — and if you do not implement it, nothing
+breaks: links that name their team still resolve, and the short form simply does not. The MongoDB store
+implements it, backed by an index on the invitation code.
+
+### Invitations that expire
+
+Off by default — invitations have never expired, and applying a lifetime on upgrade would silently invalidate
+every one already outstanding.
+
+```csharp
+builder.Services.Configure<InvitationOptions>(o => o.Lifetime = TimeSpan.FromDays(14));
+```
+
+With a lifetime set, an invitation older than it is **refused at acceptance** and reported as *expired* rather
+than as an invalid code — the distinction between "ask for a new link" and retrying something that will never
+work. A code that is malformed or unknown still resolves to nothing, indistinguishably, because that answer
+goes to someone who guessed.
+
+**Extending keeps the same code:**
+
+```csharp
+await teamManagementService.ExtendInvitationAsync(teamKey, inviteKey);
+```
+
+That is the point of it. Someone who has already mailed a link can give it another fortnight without the
+recipient's link dying, because the expiry lives on the invitation record rather than being derived from when
+it was created. **Re-inviting an address that already has an outstanding invitation does the same thing** —
+it renews rather than issuing a second live code for one seat, and applies any changed access level or name.
+
+Two things a host with its own store should know:
+
+- **Extending needs `TeamServiceBase.SetTeamMemberInvitationExpiryAsync`.** Unlike the lookup above this one
+  throws rather than no-opping: a store that silently discarded an extension would report success for an
+  invitation that stays expired, and the operator would find out from the person who could not accept it.
+- **Forward `InvitationOptions` from your own service's constructor**, the same as `ITeamCache`. Left
+  unforwarded, the base receives defaults and invitations never expire however the host configured them.
 
 ### Sending the invitation email
 

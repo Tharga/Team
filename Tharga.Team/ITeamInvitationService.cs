@@ -10,7 +10,51 @@ namespace Tharga.Team;
 /// True when the caller is already an accepted member of this team, so the screen can say so instead of
 /// offering to join twice.
 /// </param>
-public sealed record TeamInvitation(string TeamKey, string TeamName, string EMail, bool AlreadyMember);
+public sealed record TeamInvitation(string TeamKey, string TeamName, string EMail, bool AlreadyMember)
+{
+    /// <summary>
+    /// Whether the invitation can still be accepted.
+    /// </summary>
+    /// <remarks>
+    /// <b>An init-only property rather than a fifth positional parameter</b>, so a host that constructs or
+    /// deconstructs this record keeps compiling.
+    /// <para>
+    /// <b>Reporting expiry discloses nothing.</b> The caller reached this by presenting a code that resolved,
+    /// so they already hold a real invitation and are being shown the team's name beside it. Telling them it
+    /// expired is the difference between "ask for a new link" and retrying a code that will never work. A code
+    /// that is malformed or unknown still resolves to <c>null</c>, indistinguishably, because that answer
+    /// would be given to someone who guessed.
+    /// </para>
+    /// </remarks>
+    public InvitationStatus Status { get; init; } = InvitationStatus.Open;
+
+    /// <summary>
+    /// The code to hand back when accepting or declining.
+    /// </summary>
+    /// <remarks>
+    /// <b>Here so the acceptance screen never has to decode the link itself.</b> It used to unpack the
+    /// base64 payload a second time to find the code, which made the link format something two places knew
+    /// about — and the second place would have broken the moment the format changed. Resolving already
+    /// produces the code, so handing it back costs nothing.
+    /// <para>
+    /// Discloses nothing: the caller presented this code to get here.
+    /// </para>
+    /// </remarks>
+    public string InviteKey { get; init; }
+}
+
+/// <summary>Whether an invitation is still acceptable.</summary>
+public enum InvitationStatus
+{
+    /// <summary>Acceptable now.</summary>
+    Open,
+
+    /// <summary>
+    /// Real, but its time has passed. Accepting is refused; the invitation can be extended, which keeps the
+    /// same code so an already-mailed link starts working again.
+    /// </summary>
+    Expired
+}
 
 /// <summary>
 /// Resolves an invite code to the invitation it names — <b>the interface an invitation screen should

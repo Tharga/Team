@@ -102,6 +102,44 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         await _collection.UpdateOneAsync(filter, update);
     }
 
+    /// <remarks>
+    /// <b>Two matches resolve to null rather than to the first.</b> The code is a bearer credential, so
+    /// picking one of two teams would admit somebody to a team nobody invited them to. Collisions should be
+    /// impossible at 72 bits — this is what makes "should be" safe to rely on.
+    /// </remarks>
+    public async Task<TTeamEntity> GetByInviteKeyAsync(string inviteKey)
+    {
+        if (string.IsNullOrWhiteSpace(inviteKey)) return null;
+
+        var matches = await _collection
+            .GetAsync(x => x.DeletedAt == null && x.Members.Any(y => y.Invitation.InviteKey == inviteKey))
+            .Take(2)
+            .ToArrayAsync();
+
+        return matches.Length == 1 ? matches[0] : null;
+    }
+
+    public async Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
+    {
+        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
+
+        var target = team?.Members.PickOneOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey, _logger, teamKey, inviteKey);
+        if (target == null) return;
+
+        // The invitation is replaced whole rather than the expiry set in place, because Invitation is a
+        // record with required members -- and InviteKey is copied across unchanged, which is the property
+        // that makes an already-mailed link survive an extension.
+        var updated = target with { Invitation = target.Invitation with { ExpiresAt = expiresAt } };
+        var members = team.Members.ReplaceByReference(target, updated);
+
+        var filter = new FilterDefinitionBuilder<TTeamEntity>()
+            .Eq(x => x.Key, teamKey);
+        var update = new UpdateDefinitionBuilder<TTeamEntity>()
+            .Set(x => x.Members, members);
+
+        await _collection.UpdateOneAsync(filter, update);
+    }
+
     public async Task SetMemberSuspendedAsync(string teamKey, string userKey, DateTime? suspendedAt, string suspendedBy)
     {
         var team = await _collection.GetOneAsync(x => x.Key == teamKey);

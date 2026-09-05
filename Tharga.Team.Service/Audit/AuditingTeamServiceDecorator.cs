@@ -297,6 +297,28 @@ public class AuditingTeamServiceDecorator : ITeamService
         }
     }
 
+    /// <remarks>
+    /// Audited because it moves the window in which a link somebody already holds can be used. The invite key
+    /// is deliberately <b>not</b> recorded: it is the bearer credential, and an audit trail is read by more
+    /// people than may accept an invitation.
+    /// </remarks>
+    public async Task ExtendInvitationAsync(string teamKey, string inviteKey)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await _inner.ExtendInvitationAsync(teamKey, inviteKey);
+            sw.Stop();
+            Log("extend-invitation", nameof(ExtendInvitationAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("extend-invitation", nameof(ExtendInvitationAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            throw;
+        }
+    }
+
     public async Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
     {
         var previous = await TryGetMemberAsync(teamKey, userKey);

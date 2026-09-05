@@ -27,6 +27,16 @@ internal class TeamRepositoryCollection<TTeamEntity, TMember> : DiskRepositoryCo
         new(Builders<TTeamEntity>.IndexKeys.Combine(
             Builders<TTeamEntity>.IndexKeys.Ascending(x => x.Id),
             Builders<TTeamEntity>.IndexKeys.Ascending("Members.Key")
-        ), new CreateIndexOptions { Unique = true, Name = "UniqueTeamMemberKey" })
+        ), new CreateIndexOptions { Unique = true, Name = "UniqueTeamMemberKey" }),
+        // Resolves a short invitation token to its team, so the link no longer has to carry the team key.
+        //
+        // Deliberately NOT unique. Most members carry no invitation, so their array entries index as null,
+        // and a unique multikey index enforces across documents -- the second team holding a member without
+        // an invitation would collide with the first and fail to save. partialFilterExpression does not
+        // rescue it either: it filters whole documents, so a team with both invited and ordinary members
+        // still indexes the nulls. Uniqueness comes from 72 bits of entropy instead, and the repository
+        // refuses an ambiguous match rather than choosing.
+        new(Builders<TTeamEntity>.IndexKeys.Ascending("Members.Invitation.InviteKey"),
+            new CreateIndexOptions { Name = "TeamMemberInviteKey" })
     ];
 }

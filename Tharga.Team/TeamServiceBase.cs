@@ -10,6 +10,7 @@ public abstract class TeamServiceBase : ITeamService
     private readonly IIconStore _iconStore;
     private readonly ITeamCache _cache;
     private readonly TeamDeleteMode _configuredDeleteMode;
+    private readonly InvitationOptions _invitationOptions;
 
     /// <param name="userService">Resolves the calling user.</param>
     /// <param name="logger">Optional. Used to report ambiguous member matches.</param>
@@ -26,13 +27,15 @@ public abstract class TeamServiceBase : ITeamService
         ILogger<TeamServiceBase> logger = null,
         IIconStore iconStore = null,
         ITeamCache cache = null,
-        TeamDeleteMode deleteMode = TeamDeleteMode.Soft)
+        TeamDeleteMode deleteMode = TeamDeleteMode.Soft,
+        InvitationOptions invitationOptions = null)
     {
         _userService = userService;
         _logger = logger;
         _iconStore = iconStore;
         _cache = cache ?? InMemoryTeamCache.Shared;
         _configuredDeleteMode = deleteMode;
+        _invitationOptions = invitationOptions ?? new InvitationOptions();
     }
 
     /// <summary>
@@ -383,8 +386,48 @@ public abstract class TeamServiceBase : ITeamService
         }
     }
 
+    /// <summary>
+    /// Invites someone, or <b>renews the invitation they already have</b>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Re-inviting an address that already has an outstanding invitation keeps its code.</b> It used to
+    /// add a second member row carrying a second live code for one person, which is two working links to the
+    /// same seat and one of them impossible to withdraw. Renewing instead means someone who has already
+    /// mailed a link can give it more time without the recipient's link dying — the requirement behind
+    /// Tharga/Team#249.
+    /// <para>
+    /// <b>Changed details are still applied.</b> An invitation renewed with a different access level or name
+    /// takes them, because an administrator who re-invites at a different level plainly means the new one;
+    /// silently keeping the old level would be the more surprising reading of the same click.
+    /// </para>
+    /// <para>
+    /// The expiry is only moved when a <see cref="InvitationOptions.Lifetime"/> is configured. Without one
+    /// invitations do not expire, so there is nothing to extend and a store that has not implemented the
+    /// expiry seam is not asked to.
+    /// </para>
+    /// </remarks>
     public async Task AddMemberAsync(string teamKey, InviteUserModel model)
     {
+        var outstanding = string.IsNullOrWhiteSpace(model?.Email)
+            ? null
+            : await GetMembersAsync(teamKey).FirstOrDefaultAsync(x =>
+                x.Invitation != null &&
+                string.Equals(x.Invitation.EMail, model.Email, StringComparison.OrdinalIgnoreCase));
+
+        if (outstanding != null)
+        {
+            if (outstanding.AccessLevel != model.AccessLevel)
+                await SetTeamMemberRoleAsync(teamKey, outstanding.Key, model.AccessLevel);
+
+            if (!string.IsNullOrWhiteSpace(model.Name) && !string.Equals(model.Name, outstanding.Name, StringComparison.Ordinal))
+                await SetTeamMemberNameAsync(teamKey, outstanding.Key, model.Name);
+
+            if (_invitationOptions.Lifetime != null)
+                await ExtendInvitationAsync(teamKey, outstanding.Invitation.InviteKey);
+
+            return;
+        }
+
         await AddTeamMemberAsync(teamKey, model);
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
@@ -488,6 +531,30 @@ public abstract class TeamServiceBase : ITeamService
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
 
+    /// <inheritdoc />
+    public Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey)
+    {
+        return string.IsNullOrWhiteSpace(inviteKey)
+            ? Task.FromResult<string>(null)
+            : GetTeamKeyByInviteKeyInternalAsync(inviteKey);
+    }
+
+    /// <inheritdoc />
+    public async Task ExtendInvitationAsync(string teamKey, string inviteKey)
+    {
+        var invitation = await GetInvitationInternalAsync(teamKey, inviteKey);
+        if (invitation == null)
+            throw new InvalidOperationException($"No outstanding invitation matches that code on team '{teamKey}'.");
+
+        // Null lifetime means invitations do not expire, so extending clears whatever expiry the record was
+        // carrying rather than inventing one. The code is untouched either way -- that is the whole point.
+        var expiresAt = _invitationOptions.Lifetime == null
+            ? (DateTime?)null
+            : DateTime.UtcNow + _invitationOptions.Lifetime.Value;
+
+        await SetTeamMemberInvitationExpiryAsync(teamKey, inviteKey, expiresAt);
+    }
+
     public async Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles)
     {
         await SetTeamMemberTenantRolesAsync(teamKey, userKey, tenantRoles);
@@ -513,6 +580,17 @@ public abstract class TeamServiceBase : ITeamService
     {
         if (accept)
         {
+            // Enforced here rather than at the surface that reads the invitation, because this is where both
+            // paths meet: ITeamManagementService delegates to ITeamService, and a host calling ITeamService
+            // directly reaches the same method. A check on the screen would decorate one of the two.
+            //
+            // Declining is deliberately still allowed once expired -- refusing it would leave the row behind
+            // with no way for the invitee to clear it, and declining grants nothing.
+            var invitation = await GetInvitationInternalAsync(teamKey, inviteKey);
+            if (InvitationPolicy.HasExpired(invitation, _invitationOptions.Lifetime, DateTime.UtcNow))
+                throw new InvalidOperationException(
+                    $"The invitation to team '{teamKey}' expired on {InvitationPolicy.ExpiresAt(invitation, _invitationOptions.Lifetime):u}.");
+
             // Capture the admin-entered Member.Name *before* the accept clears it, so we can
             // promote it to User.Name (only-if-empty) once the response has been recorded.
             var seedName = await GetInvitedMemberNameAsync(teamKey, inviteKey);
@@ -546,6 +624,57 @@ public abstract class TeamServiceBase : ITeamService
     {
         return Task.FromResult<string>(null);
     }
+
+    /// <summary>
+    /// The outstanding invitation matching <paramref name="inviteKey"/> on <paramref name="teamKey"/>, or
+    /// null. Backs expiry enforcement.
+    /// </summary>
+    /// <remarks>
+    /// <b>Virtual rather than abstract</b>, like the other members added after the seam was first drawn, so a
+    /// host with its own store keeps compiling. The default returns null, which reads as "no expiry to
+    /// enforce".
+    /// <para>
+    /// <b>That default is a hole if a lifetime is configured and this is not overridden</b> — expiry would
+    /// silently not apply. It is a startup check rather than a silent default for exactly that reason: see
+    /// <c>InvitationExpiryWiringCheck</c>, which fails the boot naming this method when
+    /// <see cref="InvitationOptions.Lifetime"/> is set and the store cannot answer it. Nothing is asked of a
+    /// host that has not opted into expiry.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// Backs <see cref="GetTeamKeyByInviteKeyAsync"/>. Null when nothing matches, when more than one team
+    /// matches, or when this store cannot look an invitation up without its team.
+    /// </summary>
+    /// <remarks>
+    /// <b>Virtual, and null is a legitimate answer</b> — unlike the expiry seam, which throws. A store that
+    /// cannot answer this loses nothing it had: links minted before this existed carry their team key and
+    /// still resolve. Only the short link form needs it, so degrading is the correct behaviour rather than a
+    /// hidden failure.
+    /// </remarks>
+    protected virtual Task<string> GetTeamKeyByInviteKeyInternalAsync(string inviteKey)
+    {
+        return Task.FromResult<string>(null);
+    }
+
+    protected virtual Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
+    {
+        return Task.FromResult<Invitation>(null);
+    }
+
+    /// <summary>
+    /// Moves the expiry of the invitation matching <paramref name="inviteKey"/>, leaving its code alone.
+    /// </summary>
+    /// <remarks>
+    /// <b>Throws rather than no-opping when unimplemented</b>, unlike
+    /// <see cref="GetInvitationInternalAsync"/>. The difference is what silence would mean: a store that
+    /// cannot read an expiry has nothing to enforce, but a store that silently discards an extension reports
+    /// success for an invitation that stays expired, and the operator finds out from the person who could
+    /// not accept it.
+    /// </remarks>
+    protected virtual Task SetTeamMemberInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetTeamMemberInvitationExpiryAsync)}. Implement " +
+            $"it to support extending an invitation.");
 
     public async Task SetMemberLastSeenAsync(string teamKey)
     {
