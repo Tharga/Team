@@ -18,11 +18,26 @@ namespace Tharga.Team;
 /// </remarks>
 public static class InviteToken
 {
-    /// <summary>128 bits. Enough that two tokens colliding is not a case worth designing for.</summary>
-    public const int ByteCount = 16;
+    /// <summary>
+    /// Nine bytes — 72 bits, and twelve base64url characters with no padding to strip.
+    /// </summary>
+    /// <remarks>
+    /// <b>Chosen against the attack rather than by rounding to a familiar number.</b> The realistic attack is
+    /// online guessing against the whole pool of outstanding invitations at once, not against one code: any
+    /// hit joins a team, and resolving tells the caller which team, so a hit announces itself. At 72 bits,
+    /// a hundred thousand distinct sources guessing continuously against a pool of a thousand live
+    /// invitations reach even odds in roughly six million years.
+    /// <para>
+    /// Shorter was considered and rejected with numbers. At 36 bits — six characters — the same attack
+    /// succeeds in under an hour, and rate limiting does not rescue it: a per-source throttle is strong
+    /// against one attacker and close to worthless against a distributed one. The saving was ten characters
+    /// of a link whose host and path are most of its length.
+    /// </para>
+    /// </remarks>
+    public const int ByteCount = 9;
 
     /// <summary>Length of the generated token, in characters.</summary>
-    public const int Length = 22;
+    public const int Length = 12;
 
     /// <summary>A new token.</summary>
     public static string New()

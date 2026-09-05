@@ -30,9 +30,9 @@ storage-reachability problem wearing a link-format costume.
 - **A new semantic method on the storage seam** — resolve a team by an outstanding invite key. `TeamServiceBase`
   is where the seam lives (architecture-v4 names its abstract methods as the thing a future `Team.Sql` would
   implement), so this belongs there.
-- **A short opaque token** as the new `InviteKey` format: 16 cryptographically random bytes, base64url, 22
-  characters. Full 128-bit entropy — the token *is* the bearer credential, so it is generated with
-  `RandomNumberGenerator`, never `Guid.NewGuid()`.
+- **A short opaque token** as the new `InviteKey` format: 9 cryptographically random bytes, base64url, 12
+  characters. The token *is* the bearer credential, so it is generated with `RandomNumberGenerator`, never
+  `Guid.NewGuid()` — which carries 122 bits and promises uniqueness rather than unpredictability.
 - **A shorter query parameter**, `tic`, replacing `TeamInviteCode`.
 - **`Invitation.ExpiresAt`**, optional, and an `InvitationOptions.Lifetime` to default it from.
 - **An extend operation** that moves the expiry on the existing record, keeping the code.
@@ -41,7 +41,7 @@ storage-reachability problem wearing a link-format costume.
 ## Explicitly not in scope
 
 - **A separate invitation collection.** It would make the token addressable in its own right and make
-  uniqueness structural — but it is a second store, a migration, and a new port, for a problem 128 bits of
+  uniqueness structural — but it is a second store, a migration, and a new port, for a problem 72 bits of
   entropy already answers. See the uniqueness decision below.
 - **Rotating or revoking a token** beyond what removing the member already does.
 - **Anything about who may extend** beyond the scope that already authorizes inviting (`member:manage`).
@@ -59,7 +59,7 @@ answers this — `GetAllTeamsInternalAsync`, `SoftDeleteTeamAsync` and `SetTeamM
 their array entries index as null; uniqueness is enforced *across* documents, so the second team containing a
 non-invited member collides with the first. `partialFilterExpression` does not save it — the filter is
 evaluated per document, not per array element, so a team with both invited and non-invited members still
-indexes the nulls. So: a plain index for the lookup, uniqueness from 128 bits of entropy, and **a resolve that
+indexes the nulls. So: a plain index for the lookup, uniqueness from 72 bits of entropy, and **a resolve that
 returns null if it somehow matches more than one team** — ambiguity refuses rather than guesses.
 
 **3. `ExpiresAt` is optional, and it has to be.** `Invitation`'s three members are all `required`, and hosts
@@ -78,7 +78,7 @@ minted links are short.
 
 ## Acceptance criteria
 
-1. A newly created invitation produces a link of the form `?tic=<22 chars>` containing no team key.
+1. A newly created invitation produces a link of the form `?tic=<12 chars>` containing no team key.
 2. That token resolves to the correct team through `GetInvitationAsync` with no team key supplied.
 3. A token that matches no team, is malformed, or matches more than one, all return null — indistinguishably.
 4. **An invitation link created before this change still resolves**, unchanged.
@@ -94,6 +94,30 @@ minted links are short.
 ## Done condition
 
 All ten met, `docs/` and `README.md` reviewed, #249 commented and closed with evidence, records swept.
+
+## Token length — asked, argued, decided (2026-09-05)
+
+**Six characters was the ask. It was rejected on the numbers, and the numbers are worth keeping.**
+
+The realistic attack is online guessing against the *whole pool* of outstanding invitations rather than one
+code: any hit joins a team, and the resolve names the team on a hit, so a success announces itself. At 36 bits
+with a thousand live invitations, a distributed guess reaches even odds in **under an hour** at a hundred
+thousand sources; even a single source at 1000 requests a second gets there in about thirteen hours. The pool
+also only grows, because invitations do not expire by default.
+
+**Rate limiting was considered as a substitute and does not work as one.** There is no HTTP endpoint to limit
+— `TeamInviteView` resolves in-process over the Blazor circuit — so it would have to be a service-level
+throttle with shared cross-instance state. Even then a per-source limit is strong against one attacker and
+close to worthless against a distributed one: the same 36-bit attack still succeeds in 48 minutes from a
+hundred thousand addresses.
+
+**12 characters (72 bits) was the settled answer.** The same attack takes about six million years, and the
+whole link goes from 63 to 53 characters — two-thirds of the available saving, since the host and path are
+most of the length. Going to six would have saved a further six characters of a 47-character link.
+
+**A service-level throttle is still worth building, as defence in depth rather than instead of entropy** —
+it would also slow enumeration of the GUID codes still in circulation, and `AuditEventType.RateLimit` already
+exists for it. Not in this feature.
 
 ## The thing most likely to go wrong
 

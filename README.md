@@ -224,7 +224,7 @@ To persist any of it, declare the properties on your entity (`DisabledAt`/`Disab
 An invitation link carries a short opaque token and nothing else:
 
 ```
-https://your-host/invitation?tic=Zm9vYmFyYmF6cXV4MTIzNA
+https://your-host/invitation?tic=84Fb6G_8BbXE
 ```
 
 **Changed in 3.20.** Links used to carry base64 of `{"TeamKey":…,"Code":…}` — an encoding, not encryption, so

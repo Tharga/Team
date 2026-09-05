@@ -13,7 +13,7 @@ namespace Tharga.Team.MongoDB.Tests;
 /// first and fails to save. <c>partialFilterExpression</c> does not rescue it: it selects whole documents, so
 /// a team holding both invited and ordinary members still indexes the nulls.
 /// <para>
-/// Uniqueness comes from the token instead — 128 bits from a cryptographic source — and
+/// Uniqueness comes from the token instead — 72 bits from a cryptographic source — and
 /// <c>TeamRepository.GetByInviteKeyAsync</c> refuses an ambiguous match rather than choosing between teams.
 /// </para>
 /// <para>

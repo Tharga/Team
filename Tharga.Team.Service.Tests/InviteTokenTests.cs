@@ -83,10 +83,18 @@ public class InviteTokenTests
             "System.Random is not an acceptable substitute however similar the output looks.");
     }
 
-    /// <summary>128 bits. Stated as a test so shortening the token becomes a deliberate act.</summary>
+    /// <summary>
+    /// 72 bits. Stated as a test so shortening the token is a deliberate act with an argument behind it.
+    /// </summary>
+    /// <remarks>
+    /// Six characters was asked for and rejected on the numbers: 36 bits falls to a distributed online guess
+    /// in under an hour against a pool of a thousand live invitations, and per-source rate limiting does not
+    /// close that. See the remarks on <see cref="InviteToken.ByteCount"/>.
+    /// </remarks>
     [Fact]
-    public void Token_Carries128Bits()
+    public void Token_Carries72Bits()
     {
-        Assert.Equal(16, InviteToken.ByteCount);
+        Assert.Equal(9, InviteToken.ByteCount);
+        Assert.Equal(12, InviteToken.Length);
     }
 }

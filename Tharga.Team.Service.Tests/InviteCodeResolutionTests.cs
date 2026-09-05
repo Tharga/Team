@@ -19,7 +19,7 @@ namespace Tharga.Team.Service.Tests;
 public class InviteCodeResolutionTests
 {
     private const string TeamKey = "team-1";
-    private const string Token = "Zm9vYmFyYmF6cXV4MTIzNA";
+    private const string Token = "84Fb6G_8BbXE";
     private const string EMail = "invitee@example.com";
 
     private sealed record FakeMember(string Key, AccessLevel AccessLevel, Invitation Invitation) : ITeamMember

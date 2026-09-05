@@ -105,7 +105,7 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
     /// <remarks>
     /// <b>Two matches resolve to null rather than to the first.</b> The code is a bearer credential, so
     /// picking one of two teams would admit somebody to a team nobody invited them to. Collisions should be
-    /// impossible at 128 bits — this is what makes "should be" safe to rely on.
+    /// impossible at 72 bits — this is what makes "should be" safe to rely on.
     /// </remarks>
     public async Task<TTeamEntity> GetByInviteKeyAsync(string inviteKey)
     {

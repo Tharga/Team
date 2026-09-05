@@ -1432,10 +1432,10 @@ own stack already serves.
 ### What an invitation link looks like
 
 ```
-https://your-host/invitation?tic=Zm9vYmFyYmF6cXV4MTIzNA
+https://your-host/invitation?tic=84Fb6G_8BbXE
 ```
 
-A twenty-two character opaque token and nothing else. The store resolves it to its team.
+A twelve-character opaque token and nothing else. The store resolves it to its team.
 
 > **Changed in 3.20.** Links used to carry `?TeamInviteCode=` holding base64 of `{"TeamKey":…,"Code":…}`.
 > Base64 is an encoding, not encryption, so **the team key was readable by anything the link passed through** —

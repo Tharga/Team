@@ -36,7 +36,7 @@ and reviewable rather than stuck behind it.
 
 ## Part 1 — the short token
 
-- [x] **7. Token generation.** 16 bytes from `RandomNumberGenerator`, base64url, 22 chars. Assert the source is
+- [x] **7. Token generation.** 9 bytes from `RandomNumberGenerator`, base64url, 12 chars (user's call, 2026-09-05: 6 was asked for and rejected on the numbers -- see feature.md). Assert the source is
   cryptographic, not that the output "looks random" — a test that only checks length and alphabet passes just
   as happily for `Guid.NewGuid().ToString("N")[..22]`, which is the mistake worth guarding against.
 - [x] **8. The seam method** on `TeamServiceBase` — resolve a team by an outstanding invite key. **`virtual`,
