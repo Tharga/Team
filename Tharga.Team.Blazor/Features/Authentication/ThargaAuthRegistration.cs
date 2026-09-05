@@ -17,6 +17,15 @@ namespace Tharga.Team.Blazor.Features.Authentication;
 public static class ThargaAuthRegistration
 {
     private const string AzureAdSectionName = "AzureAd";
+    private const string HomePath = "/";
+
+    /// <summary>
+    /// The key the OpenID Connect handler reads a prompt from, and the value that asks for an account
+    /// picker. Both are protocol constants rather than names of ours.
+    /// </summary>
+    private const string PromptParameterName = "prompt";
+    private const string SelectAccountPrompt = "select_account";
+
     private const string MissingConfigMessage =
         $"Missing '{AzureAdSectionName}' configuration section. " +
         "Add an AzureAd section to appsettings.json with Authority, ClientId, TenantId, and CallbackPath. " +
@@ -93,15 +102,34 @@ public static class ThargaAuthRegistration
 
         app.MapGet(options.LoginPath, async (HttpContext context) =>
         {
-            await context.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme,
-                new AuthenticationProperties { RedirectUri = "/" });
+            var properties = new AuthenticationProperties { RedirectUri = HomePath };
+
+            // The handler reads the prompt out of Items and removes it before building the request; there is
+            // no property on the challenge itself to set.
+            if (options.PromptForAccount) properties.Items[PromptParameterName] = SelectAccountPrompt;
+
+            await context.ChallengeAsync(OpenIdConnectDefaults.AuthenticationScheme, properties);
         });
 
         app.MapGet(options.LogoutPath, async (HttpContext context) =>
         {
-            await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme);
+            if (!options.FederatedSignOut)
+            {
+                await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme);
+                await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+                context.Response.Redirect(HomePath);
+                return;
+            }
+
+            // Order is the fix, not a tidy-up. Signing out of the OpenID Connect scheme does not end anything
+            // in process: it writes the provider's end_session_endpoint into the response's Location header
+            // and relies on the browser going there. So it has to run last and own the response -- writing a
+            // redirect after it replaces that header, the browser never reaches the provider, and the
+            // provider's session outlives a sign-out the application has already reported as done.
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            context.Response.Redirect("/");
+            await context.SignOutAsync(
+                OpenIdConnectDefaults.AuthenticationScheme,
+                new AuthenticationProperties { RedirectUri = HomePath });
         });
     }
 }
