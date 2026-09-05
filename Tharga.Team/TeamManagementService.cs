@@ -186,22 +186,14 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     {
         if (string.IsNullOrWhiteSpace(inviteCode)) return null;
 
-        InviteModel invite;
-        try
-        {
-            invite = JsonSerializer.Deserialize<InviteModel>(Convert.FromBase64String(inviteCode));
-        }
-        catch
-        {
-            // Malformed, unknown and already-used are one answer to the caller — distinguishing them
-            // would confirm whether a team exists to someone who only has a link.
-            return null;
-        }
+        var (teamKey, inviteKey) = await ResolveCodeAsync(inviteCode);
 
-        if (invite == null || string.IsNullOrEmpty(invite.TeamKey)) return null;
+        // Malformed, unknown and already-used are one answer to the caller — distinguishing them
+        // would confirm whether a team exists to someone who only has a link.
+        if (teamKey == null || inviteKey == null) return null;
 
-        var team = await _inner.GetTeamAsync<TMember>(invite.TeamKey);
-        var invited = team?.Members?.FirstOrDefault(x => x.Invitation?.InviteKey == invite.Code);
+        var team = await _inner.GetTeamAsync<TMember>(teamKey);
+        var invited = team?.Members?.FirstOrDefault(x => x.Invitation?.InviteKey == inviteKey);
         if (invited == null) return null;
 
         var user = _userService == null ? null : await _userService.GetCurrentUserAsync();
@@ -215,8 +207,42 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
 
         return new TeamInvitation(team.Key, team.Name, invited.Invitation?.EMail, alreadyMember)
         {
-            Status = expired ? InvitationStatus.Expired : InvitationStatus.Open
+            Status = expired ? InvitationStatus.Expired : InvitationStatus.Open,
+            InviteKey = inviteKey
         };
+    }
+
+    /// <summary>
+    /// The team and code an invitation link names, whichever form the link takes.
+    /// </summary>
+    /// <remarks>
+    /// <b>Two formats, and both have to keep working.</b> Links minted from 3.20 carry a short opaque token
+    /// and nothing else, resolved through the store. Links minted before that carry base64
+    /// <c>{TeamKey, Code}</c> — and are sitting in inboxes right now, so dropping support for them would
+    /// invalidate every invitation already sent.
+    /// <para>
+    /// The older form is tried first because it is self-describing: it either parses into a model naming a
+    /// team or it does not. A short token is not valid base64 JSON, so it falls through to the store lookup.
+    /// Anything else — a guess, a truncated link — resolves to nothing by both routes, which is the same
+    /// answer either way.
+    /// </para>
+    /// </remarks>
+    private async Task<(string TeamKey, string InviteKey)> ResolveCodeAsync(string inviteCode)
+    {
+        try
+        {
+            var invite = JsonSerializer.Deserialize<InviteModel>(Convert.FromBase64String(inviteCode));
+            if (invite != null && !string.IsNullOrEmpty(invite.TeamKey) && !string.IsNullOrEmpty(invite.Code))
+                return (invite.TeamKey, invite.Code);
+        }
+        catch
+        {
+            // Not the older format. That is not an error — it is the common case now.
+        }
+
+        var teamKey = await _inner.GetTeamKeyByInviteKeyAsync(inviteCode);
+
+        return (teamKey, teamKey == null ? null : inviteCode);
     }
 
     /// <summary>

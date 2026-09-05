@@ -32,6 +32,12 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     /// of use rather than as an extension that quietly did nothing.
     /// </remarks>
     Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt) => Task.CompletedTask;
+
+    /// <summary>
+    /// The single live team holding an outstanding invitation with this code, or null when none or more than
+    /// one does. Backed by the <c>Members.Invitation.InviteKey</c> index.
+    /// </summary>
+    Task<TTeamEntity> GetByInviteKeyAsync(string inviteKey) => Task.FromResult<TTeamEntity>(null);
     Task SetConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null);
     Task SetCustomRolesAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles);
     IAsyncEnumerable<TTeamEntity> GetTeamsByConsentAsync(string[] roles);

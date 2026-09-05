@@ -36,22 +36,22 @@ and reviewable rather than stuck behind it.
 
 ## Part 1 — the short token
 
-- [~] **7. Token generation.** 16 bytes from `RandomNumberGenerator`, base64url, 22 chars. Assert the source is
+- [x] **7. Token generation.** 16 bytes from `RandomNumberGenerator`, base64url, 22 chars. Assert the source is
   cryptographic, not that the output "looks random" — a test that only checks length and alphabet passes just
   as happily for `Guid.NewGuid().ToString("N")[..22]`, which is the mistake worth guarding against.
-- [ ] **8. The seam method** on `TeamServiceBase` — resolve a team by an outstanding invite key. **`virtual`,
+- [x] **8. The seam method** on `TeamServiceBase` — resolve a team by an outstanding invite key. **`virtual`,
   returning null by default**, matching `GetAllTeamsInternalAsync` and the other later additions. Null means
   "this store cannot resolve a bare token", which is what makes criterion 10's fallback work.
-- [ ] **9. The MongoDB implementation and its index.** A non-unique multikey index on
+- [x] **9. The MongoDB implementation and its index.** A non-unique multikey index on
   `"Members.Invitation.InviteKey"`, by string path — the same shape as the existing `"Members.Key"` index in
   `TeamRepositoryCollection.Indices`.
   **Verify the uniqueness reasoning against a real index before trusting it** (see the note below).
-- [ ] **10. Resolve, with the old format still working.** `GetInvitationAsync` tries base64-JSON first, falls
+- [x] **10. Resolve, with the old format still working.** `GetInvitationAsync` tries base64-JSON first, falls
   back to a bare token. **Ambiguity returns null** rather than picking a team.
-- [ ] **11. Mint the short link.** `BuildInviteLink` emits `?tic=<token>`; `TeamInviteView` reads `tic` and
+- [x] **11. Mint the short link.** `BuildInviteLink` emits `?tic=<token>`; `TeamInviteView` reads `tic` and
   still accepts the old `TeamInviteCode` parameter, including the copy it stashes in local storage across the
   login redirect.
-- [ ] **12. Tests** for every acceptance criterion, including the two that are easy to leave unexecuted: the
+- [x] **12. Tests** for every acceptance criterion, including the two that are easy to leave unexecuted: the
   multi-match null and the store-without-the-override fallback.
 
 ## Then
@@ -91,6 +91,27 @@ renewed invitation.
 **Extending is skipped entirely when no lifetime is configured.** Otherwise re-invite would start calling the
 expiry seam on hosts that never opted into expiry and have not implemented it — turning a working re-invite
 into a `NotSupportedException`.
+
+## Part 1 notes
+
+**The seam returns a team *key*, not a team.** Planned as a team lookup; a key is better — the caller loads
+it through reads that already exist, so no second way to fetch a team appears, and the member type stays out
+of the signature that a generic overload would have dragged in.
+
+**Resolution tries the old format first, then treats the whole code as a bare key.** That also means an
+invitation minted *before* this change resolves through the new index if its link is regenerated, because the
+fallback does not care what shape the key is.
+
+**`TeamInvitation` gained `InviteKey`, which removed a second copy of the link format.** `TeamInviteView`
+decoded the base64 payload again inside `JoinTeam` and `Decline` to recover the code — a second place that
+knew the format and would have broken silently the moment it changed. Resolving already produces the code, so
+the screen now uses it and decodes nothing.
+
+**The index test is a source scan, and it cannot prove the MongoDB behaviour.** `TeamRepositoryCollection`
+cannot be constructed in a test (its base works against a real Mongo service in the constructor — the same
+reason `RegisterUserRepositoryTests` inspects registrations instead), and there is no MongoDB server in this
+suite. The scan pins the non-unique decision and carries the reasoning; **the reasoning itself is still
+unproven and wants one check against a real server before release.**
 
 ## Last session
 

@@ -160,7 +160,7 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
                 Invitation = new Invitation
                 {
                     EMail = model.Email,
-                    InviteKey = Guid.NewGuid().ToString(),
+                    InviteKey = InviteToken.New(),
                     InviteTime = DateTime.UtcNow,
                     ExpiresAt = _invitationOptions.Lifetime == null
                         ? null
@@ -198,6 +198,12 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
     {
         var member = await GetInvitedMemberAsync(teamKey, inviteKey);
         return member?.Invitation;
+    }
+
+    protected override async Task<string> GetTeamKeyByInviteKeyInternalAsync(string inviteKey)
+    {
+        var team = await _teamRepository.GetByInviteKeyAsync(inviteKey);
+        return team?.Key;
     }
 
     protected override Task SetTeamMemberInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)

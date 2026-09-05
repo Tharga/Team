@@ -532,6 +532,14 @@ public abstract class TeamServiceBase : ITeamService
     }
 
     /// <inheritdoc />
+    public Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey)
+    {
+        return string.IsNullOrWhiteSpace(inviteKey)
+            ? Task.FromResult<string>(null)
+            : GetTeamKeyByInviteKeyInternalAsync(inviteKey);
+    }
+
+    /// <inheritdoc />
     public async Task ExtendInvitationAsync(string teamKey, string inviteKey)
     {
         var invitation = await GetInvitationInternalAsync(teamKey, inviteKey);
@@ -633,6 +641,21 @@ public abstract class TeamServiceBase : ITeamService
     /// host that has not opted into expiry.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Backs <see cref="GetTeamKeyByInviteKeyAsync"/>. Null when nothing matches, when more than one team
+    /// matches, or when this store cannot look an invitation up without its team.
+    /// </summary>
+    /// <remarks>
+    /// <b>Virtual, and null is a legitimate answer</b> — unlike the expiry seam, which throws. A store that
+    /// cannot answer this loses nothing it had: links minted before this existed carry their team key and
+    /// still resolve. Only the short link form needs it, so degrading is the correct behaviour rather than a
+    /// hidden failure.
+    /// </remarks>
+    protected virtual Task<string> GetTeamKeyByInviteKeyInternalAsync(string inviteKey)
+    {
+        return Task.FromResult<string>(null);
+    }
+
     protected virtual Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
     {
         return Task.FromResult<Invitation>(null);

@@ -93,6 +93,27 @@ public interface ITeamService
     Task SetMemberSuspendedAsync(string teamKey, string userKey, bool suspended)
         => throw new NotSupportedException(
             $"'{GetType().Name}' does not implement {nameof(SetMemberSuspendedAsync)}.");
+    /// <summary>
+    /// The key of the team holding an outstanding invitation whose code is <paramref name="inviteKey"/>, or
+    /// null.
+    /// </summary>
+    /// <remarks>
+    /// <b>Returns a key rather than a team</b>, so the caller loads it through the reads that already exist
+    /// and this adds no second way to fetch a team. It also keeps the member type out of the signature,
+    /// which a generic overload would have dragged in for no gain.
+    /// <para>
+    /// <b>Null means "no single team", covering three cases on purpose:</b> nothing matched, the store cannot
+    /// answer this at all, and — the one worth stating — more than one team matched. A token is a bearer
+    /// credential, so resolving an ambiguous one by picking a team would hand someone access to a team
+    /// nobody invited them to.
+    /// </para>
+    /// <para>
+    /// The default returns null, so a host with its own store keeps compiling and keeps working: invitation
+    /// links carrying the team key still resolve, and only the short form is unavailable.
+    /// </para>
+    /// </remarks>
+    Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey) => Task.FromResult<string>(null);
+
     /// <inheritdoc cref="ITeamManagementService.ExtendInvitationAsync"/>
     Task ExtendInvitationAsync(string teamKey, string inviteKey)
         => throw new NotSupportedException(

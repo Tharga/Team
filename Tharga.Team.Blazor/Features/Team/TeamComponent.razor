@@ -1334,11 +1334,12 @@ else
     /// </remarks>
     private string BuildInviteLink(string teamKey, string inviteKey)
     {
-        var inviteModel = new InviteModel { TeamKey = teamKey, Code = inviteKey };
-        var inviteModelJson = JsonSerializer.Serialize(inviteModel);
-        var inviteCode = inviteModelJson.ToBase64();
+        // The code alone, and the team key stays out of the link entirely: the previous format was base64
+        // rather than encryption, so anything that touched the link -- a mail relay, a helpdesk ticket, a
+        // forwarded message -- could read the team key straight out of it (Tharga/Team#249). Resolving the
+        // code to its team is the store's job now.
         var path = InvitePathResolver.Resolve(BlazorOptions.Value.InvitePath);
-        return $"{NavigationManager.BaseUri}{path}?{Constants.TeamInviteCode}={inviteCode}";
+        return $"{NavigationManager.BaseUri}{path}?{Constants.TeamInviteToken}={Uri.EscapeDataString(inviteKey)}";
     }
 
 }

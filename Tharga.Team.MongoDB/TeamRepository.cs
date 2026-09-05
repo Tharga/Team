@@ -102,6 +102,23 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         await _collection.UpdateOneAsync(filter, update);
     }
 
+    /// <remarks>
+    /// <b>Two matches resolve to null rather than to the first.</b> The code is a bearer credential, so
+    /// picking one of two teams would admit somebody to a team nobody invited them to. Collisions should be
+    /// impossible at 128 bits — this is what makes "should be" safe to rely on.
+    /// </remarks>
+    public async Task<TTeamEntity> GetByInviteKeyAsync(string inviteKey)
+    {
+        if (string.IsNullOrWhiteSpace(inviteKey)) return null;
+
+        var matches = await _collection
+            .GetAsync(x => x.DeletedAt == null && x.Members.Any(y => y.Invitation.InviteKey == inviteKey))
+            .Take(2)
+            .ToArrayAsync();
+
+        return matches.Length == 1 ? matches[0] : null;
+    }
+
     public async Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
     {
         var team = await _collection.GetOneAsync(x => x.Key == teamKey);

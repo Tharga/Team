@@ -27,6 +27,20 @@ public sealed record TeamInvitation(string TeamKey, string TeamName, string EMai
     /// </para>
     /// </remarks>
     public InvitationStatus Status { get; init; } = InvitationStatus.Open;
+
+    /// <summary>
+    /// The code to hand back when accepting or declining.
+    /// </summary>
+    /// <remarks>
+    /// <b>Here so the acceptance screen never has to decode the link itself.</b> It used to unpack the
+    /// base64 payload a second time to find the code, which made the link format something two places knew
+    /// about — and the second place would have broken the moment the format changed. Resolving already
+    /// produces the code, so handing it back costs nothing.
+    /// <para>
+    /// Discloses nothing: the caller presented this code to get here.
+    /// </para>
+    /// </remarks>
+    public string InviteKey { get; init; }
 }
 
 /// <summary>Whether an invitation is still acceptable.</summary>

@@ -89,36 +89,28 @@
     {
         var uri = new Uri(NavigationManager.Uri);
 
-        var values = Tharga.Blazor.Framework.UriExtensions.GetQueryValue(uri, Constants.TeamInviteCode).ToArray();
-        string inviteCode;
-        if (values.Any())
-        {
-            inviteCode = values.First();
-        }
-        else
-        {
-            inviteCode = await LocalStorage.GetItemAsync<string>(Constants.TeamInviteCode);
-        }
+        // Both parameters are read: 'tic' is what links carry from 3.20, and 'TeamInviteCode' is what is
+        // sitting in inboxes from before it. Local storage is the third source, holding whichever form was
+        // presented while the invitee went away to sign in.
+        var values = Tharga.Blazor.Framework.UriExtensions.GetQueryValue(uri, Constants.TeamInviteToken)
+            .Concat(Tharga.Blazor.Framework.UriExtensions.GetQueryValue(uri, Constants.TeamInviteCode))
+            .ToArray();
 
-        return inviteCode;
+        return values.Any()
+            ? values.First()
+            : await LocalStorage.GetItemAsync<string>(Constants.TeamInviteCode);
     }
 
     private async Task JoinTeam()
     {
-        var inviteModelJson = _inviteCode.FromBase64();
-        var inviteModel = JsonSerializer.Deserialize<InviteModel>(inviteModelJson);
-
-        await TeamManagementService.SetInvitationResponseAsync(_invitation.TeamKey, _user.Key, inviteModel.Code, true);
+        await TeamManagementService.SetInvitationResponseAsync(_invitation.TeamKey, _user.Key, _invitation.InviteKey, true);
         await LocalStorage.RemoveItemAsync(Constants.TeamInviteCode);
         NavigationManager.NavigateTo(Tharga.Blazor.Framework.UriExtensions.RemoveQuery(new Uri(NavigationManager.Uri)).AbsoluteUri, true);
     }
 
     private async Task Decline()
     {
-        var inviteModelJson = _inviteCode.FromBase64();
-        var inviteModel = JsonSerializer.Deserialize<InviteModel>(inviteModelJson);
-
-        await TeamManagementService.SetInvitationResponseAsync(_invitation.TeamKey, _user.Key, inviteModel.Code, false);
+        await TeamManagementService.SetInvitationResponseAsync(_invitation.TeamKey, _user.Key, _invitation.InviteKey, false);
         await LocalStorage.RemoveItemAsync(Constants.TeamInviteCode);
         NavigationManager.NavigateTo(Tharga.Blazor.Framework.UriExtensions.RemoveQuery(new Uri(NavigationManager.Uri)).AbsoluteUri, true);
     }
