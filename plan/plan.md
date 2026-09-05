@@ -54,3 +54,9 @@ Branch: `feature/team-accessible-label` (from `master`, at 3.20.0)
 - **Step 5 done.** `docs/articles/implementation-guide.md` — "Using your own entities" now states that
   `ToString()` is sealed and why, since that is the section a host reads while declaring the record that
   would otherwise fail to compile. No `README.md` change: it does not cover entity declaration.
+
+- **Branch pushed** 2026-09-05 (`origin/feature/team-accessible-label`), no PR yet, awaiting user testing.
+  **CI does not build it.** `build.yml` triggers only on `push: [master]` and `pull_request: [master]`,
+  so a feature branch with no PR runs no workflow; and `dotnet nuget push` sits in a job gated on
+  `github.ref == master && event_name == push`, so no pre-release package is published even from a PR.
+  Testing this branch therefore means the sample app or a local package feed, not a package from origin.
