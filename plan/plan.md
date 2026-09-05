@@ -112,5 +112,15 @@ built, not yet wired" and "Cases with no team selected — specified", both of w
 
 ## Last session
 
-2026-09-05 — Branch cut, defect diagnosed and confirmed against the code, plan written. Nothing implemented
-yet; step 1 is next.
+2026-09-05 — **Steps 1–11 done; implementation complete and green (2481 tests, 0 failed).** Three commits on
+`feature/team-read-honours-consent`: the MTP migration and package updates, the fix with its tests, and the
+docs.
+
+The fix found **two more defects beyond the reported one**, both from the same drift and neither filed: a
+tenant role granting `team:read` was ignored by the gate, and a suspended member kept full read access. The
+suspension one is the reason to read the diff carefully — it is the only change here that *removes* access
+somebody currently has, so it is the only one that can break a consumer who was (unknowingly) relying on it.
+
+**Not yet done — step 12, and it waits on the user confirming the feature is done:** close #248 with evidence,
+sweep `Requests.md` and the backlog, archive `feature.md` to `done/`, `git rm -r plan`, final commit, push,
+open the PR. The branch is **not pushed yet** — pushing needs explicit approval.
