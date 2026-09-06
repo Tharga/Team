@@ -38,6 +38,22 @@ public class AuthorizationTeamServiceDecoratorTests
 
     private static ClaimsPrincipal Anonymous() => new(new ClaimsIdentity());
 
+    /// <summary>
+    /// A caller at <paramref name="accessLevel"/> on <paramref name="teamKey"/>, carrying the team manage
+    /// scopes as well.
+    /// </summary>
+    /// <remarks>
+    /// The scopes are deliberately present at both levels, because that is the truth the delete rule turns
+    /// on: an Administrator holds every registered scope an Owner does, so <c>team:manage</c> cannot tell
+    /// them apart and the access level has to.
+    /// </remarks>
+    private static ClaimsPrincipal At(string teamKey, AccessLevel accessLevel)
+    {
+        var principal = Principal(teamKey, TeamScopes.Manage, TeamScopes.MemberManage);
+        ((ClaimsIdentity)principal.Identity).AddClaim(new Claim(TeamClaimTypes.AccessLevel, accessLevel.ToString()));
+        return principal;
+    }
+
     // ---- Create: authenticated + AllowTeamCreation ----
     [Fact]
     public async Task Create_Authenticated_AllowCreation_Delegates()
@@ -62,19 +78,44 @@ public class AuthorizationTeamServiceDecoratorTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.CreateTeamAsync("n"));
     }
 
-    // ---- Delete: (team:manage + own team + AllowTeamCreation) OR teams:delete ----
+    // ---- Delete: (Owner of the team + AllowTeamCreation) OR teams:delete ----
+    //
+    // team:manage used to be the in-team rule, and it is registered at Administrator -- so the service
+    // admitted any administrator while TeamActionGate.CanDelete had always required the Owner. The service
+    // now agrees with the button.
+
     [Fact]
-    public async Task Delete_TeamManage_OwnTeam_AllowCreation_Delegates()
+    public async Task Delete_Owner_OwnTeam_AllowCreation_Delegates()
     {
-        var (sut, inner) = Build(Principal("T1", TeamScopes.Manage), allowCreation: true);
+        var (sut, inner) = Build(At("T1", AccessLevel.Owner), allowCreation: true);
         await sut.DeleteTeamAsync<TestMember>("T1");
         await inner.Received(1).DeleteTeamAsync<TestMember>("T1");
     }
 
     [Fact]
-    public async Task Delete_TeamManage_AllowCreationFalse_Throws()
+    public async Task Delete_Administrator_OwnTeam_Throws()
     {
-        var (sut, inner) = Build(Principal("T1", TeamScopes.Manage), allowCreation: false);
+        var (sut, inner) = Build(At("T1", AccessLevel.Administrator), allowCreation: true);
+
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.DeleteTeamAsync<TestMember>("T1"));
+
+        Assert.Contains("owner", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await inner.DidNotReceive().DeleteTeamAsync<TestMember>(Arg.Any<string>());
+    }
+
+    /// <summary>The scope alone no longer suffices, with no access level claim to fall back on.</summary>
+    [Fact]
+    public async Task Delete_TeamManageWithoutAnAccessLevel_Throws()
+    {
+        var (sut, inner) = Build(Principal("T1", TeamScopes.Manage), allowCreation: true);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.DeleteTeamAsync<TestMember>("T1"));
+        await inner.DidNotReceive().DeleteTeamAsync<TestMember>(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task Delete_Owner_AllowCreationFalse_Throws()
+    {
+        var (sut, inner) = Build(At("T1", AccessLevel.Owner), allowCreation: false);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.DeleteTeamAsync<TestMember>("T1"));
         await inner.DidNotReceive().DeleteTeamAsync<TestMember>(Arg.Any<string>());
     }
@@ -87,10 +128,11 @@ public class AuthorizationTeamServiceDecoratorTests
         await inner.Received(1).DeleteTeamAsync<TestMember>("T-other");
     }
 
+    /// <summary>Owning one team must not authorize deleting another.</summary>
     [Fact]
-    public async Task Delete_TeamManage_DifferentTeam_Throws()
+    public async Task Delete_Owner_DifferentTeam_Throws()
     {
-        var (sut, _) = Build(Principal("T1", TeamScopes.Manage), allowCreation: true);
+        var (sut, _) = Build(At("T1", AccessLevel.Owner), allowCreation: true);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.DeleteTeamAsync<TestMember>("T2"));
     }
 
@@ -99,6 +141,24 @@ public class AuthorizationTeamServiceDecoratorTests
     {
         var (sut, _) = Build(Principal("T1", TeamScopes.Read), allowCreation: true);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.DeleteTeamAsync<TestMember>("T1"));
+    }
+
+    // ---- Restore is authorized by the delete rule, because it undoes it ----
+
+    [Fact]
+    public async Task Restore_Owner_Delegates()
+    {
+        var (sut, inner) = Build(At("T1", AccessLevel.Owner), allowCreation: true);
+        await sut.RestoreTeamAsync<TestMember>("T1");
+        await inner.Received(1).RestoreTeamAsync<TestMember>("T1");
+    }
+
+    [Fact]
+    public async Task Restore_Administrator_Throws()
+    {
+        var (sut, inner) = Build(At("T1", AccessLevel.Administrator), allowCreation: true);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.RestoreTeamAsync<TestMember>("T1"));
+        await inner.DidNotReceive().RestoreTeamAsync<TestMember>(Arg.Any<string>());
     }
 
     // ---- Rename / Consent: team:manage ----

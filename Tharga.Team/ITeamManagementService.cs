@@ -16,7 +16,24 @@ public interface ITeamManagementService
     [RequireScope(TeamScopes.Manage)]
     Task RenameTeamAsync(string teamKey, string name);
 
-    /// <summary>Delete a team. Requires <c>team:manage</c> on the team (with <c>AllowTeamCreation</c>) or the <c>teams:delete</c> system scope.</summary>
+    /// <summary>
+    /// Delete a team. Requires being its <b>Owner</b> (with <c>AllowTeamCreation</c>), or the
+    /// <c>teams:delete</c> system scope.
+    /// </summary>
+    /// <remarks>
+    /// <b>From 3.20.3, <c>team:manage</c> on the team is no longer sufficient.</b> That scope is registered
+    /// at <see cref="AccessLevel.Administrator"/>, so it admitted any administrator — while the UI had
+    /// always offered Delete to the Owner alone. The service now agrees with the button.
+    /// <para>
+    /// The attribute below is the team-bound half of the signature and does not state the whole rule; the
+    /// Owner check lives in <c>AuthorizationTeamServiceDecorator</c>, because no scope can express it —
+    /// every registered scope is granted to Administrator as well.
+    /// </para>
+    /// <para>
+    /// The delete is recoverable by default; <see cref="ITeamService.PurgeTeamAsync{TMember}"/> is the
+    /// irreversible one and needs <c>teams:purge</c>.
+    /// </para>
+    /// </remarks>
     [RequireScope(TeamScopes.Manage)]
     Task DeleteTeamAsync(string teamKey);
 
