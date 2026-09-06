@@ -156,6 +156,44 @@ public class AuthorizationTeamServiceDecoratorTests
         await inner.Received(1).SetMemberNameAsync("T1", "U2", "Name");
     }
 
+    // ---- Leave: no scope, because the operation names no user but the caller ----
+    //
+    // Gating this on member:manage -- which is what removing yourself used to be -- is what stopped an
+    // ordinary member leaving a team: the scope is registered at Administrator, so User and Viewer never
+    // hold it. A suspended member holds nothing at all, so no scope could express the rule either.
+
+    [Fact]
+    public async Task Leave_NoScopes_Delegates()
+    {
+        var (sut, inner) = Build(Principal("T1"));
+        await sut.LeaveTeamAsync("T1");
+        await inner.Received(1).LeaveTeamAsync("T1");
+    }
+
+    [Fact]
+    public async Task Leave_TeamNotSelected_Delegates()
+    {
+        var (sut, inner) = Build(Principal("T1"));
+        await sut.LeaveTeamAsync("T2");
+        await inner.Received(1).LeaveTeamAsync("T2");
+    }
+
+    /// <summary>
+    /// Leaving is unscoped; removing somebody else is not. Both on the same caller, so the pair says the
+    /// gate was relaxed for exactly one operation.
+    /// </summary>
+    [Fact]
+    public async Task Leave_DoesNotRelaxRemovingAnotherMember()
+    {
+        var (sut, inner) = Build(Principal("T1"));
+
+        await sut.LeaveTeamAsync("T1");
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.RemoveMemberAsync("T1", "U2"));
+
+        await inner.Received(1).LeaveTeamAsync("T1");
+        await inner.DidNotReceive().RemoveMemberAsync(Arg.Any<string>(), Arg.Any<string>());
+    }
+
     // ---- Reads pass through (no authz) ----
     [Fact]
     public void Reads_PassThrough_EvenAnonymous()

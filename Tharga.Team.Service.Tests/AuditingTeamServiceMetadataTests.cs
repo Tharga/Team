@@ -195,6 +195,36 @@ public class AuditingTeamServiceMetadataTests
         Assert.Equal("user-2", Single(recorder)[AuditMetadataKeys.NewOwnerKey]);
     }
 
+    /// <summary>
+    /// Leaving and being removed are the same write to the roster and read very differently afterwards,
+    /// so they are separate actions in the log.
+    /// </summary>
+    [Fact]
+    public async Task Leave_IsRecordedApartFromRemoveMember()
+    {
+        var (sut, _, recorder) = Build();
+
+        await sut.LeaveTeamAsync(TeamKey);
+
+        var entry = Assert.Single(recorder.Entries);
+        Assert.Equal("leave-team", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal(TeamKey, entry.TeamKey);
+    }
+
+    [Fact]
+    public async Task Leave_Refused_IsStillRecorded()
+    {
+        var (sut, inner, recorder) = Build();
+        inner.LeaveTeamAsync(TeamKey).Returns<Task>(_ => throw new InvalidOperationException("The owner cannot leave the team."));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.LeaveTeamAsync(TeamKey));
+
+        var entry = Assert.Single(recorder.Entries);
+        Assert.Equal("leave-team", entry.Action);
+        Assert.False(entry.Success);
+    }
+
     /// <summary>A failed operation should still record what was attempted.</summary>
     [Fact]
     public async Task FailedOperation_StillRecordsTheAttemptedValues()

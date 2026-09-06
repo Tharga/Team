@@ -212,6 +212,27 @@ public class AuditingTeamServiceDecorator : ITeamService
         }
     }
 
+    /// <summary>
+    /// Logged as <c>leave-team</c> rather than <c>remove-member</c>, so the log says whether someone left
+    /// or was removed. The two are the same write to the roster and read very differently afterwards.
+    /// </summary>
+    public async Task LeaveTeamAsync(string teamKey)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await _inner.LeaveTeamAsync(teamKey);
+            sw.Stop();
+            Log("leave-team", nameof(LeaveTeamAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("leave-team", nameof(LeaveTeamAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            throw;
+        }
+    }
+
     public async Task SetTeamIconAsync(string teamKey, byte[] data, string contentType)
     {
         var metadata = Meta(

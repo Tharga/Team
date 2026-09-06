@@ -87,6 +87,32 @@ public interface ITeamService
     IAsyncEnumerable<ITeamMember> GetMembersAsync(string teamKey);
     Task AddMemberAsync(string teamKey, InviteUserModel model);
     Task RemoveMemberAsync(string teamKey, string userKey);
+
+    /// <summary>
+    /// Removes the <b>calling</b> user from the team. Refuses the Owner, who must transfer ownership
+    /// first, and the last administrator of a team with no owner.
+    /// </summary>
+    /// <remarks>
+    /// <b>It takes no user key, and that is the whole of its authorization.</b> There is nothing in the
+    /// signature to point at anybody else, so a caller can only remove themselves — which is why the
+    /// decorators pass it through unscoped where <see cref="RemoveMemberAsync"/> requires
+    /// <c>member:manage</c>. That scope is registered at <see cref="AccessLevel.Administrator"/>, so
+    /// gating leaving on it means an ordinary member cannot leave the team they are in.
+    /// <para>
+    /// A scope could not express this rule anyway: a suspended member holds none at all, and suspension
+    /// is precisely the state someone most wants out of.
+    /// </para>
+    /// <para>
+    /// A default interface method for the same reason as <see cref="RestoreTeamAsync{TMember}"/> — a host
+    /// implementing this contract directly keeps compiling — and it throws rather than no-opping, because
+    /// reporting success for a departure that did not happen leaves someone believing they are out of a
+    /// team they are still in.
+    /// </para>
+    /// </remarks>
+    Task LeaveTeamAsync(string teamKey)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(LeaveTeamAsync)}.");
+
     Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel);
 
     /// <inheritdoc cref="ITeamManagementService.SetMemberSuspendedAsync"/>

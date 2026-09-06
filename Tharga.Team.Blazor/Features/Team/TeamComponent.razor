@@ -9,7 +9,6 @@
 @inject ITeamManagementService TeamManagementService
 @inject ITeamDirectoryService TeamDirectoryService
 @inject ITeamOversightService TeamOversightService
-@inject ITeamManagementService TeamManagementService
 @inject ITeamLifecycleService TeamLifecycleService
 @inject ITeamStateService TeamStateService
 @inject AuthenticationStateProvider AuthStateProvider
@@ -519,6 +518,20 @@ else
         if (response != true) return;
 
         await TeamManagementService.RemoveMemberAsync(team.Key, member.Key);
+        await ReloadTeams();
+    }
+
+    /// <summary>
+    /// Leaving goes through <see cref="ITeamDirectoryService.LeaveTeamAsync"/>, not
+    /// <c>RemoveMemberAsync</c>: that one needs <c>member:manage</c>, which an ordinary member does not
+    /// hold, so this action used to offer itself and then fail.
+    /// </summary>
+    private async Task LeaveTeam(ITeam<TMember> team)
+    {
+        var response = await DialogService.Confirm(_text.Format(TeamComponentText.ConfirmLeaveTeam, team.Name));
+        if (response != true) return;
+
+        await TeamDirectoryService.LeaveTeamAsync(team.Key);
         await ReloadTeams();
     }
 
@@ -1157,11 +1170,11 @@ else
         if (CanRenameTeam(team))
         {
             actions.Add((IconAction, _text[TeamComponentText.ActionSetIcon], "image"));
-            actions.Add((RenameAction, "Rename", "edit"));
+            actions.Add((RenameAction, _text[TeamComponentText.ActionRenameTeam], "edit"));
         }
         if (CanTransferOwnership(team)) actions.Add((TransferAction, _text[TeamComponentText.ActionTransferOwnership], "swap_horiz"));
-        if (CanLeaveTeam(team)) actions.Add((LeaveAction, "Leave", "remove"));
-        if (CanDeleteTeam(team)) actions.Add((DeleteAction, "Delete", "delete"));
+        if (CanLeaveTeam(team)) actions.Add((LeaveAction, _text[TeamComponentText.ActionLeaveTeam], "remove"));
+        if (CanDeleteTeam(team)) actions.Add((DeleteAction, _text[TeamComponentText.ActionDeleteTeam], "delete"));
         return actions;
     }
 
@@ -1176,7 +1189,7 @@ else
             case RenameAction: await RenameTeam(team); break;
             case InviteAction: await AddUser(team); break;
             case TransferAction: await TransferOwnership(team); break;
-            case LeaveAction: await RemoveUserFromTeam(team, _user.Key); break;
+            case LeaveAction: await LeaveTeam(team); break;
             case DeleteAction: await DeleteTeam(team); break;
         }
     }
@@ -1229,7 +1242,7 @@ else
 
     private bool CanLeaveTeam(ITeam<TMember> team)
     {
-        return TeamActionGate.CanLeave(IsMemberOf(team), HasAccessLevel(team, AccessLevel.Owner), _selectedTeam?.Key, team.Key);
+        return TeamActionGate.CanLeave(IsMemberOf(team), HasAccessLevel(team, AccessLevel.Owner));
     }
 
     private bool CanTransferOwnership(ITeam<TMember> team)
