@@ -71,6 +71,14 @@ public interface ITeamDirectoryService
     /// Removing <i>another</i> member remains <c>ITeamManagementService.RemoveMemberAsync</c> and still
     /// requires <c>member:manage</c>.
     /// </para>
+    /// <para>
+    /// A default interface method, so a host that substitutes or decorates this facet — which
+    /// <c>TryAdd</c> registration exists to allow — keeps compiling. It throws rather than no-opping:
+    /// reporting success for a departure that did not happen leaves someone believing they are out of a
+    /// team they are still in.
+    /// </para>
     /// </remarks>
-    Task LeaveTeamAsync(string teamKey);
+    Task LeaveTeamAsync(string teamKey)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(LeaveTeamAsync)}.");
 }

@@ -1362,7 +1362,7 @@ A component, controller or MCP provider should inject one of these — **never `
 | Inject | For | Checked by |
 |---|---|---|
 | `ITeamManagementService` | One team: its details, roster, members, and every mutation | `team:read` on reads, `team:manage` / `member:manage` on mutations |
-| `ITeamDirectoryService` | The caller's **own** teams | Recomputed per team from that membership — teams not granting `team:read` are omitted |
+| `ITeamDirectoryService` | The caller's **own** teams, and leaving one | Recomputed per team from that membership — teams not granting `team:read` are omitted. `LeaveTeamAsync` carries no scope at all; see [Leaving a team](#leaving-a-team) |
 | `ITeamOversightService` | **Every** team, regardless of membership | `teams:read` system scope. Discovery only |
 | `ITeamInvitationService` | Resolving an invite code | **The code itself.** An invitee holds no scope for the team they are joining |
 | `ITeamLifecycleService` | Creating a team | Authenticated caller plus `AllowTeamCreation` |
@@ -1766,7 +1766,36 @@ Team mutations are enforced in the **service layer** (`AuthorizationTeamServiceD
 | Purge | `teams:purge` **only**. No team-level or `AllowTeamCreation` path: destroying a team's data is not something a tenant should reach by holding `team:manage` |
 | Rename / Consent | `team:manage` on the team |
 | Member invite/remove/role/overrides/display-name | `member:manage` on the team |
+| Leave | **No scope.** The operation names no user but the caller |
 | Transfer ownership | Owner only |
+
+### Leaving a team
+
+**Any member can leave a team they belong to.** The Owner cannot — they transfer ownership first — and
+neither can the last administrator of a team that has no owner. Both are refused by the service, not
+merely hidden in the UI.
+
+```csharp
+@inject ITeamDirectoryService TeamDirectory
+
+await TeamDirectory.LeaveTeamAsync(teamKey);
+```
+
+**It is the one team operation authorized by no scope, and the signature is why.** `LeaveTeamAsync` takes
+no user key, so there is nothing in it to point at anybody else — a caller can only remove themselves.
+Removing *another* member is still `ITeamManagementService.RemoveMemberAsync` and still requires
+`member:manage`.
+
+> [!NOTE]
+> **Before 3.20.2 leaving was `RemoveMemberAsync(teamKey, yourOwnKey)`, and an ordinary member could not
+> do it.** `member:manage` is registered at `Administrator`, so `User` and `Viewer` never held it: the
+> Leave button offered itself and the service then refused with `UnauthorizedAccessException`. No scope
+> could have fixed it either — a **suspended** member holds none at all, and suspension is precisely the
+> state someone most wants out of. Letting them go strands nothing, because the Owner cannot be
+> suspended.
+
+Leaving is audited as **`leave-team`**, separate from `remove-member`, so the log says whether somebody
+left or was removed.
 
 ### Deleting a team: soft delete, restore and purge
 
@@ -1810,7 +1839,7 @@ per-team-database deployment that would otherwise point the new team at the dele
 `SupportsSoftDelete` reports `false`, and its deletes stay exactly as irreversible as they were. Implement
 `SoftDeleteTeamAsync` and `RestoreTeamAsync` to opt in.
 
-Team scopes (`team:*`, `member:manage`) authorize only the caller's **own** team — the `TeamKey` claim must match the team being acted on, so an admin of one team can't act on another. `TeamComponent` mirrors this in the UI: because the scope is issued for the **selected** team only, the Rename and Delete buttons appear on the selected team and not on the other teams you belong to. Select a team to manage it. **`teams:delete`** is a **system** scope (toolkit-defined) that authorizes deleting *any* team regardless of membership and regardless of `AllowTeamCreation` — grant it to your support/dev tooling via `o.ConfigureSystemRoles` (e.g. map `Developer` → `teams:delete`) or to a system API key. Setting `AllowTeamCreation = false` disables the self-service create and in-team delete paths but never blocks `teams:delete`.
+Team scopes (`team:*`, `member:manage`) authorize only the caller's **own** team — the `TeamKey` claim must match the team being acted on, so an admin of one team can't act on another. `TeamComponent` mirrors this in the UI: because the scope is issued for the **selected** team only, the Rename and Delete buttons appear on the selected team and not on the other teams you belong to. Select a team to manage it. **Leave is the exception**, because it carries no scope: it is offered on every team you are a member of and does not need the team selected first. **`teams:delete`** is a **system** scope (toolkit-defined) that authorizes deleting *any* team regardless of membership and regardless of `AllowTeamCreation` — grant it to your support/dev tooling via `o.ConfigureSystemRoles` (e.g. map `Developer` → `teams:delete`) or to a system API key. Setting `AllowTeamCreation = false` disables the self-service create and in-team delete paths but never blocks `teams:delete`.
 
 ### Finding a team when there are many of them
 
