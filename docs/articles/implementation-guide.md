@@ -1716,7 +1716,7 @@ left unregistered this way, which is the nudge to move it across.
 | Scope | Kind | Source | Gates |
 |-------|------|--------|-------|
 | `team:read` | team | `TeamScopes.Read` | View team details & members |
-| `team:manage` | team | `TeamScopes.Manage` | Rename, transfer ownership, consent, custom roles, team icon. **Not delete** — that is an Owner act from 3.21 |
+| `team:manage` | team | `TeamScopes.Manage` | Rename, transfer ownership, consent, custom roles, team icon. **Not delete** — that is an Owner act from 3.20.3 |
 | `member:manage` | team | `TeamScopes.MemberManage` | Invite/remove members, **suspend/restore a member**, change access level/roles/scope-overrides, edit display names |
 | `teams:delete` | **system** | `SystemTeamScopes.Delete` | Delete **any** team (cross-team), and restore one that was soft-deleted |
 | `teams:purge` | **system** | `SystemTeamScopes.Purge` | **Permanently** remove a soft-deleted team and destroy its stored data. Irreversible |
@@ -1761,7 +1761,7 @@ Team mutations are enforced in the **service layer** (`AuthorizationTeamServiceD
 | Operation | Allowed when |
 |---|---|
 | Create | authenticated **and** `AllowTeamCreation` (no scope — self-service) |
-| Delete | (**Owner** of the team **and** `AllowTeamCreation`) **or** `teams:delete`. From 3.21 `team:manage` alone no longer suffices — see [below](#deleting-a-team-is-an-owner-act) |
+| Delete | (**Owner** of the team **and** `AllowTeamCreation`) **or** `teams:delete`. From 3.20.3 `team:manage` alone no longer suffices — see [below](#deleting-a-team-is-an-owner-act) |
 | Restore | Same as Delete — restoring undoes it and is strictly less destructive |
 | Purge | `teams:purge` **only**. No team-level or `AllowTeamCreation` path: destroying a team's data is not something a tenant should reach by holding `team:manage` |
 | Rename / Consent | `team:manage` on the team |
@@ -1799,13 +1799,13 @@ left or was removed.
 
 ### Deleting a team is an Owner act
 
-**From 3.21, deleting a team from inside it requires being its Owner.** Holding `team:manage` is no longer
-enough, and neither is any other scope.
+**From 3.20.3, deleting a team from inside it requires being its Owner.** Holding `team:manage` is no
+longer enough, and neither is any other scope.
 
 **No scope could express this rule**, which is why the check is not one. Owner and Administrator are both
-granted every registered scope, so `team:manage` cannot distinguish them — and for two years it did not:
-the service admitted any administrator while `TeamComponent` offered the button to nobody but the Owner.
-The gate now agrees with the button, and it is the button that was right.
+granted every registered scope, so `team:manage` cannot distinguish them — and so the service admitted any
+administrator, while `TeamComponent` had always offered the button to nobody but the Owner. The gate now
+agrees with the button, and it is the button that was right.
 
 The Owner is also the member who cannot leave without first transferring the team on, which makes them the
 one person whose departure and whose deletion are the same decision.
@@ -1814,7 +1814,7 @@ one person whose departure and whose deletion are the same decision.
 |---|---|
 | Owner, `AllowTeamCreation` enabled | Yes |
 | Owner, `AllowTeamCreation` disabled | No |
-| Administrator, whatever scopes they hold | **No — changed in 3.21** |
+| Administrator, whatever scopes they hold | **No — changed in 3.20.3** |
 | Holder of the `teams:delete` system scope | Yes, on **any** team, member or not, and regardless of `AllowTeamCreation` |
 
 **Nothing about the operator path changes.** `teams:delete` is a system grant for support and dev tooling;

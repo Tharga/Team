@@ -8,7 +8,7 @@ on:
 
 env:
   # Bump by hand when a release breaks compatibility or adds public API; only the patch is automatic.
-  MAJOR_MINOR: '3.21'
+  MAJOR_MINOR: '3.20'
 
 permissions:
   contents: write

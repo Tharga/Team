@@ -580,7 +580,7 @@ The **Teams** tab of `<UsersView />` offers a Delete action on each row, gated b
 system scope. It deletes any team irrespective of the caller's membership or access level, and
 irrespective of the `AllowTeamCreation` option that governs self-service deletion on `<TeamComponent />`.
 
-**This is the only way to delete a team you do not own.** The in-team path is an Owner act from 3.21 —
+**This is the only way to delete a team you do not own.** The in-team path is an Owner act from 3.20.3 —
 `team:manage` no longer authorizes deletion — so if operators or team administrators in your product need
 to delete teams, `teams:delete` is what to grant them.
 

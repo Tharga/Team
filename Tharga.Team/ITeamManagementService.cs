@@ -21,7 +21,7 @@ public interface ITeamManagementService
     /// <c>teams:delete</c> system scope.
     /// </summary>
     /// <remarks>
-    /// <b>From 3.21, <c>team:manage</c> on the team is no longer sufficient.</b> That scope is registered
+    /// <b>From 3.20.3, <c>team:manage</c> on the team is no longer sufficient.</b> That scope is registered
     /// at <see cref="AccessLevel.Administrator"/>, so it admitted any administrator — while the UI had
     /// always offered Delete to the Owner alone. The service now agrees with the button.
     /// <para>
