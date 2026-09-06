@@ -1716,7 +1716,7 @@ left unregistered this way, which is the nudge to move it across.
 | Scope | Kind | Source | Gates |
 |-------|------|--------|-------|
 | `team:read` | team | `TeamScopes.Read` | View team details & members |
-| `team:manage` | team | `TeamScopes.Manage` | Rename, delete, transfer ownership, consent, custom roles |
+| `team:manage` | team | `TeamScopes.Manage` | Rename, transfer ownership, consent, custom roles, team icon. **Not delete** — that is an Owner act from 3.21 |
 | `member:manage` | team | `TeamScopes.MemberManage` | Invite/remove members, **suspend/restore a member**, change access level/roles/scope-overrides, edit display names |
 | `teams:delete` | **system** | `SystemTeamScopes.Delete` | Delete **any** team (cross-team), and restore one that was soft-deleted |
 | `teams:purge` | **system** | `SystemTeamScopes.Purge` | **Permanently** remove a soft-deleted team and destroy its stored data. Irreversible |
@@ -1761,7 +1761,7 @@ Team mutations are enforced in the **service layer** (`AuthorizationTeamServiceD
 | Operation | Allowed when |
 |---|---|
 | Create | authenticated **and** `AllowTeamCreation` (no scope — self-service) |
-| Delete | (`team:manage` on the team **and** `AllowTeamCreation`) **or** `teams:delete` |
+| Delete | (**Owner** of the team **and** `AllowTeamCreation`) **or** `teams:delete`. From 3.21 `team:manage` alone no longer suffices — see [below](#deleting-a-team-is-an-owner-act) |
 | Restore | Same as Delete — restoring undoes it and is strictly less destructive |
 | Purge | `teams:purge` **only**. No team-level or `AllowTeamCreation` path: destroying a team's data is not something a tenant should reach by holding `team:manage` |
 | Rename / Consent | `team:manage` on the team |
@@ -1796,6 +1796,36 @@ Removing *another* member is still `ITeamManagementService.RemoveMemberAsync` an
 
 Leaving is audited as **`leave-team`**, separate from `remove-member`, so the log says whether somebody
 left or was removed.
+
+### Deleting a team is an Owner act
+
+**From 3.21, deleting a team from inside it requires being its Owner.** Holding `team:manage` is no longer
+enough, and neither is any other scope.
+
+**No scope could express this rule**, which is why the check is not one. Owner and Administrator are both
+granted every registered scope, so `team:manage` cannot distinguish them — and for two years it did not:
+the service admitted any administrator while `TeamComponent` offered the button to nobody but the Owner.
+The gate now agrees with the button, and it is the button that was right.
+
+The Owner is also the member who cannot leave without first transferring the team on, which makes them the
+one person whose departure and whose deletion are the same decision.
+
+| Caller | Can delete their own team |
+|---|---|
+| Owner, `AllowTeamCreation` enabled | Yes |
+| Owner, `AllowTeamCreation` disabled | No |
+| Administrator, whatever scopes they hold | **No — changed in 3.21** |
+| Holder of the `teams:delete` system scope | Yes, on **any** team, member or not, and regardless of `AllowTeamCreation` |
+
+**Nothing about the operator path changes.** `teams:delete` is a system grant for support and dev tooling;
+it never depended on membership and is checked first. If an administrator in your product genuinely needs
+to delete teams, that grant is the supported way to give it to them — `o.ConfigureSystemRoles` or a system
+API key — rather than a team-level scope.
+
+> [!NOTE]
+> **Restore follows delete**, as it always has: it undoes deletion, so it is authorized by the same rule
+> and is likewise Owner-or-`teams:delete`. In practice a soft-deleted team is invisible to its own
+> members, so restoring is nearly always an operator act.
 
 ### Deleting a team: soft delete, restore and purge
 
@@ -1839,7 +1869,7 @@ per-team-database deployment that would otherwise point the new team at the dele
 `SupportsSoftDelete` reports `false`, and its deletes stay exactly as irreversible as they were. Implement
 `SoftDeleteTeamAsync` and `RestoreTeamAsync` to opt in.
 
-Team scopes (`team:*`, `member:manage`) authorize only the caller's **own** team — the `TeamKey` claim must match the team being acted on, so an admin of one team can't act on another. `TeamComponent` mirrors this in the UI: because the scope is issued for the **selected** team only, the Rename and Delete buttons appear on the selected team and not on the other teams you belong to. Select a team to manage it. **Leave is the exception**, because it carries no scope: it is offered on every team you are a member of and does not need the team selected first. **`teams:delete`** is a **system** scope (toolkit-defined) that authorizes deleting *any* team regardless of membership and regardless of `AllowTeamCreation` — grant it to your support/dev tooling via `o.ConfigureSystemRoles` (e.g. map `Developer` → `teams:delete`) or to a system API key. Setting `AllowTeamCreation = false` disables the self-service create and in-team delete paths but never blocks `teams:delete`.
+Team scopes (`team:*`, `member:manage`) authorize only the caller's **own** team — the `TeamKey` claim must match the team being acted on, so an admin of one team can't act on another. `TeamComponent` mirrors this in the UI: because the scope is issued for the **selected** team only, the Rename and Delete buttons appear on the selected team and not on the other teams you belong to (Delete additionally requires that you own it). Select a team to manage it. **Leave is the exception**, because it carries no scope: it is offered on every team you are a member of and does not need the team selected first. **`teams:delete`** is a **system** scope (toolkit-defined) that authorizes deleting *any* team regardless of membership and regardless of `AllowTeamCreation` — grant it to your support/dev tooling via `o.ConfigureSystemRoles` (e.g. map `Developer` → `teams:delete`) or to a system API key. Setting `AllowTeamCreation = false` disables the self-service create and in-team delete paths but never blocks `teams:delete`.
 
 ### Finding a team when there are many of them
 

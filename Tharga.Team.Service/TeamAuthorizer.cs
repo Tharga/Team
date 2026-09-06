@@ -78,6 +78,33 @@ public sealed class TeamAuthorizer
     }
 
     /// <summary>
+    /// True when the caller is the <b>Owner</b> of <paramref name="teamKey"/>: the <c>TeamKey</c> claim
+    /// equals it <b>and</b> the <c>AccessLevel</c> claim is <see cref="AccessLevel.Owner"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Both halves are load-bearing.</b> The access level is emitted for the team the caller has
+    /// resolved access to, so on its own it says "an owner" and not "the owner of this team" — checking it
+    /// without the team binding would let the owner of one team act on another, which is the hole
+    /// <see cref="HasTeamScopeAsync"/> exists to close.
+    /// <para>
+    /// <b>For the acts a scope cannot express, because no scope distinguishes the Owner.</b> Every
+    /// registered scope is granted to Administrator as well, so <c>team:manage</c> cannot say "the owner
+    /// only" — which is how deleting a team came to be available to any administrator through the service
+    /// while the UI offered it to nobody but the owner.
+    /// </para>
+    /// <para>Fails closed: an absent, empty or unparseable access level is not the Owner.</para>
+    /// </remarks>
+    public async ValueTask<bool> IsOwnerOfAsync(string teamKey)
+    {
+        if (!await IsMemberOfAsync(teamKey)) return false;
+
+        var principal = await _principalAccessor.GetCurrentAsync();
+        var value = principal?.FindFirst(TeamClaimTypes.AccessLevel)?.Value;
+
+        return Enum.TryParse<AccessLevel>(value, out var accessLevel) && accessLevel == AccessLevel.Owner;
+    }
+
+    /// <summary>
     /// The caller's stable authentication subject, or <c>null</c> when unauthenticated.
     /// </summary>
     /// <remarks>

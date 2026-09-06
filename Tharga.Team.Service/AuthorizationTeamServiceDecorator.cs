@@ -8,7 +8,7 @@ namespace Tharga.Team.Service;
 /// the caller's claims via <see cref="TeamAuthorizer"/>:
 /// <list type="bullet">
 /// <item>Create — authenticated AND <c>AllowTeamCreation</c> (no scope; self-service).</item>
-/// <item>Delete — (<c>team:manage</c> on the team AND <c>AllowTeamCreation</c>) OR <c>teams:delete</c> (system).</item>
+/// <item>Delete — (<b>Owner</b> of the team AND <c>AllowTeamCreation</c>) OR <c>teams:delete</c> (system).</item>
 /// <item>Rename / Consent — <c>team:manage</c> on the team.</item>
 /// <item>Custom-role CRUD — the configurable custom-role manage scope on the team (default <c>team:manage</c>).</item>
 /// <item>Member invite/remove/role/scope-overrides/display-name — <c>member:manage</c> on the team.</item>
@@ -312,13 +312,24 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
             $"or the '{SystemTeamScopes.Manage}' system scope.");
     }
 
+    /// <summary>
+    /// <b>Owner only, from inside the team.</b> No scope can express this: every registered scope is
+    /// granted to Administrator as well, so <c>team:manage</c> would admit any administrator — which it
+    /// did, while the UI offered Delete to nobody but the Owner.
+    /// </summary>
+    /// <remarks>
+    /// The <c>teams:delete</c> system grant is unchanged and deliberately checked first: that is the
+    /// operator path, it authorizes any team regardless of membership, and <c>AllowTeamCreation</c> does
+    /// not bound it.
+    /// </remarks>
     private async Task RequireDeleteAsync(string teamKey)
     {
         if (await _authorizer.HasSystemScopeAsync(SystemTeamScopes.Delete)) return;
-        if (_lifecycle.AllowTeamCreation && await _authorizer.HasTeamScopeAsync(TeamScopes.Manage, teamKey)) return;
+        if (_lifecycle.AllowTeamCreation && await _authorizer.IsOwnerOfAsync(teamKey)) return;
         throw new UnauthorizedAccessException(
-            $"Deleting team '{teamKey}' requires '{TeamScopes.Manage}' on that team with AllowTeamCreation enabled, " +
-            $"or the '{SystemTeamScopes.Delete}' system scope.");
+            $"Deleting team '{teamKey}' requires being its owner, with AllowTeamCreation enabled, " +
+            $"or the '{SystemTeamScopes.Delete}' system scope. " +
+            $"'{TeamScopes.Manage}' on the team is no longer sufficient on its own.");
     }
 
     private async Task RequireTeamScopeAsync(string scope, string teamKey)
