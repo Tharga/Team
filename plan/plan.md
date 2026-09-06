@@ -45,7 +45,7 @@ Branch `feature/leave-team`, from `master` at 7ce1294.
       another member. Audit: a `leave-team` entry is written. Blazor: the gate tests already cover
       visibility.
 
-- [~] 9. Full suite green, `dotnet outdated` re-checked, README/docs reviewed for a surface this
+- [x] 9. Full suite green, `dotnet outdated` re-checked, README/docs reviewed for a surface this
       changes.
 
 ## Notes
@@ -75,6 +75,25 @@ Branch `feature/leave-team`, from `master` at 7ce1294.
 
 ## Last session
 
-2026-09-06 — Steps 1-8 done. Build clean, full suite **2539 passed, 0 failed** (2527 before; +13 new
-tests, −1 from collapsing a gate theory). Step 9 in progress: docs review, backlog note for the Delete
-inconsistency, then close-out.
+2026-09-06 — All nine steps done; implementation complete and awaiting the user's testing.
+
+Build clean, full suite **2539 passed, 0 failed** (2527 before; +13 new tests, −1 from collapsing a gate
+theory). `dotnet outdated` re-checked at the end: still nothing outstanding.
+
+Docs updated (`docs:` commit 37b60d4): a *Leaving a team* section in the implementation guide, the
+team-operation authorization table, the first-level interface table, the selected-team paragraph (Leave is
+now the exception), plus the suspension passages in `README.md` and `user-management.md` — a suspended
+member can leave, which qualifies "every scoped operation refuses".
+
+**Version stays a patch (3.20.2).** `ITeamDirectoryService.LeaveTeamAsync` was made a *default* interface
+method during the docs pass, precisely so a host substituting or decorating that facet keeps compiling —
+without that it would have been a required member, which is a consumer action and would have forced a
+`MAJOR_MINOR` bump.
+
+Recorded in the backlog: the Delete inconsistency (UI offers it to the Owner only, the service admits any
+`team:manage` holder), as the separate decision the user asked for.
+
+**Not yet done, deliberately:** the branch is unpushed and no PR is open — awaiting approval to push and
+the user's confirmation that the feature is done.
+
+**README/docs changes needed at close:** none outstanding; they landed in 37b60d4.
