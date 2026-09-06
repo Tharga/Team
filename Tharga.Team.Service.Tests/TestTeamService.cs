@@ -73,7 +73,16 @@ internal class TestTeamService : TeamServiceBase
         AddTeamMemberCallCount++;
         return Task.CompletedTask;
     }
-    protected override Task RemoveTeamMemberAsync(string teamKey, string userKey) => Task.CompletedTask;
+    /// <summary>
+    /// Actually drops the member, so a test can assert <i>who</i> left rather than only that nothing threw.
+    /// </summary>
+    protected override Task RemoveTeamMemberAsync(string teamKey, string userKey)
+    {
+        if (_teams.TryGetValue(teamKey, out var team) && team.Members != null)
+            _teams[teamKey] = team with { Members = team.Members.Where(x => x.Key != userKey).ToArray() };
+
+        return Task.CompletedTask;
+    }
 
     protected override Task<ITeam> SetTeamMemberInvitationResponseAsync(string teamKey, string userKey, string inviteKey, bool accept)
     {

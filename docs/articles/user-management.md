@@ -451,6 +451,11 @@ Two refusals, both in the service:
   a team whose ownership nobody can transfer, since transfer requires the caller to be the owner.
 - **Nobody can suspend themselves.**
 
+**A suspended member can still leave.** `ITeamDirectoryService.LeaveTeamAsync` is the one team operation
+carrying no scope, precisely so that holding none does not trap somebody in a team — and it strands
+nothing, because the Owner cannot be suspended in the first place. Restoring them afterwards means
+re-inviting rather than un-suspending.
+
 And one that came from the field: **an invited member cannot be suspended.** An unaccepted invitation
 grants no access, so there is nothing to take away; withdraw the invitation instead.
 

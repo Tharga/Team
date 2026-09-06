@@ -83,6 +83,9 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     public Task DeleteTeamAsync(string teamKey) => _inner.DeleteTeamAsync<TMember>(teamKey);
     public Task AddMemberAsync(string teamKey, InviteUserModel model) => _inner.AddMemberAsync(teamKey, model);
     public Task RemoveMemberAsync(string teamKey, string userKey) => _inner.RemoveMemberAsync(teamKey, userKey);
+
+    /// <inheritdoc cref="ITeamDirectoryService.LeaveTeamAsync"/>
+    public Task LeaveTeamAsync(string teamKey) => _inner.LeaveTeamAsync(teamKey);
     public Task SetMemberSuspendedAsync(string teamKey, string userKey, bool suspended)
         => _inner.SetMemberSuspendedAsync(teamKey, userKey, suspended);
 

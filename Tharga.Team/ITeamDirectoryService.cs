@@ -49,4 +49,36 @@ public interface ITeamDirectoryService
     /// </para>
     /// </remarks>
     Task<bool> IsSuspendedAsync(string teamKey);
+
+    /// <summary>
+    /// Leaves the team. Refuses the Owner, who must transfer ownership first, and the last administrator
+    /// of a team with no owner.
+    /// </summary>
+    /// <remarks>
+    /// <b>The one mutation on this interface, and it belongs here rather than on
+    /// <see cref="ITeamManagementService"/>.</b> That interface is gated: <c>ScopeProxy</c> throws on an
+    /// unattributed method, so every operation there must name a scope. Leaving can name none —
+    /// <c>member:manage</c>, which used to authorize it as a self-removal, is registered at
+    /// <see cref="AccessLevel.Administrator"/> and so is held by nobody who most needs to leave, and a
+    /// suspended member holds no scope whatsoever.
+    /// <para>
+    /// So it sits beside <see cref="IsSuspendedAsync"/>, ungated for the same reason: both concern only
+    /// the caller's own membership, which is not somebody else's information to protect. The check is the
+    /// signature — there is no user key to point at anyone else. The refusals are enforced by the service,
+    /// not merely hidden in the UI.
+    /// </para>
+    /// <para>
+    /// Removing <i>another</i> member remains <c>ITeamManagementService.RemoveMemberAsync</c> and still
+    /// requires <c>member:manage</c>.
+    /// </para>
+    /// <para>
+    /// A default interface method, so a host that substitutes or decorates this facet — which
+    /// <c>TryAdd</c> registration exists to allow — keeps compiling. It throws rather than no-opping:
+    /// reporting success for a departure that did not happen leaves someone believing they are out of a
+    /// team they are still in.
+    /// </para>
+    /// </remarks>
+    Task LeaveTeamAsync(string teamKey)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(LeaveTeamAsync)}.");
 }

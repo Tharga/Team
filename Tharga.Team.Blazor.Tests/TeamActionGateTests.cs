@@ -74,19 +74,26 @@ public class TeamActionGateTests
     }
 
     [Theory]
-    // A member who is not the owner can leave the selected team.
-    [InlineData(true, false, "t-1", "t-1", true)]
+    // A member who is not the owner can leave.
+    [InlineData(true, false, true)]
     // The owner must transfer ownership instead.
-    [InlineData(true, true, "t-1", "t-1", false)]
+    [InlineData(true, true, false)]
     // Non-members must not be offered Leave — the #125 regression.
-    [InlineData(false, false, "t-1", "t-1", false)]
-    [InlineData(false, true, "t-1", "t-1", false)]
-    // Leaving is confined to the selected team; elsewhere the service refuses it.
-    [InlineData(true, false, "t-1", "t-2", false)]
-    [InlineData(true, false, null, "t-1", false)]
-    public void CanLeave_RequiresMembershipNotOwnerAndSelectedTeam(bool isMember, bool isOwner, string selectedTeamKey, string teamKey, bool expected)
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    public void CanLeave_RequiresMembershipAndNotOwner(bool isMember, bool isOwner, bool expected)
     {
-        Assert.Equal(expected, TeamActionGate.CanLeave(isMember, isOwner, selectedTeamKey, teamKey));
+        Assert.Equal(expected, TeamActionGate.CanLeave(isMember, isOwner));
+    }
+
+    /// <summary>
+    /// Leaving carries no scope, so unlike every other action here it is not confined to the selected
+    /// team. Requiring the selection would make somebody select each team in turn to leave it.
+    /// </summary>
+    [Fact]
+    public void CanLeave_IsNotConfinedToTheSelectedTeam()
+    {
+        Assert.True(TeamActionGate.CanLeave(isMember: true, isOwner: false));
     }
 
     [Theory]

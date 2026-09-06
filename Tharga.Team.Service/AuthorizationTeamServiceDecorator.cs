@@ -12,6 +12,7 @@ namespace Tharga.Team.Service;
 /// <item>Rename / Consent — <c>team:manage</c> on the team.</item>
 /// <item>Custom-role CRUD — the configurable custom-role manage scope on the team (default <c>team:manage</c>).</item>
 /// <item>Member invite/remove/role/scope-overrides/display-name — <c>member:manage</c> on the team.</item>
+/// <item>Leave — no scope; the operation names no user but the caller. See <see cref="LeaveTeamAsync"/>.</item>
 /// <item>Remove user from all teams — <c>users:manage</c> (system; backs user deletion).</item>
 /// <item>Transfer ownership — passed through (Owner-only is enforced by the inner service).</item>
 /// </list>
@@ -192,6 +193,27 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
         await _inner.RemoveMemberAsync(teamKey, userKey);
     }
+
+    /// <summary>
+    /// <b>Deliberately unscoped</b>, unlike <see cref="RemoveMemberAsync"/> directly above it.
+    /// </summary>
+    /// <remarks>
+    /// The signature carries no user key, so the caller can only remove themselves — the check is the
+    /// shape of the operation rather than a grant, which is the same reason an invitation is authorized
+    /// by its code. Requiring <c>member:manage</c> here is what stopped an ordinary member leaving a team
+    /// at all: it is registered at <see cref="AccessLevel.Administrator"/>, so <c>User</c> and
+    /// <c>Viewer</c> never hold it.
+    /// <para>
+    /// No scope would serve. A suspended member holds none at all, and refusing them would make
+    /// "suspended people cannot leave" an accident of the gate rather than a decision — while stranding
+    /// nothing, since the Owner cannot be suspended.
+    /// </para>
+    /// <para>
+    /// The refusals live in the inner service and are the only ones: the Owner must transfer ownership
+    /// first, and the last administrator of an ownerless team stays.
+    /// </para>
+    /// </remarks>
+    public Task LeaveTeamAsync(string teamKey) => _inner.LeaveTeamAsync(teamKey);
 
     public async Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
     {

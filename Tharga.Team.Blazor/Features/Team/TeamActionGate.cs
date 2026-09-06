@@ -64,13 +64,18 @@ internal static class TeamActionGate
         => CanManage(hasManageScope, selectedTeamKey, teamKey) && allowTeamCreation && isOwner;
 
     /// <summary>
-    /// Whether the Leave action should be visible: on the selected team, where the caller is a member
-    /// but not the owner. Non-members have nothing to leave and the owner must transfer ownership
-    /// instead; leaving elsewhere is refused by the service, which requires the member-manage scope on
-    /// the team being left.
+    /// Whether the Leave action should be visible: the caller is a member of this team and does not own
+    /// it. Non-members have nothing to leave, and the owner must transfer ownership instead.
     /// </summary>
-    public static bool CanLeave(bool isMember, bool isOwner, string selectedTeamKey, string teamKey)
-        => isMember && !isOwner && IsSelected(selectedTeamKey, teamKey);
+    /// <remarks>
+    /// <b>Not confined to the selected team, unlike every other action here.</b> The others are, because
+    /// their scopes are issued for the selected team and offering them elsewhere means offering something
+    /// the server refuses. Leaving carries no scope at all — <c>ITeamDirectoryService.LeaveTeamAsync</c>
+    /// is authorized by naming no user but the caller — so the selection has nothing to do with it, and
+    /// requiring it would make somebody select each of five teams in turn to leave them.
+    /// </remarks>
+    public static bool CanLeave(bool isMember, bool isOwner)
+        => isMember && !isOwner;
 
     /// <summary>
     /// Whether the Transfer ownership action should be visible: on the selected team, where the caller

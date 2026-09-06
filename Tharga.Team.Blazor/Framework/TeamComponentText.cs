@@ -53,6 +53,10 @@ public static class TeamComponentText
     public static readonly TextKey ConfirmRemoveMember = new("team.component.confirmRemoveMember",
         "User '{0}' will be removed from the team '{1}'.");
 
+    /// <summary><c>{0}</c> is the team name.</summary>
+    public static readonly TextKey ConfirmLeaveTeam = new("team.component.confirmLeaveTeam",
+        "You will be removed from the team '{0}'.");
+
     public static readonly TextKey MemberNotFound = new("team.component.memberNotFound", "Member not found");
     public static readonly TextKey MemberNotFoundDetail = new("team.component.memberNotFoundDetail",
         "The member could not be located. Please reload the page.");
@@ -130,6 +134,9 @@ public static class TeamComponentText
     public static readonly TextKey ActionInviteUser = new("team.component.actionInviteUser", "Invite user");
     public static readonly TextKey ActionSetIcon = new("team.component.actionSetIcon", "Set icon");
     public static readonly TextKey ActionTransferOwnership = new("team.component.actionTransferOwnership", "Transfer ownership");
+    public static readonly TextKey ActionLeaveTeam = new("team.component.actionLeaveTeam", "Leave");
+    public static readonly TextKey ActionDeleteTeam = new("team.component.actionDeleteTeam", "Delete");
+    public static readonly TextKey ActionRenameTeam = new("team.component.actionRenameTeam", "Rename");
 
     /// <summary><c>{0}</c> identifies the member.</summary>
     public static readonly TextKey AuditLogTitle = new("team.component.auditLogTitle", "Audit log — {0}");
@@ -139,7 +146,7 @@ public static class TeamComponentText
     [
         PagingSummary, ColumnTeam, ColumnYourAccess, YourAccessTooltip, ColumnConsent, ColumnMembers,
         NoTeamsCanCreate, NoTeams, CreateTeam, RenameTitle, IconTitle, InviteUserTitle, InvitationSent,
-        EmailSentTo, EmailFailed, CouldNotSendEmail, InviteLinkCopied, ConfirmRemoveMember, MemberNotFound,
+        EmailSentTo, EmailFailed, CouldNotSendEmail, InviteLinkCopied, ConfirmRemoveMember, ConfirmLeaveTeam, MemberNotFound,
         MemberNotFoundDetail, NoEligibleMembers, NoEligibleMembersDetail, TransferOwnershipTitle, Transfer,
         Cancel, OwnershipTransferred, ColumnEmail, ColumnName, ClearNameOverride, NameOverrideTooltip,
         EditDisplayName, ColumnAccessLevel, ColumnRoles, ColumnScopeOverrides, ColumnScopes, ColumnStatus,
@@ -147,6 +154,6 @@ public static class TeamComponentText
         ConsentAccessFor, ConfirmDeleteTeam, ConfirmSuspendTitle, ConfirmSuspendDetail, CouldNotSuspend,
         CouldNotRestore, SuspendedTooltip, SuspendedByTooltip, ActionCopyInviteLink, ActionAuditLog,
         ActionRestoreAccess, ActionSuspendAccess, ActionRemoveMember, ActionInviteUser, ActionSetIcon,
-        ActionTransferOwnership, AuditLogTitle
+        ActionTransferOwnership, ActionLeaveTeam, ActionDeleteTeam, ActionRenameTeam, AuditLogTitle
     ];
 }

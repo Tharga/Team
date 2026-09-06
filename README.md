@@ -209,7 +209,8 @@ A **disabled user** is refused at sign-in and evicted from a live session within
 interval. A **suspended member** keeps their membership and still sees the team in the selector — they
 simply hold no scopes in it, so every scoped operation refuses. Seeing the team is the point: a
 membership that silently vanishes is indistinguishable from removal. Drop `<SuspendedTeamNotice />` into
-your layout to explain it to them.
+your layout to explain it to them. They can still **leave**: that is the one team operation carrying no
+scope, so holding none does not trap somebody in a team.
 
 A **disabled key** stops authenticating, and the refusal is recorded as an authentication failure —
 those attempts are the point of the trail. Refreshing it does **not** re-enable it: a refresh mints a new

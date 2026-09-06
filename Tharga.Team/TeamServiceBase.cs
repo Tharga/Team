@@ -5,6 +5,9 @@ namespace Tharga.Team;
 
 public abstract class TeamServiceBase : ITeamService
 {
+    private const string OwnerCannotLeaveMessage = "The owner cannot leave the team. Transfer ownership first.";
+    private const string LastAdministratorCannotLeaveMessage = "Cannot leave the team as the last administrator.";
+
     private readonly IUserService _userService;
     private readonly ILogger<TeamServiceBase> _logger;
     private readonly IIconStore _iconStore;
@@ -442,21 +445,60 @@ public abstract class TeamServiceBase : ITeamService
             if (member != null)
             {
                 if (member.AccessLevel == AccessLevel.Owner)
-                    throw new InvalidOperationException("The owner cannot leave the team. Transfer ownership first.");
+                    throw new InvalidOperationException(OwnerCannotLeaveMessage);
 
                 var user = await RequireCurrentUserAsync();
-                if (member.Key == user.Key && member.AccessLevel == AccessLevel.Administrator)
-                {
-                    var otherAdminsOrOwners = members.Count(x =>
-                        x.Key != userKey &&
-                        x.State == MembershipState.Member &&
-                        x.AccessLevel <= AccessLevel.Administrator);
-                    if (otherAdminsOrOwners == 0)
-                        throw new InvalidOperationException("Cannot leave the team as the last administrator.");
-                }
+                if (member.Key == user.Key) RequireNotLastAdministrator(member, members);
             }
         }
 
+        await DetachMemberAsync(teamKey, userKey);
+    }
+
+    /// <inheritdoc />
+    public async Task LeaveTeamAsync(string teamKey)
+    {
+        var user = await RequireCurrentUserAsync();
+
+        // GetMembersAsync, not the reflected roster RemoveMemberAsync reads: it is virtual, so a store
+        // can answer it properly, and where nothing can answer it the sequence is empty and this refuses.
+        // Leaving must fail closed -- an owner who slipped past the guard below strands a team that only
+        // the teams:set-owner system scope can repair.
+        var members = await GetMembersAsync(teamKey).ToArrayAsync();
+        var member = members.PickOneOrDefault(x => x.Key == user.Key, _logger, teamKey, user.Key);
+        if (member == null)
+            throw new InvalidOperationException($"You are not a member of team '{teamKey}'.");
+
+        if (member.AccessLevel == AccessLevel.Owner)
+            throw new InvalidOperationException(OwnerCannotLeaveMessage);
+
+        RequireNotLastAdministrator(member, members);
+
+        await DetachMemberAsync(teamKey, user.Key);
+    }
+
+    /// <summary>
+    /// Refuses a member who is the only administrator left. Counts the Owner, who outranks
+    /// <see cref="AccessLevel.Administrator"/>, so this bites only on a team that has no owner.
+    /// </summary>
+    private static void RequireNotLastAdministrator(ITeamMember member, IEnumerable<ITeamMember> members)
+    {
+        if (member.AccessLevel != AccessLevel.Administrator) return;
+
+        var otherAdminsOrOwners = members.Count(x =>
+            x.Key != member.Key &&
+            x.State == MembershipState.Member &&
+            x.AccessLevel <= AccessLevel.Administrator);
+        if (otherAdminsOrOwners == 0)
+            throw new InvalidOperationException(LastAdministratorCannotLeaveMessage);
+    }
+
+    /// <summary>
+    /// The removal itself, shared by <see cref="RemoveMemberAsync"/> and <see cref="LeaveTeamAsync"/> so
+    /// the two ways out of a team cannot drift into evicting different things.
+    /// </summary>
+    private async Task DetachMemberAsync(string teamKey, string userKey)
+    {
         await RemoveTeamMemberAsync(teamKey, userKey);
         await _cache.RemoveMemberAsync(teamKey, userKey);
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
