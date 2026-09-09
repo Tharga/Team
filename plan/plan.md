@@ -116,7 +116,17 @@ Branch `feature/audit-readability`, off `master` at `3b4807e`.
       and the proxy trace of the same request still disagreeing, which is exactly the pair the acceptance
       criterion names. All three sites move to one shared resolver.
 
-- [ ] **7. Version line and documentation.**
+- [x] **7. Version line and documentation.** *(done 2026-09-09)*
+      `MAJOR_MINOR` `3.20` → `3.21`. Both doc surfaces updated, not one: `docs/articles/implementation-guide.md`
+      gained four sections (correlation inside a request, classifying your own entries, the Operation
+      column, opening the log on a useful view) plus the `<AuditLogView />` row in the component table, and
+      `README.md` gained a **Reading the audit log** section — it had audit configuration but nothing about
+      reading, which is what this feature is entirely about. The `CorrelationId` bullet under *Auditing
+      background work* was corrected rather than left: its claim that "without it every entry gets its own
+      generated id" is no longer true inside a request. Both surfaces carry the **Changed in 3.21** note
+      about correlation ids not matching across the upgrade.
+      XML docs on `AuditQuery` were landed with step 4.
+      Original:
       `MAJOR_MINOR` `3.20` → `3.21` in `.github/workflows/build.yml`. Review **both** doc surfaces —
       `README.md` and `docs/articles/` (the implementation guide covers the audit surface) — updating
       existing sections and deciding whether the new classification/grouping behaviour warrants new

@@ -253,6 +253,37 @@ A host with its own team store implements one method to resolve a token without 
 expiry. Skip the first and links naming their team still work; see
 [the implementation guide](docs/articles/implementation-guide.md#what-an-invitation-link-looks-like).
 
+## Reading the audit log
+
+Two kinds of entry share the log: the ones your application writes for things people did, and the per-call
+access traces the scope proxy writes for every `[RequireScope]` invocation. On a busy tenant the traces
+outnumber the rest several times over, and the audit log's own readers are usually the loudest of them.
+
+**Classify what you write**, so the Event filter can tell the two apart:
+
+```csharp
+auditLogger.Log(auditEntryFactory.Create(
+    AuditEventType.DataChange, "case", "CaseClosed", teamKey: team.Key, metadata: metadata));
+```
+
+**Open the view on what a reader is looking for**, without taking the choice away from them:
+
+```csharp
+<AuditLogView InitialFilter="@(new AuditInitialFilter { ExcludedScopes = ["audit:read"] })" />
+```
+
+`InitialFilter` sets opening values the reader can change — as against `PinnedFilter`, which hides its
+controls and locks the query. Hiding a scope never hides the entries your application wrote, since those
+check no scope, and a **Show hidden** toggle brings the rest back.
+
+The grid's **Operation** column shows the scope that was checked, or the entry's own feature and action
+where none was, so an entry you wrote is identifiable without expanding the row.
+
+**Changed in 3.21.** Entries in one request now share a correlation id taken from `Activity.Current.TraceId`.
+It was previously derived from `HttpContext.TraceIdentifier` parsed as a `Guid`, which never succeeds, so
+every entry carried its own id and nothing grouped. See
+[the implementation guide](docs/articles/implementation-guide.md#correlation-inside-a-request).
+
 ## Advanced Usage
 
 Individual `Add*` methods remain available for partial/custom setups. See the **[Implementation Guide](docs/articles/implementation-guide.md)** for step-by-step instructions.
