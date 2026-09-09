@@ -51,10 +51,21 @@ Branch `feature/audit-readability`, off `master` at `3b4807e`.
       - Text goes through `IThargaTextProvider` (`AuditLogViewText`), never a literal, and the coverage
         ratchet must stay green.
 
-- [ ] **4. Exclusion filters on the query layer.**
-      `AuditQuery` gains exclusion forms (`ExcludedScopes`, `ExcludedEventTypes`) and `MongoDbAuditLogger`
-      maps them to `Nin`. Query-layer only, no UI yet. Tests in `Tharga.Team.Service.Tests` covering
-      exclusion alone and exclusion combined with an include on the same dimension.
+- [x] **4. Exclusion filters on the query layer.** *(done 2026-09-09)*
+      `AuditQuery.ExcludedScopes` / `.ExcludedEventTypes`, mapped to `Nin` in `MongoDbAuditLogger`.
+      `BuildFilter` went `private` → `internal` so the mapping is assertable without a live server: the
+      tests render the filter to BSON and read it.
+      **The property that makes this the right primitive:** `$nin` keeps documents where the field is
+      absent, and a consumer-written entry has no `ScopeChecked` — so excluding `audit:read` removes the
+      log's own readers and leaves every domain entry beside them. Documented on the member, since it is
+      the whole reason an exclusion beats an include list here.
+      Include and exclude combine rather than override; the driver folds two constraints on one field into
+      a single clause carrying both operators, which the test now records.
+      6 tests in `AuditQueryExclusionTests`, plus the two new fields added to the existing
+      `Array_Filters_Default_To_Null`. Service suite 895 → **901, 0 failed**.
+      Also filled in the missing XML docs on `Features`/`Actions`/`Scopes`/`EventTypes` while in the file —
+      moved forward from step 7, since their absence is the documented reason #260 was filed against a
+      filter that already existed.
 
 - [ ] **5. Soft initial filter values on `AuditLogView`.** *(shape decided 2026-09-09)*
       - **A separate type** (`AuditInitialFilter`), not a reuse of `AuditPinnedFilter`. The dimension sets

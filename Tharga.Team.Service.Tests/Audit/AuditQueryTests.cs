@@ -54,5 +54,7 @@ public class AuditQueryTests
         Assert.Null(query.Actions);
         Assert.Null(query.Scopes);
         Assert.Null(query.EventTypes);
+        Assert.Null(query.ExcludedScopes);
+        Assert.Null(query.ExcludedEventTypes);
     }
 }

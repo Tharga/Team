@@ -35,10 +35,40 @@ public record AuditQuery
 
     // Multi-value filters (take precedence over single-value when set)
     public string[] TeamKeys { get; init; }
+
+    /// <summary>Filters to entries whose <see cref="AuditEntry.Feature"/> is one of these. Takes precedence over <see cref="Feature"/>.</summary>
     public string[] Features { get; init; }
+
+    /// <summary>Filters to entries whose <see cref="AuditEntry.Action"/> is one of these. Takes precedence over <see cref="Action"/>.</summary>
     public string[] Actions { get; init; }
+
+    /// <summary>Filters to entries whose <see cref="AuditEntry.ScopeChecked"/> is one of these. Entries a consumer wrote check no scope, so naming any scope here excludes all of them.</summary>
     public string[] Scopes { get; init; }
+
+    /// <summary>Filters to entries of these types. Takes precedence over <see cref="EventType"/>.</summary>
     public AuditEventType[] EventTypes { get; init; }
+
+    /// <summary>
+    /// Excludes entries whose <see cref="AuditEntry.ScopeChecked"/> is one of these — the access traces a
+    /// reader does not want, named directly rather than by enumerating everything else.
+    /// </summary>
+    /// <remarks>
+    /// <b>An entry that checked no scope is kept.</b> Exclusion is by value, and a consumer-written entry
+    /// has no <c>ScopeChecked</c> at all, so excluding <c>audit:read</c> removes the log's readers from the
+    /// view without touching the domain entries beside them — which is the whole point of naming the
+    /// exclusion instead of building an include list.
+    /// <para>
+    /// Combines with <see cref="Scopes"/> rather than overriding it: both apply, so an include list can be
+    /// narrowed further. Naming the same scope in both yields nothing, which is the honest answer.
+    /// </para>
+    /// </remarks>
+    public string[] ExcludedScopes { get; init; }
+
+    /// <summary>
+    /// Excludes entries of these types. Combines with <see cref="EventTypes"/> and <see cref="EventType"/>
+    /// rather than overriding them.
+    /// </summary>
+    public AuditEventType[] ExcludedEventTypes { get; init; }
 
     // Paging and sorting
     public DateTime? From { get; init; }
