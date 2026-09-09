@@ -24,12 +24,12 @@ internal class FakeAuditBackend : IAuditLogger
 /// </summary>
 internal static class FakeAuditLoggerFactory
 {
-    public static (CompositeAuditLogger Logger, FakeAuditBackend Backend) Create()
+    public static (CompositeAuditLogger Logger, FakeAuditBackend Backend) Create(AuditOptions options = null)
     {
         var backend = new FakeAuditBackend();
         var logger = new CompositeAuditLogger(
             new IAuditLogger[] { backend },
-            Options.Create(new AuditOptions()));
+            Options.Create(options ?? new AuditOptions()));
         return (logger, backend);
     }
 }

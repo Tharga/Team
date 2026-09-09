@@ -97,7 +97,7 @@ public class CompositeAuditLogger : IAuditLogger
         {
             AuditEventType.ServiceCall => AuditEventFilter.ServiceCalls,
             AuditEventType.AuthSuccess or AuditEventType.AuthFailure => AuditEventFilter.AuthEvents,
-            AuditEventType.ScopeDenial => AuditEventFilter.Denials,
+            AuditEventType.ScopeDenial or AuditEventType.AccessLevelDenial => AuditEventFilter.Denials,
             AuditEventType.DataChange => AuditEventFilter.DataChanges,
             AuditEventType.RateLimit => AuditEventFilter.RateLimits,
             _ => AuditEventFilter.None
