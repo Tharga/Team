@@ -241,6 +241,14 @@ builder.Services.Configure<InvitationOptions>(o => o.Lifetime = TimeSpan.FromDay
 An expired invitation is refused at acceptance and reported as *expired* rather than as an invalid code —
 the difference between asking for a new link and retrying something that will never work.
 
+**Repeated failed resolves from one source are delayed**, and the first failure past the threshold is
+recorded as `AuditEventType.RateLimit`, so an attempt to guess codes is slowed and visible rather than
+silent. It delays and never refuses, so an invitee retrying a link is never locked out. Defaults are
+generous — five failures in five minutes, then a curve capped at two seconds — and configurable on
+`InvitationOptions` (`ThrottleFailureThreshold`, `ThrottleWindow`, `MaxThrottleDelay`); set the threshold to
+`0` to turn it off. It is a second layer, not a replacement for code entropy. See
+[the implementation guide](docs/articles/implementation-guide.md#guessing-an-invite-code-is-slowed-and-shows-up-in-the-audit-log).
+
 **Extending one keeps its code**, which is the point: someone who has already mailed a link can give it more
 time without the recipient's link dying. Re-inviting the same address does the same thing rather than issuing
 a second live code for one seat.
