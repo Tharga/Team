@@ -10,6 +10,48 @@ namespace Tharga.Team.Service.Audit;
 /// </summary>
 internal static class AuditHelper
 {
+    /// <summary>
+    /// The id that groups every entry written for one unit of work: the declared one, else the ambient
+    /// trace, else a fresh id.
+    /// </summary>
+    /// <remarks>
+    /// <b>This used to be derived from <c>HttpContext.TraceIdentifier</c> parsed as a <see cref="Guid"/>,
+    /// which can never succeed.</b> That identifier is <c>{ConnectionId}:{RequestNumber:X8}</c> —
+    /// <c>0HMVDBP0M8BSM:00000001</c> — so the parse failed on every request and each entry fell through to
+    /// its own new id. Measured on a consumer's database: 417 entries, 417 distinct correlation ids, and
+    /// the grouping the field is documented to provide had never worked outside declared background work
+    /// (Tharga/Team#260).
+    /// <para>
+    /// <see cref="Activity.Current"/> is what actually spans a request, and it is already flowing wherever
+    /// the host has tracing on. Its trace id is sixteen bytes, as a Guid is, so the mapping is the value
+    /// itself rather than a hash of it — the same id can be matched against the traces in a telemetry tool.
+    /// </para>
+    /// <para>
+    /// <b>Every writer resolves it here.</b> The two enforcement proxies build their entries inline rather
+    /// than through <see cref="BuildEntry"/>, so a fix applied only there would still have left a
+    /// consumer's entry and the proxy trace of the same call disagreeing — which is the pair the grouping
+    /// exists to join.
+    /// </para>
+    /// </remarks>
+    public static Guid ResolveCorrelationId(Guid? declared)
+        => declared ?? FromActivity() ?? Guid.NewGuid();
+
+    /// <summary>
+    /// The ambient actor's correlation id, but only where that actor is the one being recorded. A real
+    /// principal always wins, so a scope left open on a pooled thread cannot pull a person's entries into
+    /// a background job's group.
+    /// </summary>
+    public static Guid? DeclaredCorrelationId(ClaimsPrincipal user)
+        => user?.Identity?.IsAuthenticated == true ? null : AuditContextAccessor.Ambient?.CorrelationId;
+
+    private static Guid? FromActivity()
+    {
+        var traceId = Activity.Current?.TraceId;
+        if (traceId is null || traceId.Value == default) return null;
+
+        return Guid.ParseExact(traceId.Value.ToHexString(), "N");
+    }
+
     public static AuditEntry BuildEntry(
         IHttpContextAccessor httpContextAccessor,
         string feature,
@@ -19,7 +61,8 @@ internal static class AuditHelper
         bool success,
         string errorMessage = null,
         string teamKey = null,
-        IReadOnlyDictionary<string, string> metadata = null)
+        IReadOnlyDictionary<string, string> metadata = null,
+        AuditEventType eventType = AuditEventType.ServiceCall)
     {
         var user = httpContextAccessor?.HttpContext?.User;
         var identity = user?.Identity;
@@ -55,7 +98,7 @@ internal static class AuditHelper
         return new AuditEntry
         {
             Timestamp = DateTime.UtcNow,
-            EventType = AuditEventType.ServiceCall,
+            EventType = eventType,
             Feature = feature,
             Action = action,
             MethodName = methodName,
@@ -63,10 +106,7 @@ internal static class AuditHelper
             Success = success,
             ErrorMessage = errorMessage,
             CallerType = callerType,
-            // A job's correlation id groups every entry it writes. Without one each entry gets its own
-            // generated id, which is exactly the grouping a worker needs and cannot reconstruct later.
-            CorrelationId = ambient?.CorrelationId
-                ?? (Guid.TryParse(httpContextAccessor?.HttpContext?.TraceIdentifier, out var traceId) ? traceId : Guid.NewGuid()),
+            CorrelationId = ResolveCorrelationId(ambient?.CorrelationId),
             CallerIdentity = user?.FindFirst(ClaimTypes.Name)?.Value
                 ?? user?.FindFirst("preferred_username")?.Value
                 ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value

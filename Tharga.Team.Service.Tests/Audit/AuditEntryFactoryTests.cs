@@ -114,6 +114,74 @@ public class AuditEntryFactoryTests
         }
     }
 
+    /// <summary>
+    /// The distinction the Event filter exists to make, and could not make before: a consumer's domain
+    /// entry against the scope proxy's per-call access trace.
+    /// </summary>
+    [Fact]
+    public void TheEventTypeOverload_ClassifiesTheEntry()
+    {
+        var sut = new AuditEntryFactory(NoHttpContext());
+
+        var entry = sut.Create(AuditEventType.DataChange, "case", "CaseClosed");
+
+        Assert.Equal(AuditEventType.DataChange, entry.EventType);
+    }
+
+    /// <summary>
+    /// The original overload keeps its behaviour exactly. An assembly built against 3.20 binds to this
+    /// signature, so a change here is a silent reclassification of every entry it ever wrote.
+    /// </summary>
+    [Fact]
+    public void TheOriginalOverload_StillRecordsAServiceCall()
+    {
+        var sut = new AuditEntryFactory(NoHttpContext());
+
+        var entry = sut.Create("case", "CaseClosed");
+
+        Assert.Equal(AuditEventType.ServiceCall, entry.EventType);
+    }
+
+    /// <summary>Classification is the only difference between the two overloads.</summary>
+    [Fact]
+    public void TheEventTypeOverload_ChangesNothingElseAboutTheEntry()
+    {
+        var context = new AuditContextAccessor();
+        var sut = new AuditEntryFactory(NoHttpContext());
+        var metadata = new Dictionary<string, string> { ["caseId"] = "c-1" };
+
+        using (context.Push(new AuditActor("nightly-retention", TeamKey: "t-1")))
+        {
+            var entry = sut.Create(AuditEventType.DataChange, "case", "CaseClosed", methodName: "CloseCaseAsync",
+                durationMs: 130, success: false, errorMessage: "boom", metadata: metadata);
+
+            Assert.Equal("case", entry.Feature);
+            Assert.Equal("CaseClosed", entry.Action);
+            Assert.Equal("CloseCaseAsync", entry.MethodName);
+            Assert.Equal(130, entry.DurationMs);
+            Assert.False(entry.Success);
+            Assert.Equal("boom", entry.ErrorMessage);
+            Assert.Equal("t-1", entry.TeamKey);
+            Assert.Equal("nightly-retention", entry.CallerIdentity);
+            Assert.Equal("c-1", entry.Metadata["caseId"]);
+        }
+    }
+
+    /// <summary>
+    /// Nothing stops a consumer classifying an entry the toolkit also uses. The type is a reading
+    /// classification, not a claim about what was enforced — <see cref="AuditEntry.ScopeChecked"/> is what
+    /// says a check happened, and the factory never sets it.
+    /// </summary>
+    [Fact]
+    public void AConsumerEntryNeverClaimsAScopeWasChecked()
+    {
+        var sut = new AuditEntryFactory(NoHttpContext());
+
+        var entry = sut.Create(AuditEventType.AuthSuccess, "case", "CaseClosed");
+
+        Assert.Null(entry.ScopeChecked);
+    }
+
     private static IHttpContextAccessor NoHttpContext()
     {
         var accessor = Substitute.For<IHttpContextAccessor>();

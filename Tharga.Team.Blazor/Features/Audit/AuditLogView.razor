@@ -110,6 +110,13 @@ else
                                         Placeholder="@_text[AuditLogViewText.FilterAll]" Change="@(_ => OnFilterChanged())"
                                         Style="width: 200px;" />
                     </RadzenStack>
+                    @* Rendered only when the host hid something. Nothing is held back without a way to
+                       see it — that is the whole difference between an opening value and a pin. *@
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(_hiddenScopes.Length > 0)">
+                        <RadzenLabel Text="@_text[AuditLogViewText.ShowHiddenEntries]"
+                                     title="@_text.Format(AuditLogViewText.HiddenScopes, string.Join(", ", _hiddenScopes))" />
+                        <RadzenCheckBox @bind-Value="_showHiddenEntries" TValue="bool" Change="@(_ => OnFilterChanged())" />
+                    </RadzenStack>
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                         <RadzenLabel Text="@_text[AuditLogViewText.Result]" />
                         <RadzenSelectBar @bind-Value="_filterSuccess" TValue="IEnumerable<bool>" Multiple="true"
@@ -156,8 +163,19 @@ else
                         <RadzenDataGridColumn Title="@_text[AuditLogViewText.Source]" Width="70px" Filterable="false" Sortable="false">
                             <Template>@context.CallerSource</Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnScope]" Property="@nameof(AuditEntry.ScopeChecked)" Width="140px"
-                                              Filterable="false" Sortable="false" />
+                        <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnOperation]" Property="@nameof(AuditEntry.ScopeChecked)" Width="140px"
+                                              Filterable="false" Sortable="false">
+                            <Template>
+                                @if (context.ScopeChecked != null)
+                                {
+                                    @GetOperation(context)
+                                }
+                                else
+                                {
+                                    <span title="@_text[AuditLogViewText.OperationNotScopeChecked]" style="font-style:italic;opacity:0.75;">@GetOperation(context)</span>
+                                }
+                            </Template>
+                        </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnMethod]" Property="@nameof(AuditEntry.MethodName)" Width="140px"
                                               Sortable="true" />
                         <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnDuration]" Property="@nameof(AuditEntry.DurationMs)" Width="80px"

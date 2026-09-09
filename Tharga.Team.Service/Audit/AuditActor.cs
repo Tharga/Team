@@ -24,8 +24,9 @@
 /// Optional. The team this work acts on. Background code has no selected team for the toolkit to infer
 /// one from, so without it entries are recorded with no team and cannot be found on a team-scoped audit
 /// view. Declaring it here means a job that works on one team states it once instead of on every entry;
-/// an explicit <c>teamKey</c> passed to <see cref="IAuditEntryFactory.Create"/> still wins, for a job
-/// that crosses teams.
+/// an explicit <c>teamKey</c> passed to
+/// <see cref="IAuditEntryFactory.Create(string, string, string, long, bool, string, string, IReadOnlyDictionary{string, string})"/>
+/// still wins, for a job that crosses teams.
 /// </param>
 public sealed record AuditActor(
     string Identity,

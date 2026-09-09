@@ -1010,7 +1010,7 @@ public class MyTeamService : TeamServiceRepositoryBase<TeamEntity, TeamMember>
 | `<TeamInviteView />` | Pending invitation view. **Works standalone on its own route** — see [Where invitations are redeemed](#where-invitations-are-redeemed) |
 | `<UsersView />` | Admin user list: last seen, directory verification, user deletion, and a directory-only tab when a directory service is registered. Highlights your own row, shows record keys with copy, and cross-links users to teams. Its **Teams** tab shows owner, last used, invited-count split and an empty-team badge, and offers deleting any team to a holder of the `teams:delete` system scope, which no consent option grants. Opt-in `ShowAuditLogButton` adds a per-row audit log. Viewing and acting require the `users:manage` system scope — enforced in the service layer (see [User management & directory](user-management.md)) |
 | `<ApiKeyView />` | API key management (requires Step 5). Shows **Created** and **Last used** columns per key, and a **Tags** column (chips for keys in `ChipTagKeys`, plus an `(i)` tooltip of all tags). Opt-in `[Parameter]` flags: `ShowAuditLogButton`, `ShowScopeOverrides` (Scopes column + create-card multi-select + Edit-Scopes dialog per row), `ChipTagKeys` |
-| `<AuditLogView />` | Audit log viewer (requires Step 8) |
+| `<AuditLogView />` | Audit log viewer (requires Step 8). `PinnedFilter` scopes it and hides the pinned controls; `InitialFilter` sets opening values the reader can change, including `ExcludedScopes` for hiding access-trace noise behind a **Show hidden** toggle |
 | `Roles.TeamMember` | Role claim added to authenticated team members |
 | `Roles.Developer` | Role for developer-only UI sections |
 
@@ -2519,10 +2519,85 @@ Entries written inside the scope carry that identity, `AuditCallerType.System` a
 - **An authenticated caller always wins.** A scope left open on a pooled thread cannot relabel a real
   user's action as the system's. An *anonymous* request does not win — a job triggered through an
   unauthenticated endpoint still knows what it is.
-- **Set `CorrelationId` per unit of work.** Without it every entry gets its own generated id, and the
-  grouping cannot be reconstructed afterwards.
+- **Set `CorrelationId` per unit of work.** A job is not a request, so there is no ambient trace to group
+  its entries; without a declared id each one falls back to its own and the grouping cannot be
+  reconstructed afterwards.
 
 `IAuditContextAccessor` is registered by `AddThargaAuditLogging()`, regardless of storage mode.
+
+### Correlation inside a request
+
+Entries written during a request share the request's correlation id, so a domain entry and the per-call
+access traces around it can be pulled back together. The value is `Activity.Current.TraceId` — the same
+trace id your telemetry carries, mapped to a `Guid` by value rather than hashed — so an audit row can be
+matched against the request's spans in Application Insights or any other tool reading W3C trace context.
+
+Nothing to configure: it works wherever `Activity` is flowing, which is the default for an ASP.NET Core
+request. Outside one (and with no declared actor) each entry still gets its own id.
+
+> **Changed in 3.21.** This previously derived from `HttpContext.TraceIdentifier` parsed as a `Guid`. That
+> identifier is `{ConnectionId}:{RequestNumber:X8}` and never parses as one, so the fallback fired on every
+> request and **every entry carried a distinct id** — one consumer measured 417 entries with 417 ids. If
+> you group or report on `CorrelationId`, entries written before and after this release will not correlate
+> with each other; entries written before it were never correlated with anything.
+
+### Classifying your own entries
+
+`IAuditEntryFactory.Create` has an overload taking an `AuditEventType`. Use it for anything that changed
+something:
+
+```csharp
+auditLogger.Log(auditEntryFactory.Create(
+    AuditEventType.DataChange, "case", "CaseClosed", teamKey: team.Key, metadata: metadata));
+```
+
+**Why it matters for reading, not for storage.** The enforcement proxies record their per-call access
+traces as `ServiceCall`, and so does the overload without an event type — so an entry you write without one
+cannot be told apart from them by the log view's **Event** filter. On a busy tenant the traces outnumber
+the domain entries several times over, which makes that filter the difference between a readable log and a
+list of everything that was permitted.
+
+The classification changes nothing about how the entry is stored, retained or authorized, and it is not a
+claim that anything was checked — `ScopeChecked` is what says a check happened, and the factory never sets
+it.
+
+### What a row is about: the Operation column
+
+The grid's **Operation** column shows the scope that was checked, or — for an entry your application wrote,
+where none was — that entry's own feature and action, rendered muted with a tooltip saying so. Before 3.21
+this column showed `ScopeChecked` alone, so a domain entry carrying the object identity rendered as a blank
+cell beside a fully-labelled access trace: the important row was the anonymous one.
+
+It is one column rather than a Feature and an Action column because the proxies already store the same fact
+twice — `ScopeProxy` writes the feature, the action **and** the scope those two compose, so separate columns
+would print `case:manage | case | manage` on the row type that dominates the log.
+
+### Opening the log on a useful view
+
+`<AuditLogView />` takes an `InitialFilter` alongside the existing `PinnedFilter`, and the two are
+opposites:
+
+| | `PinnedFilter` | `InitialFilter` |
+|---|---|---|
+| The control | hidden | visible |
+| The reader | cannot change it | can change it |
+| For | scoping a view to one key, team or person | opening on what is usually wanted |
+
+```csharp
+<AuditLogView InitialFilter="@(new AuditInitialFilter { ExcludedScopes = ["audit:read"] })" />
+```
+
+That opens the log with its own readers hidden — commonly the largest single source of noise, since a page
+refresh writes several — and renders a **Show hidden** toggle that brings them back. Entries that checked no
+scope are unaffected, so hiding a scope never hides the entries your application wrote.
+
+`AuditInitialFilter` also carries `EventTypes`, `Features` and `Actions`. Two rules worth knowing:
+
+- **A pin wins where both name a dimension.** An opening value is one the reader can change, so a value
+  that survived alongside a pin would be a way to widen the view past the scope the pin exists to impose.
+- **Opening values never narrow the filter options.** A category hidden on open still appears in its
+  control — otherwise the reader could not discover what was held back, and the default would be a pin
+  wearing a different name.
 
 ### Reading failures in the log view
 

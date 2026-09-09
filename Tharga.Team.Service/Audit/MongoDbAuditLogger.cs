@@ -109,7 +109,7 @@ public class MongoDbAuditLogger : BackgroundService, IAuditLogger
         }
     }
 
-    private static FilterDefinition<AuditEntryEntity> BuildFilter(AuditQuery query)
+    internal static FilterDefinition<AuditEntryEntity> BuildFilter(AuditQuery query)
     {
         var builder = Builders<AuditEntryEntity>.Filter;
         var filters = new List<FilterDefinition<AuditEntryEntity>>();
@@ -133,10 +133,18 @@ public class MongoDbAuditLogger : BackgroundService, IAuditLogger
         if (query.Scopes is { Length: > 0 })
             filters.Add(builder.In(e => e.ScopeChecked, query.Scopes));
 
+        // Nin keeps entries with no ScopeChecked at all, which is what makes excluding one noisy scope
+        // leave the consumer-written entries beside it in place.
+        if (query.ExcludedScopes is { Length: > 0 })
+            filters.Add(builder.Nin(e => e.ScopeChecked, query.ExcludedScopes));
+
         if (query.EventTypes is { Length: > 0 })
             filters.Add(builder.In(e => e.EventType, query.EventTypes));
         else if (query.EventType != null)
             filters.Add(builder.Eq(e => e.EventType, query.EventType.Value));
+
+        if (query.ExcludedEventTypes is { Length: > 0 })
+            filters.Add(builder.Nin(e => e.EventType, query.ExcludedEventTypes));
 
         if (query.CallerIdentity != null)
             filters.Add(builder.Regex(e => e.CallerIdentity, new BsonRegularExpression(query.CallerIdentity, "i")));

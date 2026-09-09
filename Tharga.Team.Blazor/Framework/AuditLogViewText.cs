@@ -52,6 +52,26 @@ public static class AuditLogViewText
     public static readonly TextKey ColumnTime = new("team.auditLogView.columnTime", "Time");
     public static readonly TextKey ColumnCaller = new("team.auditLogView.columnCaller", "Caller");
     public static readonly TextKey ColumnScope = new("team.auditLogView.columnScope", "Scope");
+
+    /// <summary>
+    /// What the row is about: the scope that was checked, or — for an entry a consumer wrote, where none
+    /// was — its feature and action. Deliberately not <see cref="ColumnScope"/>: a consumer's
+    /// <c>case:CaseClosed</c> under a heading reading "Scope" would claim an authorization check that
+    /// never happened, and an audit log must not conflate what was authorized with what was done.
+    /// </summary>
+    public static readonly TextKey ColumnOperation = new("team.auditLogView.columnOperation", "Operation");
+
+    /// <summary>Tooltip on an entry a consumer wrote, where the operation shown was never scope-checked.</summary>
+    public static readonly TextKey OperationNotScopeChecked = new("team.auditLogView.operationNotScopeChecked", "Recorded by the application. No scope was checked for this entry.");
+
+    /// <summary>
+    /// The filter that reverses a host's opening exclusion. Rendered only when there is something hidden,
+    /// so that nothing is ever held back without a way to see it.
+    /// </summary>
+    public static readonly TextKey ShowHiddenEntries = new("team.auditLogView.showHiddenEntries", "Show hidden");
+
+    /// <summary>Tooltip naming what the host hid. The placeholder is the comma-separated scope list.</summary>
+    public static readonly TextKey HiddenScopes = new("team.auditLogView.hiddenScopes", "Hidden unless shown: {0}");
     public static readonly TextKey ColumnMethod = new("team.auditLogView.columnMethod", "Method");
     public static readonly TextKey ColumnDuration = new("team.auditLogView.columnDuration", "Duration");
     public static readonly TextKey ColumnFeature = new("team.auditLogView.columnFeature", "Feature");
@@ -98,7 +118,9 @@ public static class AuditLogViewText
         Period, PeriodToday, PeriodSevenDays, PeriodThirtyDays, PeriodNinetyDays, FilterAll,
         Team, Source, ScopeFeature, ScopeAction, Event, Result, Success, Failure,
         Export, ExportCsv, ExportJson, PagingSummary,
-        ColumnTime, ColumnCaller, ColumnScope, ColumnMethod, ColumnDuration, ColumnFeature, ColumnAction, ColumnDurationMs,
+        ColumnTime, ColumnCaller, ColumnScope, ColumnOperation, OperationNotScopeChecked,
+        ShowHiddenEntries, HiddenScopes,
+        ColumnMethod, ColumnDuration, ColumnFeature, ColumnAction, ColumnDurationMs,
         DetailName, DetailValue, DetailEmpty, NoAdditionalDetails, TotalEntries,
         ChartCallsOverTime, GroupingHourly, GroupingDaily, AxisCount, SeriesCalls,
         ChartSuccessVsFailure, SeriesStatus, ChartByFeature, ChartTopCallers, NoDataForFilters,

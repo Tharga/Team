@@ -87,7 +87,7 @@ public class ScopeProxy<T> : DispatchProxy where T : class
             Success = success,
             ErrorMessage = errorMessage,
             CallerType = callerSource == AuditCallerSource.Api ? AuditCallerType.ApiKey : AuditCallerType.User,
-            CorrelationId = Guid.NewGuid(),
+            CorrelationId = AuditHelper.ResolveCorrelationId(AuditHelper.DeclaredCorrelationId(user)),
             CallerIdentity = user?.FindFirst(ClaimTypes.Name)?.Value
                 ?? user?.FindFirst("preferred_username")?.Value
                 ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value

@@ -33,7 +33,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="SkiaSharp" Version="4.151.2" />
+    <PackageReference Include="SkiaSharp" Version="4.152.0" />
     <!--
       The self-contained libSkiaSharp.so, so a Linux host needs no fontconfig or freetype packages.
       Referenced here rather than left to the consumer: a missing native asset builds cleanly and fails
@@ -41,8 +41,8 @@
       The plain SkiaSharp.NativeAssets.Linux variant is smaller but pulls a font stack we never use —
       icons are decoded, scaled and encoded, never drawn with text.
     -->
-    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.151.2" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.11" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.152.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team\Tharga.Team.csproj" />
