@@ -19,7 +19,8 @@ internal static class AuditHelper
         bool success,
         string errorMessage = null,
         string teamKey = null,
-        IReadOnlyDictionary<string, string> metadata = null)
+        IReadOnlyDictionary<string, string> metadata = null,
+        AuditEventType eventType = AuditEventType.ServiceCall)
     {
         var user = httpContextAccessor?.HttpContext?.User;
         var identity = user?.Identity;
@@ -55,7 +56,7 @@ internal static class AuditHelper
         return new AuditEntry
         {
             Timestamp = DateTime.UtcNow,
-            EventType = AuditEventType.ServiceCall,
+            EventType = eventType,
             Feature = feature,
             Action = action,
             MethodName = methodName,
