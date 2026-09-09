@@ -95,7 +95,17 @@ Branch `feature/audit-readability`, off `master` at `3b4807e`.
         and unreachable. Off applies the host's configured exclusion; on clears it. One discoverable
         control matching the question the reader actually has.
 
-- [ ] **6. Correlation id from `Activity.Current`.**
+- [x] **6. Correlation id from `Activity.Current`.** *(done 2026-09-09)*
+      `AuditHelper.ResolveCorrelationId` / `.DeclaredCorrelationId` are now the single source, called from
+      `AuditHelper.BuildEntry`, `ScopeProxy` and `AccessLevelProxy` alike. The trace id maps to the Guid
+      **by value** (both are sixteen bytes) rather than by hash, so an entry can be matched against the
+      request's spans in a telemetry tool. A declared `AuditActor` still wins, and an authenticated
+      principal still beats a stray open scope — the same precedence identity already used, now applied to
+      correlation in all three writers instead of one.
+      6 tests in `AuditCorrelationTests`, the load-bearing one being end-to-end: a real `ScopeProxy` trace
+      and a factory-written entry in one activity, asserted equal. Service suite 901 → **907**; whole suite
+      **2572, 0 failed** across all seven projects.
+      Original note:
       Replace the `Guid.TryParse(TraceIdentifier)` fallback in `AuditHelper`, which can never succeed on
       the HTTP path. A declared `AuditActor.CorrelationId` still wins — background work keeps its
       grouping. Tests: two entries from one request share an id; a declared actor's id is preferred; a
