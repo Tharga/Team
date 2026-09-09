@@ -28,7 +28,13 @@ Branch `feature/audit-readability`, off `master` at `3b4807e`.
       `ScopeChecked`, so classifying one can never read as a claim that a check happened.
       Service suite 891 → **895, 0 failed**.
 
-- [ ] **3. One coalesced Operation column in the reading grid.** *(shape decided 2026-09-09)*
+- [x] **3. One coalesced Operation column in the reading grid.** *(done 2026-09-09)*
+      Shipped as designed: `AuditLogView.GetOperation` coalesces, the column is titled from the new
+      `ColumnOperation` key, and the fallback form renders italic-and-muted with an
+      `OperationNotScopeChecked` tooltip. Styling is opacity and font-style only — no colour literal, so it
+      survives both themes. 8 tests in `AuditOperationColumnTests`, including the `AccessLevelProxy` shape
+      (a CLR type name as Feature must not displace the level expression) and an empty-string scope, which
+      is not a checked scope. Blazor suite 1041 → **1049, 0 failed**; the text ratchet stayed green.
       **Not two new columns.** `ScopeProxy.cs:73-74` sets `Feature`/`Action` *and* `ScopeChecked`, and the
       scope is feature-colon-action — so on the row type that is ~85% of the log, two columns would print
       the same fact three times (`case:manage | case | manage`), and on an `AccessLevelProxy` row they

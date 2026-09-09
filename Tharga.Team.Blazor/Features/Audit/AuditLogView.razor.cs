@@ -552,6 +552,33 @@ public partial class AuditLogView : ComponentBase
         return System.Text.Json.JsonSerializer.Serialize(ordered);
     }
 
+    /// <summary>
+    /// What a row is about: the scope that was checked, or the entry's own feature and action when none
+    /// was. Null only for an entry carrying neither.
+    /// </summary>
+    /// <remarks>
+    /// <b>One column rather than two, because the proxies already store the same fact twice.</b>
+    /// <c>ScopeProxy</c> sets <c>Feature</c> and <c>Action</c> <i>and</i> <c>ScopeChecked</c>, and the scope
+    /// is those two joined by a colon — so separate Feature and Action columns would print
+    /// <c>case:manage | case | manage</c> on the row type that dominates the log, while
+    /// <c>AccessLevelProxy</c> would print a CLR type name beside a duplicate of Method. Only a
+    /// consumer-written entry, which has no <c>ScopeChecked</c> at all, carries anything the Scope column
+    /// did not already show — and that is the entry this view used to render blank.
+    /// <para>
+    /// <b>The fallback is marked in the UI, and on <c>ScopeChecked</c> rather than on
+    /// <see cref="AuditEntry.EventType"/>.</b> The event type only separates the two classes for consumers
+    /// who adopted the classifying overload, and never for rows already stored; the absence of a checked
+    /// scope is what says "nothing authorized this" for every row ever written.
+    /// </para>
+    /// </remarks>
+    internal static string GetOperation(AuditEntry entry)
+    {
+        if (entry is null) return null;
+        if (!string.IsNullOrEmpty(entry.ScopeChecked)) return entry.ScopeChecked;
+        if (string.IsNullOrEmpty(entry.Feature)) return entry.Action;
+        return string.IsNullOrEmpty(entry.Action) ? entry.Feature : $"{entry.Feature}:{entry.Action}";
+    }
+
     // Audit calls are not HTTP, so there is no numeric status; the failure's EventType is the closest
     // "response code" — with a plain exception (Success=false on an otherwise normal event) surfaced as "Error".
     internal static string BuildFailureCode(AuditEntry entry)
