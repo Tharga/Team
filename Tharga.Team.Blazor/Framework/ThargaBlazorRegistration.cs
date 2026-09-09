@@ -137,6 +137,12 @@ public static class ThargaBlazorRegistration
                 // are optional -- and the container picks the greediest constructor it can *fully* satisfy,
                 // so one unregistered dependency would silently select a lesser overload and quietly go back
                 // to refusing reads it should allow. GetService returns null for the absent ones instead.
+                //
+                // The cost of that choice is this argument list, which has to match the constructor exactly:
+                // Activator does not fill in optional parameters, so a parameter added with a default -- a
+                // source-compatible change everywhere else -- fails here at the first resolve, on every host,
+                // with the build and the tests green (Tharga/Team#261, #265). ResolveEveryFacet in
+                // TeamServiceResolutionTests is what catches it now.
                 services.AddScoped(managementServiceType, sp => Activator.CreateInstance(
                     managementServiceType,
                     sp.GetRequiredService<ITeamService>(),
@@ -144,7 +150,8 @@ public static class ThargaBlazorRegistration
                     sp.GetService<IScopeRegistry>(),
                     sp.GetService<ITeamPrincipalAccessor>(),
                     sp.GetService<ITenantRoleService>(),
-                    sp.GetService<IOptions<ConsentOptions>>()));
+                    sp.GetService<IOptions<ConsentOptions>>(),
+                    sp.GetService<IOptions<InvitationOptions>>()));
 
                 // TryAdd, so a host substituting or decorating one facet keeps its own. That is the one
                 // legitimate reason this was ever left to the host, and it is answered here rather than
@@ -358,6 +365,15 @@ public static class ThargaBlazorRegistration
         services.AddScoped<IIconSource, GravatarIconSource>();
         services.AddScoped<IIconSource, DefaultIconSource>();
         services.AddScoped<IIconResolver, IconResolver>();
+
+        // The processor is optional in principle -- absent means "store icons as-is" -- but the two upload
+        // dialogs live in this package and inject it as required, so absent meant a dead dialog and a
+        // terminated circuit rather than a stored-as-is icon (Tharga/Team#266). The no-op default was
+        // registered by Tharga.Team.MongoDB, which is the wrong package to own it: it is not the one whose
+        // components need it, and a host is not obliged to use it. TryAdd, so AddThargaImageProcessing's
+        // real implementation still wins whichever order the two are called in.
+        services.TryAddScoped<IIconProcessor, NoOpIconProcessor>();
+
         services.AddScoped<Features.User.AvatarChangeNotifier>();
         services.AddHttpClient(IconHttpClientName);
     }
