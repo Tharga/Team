@@ -38,7 +38,15 @@ Branch `feature/per-method-audit-mode`, off `master` at `d480c3c` (the #263 merg
       dropped by a host `EventFilter` that excludes `ServiceCalls`, and that a `Change` entry survives it —
       the compliance escape hatch, pinned rather than described.
 
-- [ ] **7. Documentation.**
+- [x] **7. Documentation.** *(done 2026-09-09)*
+      Implementation guide: a *Deciding per method what gets audited* section before the reading sections —
+      the mode table, the host default, why silence is not the shipped one, and the two properties a host can
+      rely on (a refusal is always recorded; the annotation writes and the configuration still filters).
+      README: the writing half added to **Reading the audit log**, plus a note that the two denial-recording
+      corrections change what an existing log contains.
+      **`MAJOR_MINOR` stays 3.21** — re-checked, nuget.org is still at 3.20.1, so this rides in the same
+      unpublished release rather than becoming 3.22.
+      Original:
       `docs/articles/implementation-guide.md` — a section under the audit steps covering the mode, the host
       default, and why a denial is always recorded. `README.md` — extend the **Reading the audit log**
       section added in 3.21, since this is the writing half of the same story.

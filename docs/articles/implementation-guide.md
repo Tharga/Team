@@ -2561,6 +2561,63 @@ The classification changes nothing about how the entry is stored, retained or au
 claim that anything was checked — `ScopeChecked` is what says a check happened, and the factory never sets
 it.
 
+### Deciding per method what gets audited
+
+Every scope- or access-level-checked call is recorded. On a busy tenant that is most of the log: opening a
+dialog that loads five catalogs writes five entries describing nothing a person did, and reading the audit
+log is itself a read, so the log fills with the act of reading it.
+
+Neither `ExcludedActions` nor `EventFilter` can fix that. `ExcludedActions` is a name blacklist — every quiet
+read has to be named, and the next one somebody adds is audited until a human remembers. `EventFilter` works
+on event types, and every proxy-written entry is a `ServiceCall`. What separates a read worth recording from
+a read that is noise is **intent**, and only the declaration site knows it.
+
+So it is declared there:
+
+```csharp
+[RequireScope(CaseScopes.Read)]                              // whatever the host defaults to
+Task<Case> GetAsync(string teamKey, ObjectId id);
+
+[RequireScope(CaseScopes.Read, Audit = AuditMode.Access)]    // recorded, because this one must be
+Task<Case> GetForDisclosureAsync(string teamKey, ObjectId id);
+
+[RequireScope(CaseScopes.Manage, Audit = AuditMode.Change)]  // recorded as a data change
+Task<Case> UpdateAsync(string teamKey, ObjectId id, UpdateCaseRequest request);
+```
+
+`[RequireAccessLevel]` takes the same parameter and behaves identically — a method's audit rule should not
+depend on which kind of guard happens to be on it.
+
+| `AuditMode` | Effect |
+|---|---|
+| `Default` | Defer to the host. What an unannotated method gets. |
+| `None` | Not recorded. |
+| `Access` | Recorded as `AuditEventType.ServiceCall`. |
+| `Change` | Recorded as `AuditEventType.DataChange`. |
+
+**The host sets the default, and it stays `Access`** — so nothing changes for an application that configures
+nothing. To make silence the default and record by exception:
+
+```csharp
+o.Audit = new AuditOptions { DefaultAuditMode = AuditMode.None };
+```
+
+That combination is what a host under privacy rules needs. Where broad read logging is itself a hazard —
+Swedish *meddelarskydd*, for instance, where audit logs must not become a way to work out who asked for
+something — nothing should be recorded unless a method asks for it, so that **adding a method cannot silently
+start recording who read what**. Making that the shipped default instead would have ended the access trace of
+every existing application with no compile error and nothing in a diff to notice.
+
+Two properties worth relying on:
+
+- **A refusal is always recorded.** `AuditMode.None` suppresses the call, not the denial. Saying "do not
+  record who read this" is not saying "do not record who was refused" — those are different records, and
+  refusals are low-volume by nature.
+- **The annotation decides what is written; the configuration still decides what is kept.** `CallerFilter`,
+  `EventFilter` and `ExcludedActions` apply afterwards exactly as before. That also gives a method that must
+  be recorded an escape hatch without a special rule: mark it `Change` and it records a `DataChange`, which
+  survives a host filter that drops service calls.
+
 ### What a row is about: the Operation column
 
 The grid's **Operation** column shows the scope that was checked, or — for an entry your application wrote,

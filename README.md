@@ -266,6 +266,20 @@ auditLogger.Log(auditEntryFactory.Create(
     AuditEventType.DataChange, "case", "CaseClosed", teamKey: team.Key, metadata: metadata));
 ```
 
+**Decide per method what is recorded at all**, since most of the volume is the enforcement proxies tracing
+every scope-checked call:
+
+```csharp
+[RequireScope(CaseScopes.Read)]                              // the host's default
+[RequireScope(CaseScopes.Read, Audit = AuditMode.Access)]    // recorded, because this one must be
+[RequireScope(CaseScopes.Manage, Audit = AuditMode.Change)]  // recorded as a data change
+```
+
+`[RequireAccessLevel]` takes the same parameter. The host default stays `Access`, so nothing changes unless
+you ask — set `o.Audit = new AuditOptions { DefaultAuditMode = AuditMode.None }` to make silence the default
+and record by exception. **A refusal is recorded whatever the mode says**, and the existing
+`CallerFilter`/`EventFilter`/`ExcludedActions` still apply to whatever is written.
+
 **Open the view on what a reader is looking for**, without taking the choice away from them:
 
 ```csharp
@@ -278,6 +292,11 @@ check no scope, and a **Show hidden** toggle brings the rest back.
 
 The grid's **Operation** column shows the scope that was checked, or the entry's own feature and action
 where none was, so an entry you wrote is identifiable without expanding the row.
+
+**Two corrections in 3.21 that change what a log contains.** A refused *team* call was recorded as an
+allowed one — denials were classified by matching an exception message that only the system path produces —
+and access-level denials were discarded entirely, because that event type had no filter mapping. Both now
+record correctly, so refusals appear in reporting where they previously did not.
 
 **Changed in 3.21.** Entries in one request now share a correlation id taken from `Activity.Current.TraceId`.
 It was previously derived from `HttpContext.TraceIdentifier` parsed as a `Guid`, which never succeeds, so
