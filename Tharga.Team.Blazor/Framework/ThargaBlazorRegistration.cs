@@ -159,6 +159,11 @@ public static class ThargaBlazorRegistration
                 // nothing -- they are scoped and simply never constructed.
                 foreach (var facet in TeamServiceFacets.All)
                     services.TryAddScoped(facet, sp => sp.GetRequiredService(managementServiceType));
+
+                // After the facets exist, since it replaces one of them. Resolving an invite code is an
+                // oracle by necessity -- the screen has to name the team -- so repeated failures from one
+                // source are slowed and the first crossing is audited.
+                services.AddInvitationThrottle();
             }
 
             // Reports at startup if any facet is still unresolvable, naming it. Without this the first

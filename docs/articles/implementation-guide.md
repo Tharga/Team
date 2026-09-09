@@ -1489,6 +1489,44 @@ Two things a host with its own store should know:
 - **Forward `InvitationOptions` from your own service's constructor**, the same as `ITeamCache`. Left
   unforwarded, the base receives defaults and invitations never expire however the host configured them.
 
+### Guessing an invite code is slowed, and shows up in the audit log
+
+Resolving a code has to be an oracle: a hit returns the team's name, because the screen has to say which
+team you were invited to. So a correct guess announces itself — and because invitations do not expire
+unless you configure a `Lifetime`, the set of live codes only grows.
+
+Repeated **failed** resolves from one source are therefore delayed, on a curve, and the failure that first
+crosses the threshold is recorded as `AuditEventType.RateLimit` — which the log view has always been able
+to render and nothing raised until now.
+
+```csharp
+builder.Services.Configure<InvitationOptions>(o =>
+{
+    o.ThrottleFailureThreshold = 5;                        // failures before delay starts
+    o.ThrottleWindow = TimeSpan.FromMinutes(5);
+    o.MaxThrottleDelay = TimeSpan.FromSeconds(2);          // TimeSpan.Zero to audit without delaying
+});
+```
+
+Defaults are generous rather than off: a real invitee fails once or twice — a mistyped link, a code already
+accepted — and never reaches five. Set `ThrottleFailureThreshold` to `0` to turn it off entirely.
+
+Four properties worth knowing, because each is a deliberate limit rather than an omission:
+
+- **It delays, and never refuses.** An invitee retrying a link, or an office behind one address accepting
+  invitations the same morning, must not be locked out. A throttled resolve still answers.
+- **It is not a substitute for entropy.** Against a distributed source a per-source delay barely moves a
+  weak code. Token length should never be reduced on the strength of this.
+- **The count is per process.** Spread across instances an attacker gets one budget per instance. Shared
+  state would need a third host-implemented port, which is not worth a new obligation for a threat nobody
+  has reported; the delay still slows every connection an attacker holds.
+- **A Blazor circuit has no client address to read**, so callers whose address cannot be determined share
+  one bucket. That is affordable exactly because the consequence is a delay rather than a refusal.
+
+Only the first crossing is audited. Auditing every failure past the threshold would bury the signal in the
+noise it exists to report — and the entry deliberately carries no invite code, since a failed code is one
+somebody guessed and the log should not hand candidate codes to everyone who can read it.
+
 ### Sending the invitation email
 
 **Invitations are the only mail the toolkit sends.** `ITeamEmailSender` has a single member,

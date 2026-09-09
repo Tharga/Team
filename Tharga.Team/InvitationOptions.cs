@@ -26,4 +26,28 @@ public class InvitationOptions
     /// </para>
     /// </remarks>
     public TimeSpan? Lifetime { get; set; }
+
+    /// <summary>
+    /// How many failed resolves a source may make inside <see cref="ThrottleWindow"/> before failures start
+    /// being delayed. Default: 5. Zero or less turns throttling off.
+    /// </summary>
+    /// <remarks>
+    /// <b>Generous rather than off by default.</b> A real invitee fails once or twice — a mistyped link, a
+    /// code already accepted — and never reaches five, so the default costs nothing a person would notice
+    /// while still slowing a script. Off by default would mean nobody gets it.
+    /// </remarks>
+    public int ThrottleFailureThreshold { get; set; } = 5;
+
+    /// <summary>How long failures are remembered for. Default: five minutes.</summary>
+    public TimeSpan ThrottleWindow { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// The longest a failed resolve is delayed once the threshold is passed. Default: two seconds.
+    /// </summary>
+    /// <remarks>
+    /// <b>A delay, never a refusal.</b> An invitee retrying a link, or several people in one office behind
+    /// one address accepting invitations the same morning, must not be locked out — so the throttle slows a
+    /// guess and makes it visible, and never turns a real invitation away.
+    /// </remarks>
+    public TimeSpan MaxThrottleDelay { get; set; } = TimeSpan.FromSeconds(2);
 }
