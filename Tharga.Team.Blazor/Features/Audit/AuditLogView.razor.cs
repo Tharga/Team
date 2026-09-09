@@ -33,6 +33,12 @@ public partial class AuditLogView : ComponentBase
     [Parameter] public AuditPinnedFilter PinnedFilter { get; set; }
 
     /// <summary>
+    /// Optional opening filter values the reader may then change — as opposed to <see cref="PinnedFilter"/>,
+    /// which hides its controls and locks them. Where both name a dimension, the pin wins.
+    /// </summary>
+    [Parameter] public AuditInitialFilter InitialFilter { get; set; }
+
+    /// <summary>
     /// How long entries are kept, described for the reader. Null when retention is unlimited, so that an
     /// empty result reads as "nothing happened" rather than "it aged out".
     /// </summary>
@@ -73,6 +79,10 @@ public partial class AuditLogView : ComponentBase
     private IEnumerable<AuditEventType> _filterEventTypes = Enumerable.Empty<AuditEventType>();
     private IEnumerable<bool> _filterSuccess = Enumerable.Empty<bool>();
     private string _timeGrouping = "hourly";
+
+    /// <summary>Scopes the host hid on open. The toggle below reveals them; it is not rendered when this is empty.</summary>
+    private string[] _hiddenScopes = [];
+    private bool _showHiddenEntries;
 
     // Dynamic filter options
     private List<TeamInfo> _teams = new();
@@ -126,6 +136,12 @@ public partial class AuditLogView : ComponentBase
         // Before the not-configured branch below, which returns early: that alert is user-facing too, and
         // resolving after it would leave the one message shown to a misconfigured host in English.
         _text = await TextProvider.ResolveAsync(AuditLogViewText.All);
+
+        // AuditPinnedFilter has no event-type dimension, so there is nothing for an opening value to lose to.
+        _filterEventTypes = InitialFilter?.EventTypes ?? [];
+        _filterFeatures = InitialUnlessPinned(InitialFilter?.Features, PinnedFilter?.Feature != null);
+        _filterActions = InitialUnlessPinned(InitialFilter?.Actions, PinnedFilter?.Action != null);
+        _hiddenScopes = InitialFilter?.ExcludedScopes ?? [];
 
         _auditReadService = ServiceProvider.GetService<IAuditReadService>();
         _auditOversightService = ServiceProvider.GetService<IAuditOversightService>();
@@ -374,6 +390,7 @@ public partial class AuditLogView : ComponentBase
             Features = features is { Length: > 0 } ? features : null,
             Actions = actions is { Length: > 0 } ? actions : null,
             EventTypes = eventTypes is { Length: > 0 } ? eventTypes : null,
+            ExcludedScopes = _showHiddenEntries || _hiddenScopes.Length == 0 ? null : _hiddenScopes,
             CallerSource = callerSource,
             CallerType = RestrictCallerType,
             CallerIdentity = callerFilter,
@@ -551,6 +568,18 @@ public partial class AuditLogView : ComponentBase
             .ToDictionary(x => x.Key, x => x.Value);
         return System.Text.Json.JsonSerializer.Serialize(ordered);
     }
+
+    /// <summary>
+    /// An opening filter value, dropped when the same dimension is pinned.
+    /// </summary>
+    /// <remarks>
+    /// <b>The pin has to win, and not by being applied afterwards.</b> An opening value is one the reader
+    /// can change; if it survived alongside a pin, changing it would widen the query past the scope the pin
+    /// exists to impose. Dropping it here means the control opens unfiltered and stays hidden, which is
+    /// what a pinned dimension already means.
+    /// </remarks>
+    internal static T[] InitialUnlessPinned<T>(T[] initial, bool isPinned)
+        => isPinned || initial is null ? [] : initial;
 
     /// <summary>
     /// What a row is about: the scope that was checked, or the entry's own feature and action when none

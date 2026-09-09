@@ -110,6 +110,13 @@ else
                                         Placeholder="@_text[AuditLogViewText.FilterAll]" Change="@(_ => OnFilterChanged())"
                                         Style="width: 200px;" />
                     </RadzenStack>
+                    @* Rendered only when the host hid something. Nothing is held back without a way to
+                       see it — that is the whole difference between an opening value and a pin. *@
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(_hiddenScopes.Length > 0)">
+                        <RadzenLabel Text="@_text[AuditLogViewText.ShowHiddenEntries]"
+                                     title="@_text.Format(AuditLogViewText.HiddenScopes, string.Join(", ", _hiddenScopes))" />
+                        <RadzenCheckBox @bind-Value="_showHiddenEntries" TValue="bool" Change="@(_ => OnFilterChanged())" />
+                    </RadzenStack>
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0">
                         <RadzenLabel Text="@_text[AuditLogViewText.Result]" />
                         <RadzenSelectBar @bind-Value="_filterSuccess" TValue="IEnumerable<bool>" Multiple="true"

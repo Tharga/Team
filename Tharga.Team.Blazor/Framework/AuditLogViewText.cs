@@ -63,6 +63,15 @@ public static class AuditLogViewText
 
     /// <summary>Tooltip on an entry a consumer wrote, where the operation shown was never scope-checked.</summary>
     public static readonly TextKey OperationNotScopeChecked = new("team.auditLogView.operationNotScopeChecked", "Recorded by the application. No scope was checked for this entry.");
+
+    /// <summary>
+    /// The filter that reverses a host's opening exclusion. Rendered only when there is something hidden,
+    /// so that nothing is ever held back without a way to see it.
+    /// </summary>
+    public static readonly TextKey ShowHiddenEntries = new("team.auditLogView.showHiddenEntries", "Show hidden");
+
+    /// <summary>Tooltip naming what the host hid. The placeholder is the comma-separated scope list.</summary>
+    public static readonly TextKey HiddenScopes = new("team.auditLogView.hiddenScopes", "Hidden unless shown: {0}");
     public static readonly TextKey ColumnMethod = new("team.auditLogView.columnMethod", "Method");
     public static readonly TextKey ColumnDuration = new("team.auditLogView.columnDuration", "Duration");
     public static readonly TextKey ColumnFeature = new("team.auditLogView.columnFeature", "Feature");
@@ -110,6 +119,7 @@ public static class AuditLogViewText
         Team, Source, ScopeFeature, ScopeAction, Event, Result, Success, Failure,
         Export, ExportCsv, ExportJson, PagingSummary,
         ColumnTime, ColumnCaller, ColumnScope, ColumnOperation, OperationNotScopeChecked,
+        ShowHiddenEntries, HiddenScopes,
         ColumnMethod, ColumnDuration, ColumnFeature, ColumnAction, ColumnDurationMs,
         DetailName, DetailValue, DetailEmpty, NoAdditionalDetails, TotalEntries,
         ChartCallsOverTime, GroupingHourly, GroupingDaily, AxisCount, SeriesCalls,

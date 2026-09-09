@@ -67,7 +67,16 @@ Branch `feature/audit-readability`, off `master` at `3b4807e`.
       moved forward from step 7, since their absence is the documented reason #260 was filed against a
       filter that already existed.
 
-- [ ] **5. Soft initial filter values on `AuditLogView`.** *(shape decided 2026-09-09)*
+- [x] **5. Soft initial filter values on `AuditLogView`.** *(done 2026-09-09)*
+      Shipped as `AuditInitialFilter` (`EventTypes`, `Features`, `Actions`, `ExcludedScopes`) behind a new
+      `InitialFilter` parameter, with `InitialUnlessPinned` carrying the precedence rule and the
+      "Show hidden" toggle rendering only when something is actually hidden. The option-source query was
+      left untouched, so a hidden category still appears in its dropdown.
+      5 tests in `AuditInitialFilterTests` — including a reflection guard that the opening filter offers no
+      soft version of a scoping pin (`TeamKey`, `CallerKeyId`, `CallerType`, `CallerIdentity`,
+      `CallerUserIdentity`), which would hand a reader a control that widens past the confinement the pin
+      exists to impose. Blazor suite 1049 → **1054, 0 failed**.
+      Original shape notes, kept because they are the reasoning:
       - **A separate type** (`AuditInitialFilter`), not a reuse of `AuditPinnedFilter`. The dimension sets
         differ for a reason: defaults need `EventTypes[]` and the exclusion form, while pins need
         `CallerKeyId`, which as a *soft* default would let a reader un-scope a dialog that exists to show
