@@ -103,11 +103,11 @@ else
                                 }
                                 @if (myLevel != null)
                                 {
+                                    @* TextSet.Empty renders the English defaults: this component has not been
+                                       migrated onto the text catalogue yet, and is listed as pending in
+                                       TextCoverage. *@
                                     <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(myLevel)))"
                                                  Variant="Variant.Flat"
-                                                 @* TextSet.Empty renders the English defaults: this component
-                                                    has not been migrated onto the text catalogue yet, and is
-                                                    listed as pending in TextCoverage. *@
                                                  Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
                                                  title="@_text[TeamComponentText.YourAccessTooltip]" />
                                 }

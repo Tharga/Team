@@ -81,6 +81,26 @@ public class TeamServiceResolutionTests
     }
 
     /// <summary>
+    /// The invitation throttle is actually applied to the facet, not merely available to be applied.
+    /// </summary>
+    /// <remarks>
+    /// Its own registration tests cover the extension method; what they cannot cover is the one line in
+    /// <c>AddThargaTeamBlazor</c> that calls it — and the facets are registered with <c>TryAdd</c>, so a
+    /// call placed wrongly would leave an unthrottled service that looks wired. Asserted by type name
+    /// because the decorator is internal to <c>Tharga.Team.Service</c>.
+    /// </remarks>
+    [Fact]
+    public void TheInvitationService_IsThrottled()
+    {
+        using var provider = Provider();
+        using var scope = provider.CreateScope();
+
+        var resolved = scope.ServiceProvider.GetRequiredService<ITeamInvitationService>();
+
+        Assert.Equal("ThrottledTeamInvitationService", resolved.GetType().Name);
+    }
+
+    /// <summary>
     /// A theory over an empty set passes while checking nothing, and this file exists because something
     /// that looked covered was not.
     /// </summary>
