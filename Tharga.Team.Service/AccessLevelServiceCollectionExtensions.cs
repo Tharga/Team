@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Tharga.Team;
 using Tharga.Team.Service.Audit;
 
@@ -27,7 +28,8 @@ public static class AccessLevelServiceCollectionExtensions
             var target = sp.GetRequiredService<TImplementation>();
             var principalAccessor = sp.GetRequiredService<ITeamPrincipalAccessor>();
             var auditLogger = sp.GetService<IAuditLogger>();
-            return AccessLevelProxy<TService>.Create(target, principalAccessor, auditLogger);
+            var defaultAuditMode = sp.GetService<IOptions<AuditOptions>>()?.Value.DefaultAuditMode ?? AuditMode.Access;
+            return AccessLevelProxy<TService>.Create(target, principalAccessor, auditLogger, defaultAuditMode);
         });
         return services;
     }

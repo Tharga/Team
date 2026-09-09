@@ -17,19 +17,35 @@ public class AccessLevelProxy<T> : DispatchProxy where T : class
     private T _target;
     private ITeamPrincipalAccessor _principalAccessor;
     private IAuditLogger _auditLogger;
+    private AuditMode _defaultAuditMode = AuditMode.Access;
 
     public static T Create(T target, ITeamPrincipalAccessor principalAccessor, IAuditLogger auditLogger = null)
+        => Create(target, principalAccessor, auditLogger, AuditMode.Access);
+
+    /// <summary>
+    /// As above, with the host's default audit mode for methods whose attribute does not declare one.
+    /// </summary>
+    /// <remarks>
+    /// An overload rather than an optional parameter, so an assembly already compiled against the existing
+    /// signature keeps binding.
+    /// </remarks>
+    public static T Create(T target, ITeamPrincipalAccessor principalAccessor, IAuditLogger auditLogger, AuditMode defaultAuditMode)
     {
         var proxy = Create<T, AccessLevelProxy<T>>() as AccessLevelProxy<T>;
         proxy._target = target;
         proxy._principalAccessor = principalAccessor;
         proxy._auditLogger = auditLogger;
+        proxy._defaultAuditMode = defaultAuditMode;
         return proxy as T;
     }
 
     /// <summary>Back-compat overload — adapts an <see cref="IHttpContextAccessor"/> to the default accessor.</summary>
     public static T Create(T target, IHttpContextAccessor httpContextAccessor, IAuditLogger auditLogger = null)
         => Create(target, new HttpContextTeamPrincipalAccessor(httpContextAccessor), auditLogger);
+
+    /// <inheritdoc cref="Create(T, ITeamPrincipalAccessor, IAuditLogger, AuditMode)"/>
+    public static T Create(T target, IHttpContextAccessor httpContextAccessor, IAuditLogger auditLogger, AuditMode defaultAuditMode)
+        => Create(target, new HttpContextTeamPrincipalAccessor(httpContextAccessor), auditLogger, defaultAuditMode);
 
     protected override object Invoke(MethodInfo targetMethod, object[] args)
     {
@@ -47,8 +63,13 @@ public class AccessLevelProxy<T> : DispatchProxy where T : class
             },
             audit: (principal, ms, success, ex) =>
             {
-                var eventType = !success && ex is UnauthorizedAccessException ? AuditEventType.AccessLevelDenial : (AuditEventType?)null;
-                LogAudit(principal, attribute.MinimumLevel, targetMethod.Name, ms, success, eventType, success ? null : ex?.Message);
+                var denied = !success && ex is UnauthorizedAccessException;
+                var mode = AuditModeResolver.Resolve(attribute.Audit, _defaultAuditMode);
+                if (!AuditModeResolver.ShouldWrite(mode, denied)) return;
+
+                LogAudit(principal, attribute.MinimumLevel, targetMethod.Name, ms, success,
+                    AuditModeResolver.EventTypeFor(mode, denied, AuditEventType.AccessLevelDenial),
+                    success ? null : ex?.Message);
             });
     }
 

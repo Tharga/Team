@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Tharga.Team.Service.Audit;
 using Tharga.Team;
 
@@ -105,7 +106,8 @@ public static class ScopeServiceCollectionExtensions
             var target = sp.GetRequiredService<TImplementation>();
             var principalAccessor = sp.GetRequiredService<ITeamPrincipalAccessor>();
             var auditLogger = sp.GetService<CompositeAuditLogger>();
-            return ScopeProxy<TService>.Create(target, principalAccessor, scopeKind, auditLogger);
+            var defaultAuditMode = sp.GetService<IOptions<AuditOptions>>()?.Value.DefaultAuditMode ?? AuditMode.Access;
+            return ScopeProxy<TService>.Create(target, principalAccessor, scopeKind, auditLogger, defaultAuditMode);
         });
         return services;
     }

@@ -19,24 +19,41 @@ public class ScopeProxy<T> : DispatchProxy where T : class
     private ITeamPrincipalAccessor _principalAccessor;
     private IAuditLogger _auditLogger;
     private ServiceScopeKind _scopeKind;
+    private AuditMode _defaultAuditMode = AuditMode.Access;
 
     /// <param name="scopeKind">
     /// Deliberately required. A default would pick an authorization policy on the caller's behalf, which
     /// is how a service ends up enforcing something other than what its author assumed.
     /// </param>
     public static T Create(T target, ITeamPrincipalAccessor principalAccessor, ServiceScopeKind scopeKind, IAuditLogger auditLogger = null)
+        => Create(target, principalAccessor, scopeKind, auditLogger, AuditMode.Access);
+
+    /// <summary>
+    /// As above, with the host's default audit mode for methods whose attribute does not declare one.
+    /// </summary>
+    /// <remarks>
+    /// An overload rather than an optional parameter on the existing signature: a call site bakes the whole
+    /// optional-argument list into the emitted call, so adding one would break every assembly already
+    /// compiled against this method.
+    /// </remarks>
+    public static T Create(T target, ITeamPrincipalAccessor principalAccessor, ServiceScopeKind scopeKind, IAuditLogger auditLogger, AuditMode defaultAuditMode)
     {
         var proxy = Create<T, ScopeProxy<T>>() as ScopeProxy<T>;
         proxy._target = target;
         proxy._principalAccessor = principalAccessor;
         proxy._auditLogger = auditLogger;
         proxy._scopeKind = scopeKind;
+        proxy._defaultAuditMode = defaultAuditMode;
         return proxy as T;
     }
 
     /// <summary>Overload for HTTP-only callers — adapts an <see cref="IHttpContextAccessor"/> to the default accessor.</summary>
     public static T Create(T target, IHttpContextAccessor httpContextAccessor, ServiceScopeKind scopeKind, IAuditLogger auditLogger = null)
         => Create(target, new HttpContextTeamPrincipalAccessor(httpContextAccessor), scopeKind, auditLogger);
+
+    /// <inheritdoc cref="Create(T, ITeamPrincipalAccessor, ServiceScopeKind, IAuditLogger, AuditMode)"/>
+    public static T Create(T target, IHttpContextAccessor httpContextAccessor, ServiceScopeKind scopeKind, IAuditLogger auditLogger, AuditMode defaultAuditMode)
+        => Create(target, new HttpContextTeamPrincipalAccessor(httpContextAccessor), scopeKind, auditLogger, defaultAuditMode);
 
     protected override object Invoke(MethodInfo targetMethod, object[] args)
     {
@@ -58,14 +75,21 @@ public class ScopeProxy<T> : DispatchProxy where T : class
             },
             audit: (principal, ms, success, ex) =>
             {
-                var scopeResult = !success && ex is UnauthorizedAccessException uae && uae.Message.Contains("Missing required scope")
-                    ? AuditScopeResult.Denied
-                    : AuditScopeResult.Allowed;
-                LogAudit(principal, attribute.Scope, feature, action, targetMethod.Name, ms, success, scopeResult, success ? null : ex?.Message);
+                // Every refusal from CheckScope is an UnauthorizedAccessException, so the type is the
+                // signal. This used to substring-match "Missing required scope" -- wording only the system
+                // path produces -- so a refused team call was recorded as an allowed service call.
+                var denied = !success && ex is UnauthorizedAccessException;
+                var scopeResult = denied ? AuditScopeResult.Denied : AuditScopeResult.Allowed;
+                var mode = AuditModeResolver.Resolve(attribute.Audit, _defaultAuditMode);
+                if (!AuditModeResolver.ShouldWrite(mode, denied)) return;
+
+                LogAudit(principal, attribute.Scope, feature, action, targetMethod.Name, ms, success, scopeResult,
+                    AuditModeResolver.EventTypeFor(mode, denied, AuditEventType.ScopeDenial),
+                    success ? null : ex?.Message);
             });
     }
 
-    private void LogAudit(ClaimsPrincipal user, string scope, string feature, string action, string methodName, long durationMs, bool success, AuditScopeResult scopeResult, string errorMessage = null)
+    private void LogAudit(ClaimsPrincipal user, string scope, string feature, string action, string methodName, long durationMs, bool success, AuditScopeResult scopeResult, AuditEventType eventType, string errorMessage = null)
     {
         if (_auditLogger == null) return;
 
@@ -79,7 +103,7 @@ public class ScopeProxy<T> : DispatchProxy where T : class
         var entry = new AuditEntry
         {
             Timestamp = DateTime.UtcNow,
-            EventType = scopeResult == AuditScopeResult.Denied ? AuditEventType.ScopeDenial : AuditEventType.ServiceCall,
+            EventType = eventType,
             Feature = feature,
             Action = action,
             MethodName = methodName,
