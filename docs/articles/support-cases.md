@@ -518,6 +518,105 @@ mail and support mail is not a fallback for it: an invitation is usually sent fr
 mail must come from an address replies return to. Inheriting one for the other would send support mail from a
 no-reply address and lose every reply. Bind both from the same configuration section if you want one mailbox.
 
+## An assistant answering first
+
+A case can be answered by an assistant before, or instead of, a person. The customer chooses when they raise
+it, and can ask for a person at any point without losing the conversation.
+
+### Any model, because the toolkit does not choose one
+
+The toolkit consumes **`IChatClient`** — Microsoft's abstraction from `Microsoft.Extensions.AI` — and nothing
+else. It ships no provider adapter, references no vendor SDK, and names no model. Which model answers your
+customers is one registration in your own host:
+
+```csharp
+// Ollama, llama.cpp, a self-hosted model, OpenAI, Anthropic — all the same shape.
+builder.Services.AddSingleton<IChatClient>(_ => new OllamaApiClient(uri, "llama3")
+    .AsBuilder()
+    .UseFunctionInvocation()
+    .Build());
+```
+
+**Register nothing and there is no assistant.** No responder resolves, the choice is never offered on the
+new-case form, and every case is answered by a person exactly as before. That is the default, and it is not a
+degraded state — it is what a host that never wanted one gets.
+
+This is also why provider-specific capability is not lost by the toolkit being neutral. Prompt caching,
+effort levels, token counting and the rest belong to the client you construct, so they stay available to you:
+you own the object the toolkit calls.
+
+### What the customer sees
+
+The new-case form offers the assistant, unticked, only when one is registered. A case being answered by an
+assistant offers **Talk to a person**, which stops the assistant and leaves the same case, with the whole
+transcript, to whoever picks it up. That transition is one-way — handing back after somebody has asked for a
+human would answer a question they have already declined to have answered that way.
+
+An answer the assistant wrote is recorded as `SupportMessageKind.Assistant` and badged in the back-office
+transcript, so an agent can tell what the customer was already told by a machine from what a colleague told
+them. The two carry very different weight.
+
+### What it does to the queue
+
+**An assistant answer takes the case out of the awaiting-an-answer count, and a customer reply puts it back.**
+This is the same rule read state already uses: a position, not a flag.
+
+It matters in both directions. If an answered case stayed in the queue, the queue would show every case
+including the ones handled perfectly, which is how people learn to ignore a queue. If it cleared permanently,
+a customer replying *that did not help* would sit unseen. Replying re-raises it, so a dissatisfied customer is
+always back in front of a person.
+
+### It answers; it does not act
+
+The built-in tools are reads: the caller's own cases, and one case's transcript. Closing, assigning and
+reopening stay with people — an assistant that can close its own cases can close the ones it answered badly.
+
+Every tool reads through the same scope-checked service any other caller uses, so the assistant sees exactly
+what the person it is answering would see. The responder is handed the case and its transcript rather than
+fetching them, so it holds nothing it could reach further with.
+
+**Add your own tools.** The toolkit knows about teams, membership and cases; it knows nothing about the
+product your customer is actually asking about. Implement `ISupportAssistantTools` to replace the built-in
+set, or resolve the built-in one and add to what it returns. Keep every tool reading through a scope-checked
+service — a tool that reaches the store directly is a second enforcement point, and the assistant would be
+the one caller able to use it.
+
+### Running it
+
+Raising and replying stay fast; asking for the answer is a separate call, because a model can take tens of
+seconds and burying that inside a write makes reporting a problem feel broken.
+
+```csharp
+var raised = await cases.RaiseCaseAsync(teamKey, subject, body, SupportAssistance.Assistant);
+
+await cases.RunAssistantAsync(teamKey, raised.Id);   // returns false when there is nothing to do
+```
+
+`RunAssistantAsync` is safe to call unconditionally: it does nothing when the case has no assistant, when the
+customer has asked for a person, or when the host registered no responder. The shipped components already
+call it, so a host using `<SupportCasesView />` needs none of this.
+
+### Settings
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Assistant.Instructions = "You answer support questions for Contoso Archive…";
+    o.Assistant.Timeout = TimeSpan.FromSeconds(60);
+    o.Assistant.TranscriptLimit = 20;
+});
+```
+
+Configuring these does not turn an assistant on — registering an `IChatClient` does. There is deliberately no
+model, endpoint or key here.
+
+**Replace `Instructions`.** The default says only what is true of every host: answer from the tools, and say
+so rather than guess. A model that knows your product answers very differently from one that does not.
+
+A model that times out, returns nothing, or cannot be reached **declines**, and a decline is an ordinary
+outcome rather than an error: the case stays waiting for a person, which is what the customer would have had
+anyway. A provider being down never stops somebody reporting a problem.
+
 ## Is anybody on support
 
 ```csharp

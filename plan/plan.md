@@ -69,10 +69,10 @@ again, so it re-raises. The chosen semantic needs no store change — verify by 
       a hardcoded string, so it now resolves `SupportTranscriptText.Assistant` through the provider and the
       component joined the migrated list — the guard doing exactly its job.
 
-- [~] 12. Docs: `docs/articles/support-cases.md` gains the responder and the provider-agnostic setup;
+- [x] 12. Docs: done on both surfaces — `docs/articles/support-cases.md` gains the responder and the provider-agnostic setup;
       `README.md` gains it under Support. Land as a `docs:` commit.
 
-- [ ] 13. Push, hand to the user to test, do not open the PR yet.
+- [~] 13. Push, hand to the user to test, do not open the PR yet.
 
 - [ ] 14. On confirmation: close-out — re-run `dotnet outdated`, update #142 with what shipped and what
       remains, archive `plan/feature.md`, `git rm -r plan`, final commit, PR.
@@ -97,4 +97,4 @@ reporting a problem feel broken.
 drives the awaiting count, so an assistant answer clears it and a customer reply re-raises it. Verified by
 test rather than assumed.
 
-Steps 8-11 done. Next: the documentation.
+Steps 8-12 done; docs on both surfaces. Next: push and hand over for testing.
