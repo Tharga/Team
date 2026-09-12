@@ -1456,6 +1456,12 @@ one method — `TeamServiceBase.GetTeamKeyByInviteKeyInternalAsync` — and if y
 breaks: links that name their team still resolve, and the short form simply does not. The MongoDB store
 implements it, backed by an index on the invitation code.
 
+> **Broken in 3.20.0 through 3.21.0, fixed in 3.21.1.** In those releases the two `ITeamService` decorators
+> that `AddThargaTeamBlazor` applies did not forward `GetTeamKeyByInviteKeyAsync`, so the call ran the
+> interface's default body and returned nothing — on every host, including one whose store implements the
+> method. If you are on one of those versions and short links resolve to nothing, the store above is not the
+> thing to check. Upgrade.
+
 ### Invitations that expire
 
 Off by default — invitations have never expired, and applying a lifetime on upgrade would silently invalidate
