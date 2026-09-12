@@ -20,6 +20,20 @@ internal class TestTeamService : TeamServiceBase
         return Task.FromResult(member?.Invitation);
     }
 
+    /// <summary>
+    /// Answers the short-link lookup the way a real store does, so a test can tell a decorator that
+    /// forwards from one that falls through to the interface default.
+    /// </summary>
+    protected override Task<string> GetTeamKeyByInviteKeyInternalAsync(string inviteKey)
+    {
+        var matches = _teams.Values
+            .Where(x => x.Members != null && x.Members.Any(m => m.Invitation != null && m.Invitation.InviteKey == inviteKey))
+            .Select(x => x.Key)
+            .ToArray();
+
+        return Task.FromResult(matches.Length == 1 ? matches[0] : null);
+    }
+
     protected override Task SetTeamMemberInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
     {
         _teams.TryGetValue(teamKey, out var team);

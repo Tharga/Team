@@ -54,6 +54,12 @@ public class AuditingTeamServiceDecorator : ITeamService
     public Task SetMemberLastSeenAsync(string teamKey) => _inner.SetMemberLastSeenAsync(teamKey);
     public Task<IReadOnlyList<TenantRoleDefinition>> GetTeamCustomRolesAsync(string teamKey) => _inner.GetTeamCustomRolesAsync(teamKey);
 
+    /// <remarks>
+    /// Not audited by design, like the reads above. The accept it precedes is audited, and an entry here
+    /// would be written by an unauthenticated caller who holds nothing but a link.
+    /// </remarks>
+    public Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey) => _inner.GetTeamKeyByInviteKeyAsync(inviteKey);
+
     // Mutation operations — log audit entries
 
     public async Task<ITeam> CreateTeamAsync(string name)

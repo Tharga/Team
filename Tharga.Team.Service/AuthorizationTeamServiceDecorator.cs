@@ -81,6 +81,12 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     public Task<IReadOnlyList<TenantRoleDefinition>> GetTeamCustomRolesAsync(string teamKey) => _inner.GetTeamCustomRolesAsync(teamKey);
     public Task SetMemberLastSeenAsync(string teamKey) => _inner.SetMemberLastSeenAsync(teamKey);
     public Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept) => _inner.SetInvitationResponseAsync(teamKey, userKey, inviteCode, accept);
+
+    /// <remarks>
+    /// Unchecked by design, like the other invitation reads: the invite code is the check. The caller is
+    /// not yet a member and holds no scopes, so a scope check here would refuse every invitee.
+    /// </remarks>
+    public Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey) => _inner.GetTeamKeyByInviteKeyAsync(inviteKey);
     public Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember => _inner.TransferOwnershipAsync<TMember>(teamKey, newOwnerUserKey);
 
     /// <remarks>
