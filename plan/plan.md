@@ -77,6 +77,21 @@ again, so it re-raises. The chosen semantic needs no store change — verify by 
 - [ ] 14. On confirmation: close-out — re-run `dotnet outdated`, update #142 with what shipped and what
       remains, archive `plan/feature.md`, `git rm -r plan`, final commit, PR.
 
+## Version
+
+**Stays on the 3.21 line — the user's decision, 2026-09-12, and it follows the recorded convention.** A bump
+needs a consumer *action*, and everything here is additive for callers: new methods, a new optional parameter
+on `RaiseCaseAsync`, a new `SupportMessageKind` member, a new `SupportCase` property, and a store operation
+added as a *default* interface member so a host with its own store keeps compiling. `MAJOR_MINOR` in
+`build.yml` is untouched, so the merge lands as the next patch.
+
+Recorded so it is not re-litigated: an earlier suggestion in this session that this needed a minor bump was
+wrong against the convention, not a judgement the next session should revisit.
+
+**For the release notes:** `ISupportCaseService` gained two methods, so anyone who *implements* it — a test
+double, a hand-rolled decorator — has a compile error to fix. Hosts call that interface rather than implement
+it, which is why it is not a consumer break, but it is worth naming rather than leaving to be discovered.
+
 ## Last session
 
 2026-09-12 — Branch off `master`. Read `architecture-v4.md` first, per `mission.md`: the design is checked
