@@ -89,4 +89,13 @@ public record SupportCase
 
     /// <summary>External projections. Empty until the channel work lands.</summary>
     public SupportChannelBinding[] Bindings { get; init; } = [];
+
+    /// <summary>
+    /// Whether an assistant is answering this case.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to <see cref="SupportAssistantState.None"/>, which is what every case raised before
+    /// assistants existed deserializes as — so nothing already stored changes meaning.
+    /// </remarks>
+    public SupportAssistantState AssistantState { get; init; } = SupportAssistantState.None;
 }

@@ -20,10 +20,45 @@ namespace Tharga.Team.Support.Cases;
 public interface ISupportCaseService
 {
     /// <summary>Raises a case for a team, with its opening message.</summary>
-    Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default);
+    /// <remarks>
+    /// <paramref name="assistance"/> is the customer's choice of who answers, and it is the only place that
+    /// choice is made. Asking for an assistant when the host has registered none is not an error: the case is
+    /// raised and a person answers it, which is what the customer would have got anyway.
+    /// </remarks>
+    Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Stops the assistant answering a case, so a person takes over.
+    /// </summary>
+    /// <remarks>
+    /// <b>Same case, same transcript.</b> Handing over is not a second case: whoever picks it up reads
+    /// everything that was already said, which is the whole point of offering an assistant first.
+    /// <para>
+    /// Authorized exactly as replying is. On a case with no assistant this does nothing and is not an error,
+    /// so a component can offer it without first working out whether it applies.
+    /// </para>
+    /// </remarks>
+    Task RequestHumanAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>Appends a reply to an open case.</summary>
     Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Has the assistant answer the newest message on a case, and appends what it says.
+    /// </summary>
+    /// <remarks>
+    /// <b>A separate operation rather than something raising and replying do for you.</b> A model can take
+    /// tens of seconds, and burying that inside a write would make reporting a problem feel broken. Raising
+    /// stays fast, and the caller decides when to ask for the answer — which also lets a UI say that the
+    /// assistant is thinking.
+    /// <para>
+    /// Does nothing and returns <c>false</c> when the case has no assistant, when the customer has already
+    /// asked for a person, or when the host registered no responder. Every one of those is an ordinary state
+    /// rather than an error, so a caller can call this unconditionally.
+    /// </para>
+    /// </remarks>
+    /// <returns>True when an answer was appended.</returns>
+    Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>Closes a case and records who closed it in its transcript.</summary>
     Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);

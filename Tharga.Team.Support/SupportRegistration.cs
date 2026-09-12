@@ -1,7 +1,9 @@
 ﻿using System.Reflection;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
@@ -182,6 +184,28 @@ public static class SupportRegistration
                 "Reply to, close, reopen and assign a support case that belongs to no team. Assigning decides which tenant the case and its whole transcript become part of.");
         });
 
+        // The assistant, and only when the host has given it something to talk to. An IChatClient is the
+        // host's to register -- a local model, a self-hosted one, or a hosted API -- so the toolkit names no
+        // provider and takes no vendor package. With none registered the factory yields null, the service's
+        // optional responder stays null, and every path behaves exactly as it did before assistants existed.
+        //
+        // Resolved rather than injected into a component: an optional dependency taken as a required
+        // injection is Tharga/Team#266, where opening a dialog killed the circuit because nothing had
+        // registered what it demanded.
+        services.AddSingleton(caseOptions.Assistant);
+        services.TryAddScoped<ISupportAssistantTools, SupportAssistantTools>();
+        services.TryAddScoped<ISupportResponder>(sp =>
+        {
+            var chat = sp.GetService<IChatClient>();
+            if (chat == null) return null;
+
+            return new ChatSupportResponder(
+                chat,
+                sp.GetRequiredService<ISupportAssistantTools>(),
+                sp.GetRequiredService<SupportAssistantOptions>(),
+                sp.GetRequiredService<ILogger<ChatSupportResponder>>());
+        });
+
         // Auditing wraps authorization so a refusal is recorded as a failed entry rather than lost, matching
         // how access-level and scope denials are already audited. Composed the other way round, every
         // refused attempt would vanish and nothing would fail to compile.
@@ -192,7 +216,8 @@ public static class SupportRegistration
                     sp.GetRequiredService<TeamAuthorizer>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetServices<ISupportChannel>(),
-                    sp.GetRequiredService<ISupportCaseNotifier>()),
+                    sp.GetRequiredService<ISupportCaseNotifier>(),
+                    sp.GetService<ISupportResponder>()),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
