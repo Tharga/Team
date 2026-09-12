@@ -67,10 +67,29 @@ public static class SupportCasesViewText
     /// </remarks>
     public static readonly TextKey SupportAway = new("team.support.cases.presence.away", "Support will reply later");
 
+    /// <summary>
+    /// The offer on the new-case form, shown only when the host has an assistant to offer.
+    /// </summary>
+    /// <remarks>
+    /// Worded as a choice the customer makes, not as a feature being switched on, and never preselected. It
+    /// also says a person is still available, because the common fear about a support bot is that it is a
+    /// wall rather than a first answer.
+    /// </remarks>
+    public static readonly TextKey AskTheAssistant = new("team.support.cases.assistant.ask",
+        "Ask the assistant first — you can still reach a person.");
+
+    /// <summary>Shown while the assistant is working, so a slow model does not read as a broken page.</summary>
+    public static readonly TextKey AssistantThinking = new("team.support.cases.assistant.thinking",
+        "The assistant is looking into it…");
+
+    /// <summary>The hand-over action, offered only while an assistant is answering.</summary>
+    public static readonly TextKey TalkToAPerson = new("team.support.cases.assistant.handover", "Talk to a person");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         Title, NewCase, SubjectLabel, MessageLabel, Send, MyCases, NoCases, ReplyLabel, Reopen,
-        Open, Closed, ClosedForInactivity, Unread, SelectTeam, SupportOnline, SupportAway
+        Open, Closed, ClosedForInactivity, Unread, SelectTeam, SupportOnline, SupportAway,
+        AskTheAssistant, AssistantThinking, TalkToAPerson
     ];
 }

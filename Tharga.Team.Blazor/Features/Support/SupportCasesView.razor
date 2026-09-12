@@ -58,6 +58,15 @@ else
                             Placeholder="@_text[SupportCasesViewText.MessageLabel]" Rows="4"
                             Style="width: 100%;" aria-label="@_text[SupportCasesViewText.MessageLabel]" />
 
+            @* Only offered when there is an assistant to offer, and never preselected. Which of the two
+               answers you is the customer's choice; presence saying nobody is online is a reason to suggest
+               it, not a reason to decide for them. *@
+            @if (_assistantAvailable)
+            {
+                <RadzenCheckBox @bind-Value="_useAssistant" Name="useAssistant" />
+                <RadzenLabel Text="@_text[SupportCasesViewText.AskTheAssistant]" Component="useAssistant" />
+            }
+
             <div>
                 <RadzenButton Text="@_text[SupportCasesViewText.Send]" Icon="send" Click="RaiseAsync"
                               Disabled="@(string.IsNullOrWhiteSpace(_body) || _busy)" />
@@ -111,10 +120,29 @@ else
                                                     @oninput="@(e => _reply = e.Value?.ToString())"
                                                     Placeholder="@_text[SupportCasesViewText.ReplyLabel]"
                                                     Rows="3" Style="width: 100%;" aria-label="@_text[SupportCasesViewText.ReplyLabel]" />
-                                    <div>
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
                                         <RadzenButton Text="@_text[SupportCasesViewText.ReplyLabel]" Click="ReplyAsync"
                                                       Disabled="@(string.IsNullOrWhiteSpace(_reply) || _busy)" />
-                                    </div>
+
+                                        @* Offered only while an assistant is actually answering. On a case
+                                           already handed over the button would promise something that has
+                                           happened, and on a case that never had one it means nothing. *@
+                                        @if (_selected.AssistantState == SupportAssistantState.Active)
+                                        {
+                                            <RadzenButton Text="@_text[SupportCasesViewText.TalkToAPerson]" Icon="person"
+                                                          ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                                          Click="RequestHumanAsync" Disabled="_busy" />
+                                        }
+
+                                        @* A model can take tens of seconds, and a screen that shows nothing
+                                           for that long reads as broken rather than as busy. *@
+                                        @if (_thinking)
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                                                @_text[SupportCasesViewText.AssistantThinking]
+                                            </RadzenText>
+                                        }
+                                    </RadzenStack>
                                 }
                                 else
                                 {
@@ -177,6 +205,13 @@ else
 
     private SupportPresenceState _presence = SupportPresenceState.Unknown;
 
+    /// <remarks>
+    /// Resolved for the same reason as presence: an assistant exists only when the host registered a chat
+    /// client for it, and <c>[Inject]</c> on a service nothing registered fails the whole render — which is
+    /// Tharga/Team#266. Absent means the choice is never offered and a person answers, exactly as before.
+    /// </remarks>
+    private bool _assistantAvailable;
+
     private TextSet _text = TextSet.Empty;
     private bool _ready;
     private bool _busy;
@@ -185,6 +220,8 @@ else
     private string _subject;
     private string _body;
     private string _reply;
+    private bool _useAssistant;
+    private bool _thinking;
     private int _unread;
 
     private SupportCase[] _cases = [];
@@ -217,6 +254,8 @@ else
 
         // After _ready, deliberately: presence is advisory and must never delay the form being usable.
         _ready = true;
+
+        _assistantAvailable = Services.GetService(typeof(ISupportResponder)) != null;
 
         await RefreshPresenceAsync();
     }
@@ -274,13 +313,20 @@ else
         _busy = true;
         try
         {
-            var raised = await SupportCases.RaiseCaseAsync(_teamKey, _subject, _body);
+            var assistance = _useAssistant ? SupportAssistance.Assistant : SupportAssistance.None;
+
+            var raised = await SupportCases.RaiseCaseAsync(_teamKey, _subject, _body, assistance);
 
             _subject = null;
             _body = null;
+            _useAssistant = false;
 
             await ReloadAsync();
             await SelectAsync(raised.Id);
+
+            // After the case is on screen, not before. Raising stays fast and the customer watches their
+            // case appear; the answer lands in it when the model is done, which may be tens of seconds.
+            await RunAssistantAsync(raised.Id);
         }
         finally
         {
@@ -295,11 +341,58 @@ else
         _busy = true;
         try
         {
-            await SupportCases.ReplyToCaseAsync(_teamKey, _selected.Id, _reply);
+            var caseId = _selected.Id;
+
+            await SupportCases.ReplyToCaseAsync(_teamKey, caseId, _reply);
             _reply = null;
 
             await ReloadAsync();
-            await SelectAsync(_selected.Id);
+            await SelectAsync(caseId);
+
+            await RunAssistantAsync(caseId);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <remarks>
+    /// Unconditional on purpose: the service answers nothing when the case has no assistant, when the
+    /// customer has already asked for a person, or when the host registered none. A component deciding that
+    /// for itself would be a second copy of the rule, and the two would drift.
+    /// </remarks>
+    private async Task RunAssistantAsync(string caseId)
+    {
+        _thinking = true;
+        StateHasChanged();
+        try
+        {
+            if (await SupportCases.RunAssistantAsync(_teamKey, caseId))
+            {
+                await ReloadAsync();
+                await SelectAsync(caseId);
+            }
+        }
+        finally
+        {
+            _thinking = false;
+        }
+    }
+
+    private async Task RequestHumanAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            var caseId = _selected.Id;
+
+            await SupportCases.RequestHumanAsync(_teamKey, caseId);
+
+            await ReloadAsync();
+            await SelectAsync(caseId);
         }
         finally
         {

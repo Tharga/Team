@@ -50,21 +50,26 @@ again, so it re-raises. The chosen semantic needs no store change — verify by 
       anywhere. Resolve it with `GetService`, never `[Inject]` on a component — that is #266 exactly, where a
       required injection of an optional dependency killed the circuit.
 
-- [~] 8. Blazor: the transcript renders an AI answer as what it is, the raise dialog offers the choice, and a
+- [x] 8. Blazor: the transcript renders an AI answer as what it is, the raise dialog offers the choice, and a
       case being assisted offers *talk to a human*.
 
-- [ ] 9. Sample — the AI responder. The sample takes no vendor package either, so it registers a small
+- [x] 9. Sample — the AI responder. The sample takes no vendor package either, so it registers a small
       deterministic `IChatClient` that runs with no key and no network, and the wiring comment says how to
       swap in Ollama, llama.cpp, OpenAI or Anthropic in one line. Same shape as Slack and email in the
       sample: the wiring resolves in the real graph whether or not a provider is configured.
 
-- [ ] 10. Sample — the rest of the support surface it never picked up: presence, the member's unread count
-      and support's awaiting count. All three are shipped public API with no sample rendering them, which is
-      what "the whole support feature package in the sample" is actually asking for.
+- [x] 10. **Dropped — the premise was wrong, and that is the finding.** Presence, the unread count and the
+      awaiting count are all rendered *inside* the components the sample already uses: `SupportCasesView`
+      shows presence and unread, `SupportQueueView` shows the awaiting count. Grepping the sample for those
+      names found nothing and I read that as a gap; the components own them. The sample therefore already
+      had the whole support surface, and the only thing genuinely missing was the assistant. Nothing built
+      here, and no redundant sample UI added.
 
-- [ ] 11. Full suite green, then commit.
+- [x] 11. Full suite green: 2687 passed, 0 failed. A text-coverage guard caught the transcript badge as
+      a hardcoded string, so it now resolves `SupportTranscriptText.Assistant` through the provider and the
+      component joined the migrated list — the guard doing exactly its job.
 
-- [ ] 12. Docs: `docs/articles/support-cases.md` gains the responder and the provider-agnostic setup;
+- [~] 12. Docs: `docs/articles/support-cases.md` gains the responder and the provider-agnostic setup;
       `README.md` gains it under Support. Land as a `docs:` commit.
 
 - [ ] 13. Push, hand to the user to test, do not open the PR yet.
@@ -92,4 +97,4 @@ reporting a problem feel broken.
 drives the awaiting count, so an assistant answer clears it and a customer reply re-raises it. Verified by
 test rather than assumed.
 
-Next: step 8, the Blazor components.
+Steps 8-11 done. Next: the documentation.

@@ -21,6 +21,14 @@
             {
                 <RadzenBadge Text="@message.Source.ToString()" BadgeStyle="BadgeStyle.Light" />
             }
+
+            @* An answer nobody wrote. An agent reading the thread has to be able to tell what the customer
+               was already told by an assistant from what a colleague told them, because the two carry very
+               different weight -- and the name alone does not say it. *@
+            @if (message.Kind == SupportMessageKind.Assistant)
+            {
+                <RadzenBadge Text="@_text[SupportTranscriptText.Assistant]" BadgeStyle="BadgeStyle.Info" />
+            }
         </RadzenStack>
         <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@message.Body</RadzenText>
     </RadzenStack>
@@ -29,4 +37,13 @@
 @code {
     /// <summary>The entries to render, oldest first.</summary>
     [Parameter] public SupportMessage[] Messages { get; set; } = [];
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportTranscriptText.All);
+    }
 }
