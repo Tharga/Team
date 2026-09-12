@@ -31,11 +31,15 @@
 - [x] 6. Full suite green: 2672 passed, 0 failed, 0 skipped — up from 2654 at the dependency commit, the
       18 new tests accounted for. Committed.
 
-- [~] 7. Documentation review. Check `README.md` and `docs/articles/` for anything describing invitation
-      links or the decorator chain that this changes or should now mention. A pure defect fix may warrant
-      nothing — but the review happens before that is concluded, and the conclusion gets stated either way.
+- [x] 7. Documentation review done across both surfaces. **No API or documented behaviour changed** — the
+      docs already described what the code was supposed to do, which is why nothing read as wrong while it
+      was broken. One addition earned its place: `docs/articles/implementation-guide.md` told a host that
+      short links work only if its store implements `GetTeamKeyByInviteKeyInternalAsync`, which sends anyone
+      hitting this defect to inspect the one thing that was fine. It now names the affected versions beside
+      that paragraph. `README.md` needed nothing — its Invitations section describes the link format, which
+      is unchanged. No new article: a defect fix is not a feature area.
 
-- [ ] 8. Push the branch and hand it to the user to test. Do not open the PR yet.
+- [~] 8. Push the branch and hand it to the user to test. Do not open the PR yet.
 
 - [ ] 9. On the user's confirmation: close-out. Re-run `dotnet outdated`, docs commit if any, update
       `Requests.md` / backlog if they carry this, archive `plan/feature.md` to the Plan directory `done/`,
@@ -58,4 +62,4 @@ code before planning: the missing member, both decorators, the registration orde
 check out. Confirmed the sibling case is sound — `IUserService.GetTeamMemberUsersAsync` is the toolkit's
 only other default member, and both its decorators forward it, so #272 is the single hole. Dependencies
 updated and committed. Tests written first and watched fail, fix applied, full suite green at 2672.
-Next: step 7, the documentation review.
+Documentation reviewed and one clarifying note added. Next: push for the user to test.
