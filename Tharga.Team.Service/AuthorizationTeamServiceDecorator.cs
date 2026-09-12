@@ -16,7 +16,7 @@ namespace Tharga.Team.Service;
 /// <item>Remove user from all teams — <c>users:manage</c> (system; backs user deletion).</item>
 /// <item>Transfer ownership — passed through (Owner-only is enforced by the inner service).</item>
 /// </list>
-/// Reads, consent-team lookup, last-seen touch, and invitation responses pass through (self-service / not gated here).
+/// Reads, consent-team lookup, last-seen touch, invite-code lookup and invitation responses pass through (self-service / not gated here).
 /// </summary>
 public sealed class AuthorizationTeamServiceDecorator : ITeamService
 {
@@ -81,6 +81,12 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     public Task<IReadOnlyList<TenantRoleDefinition>> GetTeamCustomRolesAsync(string teamKey) => _inner.GetTeamCustomRolesAsync(teamKey);
     public Task SetMemberLastSeenAsync(string teamKey) => _inner.SetMemberLastSeenAsync(teamKey);
     public Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept) => _inner.SetInvitationResponseAsync(teamKey, userKey, inviteCode, accept);
+
+    /// <summary>
+    /// Unscoped, like <see cref="SetInvitationResponseAsync"/>: the invite code is the check, and whoever follows
+    /// an invitation link holds nothing on the team yet.
+    /// </summary>
+    public Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey) => _inner.GetTeamKeyByInviteKeyAsync(inviteKey);
     public Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember => _inner.TransferOwnershipAsync<TMember>(teamKey, newOwnerUserKey);
 
     /// <remarks>

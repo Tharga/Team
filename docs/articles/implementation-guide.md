@@ -1451,10 +1451,21 @@ A twelve-character opaque token and nothing else. The store resolves it to its t
 > **Links already sent keep working.** The old parameter and payload are still accepted, so invitations
 > sitting unopened in an inbox are unaffected. Only newly generated links use the short form.
 
+> **Fixed in 3.21.1 — upgrade if you are on 3.20.0 through 3.21.0.** In those versions the short form never
+> resolved in a host registered through `AddThargaTeamBlazor` or `AddThargaTeam`: every link minted there
+> opened on "no invitation", whatever the store held (Tharga/Team#272). Nothing needs re-sending — the same
+> links resolve once the host is on 3.21.1.
+
 **A host with its own team store gets this only if it can look an invitation up without its team.** That is
 one method — `TeamServiceBase.GetTeamKeyByInviteKeyInternalAsync` — and if you do not implement it, nothing
 breaks: links that name their team still resolve, and the short form simply does not. The MongoDB store
 implements it, backed by an index on the invitation code.
+
+**A host that wraps `ITeamService` in a decorator of its own must implement `GetTeamKeyByInviteKeyAsync` and
+forward it.** It is a default interface member returning `null`, so a decorator that leaves it out compiles,
+and every short link resolved through it comes back as "no invitation". The same is true of every default
+member on the interface — forward all of them. The toolkit's own decorators are held to this by
+`DecoratorDefaultMemberTests`; a host writing its own should carry the equivalent test.
 
 ### Invitations that expire
 

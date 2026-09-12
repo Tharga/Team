@@ -46,6 +46,12 @@ public class AuditingTeamServiceDecorator : ITeamService
     public IAsyncEnumerable<ITeamMember> GetMembersAsync(string teamKey) => _inner.GetMembersAsync(teamKey);
     public IAsyncEnumerable<ITeam> GetConsentedTeamsAsync(string[] userRoles) => _inner.GetConsentedTeamsAsync(userRoles);
 
+    /// <remarks>
+    /// Not audited: the code is a bearer credential, and repeated failed lookups are already recorded by the
+    /// invitation throttle — without the code.
+    /// </remarks>
+    public Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey) => _inner.GetTeamKeyByInviteKeyAsync(inviteKey);
+
     // Not audited by design: enumeration is a read with no side effect. Mutations a cross-team caller
     // performs inside a team still flow through the audited methods below.
     public IAsyncEnumerable<ITeam> GetAllTeamsAsync() => _inner.GetAllTeamsAsync();

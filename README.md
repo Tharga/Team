@@ -232,6 +232,12 @@ https://your-host/invitation?tic=84Fb6G_8BbXE
 the team key was readable by any mail relay, helpdesk ticket or forwarded message the link passed through. It
 is no longer in the link at all. Links already sent keep working; only new ones use the short form.
 
+**Fixed in 3.21.1.** From 3.20.0 through 3.21.0 the short form never resolved in a host registered through
+`AddThargaTeamBlazor` or `AddThargaTeam` — every new link opened on "no invitation" (Tharga/Team#272). Upgrade;
+the links already sent resolve once the host is on the fixed version. If you wrap `ITeamService` in a decorator
+of your own, implement and forward `GetTeamKeyByInviteKeyAsync` — and every other default member — or the
+same thing happens through yours.
+
 Invitations can expire, off by default because they never used to:
 
 ```csharp
