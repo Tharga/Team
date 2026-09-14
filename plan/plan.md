@@ -5,8 +5,8 @@
 - [x] 3. Add filtering to `RoleEditor`, `ScopeOverrideEditor`, `SystemApiKeyView`, `TenantRoleManager`, and the sample `SpecialApiKeyCreator`. Also made `AccessSimulationDialog` scope picker case-insensitive. Scan test green.
 - [x] 4. Single visibility rule: replace `ApiKeyRolePicker.RolesAvailable(service, registry)` with a rule over the resolved role set (`ShowRoles && roles.Count > 0`); unit tests replace the `RolesAvailable_*` tests. Added internal `Framework/RolePickerGate.ShowRoles` + `RolePickerGateTests`; `RolesAvailable` and its 3 tests removed.
 - [x] 5. Apply it in `ApiKeyView` (create form, row menu, edit dialog) and `TeamComponent` (Roles column via `GetVisibleRoles(team.Key)`). `ApiKeyView` uses a `ShowRolePicker` property over `_roleDefinitions`. Side effect in `TeamComponent`: dynamic roles without a code-role registry now show the column when the team has custom roles (previously hidden; `ApiKeyView` already showed them). Full suite green, 2,686 tests.
-- [~] 6. Full suite; manual check in the sample app (search in each picker; Roles hidden with no roles defined).
-- [ ] 7. Push branch for user testing.
+- [x] 6. Full suite; manual check in the sample app (search in each picker; Roles hidden with no roles defined). Verified in Chrome: Custom roles scopes ("ORDERS" → orders:*), API Keys Roles ("sup" → Support) and Scopes ("Content" → content:*, inherited stay disabled), System API Keys ("TEAMS" → teams:*). Roles column/picker still shown on Team and API Keys (sample registers code roles). Hidden-when-empty covered by `RolePickerGateTests`, not visually checked — the sample always has code roles.
+- [~] 7. Push branch for user testing.
 
 ## Notes
 
