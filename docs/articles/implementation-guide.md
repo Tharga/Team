@@ -2013,6 +2013,12 @@ Role assignment is a **component parameter**, not a global option. Set `ShowRole
 <TeamComponent TMember="MyMember" ShowRoles="true" ShowScopeOverrides="true" />
 ```
 
+`ShowRoles` offers the Roles picker only when there is a role to pick: a team with no code-registered roles
+and no custom roles gets no Roles column in `<TeamComponent>` and no Roles picker in `<ApiKeyView>`, rather
+than a control that can only be set to nothing. Every role and scope picker — here, in `<ApiKeyView>`,
+`<SystemApiKeyView>`, `<TenantRoleManager>` and the access-simulation dialog — has a case-insensitive search
+box, so a long scope list can be narrowed by typing.
+
 ### How it works
 
 When a team member is assigned the "Editor" role, they automatically receive the `feature:read` and `feature:write` scopes in addition to their access-level scopes. Roles are combined — a member with both "Editor" and "Auditor" gets all scopes from both. Members/keys store the role **names**; the scopes are resolved live from the registry (change a role's scopes and it applies to all assignees).
