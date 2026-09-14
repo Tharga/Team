@@ -238,6 +238,23 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
         return _teamRepository.SetMemberSuspendedAsync(teamKey, userKey, suspendedAt, suspendedBy);
     }
 
+    protected override Task AddAccessRequestAsync(string teamKey, TeamAccessRequest request)
+    {
+        return _teamRepository.AddAccessRequestAsync(teamKey, TeamAccessRequestEntity.FromContract(request));
+    }
+
+    protected override Task<bool> DecideAccessRequestAsync(string teamKey, string requestId, TeamAccessRequestStatus status, string decidedBy, DateTime decidedAt)
+    {
+        return _teamRepository.DecideAccessRequestAsync(teamKey, requestId, status, decidedBy, decidedAt);
+    }
+
+    protected override Task<bool> ApproveAccessRequestAsync(string teamKey, string requestId, string decidedBy, DateTime decidedAt, DateTime? grantedUntil,
+        string[] consentedRoles, AccessLevel accessLevel, TemporaryConsent temporaryConsent)
+    {
+        return _teamRepository.ApproveAccessRequestAsync(teamKey, requestId, decidedBy, decidedAt, grantedUntil, consentedRoles, accessLevel,
+            TemporaryConsentEntity.FromContract(temporaryConsent));
+    }
+
     protected override Task SetTeamMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles)
     {
         return _teamRepository.SetMemberTenantRolesAsync(teamKey, userKey, tenantRoles);
