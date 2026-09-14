@@ -298,7 +298,9 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         var filter = new FilterDefinitionBuilder<TTeamEntity>().Eq(x => x.Key, teamKey);
         var update = new UpdateDefinitionBuilder<TTeamEntity>()
             .Set(x => x.ConsentedRoles, consentedRoles)
-            .Set(x => x.ConsentAccessLevel, accessLevel);
+            .Set(x => x.ConsentAccessLevel, accessLevel)
+            .Unset(x => x.TemporaryConsent);
+        // A manager setting consent directly makes it standing: any time-bound window from an approved request ends.
         return _collection.UpdateOneAsync(filter, update);
     }
 

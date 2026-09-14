@@ -174,9 +174,13 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
         await _inner.RenameTeamAsync<TMember>(teamKey, name);
     }
 
+    /// <remarks>
+    /// <b><c>team:manage</c> held directly</b> — as a member or a team key, not through consent. A caller consented
+    /// in at Administrator also holds <c>team:manage</c>, and changing consent would let that grant extend itself.
+    /// </remarks>
     public async Task SetTeamConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null)
     {
-        await RequireTeamScopeAsync(TeamScopes.Manage, teamKey);
+        await RequireDirectTeamScopeAsync(TeamScopes.Manage, teamKey, nameof(SetTeamConsentAsync));
         await _inner.SetTeamConsentAsync(teamKey, consentedRoles, accessLevel);
     }
 
@@ -342,6 +346,18 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     {
         if (!await _authorizer.HasTeamScopeAsync(scope, teamKey))
             throw new UnauthorizedAccessException($"This operation on team '{teamKey}' requires the '{scope}' scope on that team.");
+    }
+
+    private async Task RequireDirectTeamScopeAsync(string scope, string teamKey, string operation)
+    {
+        if (await _authorizer.HasDirectTeamScopeAsync(scope, teamKey)) return;
+
+        if (await _authorizer.HasTeamScopeAsync(scope, teamKey))
+            throw new UnauthorizedAccessException(
+                $"{operation} on team '{teamKey}' requires '{scope}' held as a member of the team. Access that reaches the team " +
+                "through its consent cannot change that consent.");
+
+        throw new UnauthorizedAccessException($"This operation on team '{teamKey}' requires the '{scope}' scope on that team.");
     }
 
     /// <summary>

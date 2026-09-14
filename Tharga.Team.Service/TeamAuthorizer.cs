@@ -45,6 +45,16 @@ public sealed class TeamAuthorizer
         return TeamScopePolicy.HasTeamScope(principal, scope, teamKey);
     }
 
+    /// <summary>
+    /// True when the caller holds <paramref name="scope"/> for <paramref name="teamKey"/> as a member or a team key —
+    /// not through the team's consent. See <see cref="TeamScopePolicy.HasDirectTeamScope"/>.
+    /// </summary>
+    public async ValueTask<bool> HasDirectTeamScopeAsync(string scope, string teamKey)
+    {
+        var principal = await _principalAccessor.GetCurrentAsync();
+        return TeamScopePolicy.HasDirectTeamScope(principal, scope, teamKey);
+    }
+
     /// <summary>True when the caller holds the system <paramref name="scope"/> (authorizes any team; no team binding).</summary>
     public async ValueTask<bool> HasSystemScopeAsync(string scope)
     {

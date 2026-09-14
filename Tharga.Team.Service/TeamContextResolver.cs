@@ -26,6 +26,16 @@ public sealed record TeamContext(string TeamKey, IReadOnlyList<string> Scopes, T
 {
     public bool IsRefused => Refusal != TeamContextRefusal.None;
 
+    /// <summary>
+    /// The caller's member key in <see cref="TeamKey"/> when the scopes come from a membership; null when they come
+    /// from consent.
+    /// </summary>
+    /// <remarks>
+    /// Issued as a claim beside the scopes, as the claims builder issues it, so an act that must not be performed
+    /// through consent can tell a member naming their team apart from a caller consented into it.
+    /// </remarks>
+    public string MemberKey { get; init; }
+
     internal static TeamContext None { get; } = new(null, null, TeamContextRefusal.None);
     internal static TeamContext Refused(TeamContextRefusal reason) => new(null, null, reason);
 }
@@ -122,7 +132,7 @@ public sealed class TeamContextResolver
 
             return grant == null
                 ? TeamContext.Refused(TeamContextRefusal.NotConsented)
-                : new TeamContext(headerTeamKey, grant.Scopes, TeamContextRefusal.None);
+                : new TeamContext(headerTeamKey, grant.Scopes, TeamContextRefusal.None) { MemberKey = grant.MemberKey };
         }
 
         var team = await _teamService.GetTeamByKeyAsync(headerTeamKey);
