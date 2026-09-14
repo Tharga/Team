@@ -11,14 +11,6 @@ namespace Tharga.Team.Blazor.Framework;
 internal static class ApiKeyRolePicker
 {
     /// <summary>
-    /// Whether any role source is configured, so the picker should be offered at all. True when either dynamic
-    /// roles are enabled or code roles are registered — so a team that defines only custom roles (no code roles)
-    /// still gets a picker.
-    /// </summary>
-    internal static bool RolesAvailable(ITenantRoleService tenantRoleService, ITenantRoleRegistry registry)
-        => tenantRoleService != null || registry != null;
-
-    /// <summary>
     /// The roles to offer for the given team: the merged per-team set from <paramref name="tenantRoleService"/>
     /// when it and a non-empty <paramref name="teamKey"/> are present, otherwise the code-registered roles.
     /// </summary>

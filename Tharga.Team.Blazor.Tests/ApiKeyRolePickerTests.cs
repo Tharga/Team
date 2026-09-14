@@ -12,18 +12,6 @@ namespace Tharga.Team.Blazor.Tests;
 public class ApiKeyRolePickerTests
 {
     [Fact]
-    public void RolesAvailable_False_WhenNeitherSourceRegistered()
-        => Assert.False(ApiKeyRolePicker.RolesAvailable(null, null));
-
-    [Fact]
-    public void RolesAvailable_True_WhenOnlyRegistry()
-        => Assert.True(ApiKeyRolePicker.RolesAvailable(null, new TenantRoleRegistry()));
-
-    [Fact]
-    public void RolesAvailable_True_WhenOnlyService()
-        => Assert.True(ApiKeyRolePicker.RolesAvailable(new Mock<ITenantRoleService>().Object, null));
-
-    [Fact]
     public async Task ResolveAsync_UsesMergedSet_WhenServiceAndTeamKeyPresent()
     {
         var service = new Mock<ITenantRoleService>();

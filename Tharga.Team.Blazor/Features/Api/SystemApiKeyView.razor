@@ -93,6 +93,8 @@
                                             Data="@_allScopes"
                                             Multiple="true"
                                             AllowClear="true"
+                                            AllowFiltering="true"
+                                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                                             Placeholder="Select scopes...">
                                 <Template>
                                     <span title="@(_scopeDescriptions.TryGetValue((string)context, out var d) ? d : null)">@context</span>

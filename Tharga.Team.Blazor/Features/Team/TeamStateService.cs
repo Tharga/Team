@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.JSInterop;
+using Tharga.Team.Blazor.Features.Simulation;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team;
 
@@ -107,11 +108,11 @@ internal class TeamStateService : ITeamStateService
             // *chosen* team is still legitimate; `teams` (own memberships) is the only source for the
             // fallback, so nobody is ever defaulted into a tenant they didn't pick.
             var teams = await _teamService.GetTeamsAsync().ToArrayAsync();
-            var visibleTeams = await GetVisibleTeamsAsync(principal, teams);
+            var currentTeamKey = principal.Claims.FirstOrDefault(x => x.Type == Constants.TeamKeyCookie)?.Value;
+            var visibleTeams = await WithSimulatedTeamAsync(principal, currentTeamKey, await GetVisibleTeamsAsync(principal, teams));
 
             if (!NeedsResolution(visibleTeams)) return (_selectedTeam, false);
 
-            var currentTeamKey = principal.Claims.FirstOrDefault(x => x.Type == Constants.TeamKeyCookie)?.Value;
             var rememberedTeamKey = await _localStorageService.GetItemAsStringAsync(Constants.SelectedTeamLocalStorageKey);
             var team = TeamSelectionResolver.Resolve(currentTeamKey, rememberedTeamKey, visibleTeams, teams);
 
@@ -178,6 +179,24 @@ internal class TeamStateService : ITeamStateService
         {
             return ownTeams;
         }
+    }
+
+    /// <summary>
+    /// Adds the selected team to <paramref name="visibleTeams"/> while a simulation is in force for it.
+    /// </summary>
+    /// <remarks>
+    /// Visibility is otherwise judged from the principal, which a simulation has narrowed — so a team reached by
+    /// consent or <c>teams:read</c> would drop out and the caller would be moved to a team they never chose, with
+    /// the simulation applied there (Tharga/Team#276). <see cref="SimulatedTeamSelection"/> decides from the
+    /// caller's real grant; this only supplies the team.
+    /// </remarks>
+    private async Task<ITeam[]> WithSimulatedTeamAsync(ClaimsPrincipal principal, string currentTeamKey, ITeam[] visibleTeams)
+    {
+        if (!SimulatedTeamSelection.KeepsSelection(principal, currentTeamKey)) return visibleTeams;
+        if (visibleTeams.Any(x => x.Key == currentTeamKey)) return visibleTeams;
+
+        var team = await _teamService.GetTeamByKeyAsync(currentTeamKey);
+        return team == null ? visibleTeams : [.. visibleTeams, team];
     }
 
     private async Task SetTeamCookieAsync(string teamKey)

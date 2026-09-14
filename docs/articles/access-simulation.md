@@ -64,6 +64,23 @@ things elsewhere:
 > mode was turned on to avoid. For the access-checking job the feature was built for, leave it alone —
 > being loud is the point.
 
+### A compact indicator beside the team selector
+
+For a quieter marker than the banner, place `<AccessSimulationIndicator />` in the header — typically right
+beside `<TeamSelector />`:
+
+```razor
+<AccessSimulationIndicator />
+<TeamSelector />
+```
+
+While a simulation is active it shows an **Access reduced** badge, with the banner's sentence as its tooltip,
+and a button that returns you to your own access. Otherwise it renders nothing. It is optional and takes no
+parameters; it does not start a simulation, so pair it with the card or the bar's entry point.
+
+**It renders nothing during demo mode**, for the same reason the banner does not: a demonstration is meant
+to look like an ordinary member's session. The profile card stays the way out of a demo.
+
 ## Who can use it
 
 **Two capabilities, two grants.** They were one until 3.13.2, which is the fix for
@@ -128,12 +145,14 @@ revalidation — the same freshness every other scope-gated surface in the toolk
 
 ## Translating it
 
-Both components route their wording through `IThargaTextProvider`:
+Every simulation component routes its wording through `IThargaTextProvider`:
 
 | Component | Keys |
 |-----------|------|
 | `AccessSimulationCard` | `team.simulation.card.*` — ten keys |
 | `AccessSimulationBar` | `team.simulation.bar.*` — five keys |
+| `AccessSimulationDialog` | `team.simulation.dialog.*` — eighteen keys |
+| `AccessSimulationIndicator` | `team.simulation.indicator.*` — two keys, plus the bar's sentence for its tooltip |
 
 Enumerate `ThargaTextKeys.All` to generate the table with the English defaults; the banner's keys arrive
 there like any other.
@@ -145,27 +164,37 @@ access is reduced" suffix would hard-code English word order. `team.simulation.b
 `.targetAccessLevel` do the same for naming a role or a level. A translation that drops the `{0}` renders
 the sentence without naming the target rather than failing.
 
-**`AccessSimulationTargets.DemoLabel` is deliberately not translatable.** It is written to audit metadata,
-where a value that varies by operator language cannot be searched or compared.
-
-> **Not yet translatable:** `AccessSimulationDialog`, the "View as another user" screen. The way *out* of a
-> reduced session translates; the way in does not, yet.
+**Simulation labels are deliberately not translatable** — `AccessSimulationTargets.DemoLabel`, and the label
+a composed simulation is given (see below). They are written to audit metadata, where a value that varies by
+operator language cannot be searched or compared.
 
 ## What you can simulate
 
-| Target | What it means |
-|--------|---------------|
-| **A member** | The access that person actually holds in this team |
-| **A role** | Exactly what that tenant role grants |
-| **An access level** | Exactly what that level grants |
-| **Scopes** | A set you tick by hand, from the scopes you hold |
-| **Demo mode** | Your own team access, unchanged — with your system-wide access dropped |
+The **View as another user** dialog builds one set of scopes from any combination of:
 
-They all work the same way: each names a **target scope set**, and the simulation keeps what the target
-has *and you also have*, removing everything else.
+| Part | What it adds |
+|------|--------------|
+| **An access level** | The scopes that level grants — every level except `Custom`, which grants none and is what choosing no level already means |
+| **One or more roles** | The scopes each tenant role grants — code-registered roles, and custom roles when dynamic roles are enabled |
+| **Scopes ticked by hand** | Anything else from the list |
 
-**Applying a role replaces, it does not add.** Simulating the `Support` role leaves you with `Support`'s
-scopes and nothing more — not your own plus its.
+Every registered team scope is listed as a checkbox, with a search box. Scopes the level or a role grants
+show **checked and fixed**, marked *from level or role*: unticking one would be simulating a different level
+or role rather than that one. Scopes **you do not hold** are listed but greyed out and marked, because a
+simulation cannot keep them — the dialog says so above the choices.
+
+**Starting from a member** fills in that member's access level, roles and scopes in one step, so the target
+is exactly the access they hold. Change anything afterwards and it becomes a composed target of your own.
+
+Whatever is chosen, it works the same way: the dialog names a **target scope set**, and the simulation keeps
+what the target has *and you also have*, removing everything else. Choosing nothing is allowed, and shows the
+application with no team scopes at all.
+
+**A level or role replaces your access, it does not add to it.** Simulating the `Support` role leaves you
+with `Support`'s scopes and nothing more — not your own plus its.
+
+**Demo mode** is the other target: your own team access, unchanged, with your system-wide access dropped. It
+has its own button on the profile card.
 
 ### Demo mode
 
@@ -182,8 +211,7 @@ and the system scopes come back.
   developer-only surfaces.
 - It is started from the **card on the profile page** — one button, no target to pick.
 
-In the audit log a demo records `simulation.kind = Scopes` with `simulation.target = Demo mode`, so it is
-distinguishable from a hand-picked scope simulation by the target rather than the kind.
+In the audit log a demo records `simulation.kind = Demo` with `simulation.target = Demo mode`.
 
 ## What it cannot show, and why you are told
 
@@ -231,8 +259,8 @@ action was refused, or performed at a level below the one they hold:
 | Key | Value |
 |-----|-------|
 | `simulation.active` | `true` |
-| `simulation.kind` | `User` · `Role` · `Scopes` · `AccessLevel` |
-| `simulation.target` | The member, role or level being simulated |
+| `simulation.kind` | `User` for an unedited member pick · `Composed` for anything built in the dialog · `Demo` · and `Role`, `Scopes`, `AccessLevel` from earlier releases |
+| `simulation.target` | The member's name; for `Composed`, the parts joined with ` + ` — e.g. `Viewer + Editor + reports:export` |
 
 **This covers entries written from an interactive component**, not only from a controller. A circuit has no
 `HttpContext` to read the caller from, so the toolkit publishes the circuit's principal for the length of
@@ -249,6 +277,16 @@ thereafter — the same pattern the selected team uses, and necessary because a 
 **The cookie is not signed, and does not need to be.** The filter can only ever *remove* claims, so
 editing the cookie to name scopes you do not hold achieves nothing. That is why the guarantee is a
 property of the mechanism rather than of a calculation being correct.
+
+**A simulation belongs to the team it was started in.** It records that team, and applies only while that
+team is selected; on any other team it is ignored and you see your real access there. While it is active,
+the selected team stays selected even if the simulation removed what let you see it — a team reached through
+consent or `teams:read` — and ending it returns you to the same team. This was
+[#276](https://github.com/Tharga/Team/issues/276): simulations used to follow you to a fallback team and apply
+there.
+
+> **Upgrading?** A simulation started before this release carries no team and no longer applies. Anyone
+> mid-simulation sees their real access after the upgrade, and starts a new one if they still want it.
 
 Starting or stopping writes the cookie and reloads the page, which re-issues claims through the ordinary
 request path. The filter is applied on both claim-issuance paths — the HTTP one and the periodic

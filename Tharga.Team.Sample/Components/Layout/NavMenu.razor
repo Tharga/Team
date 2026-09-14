@@ -19,6 +19,9 @@
                the profile page. That works here because /account carries [Authorize] and nothing more —
                a host gating it on a scope a simulation can remove would strand the caller. *@
             <AccessSimulationBar ShowEntryPoint="false" ShowBanner="false" />
+            @* The quiet way to see that access is reduced, and to return, without the banner. Shows nothing during
+               demo mode, so a demonstration stays clean; the profile page is then the way out. *@
+            <AccessSimulationIndicator />
             <TeamSelector />
             <LoginDisplay />
         </RadzenStack>

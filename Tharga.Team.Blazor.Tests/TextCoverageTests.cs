@@ -52,6 +52,8 @@ public class TextCoverageTests
         "Features/Team/TeamIconDialog.razor",
         "Features/Simulation/AccessSimulationCard.razor",
         "Features/Simulation/AccessSimulationBar.razor",
+        "Features/Simulation/AccessSimulationDialog.razor",
+        "Features/Simulation/AccessSimulationIndicator.razor",
         "Features/Team/TeamInviteView.razor",
         "Features/Team/InviteUserDialog.razor",
         "Features/User/DeleteUserDialog.razor",
@@ -80,7 +82,6 @@ public class TextCoverageTests
         ["Features/Api/SystemApiKeyView.razor"] = 35,
         ["Features/Roles/TenantRoleManager.razor"] = 11,
         ["Features/Scopes/ScopeView.razor"] = 14,
-        ["Features/Simulation/AccessSimulationDialog.razor"] = 12,
         ["Features/User/UserProfileView.razor"] = 13,
     };
 

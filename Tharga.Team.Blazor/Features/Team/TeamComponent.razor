@@ -754,7 +754,7 @@ else
                                 }
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnRoles]" Width="200px" Visible="@(ShowRoles && _tenantRoleRegistry != null)">
+                        <RadzenDataGridColumn Title="@_text[TeamComponentText.ColumnRoles]" Width="200px" Visible="@RolePickerGate.ShowRoles(ShowRoles, GetVisibleRoles(team.Key))">
                             <Template>
                                 @if (CanManageMembers(team) && _user.Key != context.Key && context.AccessLevel != AccessLevel.Owner)
                                 {
