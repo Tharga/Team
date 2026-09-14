@@ -163,7 +163,7 @@ else
                     <RadzenLabel Text="Access Level" />
                     <RadzenDropDown TValue="AccessLevel" @bind-Value="_newAccessLevel" Data="@_accessLevels" />
                 </RadzenStack>
-                @if (ShowRoles && _rolesAvailable)
+                @if (ShowRolePicker)
                 {
                     <RadzenStack Gap="0.25rem">
                         <RadzenLabel Text="Roles" />
@@ -302,7 +302,7 @@ else
     private List<string> _newRoles = new();
     private ITenantRoleRegistry _tenantRoleRegistry;
     private ITenantRoleService _tenantRoleService;
-    private bool _rolesAvailable;
+    private bool ShowRolePicker => RolePickerGate.ShowRoles(ShowRoles, _roleDefinitions);
     private IReadOnlyList<TenantRoleDefinition> _roleDefinitions = Array.Empty<TenantRoleDefinition>();
 
     protected override async Task OnInitializedAsync()
@@ -333,7 +333,6 @@ else
         _scopeDescriptions = _scopeRegistry?.All.ToDictionary(s => s.Name, s => s.Description) ?? new Dictionary<string, string>();
         _tenantRoleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
         _tenantRoleService = ServiceProvider.GetService<ITenantRoleService>();
-        _rolesAvailable = ApiKeyRolePicker.RolesAvailable(_tenantRoleService, _tenantRoleRegistry);
         _options = ApiKeyOptionsAccessor.Value;
         _newExpiryDate = _options.MaxExpiryDays.HasValue
             ? DateTime.UtcNow.AddDays(_options.MaxExpiryDays.Value).Date
@@ -469,7 +468,7 @@ else
     private void OpenRowMenu(MouseEventArgs args, ApiKeyModel context)
     {
         var hasValue = !string.IsNullOrEmpty(context.ApiKey);
-        var showEdit = (ShowScopeOverrides && _scopeRegistry != null) || (ShowRoles && _rolesAvailable);
+        var showEdit = (ShowScopeOverrides && _scopeRegistry != null) || ShowRolePicker;
 
         var items = new List<ContextMenuItem>();
         if (hasValue) items.Add(new ContextMenuItem { Text = "Copy", Icon = "content_copy", Value = "copy" });
@@ -589,7 +588,7 @@ else
 
     private async Task OpenEditAsync(ApiKeyModel context)
     {
-        var showRoles = ShowRoles && _rolesAvailable;
+        var showRoles = ShowRolePicker;
         var showScopes = ShowScopeOverrides && _scopeRegistry != null;
         if (!showRoles && !showScopes) return;
 
