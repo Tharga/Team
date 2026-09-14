@@ -33,6 +33,7 @@
                 <RadzenLabel Text="Scopes to keep" />
                 <RadzenDropDown @bind-Value="_selectedScopes" Data="@_allScopes" TValue="IEnumerable<string>"
                                 Multiple="true" AllowClear="true" AllowFiltering="true"
+                                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                                 Placeholder="Choose scopes…" Change="@(_ => OnTargetChanged())"
                                 Style="width: 100%;" />
                 <RadzenText TextStyle="TextStyle.Caption" class="rz-mt-1">
