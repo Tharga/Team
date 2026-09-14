@@ -68,7 +68,7 @@ internal class TeamServerClaimsTransformation : IClaimsTransformation
         foreach (var claim in await _membershipClaimsBuilder.BuildAsync(principal, teamKey))
             AddClaimSafe(identity, claim.Type, claim.Value);
 
-        ApplySimulation(identity, httpContext);
+        ApplySimulation(identity, httpContext, teamKey);
 
         return principal;
     }
@@ -85,14 +85,18 @@ internal class TeamServerClaimsTransformation : IClaimsTransformation
     /// paths must apply it: this one alone would leave a simulation silently expiring at the next
     /// revalidation interval.
     /// </para>
+    /// <para>
+    /// Only a simulation started in <paramref name="teamKey"/> is applied or stamped. One started elsewhere is
+    /// left out entirely, so the session does not report a simulation that is not in force (Tharga/Team#276).
+    /// </para>
     /// </remarks>
-    private static void ApplySimulation(ClaimsIdentity identity, HttpContext httpContext)
+    private static void ApplySimulation(ClaimsIdentity identity, HttpContext httpContext, string teamKey)
     {
         if (!httpContext.Request.Cookies.TryGetValue(AccessSimulationCookie.Name, out var value)
             || string.IsNullOrEmpty(value))
             return;
 
-        var simulation = AccessSimulationCookie.Read(value);
+        var simulation = AccessSimulationCookie.ReadForTeam(value, teamKey);
         if (simulation == null) return;
 
         AddClaimSafe(identity, AccessSimulationCookie.ClaimType, value);

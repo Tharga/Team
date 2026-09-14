@@ -1,163 +1,224 @@
-﻿@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Authorization
 @using Tharga.Team
 @using Tharga.Team.Blazor.Features.Simulation
 @attribute [Authorize]
 @inject DialogService DialogService
 @inject AccessSimulationState SimulationState
+@inject IThargaTextProvider TextProvider
 
 <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem" Style="height: 100%;">
     <RadzenStack Gap="1rem">
-        <RadzenText TextStyle="TextStyle.Body2">
-            See the application as someone with less access. Your own access is only ever reduced — anything
-            you do is still recorded as you.
-        </RadzenText>
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationDialogText.Intro]</RadzenText>
 
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-            <RadzenLabel Text="Simulate" />
-            <RadzenSelectBar @bind-Value="_kind" TValue="AccessSimulationKind" Change="@(_ => OnTargetChanged())" Size="ButtonSize.Small">
-                <Items>
-                    <RadzenSelectBarItem Text="A member" Value="AccessSimulationKind.User" />
-                    <RadzenSelectBarItem Text="A role" Value="AccessSimulationKind.Role" Disabled="@(_roles.Count == 0)" />
-                    <RadzenSelectBarItem Text="An access level" Value="AccessSimulationKind.AccessLevel" />
-                    <RadzenSelectBarItem Text="Scopes" Value="AccessSimulationKind.Scopes" Disabled="@(_allScopes.Count == 0)" />
-                </Items>
-            </RadzenSelectBar>
-        </RadzenStack>
+        @* The limitation, stated where the choice is made rather than discovered afterwards. *@
+        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" AllowClose="false" class="rz-m-0">
+            @_text[AccessSimulationDialogText.Limitation]
+        </RadzenAlert>
 
-        @* Picking scopes by hand answers "what would someone with exactly these see?", which the other
-           three cannot: a role and a level are whatever they happen to grant today, and a member is
-           whatever they happen to hold. *@
-        @if (_kind == AccessSimulationKind.Scopes)
+        @if (_members.Count > 0)
         {
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenLabel Text="Scopes to keep" />
-                <RadzenDropDown @bind-Value="_selectedScopes" Data="@_allScopes" TValue="IEnumerable<string>"
-                                Multiple="true" AllowClear="true" AllowFiltering="true"
-                                Placeholder="Choose scopes…" Change="@(_ => OnTargetChanged())"
-                                Style="width: 100%;" />
-                <RadzenText TextStyle="TextStyle.Caption" class="rz-mt-1">
-                    Everything else is removed. Choosing none shows the application with no team scopes at all.
-                </RadzenText>
-            </RadzenStack>
-        }
-        else
-        {
-            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenLabel Text="@KindLabel" />
-                <RadzenDropDown @bind-Value="_selectedKey" Data="@Candidates" TValue="string"
+                <RadzenLabel Text="@_text[AccessSimulationDialogText.Member]" />
+                <RadzenDropDown TValue="string" Value="@_memberKey" Data="@_members"
                                 TextProperty="@nameof(AccessSimulationCandidate.Name)"
                                 ValueProperty="@nameof(AccessSimulationCandidate.Key)"
-                                AllowFiltering="true" Placeholder="Choose…"
-                                Change="@(_ => OnTargetChanged())" Style="width: 100%;" />
+                                AllowClear="true" AllowFiltering="true"
+                                FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                Placeholder="@_text[AccessSimulationDialogText.MemberPlaceholder]"
+                                Change="@OnMemberChanged" Style="width: 100%;" />
             </RadzenStack>
         }
 
-        @* The warning, shown before applying rather than after. The failure it prevents is an
-           administrator concluding "they cannot do X" from a simulation that was never able to show X —
-           an error that leads to granting more access than necessary, which is the opposite of what this
-           screen is for. *@
-        @if (_selected != null && !_gap.IsFaithful)
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Wrap="FlexWrap.Wrap">
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="flex: 1 1 12rem;">
+                <RadzenLabel Text="@_text[AccessSimulationDialogText.AccessLevel]" />
+                <RadzenDropDown TValue="AccessLevel?" Value="@_level" Data="@_levels"
+                                TextProperty="@nameof(AccessSimulationCandidate.Name)"
+                                ValueProperty="@nameof(AccessSimulationCandidate.AccessLevel)"
+                                AllowClear="true"
+                                Placeholder="@_text[AccessSimulationDialogText.AccessLevelPlaceholder]"
+                                ValueChanged="@OnLevelChanged" Style="width: 100%;" />
+            </RadzenStack>
+
+            @if (_roles.Count > 0)
+            {
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="flex: 1 1 12rem;">
+                    <RadzenLabel Text="@_text[AccessSimulationDialogText.Roles]" />
+                    <RadzenDropDown TValue="IEnumerable<string>" Value="@_selectedRoles" Data="@_roles"
+                                    TextProperty="@nameof(AccessSimulationCandidate.Name)"
+                                    ValueProperty="@nameof(AccessSimulationCandidate.Name)"
+                                    Multiple="true" AllowClear="true" AllowFiltering="true"
+                                    FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                    Placeholder="@_text[AccessSimulationDialogText.RolesPlaceholder]"
+                                    ValueChanged="@OnRolesChanged" Style="width: 100%;" />
+                </RadzenStack>
+            }
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenLabel Text="@_text[AccessSimulationDialogText.Scopes]" />
+            <RadzenTextBox Value="@_search" @oninput="@(e => _search = e.Value?.ToString() ?? string.Empty)"
+                           Placeholder="@_text[AccessSimulationDialogText.ScopeSearch]" Style="width: 100%;" />
+
+            @* Every scope, so what cannot be kept is visible rather than silently absent. Inherited scopes are
+               checked and fixed: unticking one would be simulating a different level or role, not that one. *@
+            <div class="rz-border-base-300 rz-border-radius-2 rz-p-2" style="max-height: 18rem; overflow-y: auto; border-style: solid; border-width: 1px;">
+                @foreach (var choice in VisibleChoices)
+                {
+                    var inherited = _inherited.Contains(choice.Name);
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" title="@choice.Description">
+                        <RadzenCheckBox TValue="bool" Value="@(inherited || _ticked.Contains(choice.Name))"
+                                        Disabled="@(inherited || !choice.Held)"
+                                        Change="@(value => OnScopeToggled(choice.Name, value))" />
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@choice.Name</RadzenText>
+                        @if (inherited)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0 rz-color-secondary">@_text[AccessSimulationDialogText.Inherited]</RadzenText>
+                        }
+                        @if (!choice.Held)
+                        {
+                            <RadzenIcon Icon="lock" Style="font-size: 1rem;" />
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0 rz-color-warning">@_text[AccessSimulationDialogText.NotHeld]</RadzenText>
+                        }
+                    </RadzenStack>
+                }
+            </div>
+
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                @_text.Format(AccessSimulationDialogText.Summary, KeptCount, _simulation?.Scopes.Count ?? 0)
+            </RadzenText>
+        </RadzenStack>
+
+        @* The warning, shown before applying rather than after. The failure it prevents is an administrator
+           concluding "they cannot do X" from a simulation that was never able to show X — an error that leads to
+           granting more access than necessary, which is the opposite of what this screen is for. *@
+        @if (_simulation != null && !_gap.IsFaithful)
         {
-            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">This will not be an exact view</RadzenText>
+            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false" class="rz-m-0">
+                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-mb-1">@_text[AccessSimulationDialogText.GapTitle]</RadzenText>
                 @if (_gap.UnreachableScopes.Count > 0)
                 {
                     <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-1">
-                        You do not hold @string.Join(", ", _gap.UnreachableScopes) yourself, so the simulation
-                        cannot show what @_selected.Name can do with @(_gap.UnreachableScopes.Count == 1 ? "it" : "them").
-                        <strong>They may be able to do more than you are about to see.</strong>
+                        @_text.Format(AccessSimulationDialogText.GapUnreachable, string.Join(", ", _gap.UnreachableScopes))
                     </RadzenText>
                 }
                 @if (_gap.SystemAccessNotReproduced)
                 {
-                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
-                        System-wide access comes from application roles, which are not stored here — so it is
-                        dropped rather than reproduced. This shows their access <em>within this team</em>.
-                    </RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[AccessSimulationDialogText.GapSystem]</RadzenText>
                 }
             </RadzenAlert>
         }
-
-        @if (_selected != null && _gap.IsFaithful)
+        else if (_simulation != null)
         {
-            <RadzenText TextStyle="TextStyle.Body2" class="rz-color-success">
-                You hold everything @_selected.Name does, so this will be an exact view.
-            </RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0 rz-color-success">@_text[AccessSimulationDialogText.Faithful]</RadzenText>
         }
     </RadzenStack>
 
-    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right">
-        <RadzenButton Text="Start" Icon="visibility" Disabled="@(_selected == null)" Click="@Start" />
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+        <RadzenButton Text="@_text[AccessSimulationDialogText.Start]" Icon="visibility" Disabled="@(_simulation == null)" Click="@Start" />
         <CancelButton Click="@Cancel" />
     </RadzenStack>
 </RadzenStack>
 
 @code {
-    private AccessSimulationKind _kind = AccessSimulationKind.User;
-    private string _selectedKey;
-    private AccessSimulationCandidate _selected;
-    private AccessSimulationGap _gap;
+    private TextSet _text = TextSet.Empty;
 
     private IReadOnlyList<AccessSimulationCandidate> _members = [];
     private IReadOnlyList<AccessSimulationCandidate> _roles = [];
     private IReadOnlyList<AccessSimulationCandidate> _levels = [];
-    private IReadOnlyList<string> _allScopes = [];
-    private IEnumerable<string> _selectedScopes = [];
+    private IReadOnlyList<AccessSimulationScopeChoice> _choices = [];
+    private IReadOnlyDictionary<AccessLevel, IReadOnlyList<string>> _levelScopes = new Dictionary<AccessLevel, IReadOnlyList<string>>();
+    private IReadOnlyDictionary<string, IReadOnlyList<string>> _roleScopes = new Dictionary<string, IReadOnlyList<string>>();
+    private HashSet<string> _held = new(StringComparer.OrdinalIgnoreCase);
 
-    private IReadOnlyList<AccessSimulationCandidate> Candidates => _kind switch
-    {
-        AccessSimulationKind.Role => _roles,
-        AccessSimulationKind.AccessLevel => _levels,
-        _ => _members
-    };
+    private string _memberKey;
+    private string _memberName;
+    private AccessLevel? _level;
+    private IEnumerable<string> _selectedRoles = [];
+    private HashSet<string> _ticked = new(StringComparer.Ordinal);
+    private string _search = string.Empty;
 
-    private string KindLabel => _kind switch
-    {
-        AccessSimulationKind.Role => "Role",
-        AccessSimulationKind.AccessLevel => "Access level",
-        _ => "Member"
-    };
+    private IReadOnlyCollection<string> _inherited = [];
+    private AccessSimulation _simulation;
+    private AccessSimulationGap _gap;
+
+    private IEnumerable<AccessSimulationScopeChoice> VisibleChoices => string.IsNullOrWhiteSpace(_search)
+        ? _choices
+        : _choices.Where(c => c.Name.Contains(_search.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    private int KeptCount => _simulation?.Scopes.Count(_held.Contains) ?? 0;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(AccessSimulationDialogText.All);
+
         _members = await SimulationState.GetMemberTargetsAsync();
         _roles = await SimulationState.GetRoleTargetsAsync();
         _levels = SimulationState.GetAccessLevelTargets();
+        _choices = await SimulationState.GetScopeChoicesAsync();
 
-        // Only what the caller actually holds. Offering the full registry would invite choosing a scope
-        // that cannot be kept, and the result would look like the picker ignoring the choice.
-        _allScopes = await SimulationState.GetOwnScopesAsync();
+        _levelScopes = _levels.Where(l => l.AccessLevel != null).ToDictionary(l => l.AccessLevel.Value, l => l.Scopes);
+        _roleScopes = _roles.GroupBy(r => r.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Scopes, StringComparer.Ordinal);
+        _held = _choices.Where(c => c.Held).Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        await RecomputeAsync();
     }
 
-    private async Task OnTargetChanged()
+    /// <summary>
+    /// Picking a member fills level, roles and scopes from their real grant. Their effective scopes are ticked
+    /// in full, so the target is exactly what they hold even where a role's scopes are not listed here.
+    /// </summary>
+    private async Task OnMemberChanged(object value)
     {
-        if (_kind == AccessSimulationKind.Scopes)
+        var member = _members.FirstOrDefault(m => m.Key == value as string);
+        _memberKey = member?.Key;
+        _memberName = member?.Name;
+
+        if (member != null)
         {
-            // A scope selection is its own target -- there is no candidate to look up, and an empty
-            // selection is a legitimate choice rather than "nothing picked yet".
-            _selected = new AccessSimulationCandidate("scopes", "these scopes", null, [.. _selectedScopes]);
-            _gap = await SimulationState.DescribeGapAsync(Build(_selected));
-            return;
+            _level = member.AccessLevel is { } level && _levelScopes.ContainsKey(level) ? level : null;
+            _selectedRoles = [.. member.Roles.Where(_roleScopes.ContainsKey)];
+            _ticked = member.Scopes.ToHashSet(StringComparer.Ordinal);
         }
 
-        _selected = Candidates.FirstOrDefault(c => c.Key == _selectedKey);
-        if (_selected == null)
-        {
-            _gap = default;
-            return;
-        }
-
-        _gap = await SimulationState.DescribeGapAsync(Build(_selected));
+        await RecomputeAsync();
     }
 
-    private AccessSimulation Build(AccessSimulationCandidate candidate) => _kind switch
+    private async Task OnLevelChanged(AccessLevel? level)
     {
-        AccessSimulationKind.Scopes => AccessSimulationTargets.FromScopes(candidate.Scopes),
-        AccessSimulationKind.Role => AccessSimulationTargets.FromRole(candidate.Name, candidate.Scopes),
-        AccessSimulationKind.AccessLevel => AccessSimulationTargets.FromAccessLevel(
-            candidate.AccessLevel ?? AccessLevel.Custom, candidate.Scopes),
-        _ => AccessSimulationTargets.FromUser(candidate.Name, candidate.AccessLevel ?? AccessLevel.Custom, candidate.Scopes)
-    };
+        _level = level;
+        await EditedAsync();
+    }
+
+    private async Task OnRolesChanged(IEnumerable<string> roles)
+    {
+        _selectedRoles = [.. roles ?? []];
+        await EditedAsync();
+    }
+
+    private async Task OnScopeToggled(string scope, bool selected)
+    {
+        if (selected) _ticked.Add(scope);
+        else _ticked.Remove(scope);
+
+        await EditedAsync();
+    }
+
+    /// <summary>A change by hand makes it a composed target rather than a view of that member.</summary>
+    private async Task EditedAsync()
+    {
+        _memberKey = null;
+        _memberName = null;
+        await RecomputeAsync();
+    }
+
+    private async Task RecomputeAsync()
+    {
+        var roles = _selectedRoles?.ToArray() ?? [];
+        _inherited = AccessSimulationComposer.Inherited(_level, roles, _levelScopes, _roleScopes);
+        _simulation = AccessSimulationComposer.Build(new SimulationSelection(_level, roles, [.. _ticked], _memberName), _levelScopes, _roleScopes);
+        _gap = await SimulationState.DescribeGapAsync(_simulation);
+    }
 
     private Task Cancel()
     {
@@ -167,9 +228,9 @@
 
     private async Task Start()
     {
-        if (_selected == null) return;
+        if (_simulation == null) return;
 
         DialogService.Close(true);
-        await SimulationState.StartAsync(Build(_selected));
+        await SimulationState.StartAsync(_simulation);
     }
 }

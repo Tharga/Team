@@ -32,7 +32,16 @@ public enum AccessSimulationKind
     /// match the string "Demo mode" — and the visibility rules have to tell them apart: a demo shows nothing
     /// in the navigation bar, because a banner announcing it defeats the point of demonstrating the product.
     /// </remarks>
-    Demo
+    Demo,
+
+    /// <summary>
+    /// An access level, roles and hand-ticked scopes combined in the simulation dialog.
+    /// </summary>
+    /// <remarks>
+    /// Added last so the ordinals of the kinds before it stay as they were in cookies and audit entries already
+    /// written. The label names the parts, so the audit log records what was combined.
+    /// </remarks>
+    Composed
 }
 
 /// <summary>
@@ -61,6 +70,20 @@ public sealed record AccessSimulation
     /// but do not add an equality check on this type without fixing that first.
     /// </remarks>
     public IReadOnlyList<string> Scopes { get; init; } = [];
+
+    /// <summary>
+    /// The team the simulation was started in. It applies to that team and to no other.
+    /// </summary>
+    /// <remarks>
+    /// Set by <c>AccessSimulationState.StartAsync</c> from the selected team, overwriting anything the
+    /// simulation already carried. Without it a simulation started in one team was applied to whichever team the
+    /// next request selected — including a fallback team the caller never chose (Tharga/Team#276).
+    /// <para>
+    /// Like everything here it is untrusted. Naming another team the caller holds access to only moves the
+    /// narrowing there; it still cannot add anything. A simulation with no team key applies nowhere.
+    /// </para>
+    /// </remarks>
+    public string TeamKey { get; init; }
 
     /// <summary>
     /// The target's access level, when the target has one. Applied only if it is a de-escalation.

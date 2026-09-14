@@ -44,6 +44,7 @@
         <div class="rz-mb-2">
             <RadzenText TextStyle="TextStyle.Subtitle2">Scopes (scope overrides)</RadzenText>
             <RadzenDropDown @bind-Value="_scopes" Data="@_scopeOptions" Multiple="true" AllowClear="true"
+                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                             Placeholder="Pick scopes…" Style="width:100%" />
         </div>
         <div class="rz-display-flex rz-mb-2" style="gap:.5rem">
