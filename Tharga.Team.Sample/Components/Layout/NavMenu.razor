@@ -22,6 +22,8 @@
             @* The quiet way to see that access is reduced, and to return, without the banner. Shows nothing during
                demo mode, so a demonstration stays clean; the profile page is then the way out. *@
             <AccessSimulationIndicator />
+            @* Access requests waiting for this user's decision, and their own waiting requests. *@
+            <TeamNotificationMenu />
             <TeamSelector />
             <LoginDisplay />
         </RadzenStack>

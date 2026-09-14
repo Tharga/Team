@@ -92,6 +92,9 @@ public static class TeamAccessRequestText
     /// <summary>{0} = team name.</summary>
     public static readonly TextKey YourRequestFor = new("team.accessRequest.yourRequestFor", "Your request for {0} is waiting.");
 
+    /// <summary>{0} = team name, {1} = the request line ("Alice asks for User access for 8 hours").</summary>
+    public static readonly TextKey AwaitingItem = new("team.accessRequest.awaitingItem", "{0}: {1}");
+
     /// <summary>Every key here, for the components building their <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
@@ -99,6 +102,6 @@ public static class TeamAccessRequestText
         RequestLine, Approve, Deny, ApproveTitle, ApproveWarning, Approved, Denied, Withdrawn, Failed,
         ForOneHour, ForHours, ForOneDay, ForDays, WithNoEnd,
         ChoiceOneHour, ChoiceEightHours, ChoiceOneDay, ChoiceOneWeek, ChoiceThirtyDays, ChoiceNoEnd,
-        TemporaryConsent, NoAccess, Notifications, NothingWaiting, YourRequestFor
+        TemporaryConsent, NoAccess, Notifications, NothingWaiting, YourRequestFor, AwaitingItem
     ];
 }

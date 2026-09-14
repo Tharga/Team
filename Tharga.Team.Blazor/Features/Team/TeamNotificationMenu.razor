@@ -1,0 +1,98 @@
+@using Microsoft.Extensions.Options
+@using Tharga.Team
+@using Tharga.Team.Blazor.Features.Authentication
+@implements IDisposable
+@inject ITeamAccessRequestService AccessRequestService
+@inject ITeamManagementService TeamManagementService
+@inject ITeamStateService TeamStateService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager NavigationManager
+@inject IOptions<ThargaBlazorOptions> BlazorOptions
+@inject IThargaTextProvider TextProvider
+
+@* Optional. A host places it in the top bar, typically beside the team selector. The number is what waits for the
+   caller's decision; the menu also lists the caller's own waiting requests, uncounted. *@
+@if (_authenticated)
+{
+    <RadzenProfileMenu Click="@OnItemClick" title="@_text[TeamAccessRequestText.Notifications]">
+        <Template>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0">
+                <RadzenIcon Icon="notifications" />
+                @if (_count > 0)
+                {
+                    <RadzenBadge BadgeStyle="BadgeStyle.Danger" Shade="Shade.Default" IsPill="true" Text="@_count.ToString()" />
+                }
+            </RadzenStack>
+        </Template>
+        <ChildContent>
+            @if (_items.Count == 0)
+            {
+                <RadzenProfileMenuItem Text="@_text[TeamAccessRequestText.NothingWaiting]" Icon="notifications_none" />
+            }
+            @for (var index = 0; index < _items.Count; index++)
+            {
+                var item = _items[index];
+                <RadzenProfileMenuItem Text="@item.Text" Icon="@(item.NeedsDecision ? "key" : "hourglass_empty")" Value="@index.ToString()" />
+            }
+        </ChildContent>
+    </RadzenProfileMenu>
+}
+
+@code {
+    private TextSet _text = TextSet.Empty;
+    private bool _authenticated;
+    private int _count;
+    private IReadOnlyList<TeamNotificationItem> _items = [];
+    private string _teamPath = TeamMenuNavigation.DefaultTeamPath;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthStateProvider.GetAuthenticationStateAsync();
+        _authenticated = state.User.Identity?.IsAuthenticated ?? false;
+        if (!_authenticated) return;
+
+        _text = await TextProvider.ResolveAsync(TeamAccessRequestText.All);
+        _teamPath = TeamMenuNavigation.Resolve(BlazorOptions.Value.TeamPath, TeamMenuNavigation.DefaultTeamPath);
+
+        await LoadAsync();
+        TeamStateService.TeamsListChangedEvent += OnTeamsListChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        var awaiting = await AccessRequestService.GetAccessRequestsAwaitingMeAsync();
+        var mine = await AccessRequestService.GetMyAccessRequestsAsync();
+
+        _count = TeamNotificationMenuModel.Count([.. awaiting]);
+        _items = TeamNotificationMenuModel.Items(awaiting, mine, _text);
+    }
+
+    private void OnTeamsListChanged(object sender, TeamsListChangedEventArgs e)
+        => InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+
+    /// <summary>
+    /// Opens the team. A request to decide also selects its team first, because the caller's manage scope is issued for
+    /// the selected team only — without it the team page could show the request but not let them decide it.
+    /// </summary>
+    private async Task OnItemClick(RadzenProfileMenuItem args)
+    {
+        if (!int.TryParse(args.Value, out var index) || index < 0 || index >= _items.Count) return;
+        var item = _items[index];
+
+        NavigationManager.NavigateTo(_teamPath);
+
+        if (!item.NeedsDecision) return;
+
+        var selected = await TeamStateService.GetSelectedTeamAsync();
+        if (selected?.Key == item.TeamKey) return;
+
+        var team = await TeamManagementService.GetTeamByKeyAsync(item.TeamKey);
+        if (team != null) await TeamStateService.SetSelectedTeamAsync(team);
+    }
+
+    public void Dispose() => TeamStateService.TeamsListChangedEvent -= OnTeamsListChanged;
+}
