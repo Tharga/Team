@@ -32,7 +32,16 @@ public enum AccessSimulationKind
     /// match the string "Demo mode" — and the visibility rules have to tell them apart: a demo shows nothing
     /// in the navigation bar, because a banner announcing it defeats the point of demonstrating the product.
     /// </remarks>
-    Demo
+    Demo,
+
+    /// <summary>
+    /// An access level, roles and hand-ticked scopes combined in the simulation dialog.
+    /// </summary>
+    /// <remarks>
+    /// Added last so the ordinals of the kinds before it stay as they were in cookies and audit entries already
+    /// written. The label names the parts, so the audit log records what was combined.
+    /// </remarks>
+    Composed
 }
 
 /// <summary>

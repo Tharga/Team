@@ -163,7 +163,11 @@ public sealed class AccessSimulationState
                 member.Key,
                 await DisplayNameAsync(member),
                 member.AccessLevel,
-                scopes));
+                scopes)
+            {
+                Roles = [.. member.TenantRoles ?? []],
+                ScopeOverrides = [.. member.ScopeOverrides ?? []]
+            });
         }
 
         // Simulating yourself is a no-op that looks like a feature, so it is not offered.
@@ -203,11 +207,47 @@ public sealed class AccessSimulationState
         return [.. (grant?.Scopes ?? []).OrderBy(s => s, StringComparer.Ordinal)];
     }
 
-    /// <summary>The access levels that can be simulated.</summary>
+    /// <summary>
+    /// Every scope the simulation dialog lists: the registered team scopes, plus any scope the caller holds that is
+    /// not registered (an override or a runtime role can carry one). Each says whether the caller holds it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Scopes the caller does not hold are listed on purpose</b>, marked as not held, so the dialog can show them
+    /// disabled. A simulation can only keep what the caller holds; listing the rest makes that limitation visible
+    /// where it applies, and lets a member's full set be shown truthfully instead of silently trimmed.
+    /// </remarks>
+    public async Task<IReadOnlyList<AccessSimulationScopeChoice>> GetScopeChoicesAsync()
+    {
+        var held = (await GetOwnScopesAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var registered = _scopeRegistry?.All ?? [];
+
+        var descriptions = registered
+            .GroupBy(s => s.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().Description, StringComparer.Ordinal);
+
+        return
+        [
+            .. registered.Select(s => s.Name)
+                .Concat(held)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s, StringComparer.Ordinal)
+                .Select(name => new AccessSimulationScopeChoice(
+                    name,
+                    descriptions.TryGetValue(name, out var description) ? description : null,
+                    held.Contains(name)))
+        ];
+    }
+
+    /// <summary>The access levels that can be simulated — every level except <see cref="AccessLevel.Custom"/>.</summary>
+    /// <remarks>
+    /// <see cref="AccessLevel.Custom"/> grants no base scopes; it describes a principal whose access is only its roles
+    /// and overrides, which the dialog already expresses by choosing no level. Offering it as a level would be a
+    /// second way to say the same thing.
+    /// </remarks>
     public IReadOnlyList<AccessSimulationCandidate> GetAccessLevelTargets()
         =>
         [
-            .. Enum.GetValues<AccessLevel>().Select(level => new AccessSimulationCandidate(
+            .. Enum.GetValues<AccessLevel>().Where(level => level != AccessLevel.Custom).Select(level => new AccessSimulationCandidate(
                 level.ToString(),
                 level.ToString(),
                 level,
@@ -396,4 +436,17 @@ public sealed record AccessSimulationCandidate(
     string Key,
     string Name,
     AccessLevel? AccessLevel,
-    IReadOnlyList<string> Scopes);
+    IReadOnlyList<string> Scopes)
+{
+    /// <summary>For a member: the tenant roles they are assigned. Empty for other kinds.</summary>
+    public IReadOnlyList<string> Roles { get; init; } = [];
+
+    /// <summary>For a member: the scopes granted to them directly. Empty for other kinds.</summary>
+    public IReadOnlyList<string> ScopeOverrides { get; init; } = [];
+}
+
+/// <summary>A scope the simulation dialog lists.</summary>
+/// <param name="Name">The scope.</param>
+/// <param name="Description">Its registered description, when it has one.</param>
+/// <param name="Held">Whether the caller holds it — and so whether a simulation can keep it.</param>
+public sealed record AccessSimulationScopeChoice(string Name, string Description, bool Held);
