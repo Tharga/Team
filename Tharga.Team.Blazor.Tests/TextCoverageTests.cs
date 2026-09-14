@@ -60,6 +60,8 @@ public class TextCoverageTests
         "Features/User/TeamsListView.razor",
         "Features/User/UsersListView.razor",
         "Features/Team/TeamComponent.razor",
+        "Features/Team/TeamAccessRequestPanel.razor",
+        "Features/Team/TeamAccessRequestDialog.razor",
 
         // Written against the catalogue from the start rather than migrated into it, which is the point of
         // recording them here: a component that never had literal strings must not acquire its first one.
