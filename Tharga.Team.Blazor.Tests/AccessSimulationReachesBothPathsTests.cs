@@ -33,7 +33,7 @@ public class AccessSimulationReachesBothPathsTests
     private const string UserKey = "user-1";
 
     private static AccessSimulation KeepOnly(params string[] scopes)
-        => new() { Kind = AccessSimulationKind.Scopes, Label = "test", Scopes = scopes };
+        => new() { Kind = AccessSimulationKind.Scopes, Label = "test", Scopes = scopes, TeamKey = TeamKey };
 
     private static string[] ScopesOf(ClaimsPrincipal p)
         => p.FindAll(TeamClaimTypes.Scope).Select(c => c.Value).ToArray();

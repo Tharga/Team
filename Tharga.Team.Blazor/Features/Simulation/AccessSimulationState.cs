@@ -232,8 +232,19 @@ public sealed class AccessSimulationState
     /// Replaces rather than composes. Stacking would be safe — removal composes — but "return to my
     /// normal access" would then have to unwind steps, and an indicator naming only the innermost would
     /// understate what is in force.
+    /// <para>
+    /// <b>Bound to the selected team here</b>, overwriting any team key the simulation carried, so it applies to
+    /// the team it was started in and no other (Tharga/Team#276). With no team selected there is nothing to
+    /// simulate, and nothing is written.
+    /// </para>
     /// </remarks>
-    public Task StartAsync(AccessSimulation simulation) => WriteAndReloadAsync(AccessSimulationCookie.Write(simulation));
+    public async Task StartAsync(AccessSimulation simulation)
+    {
+        var teamKey = await SelectedTeamKeyAsync();
+        if (simulation == null || string.IsNullOrEmpty(teamKey)) return;
+
+        await WriteAndReloadAsync(AccessSimulationCookie.Write(simulation with { TeamKey = teamKey }));
+    }
 
     /// <summary>
     /// Starts demo mode: keeps the caller's team access exactly as it is and drops their system-wide

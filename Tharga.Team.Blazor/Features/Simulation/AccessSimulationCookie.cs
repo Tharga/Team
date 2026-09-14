@@ -50,6 +50,24 @@ internal static class AccessSimulationCookie
     public static bool IsActive(System.Security.Claims.ClaimsPrincipal principal)
         => Read(principal?.FindFirst(ClaimType)?.Value) != null;
 
+    /// <summary>
+    /// Parses a cookie value and returns the simulation only if it belongs to <paramref name="selectedTeamKey"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>The one place the team binding is decided</b>, used by both claim-issuance paths so they cannot disagree
+    /// about whether a simulation is in force (Tharga/Team#276). A simulation with no team key — written before
+    /// simulations carried one — applies to no team, which leaves the caller with their real access.
+    /// </remarks>
+    public static AccessSimulation ReadForTeam(string value, string selectedTeamKey)
+    {
+        if (string.IsNullOrEmpty(selectedTeamKey)) return null;
+
+        var simulation = Read(value);
+        return simulation != null && string.Equals(simulation.TeamKey, selectedTeamKey, StringComparison.Ordinal)
+            ? simulation
+            : null;
+    }
+
     /// <summary>Serializes a simulation for storage. Null clears it.</summary>
     public static string Write(AccessSimulation simulation)
     {

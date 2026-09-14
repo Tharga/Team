@@ -63,6 +63,20 @@ public sealed record AccessSimulation
     public IReadOnlyList<string> Scopes { get; init; } = [];
 
     /// <summary>
+    /// The team the simulation was started in. It applies to that team and to no other.
+    /// </summary>
+    /// <remarks>
+    /// Set by <c>AccessSimulationState.StartAsync</c> from the selected team, overwriting anything the
+    /// simulation already carried. Without it a simulation started in one team was applied to whichever team the
+    /// next request selected — including a fallback team the caller never chose (Tharga/Team#276).
+    /// <para>
+    /// Like everything here it is untrusted. Naming another team the caller holds access to only moves the
+    /// narrowing there; it still cannot add anything. A simulation with no team key applies nowhere.
+    /// </para>
+    /// </remarks>
+    public string TeamKey { get; init; }
+
+    /// <summary>
     /// The target's access level, when the target has one. Applied only if it is a de-escalation.
     /// </summary>
     public AccessLevel? AccessLevel { get; init; }
