@@ -31,6 +31,9 @@ public class AccessSimulationStateTargetsTests
     }
 
     private static AccessSimulationState Build(string[] callerScopes, ScopeDefinition[] registered, params ITeamMember[] members)
+        => Build(callerScopes, registered, roleRegistry: null, members);
+
+    private static AccessSimulationState Build(string[] callerScopes, ScopeDefinition[] registered, ITenantRoleRegistry roleRegistry, params ITeamMember[] members)
     {
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
             [new Claim(ClaimTypes.NameIdentifier, UserKey), new Claim(Constants.TeamKeyCookie, TeamKey)], "Test"));
@@ -63,7 +66,24 @@ public class AccessSimulationStateTargetsTests
             navigationManager: null,
             jsRuntime: null,
             Options.Create(options),
-            scopeRegistry.Object);
+            scopeRegistry.Object,
+            tenantRoleRegistry: roleRegistry);
+    }
+
+    /// <summary>
+    /// Code-registered roles without dynamic roles enabled. The role list used to come only from
+    /// <see cref="ITenantRoleService"/>, so a host with roles registered in code could not simulate one.
+    /// </summary>
+    [Fact]
+    public async Task RoleTargets_FallBackToCodeRegisteredRoles_WithoutDynamicRoles()
+    {
+        var registry = new TenantRoleRegistry();
+        registry.Register("Editor", ["orders:write"]);
+
+        var role = Assert.Single(await Build([], [], registry).GetRoleTargetsAsync());
+
+        Assert.Equal("Editor", role.Name);
+        Assert.Equal(["orders:write"], role.Scopes);
     }
 
     [Fact]

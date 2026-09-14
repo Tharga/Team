@@ -37,6 +37,7 @@ public sealed class AccessSimulationState
     private readonly IUserService _userService;
     private readonly IScopeRegistry _scopeRegistry;
     private readonly ITenantRoleService _tenantRoleService;
+    private readonly ITenantRoleRegistry _tenantRoleRegistry;
     private readonly NavigationManager _navigationManager;
     private readonly IJSRuntime _jsRuntime;
     private readonly AccessSimulationOptions _options;
@@ -50,8 +51,10 @@ public sealed class AccessSimulationState
         IJSRuntime jsRuntime,
         IOptions<ThargaBlazorOptions> options,
         IScopeRegistry scopeRegistry = null,
-        ITenantRoleService tenantRoleService = null)
+        ITenantRoleService tenantRoleService = null,
+        ITenantRoleRegistry tenantRoleRegistry = null)
     {
+        _tenantRoleRegistry = tenantRoleRegistry;
         _authenticationStateProvider = authenticationStateProvider;
         _teamService = teamService;
         _userService = userService;
@@ -176,12 +179,16 @@ public sealed class AccessSimulationState
     }
 
     /// <summary>The tenant roles that can be simulated.</summary>
+    /// <remarks>
+    /// The per-team set when dynamic roles are enabled, otherwise the code-registered roles — resolved the way the
+    /// API-key role picker resolves them, so a host with roles registered only in code can simulate one too.
+    /// </remarks>
     public async Task<IReadOnlyList<AccessSimulationCandidate>> GetRoleTargetsAsync()
     {
         var teamKey = await SelectedTeamKeyAsync();
-        if (teamKey == null || _tenantRoleService == null) return [];
+        if (teamKey == null) return [];
 
-        var roles = await _tenantRoleService.GetRolesAsync(teamKey);
+        var roles = await ApiKeyRolePicker.ResolveAsync(_tenantRoleService, _tenantRoleRegistry, teamKey);
 
         return
         [
