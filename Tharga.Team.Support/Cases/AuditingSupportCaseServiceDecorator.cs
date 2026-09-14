@@ -36,12 +36,12 @@ internal sealed class AuditingSupportCaseServiceDecorator(
 {
     private const string Feature = "support";
 
-    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default)
+    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
         try
         {
-            var raised = await inner.RaiseCaseAsync(teamKey, subject, body, cancellationToken);
+            var raised = await inner.RaiseCaseAsync(teamKey, subject, body, assistance, cancellationToken);
 
             // raised.Subject, not the argument: with UseSubject off the caller supplies none and the service
             // derives one, so recording the argument records nothing -- and a notification worded around
@@ -55,6 +55,53 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         {
             Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
                 Meta((SupportAuditMetadataKeys.CaseSubject, subject)));
+            throw;
+        }
+    }
+
+    /// <remarks>
+    /// Audited only when it answered. A call that found no assistant on the case did nothing, and a row per
+    /// non-event is how an audit log stops being read.
+    /// </remarks>
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var answered = await inner.RunAssistantAsync(teamKey, caseId, cancellationToken);
+
+            if (answered)
+                Log("assistant-answer", nameof(RunAssistantAsync), sw.ElapsedMilliseconds, true, teamKey,
+                    metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+
+            return answered;
+        }
+        catch (Exception ex)
+        {
+            Log("assistant-answer", nameof(RunAssistantAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
+    /// <remarks>
+    /// Audited as its own action rather than folded into the reply that follows it. Who stopped talking to an
+    /// assistant, and when, is the fact that explains the rest of the transcript.
+    /// </remarks>
+    public async Task RequestHumanAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.RequestHumanAsync(teamKey, caseId, cancellationToken);
+
+            Log("hand-over", nameof(RequestHumanAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+        }
+        catch (Exception ex)
+        {
+            Log("hand-over", nameof(RequestHumanAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
             throw;
         }
     }

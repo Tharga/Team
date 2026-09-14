@@ -87,4 +87,15 @@ public class SupportCaseOptions
     /// keep email off.
     /// </summary>
     public MailOptions Email { get; } = new();
+
+    /// <summary>
+    /// How the assistant behaves, when the host has registered an <c>IChatClient</c> for it to use.
+    /// </summary>
+    /// <remarks>
+    /// <b>Configuring this does not turn an assistant on.</b> What does is registering an <c>IChatClient</c>;
+    /// with none registered no responder exists, every case is answered by a person, and nothing here has any
+    /// effect. That is deliberate — which model answers your customers is not a setting the toolkit should
+    /// own.
+    /// </remarks>
+    public SupportAssistantOptions Assistant { get; } = new();
 }

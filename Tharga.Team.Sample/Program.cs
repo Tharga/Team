@@ -16,6 +16,7 @@ using Tharga.Team.Images;
 using Tharga.Team.MongoDB;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
+using Microsoft.Extensions.AI;
 using Tharga.Team.Support;
 using Tharga.Team.Support.Cases;
 
@@ -223,6 +224,21 @@ builder.Services.AddThargaTeamRepository(o =>
 
 // Support cases. Registered whether or not Slack is configured -- with no channel the cases are site-only,
 // which is the ordinary shape for a host that never wanted Slack rather than a degraded one.
+// The support assistant. What the toolkit consumes is an IChatClient -- Microsoft's abstraction, not a
+// vendor SDK -- so which model answers your customers is entirely this line. Ollama, llama.cpp, a
+// self-hosted model, OpenAI or Anthropic all register the same way:
+//
+//     builder.Services.AddSingleton<IChatClient>(_ => new OllamaApiClient(uri, "llama3")
+//         .AsBuilder().UseFunctionInvocation().Build());
+//
+// The sample uses a scripted client so it runs with no key and no network. Register nothing at all and the
+// assistant simply does not exist: no responder resolves, the choice is never offered on the new-case form,
+// and every case is answered by a person exactly as before.
+builder.Services.AddSingleton<IChatClient>(_ => new SampleChatClient()
+    .AsBuilder()
+    .UseFunctionInvocation()
+    .Build());
+
 builder.Services.AddThargaSupportCases(o =>
 {
     o.SlackChannel = builder.Configuration["Slack:SupportChannel"];
