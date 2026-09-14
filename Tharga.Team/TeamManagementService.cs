@@ -24,7 +24,7 @@ namespace Tharga.Team;
 /// Generic methods (GetTeamsAsync, DeleteTeamAsync, RenameTeamAsync) call non-generic
 /// internal versions since the proxy resolves the member type from the team data.
 /// </summary>
-public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifecycleService, ITeamDirectoryService, ITeamOversightService, ITeamInvitationService
+public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifecycleService, ITeamDirectoryService, ITeamOversightService, ITeamInvitationService, ITeamAccessRequestService
     where TMember : class, ITeamMember
 {
     private readonly ITeamService _inner;
@@ -102,6 +102,109 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
     public Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept) => _inner.SetInvitationResponseAsync(teamKey, userKey, inviteCode, accept);
     public Task SetTeamConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null) => _inner.SetTeamConsentAsync(teamKey, consentedRoles, accessLevel);
     public Task<SetOwnerResult> SetOwnerAsync(string teamKey, string newOwnerUserKey) => _inner.SetOwnerAsync<TMember>(teamKey, newOwnerUserKey);
+
+    /// <inheritdoc />
+    public Task<TeamAccessRequest> RequestTeamAccessAsync(string teamKey, AccessLevel accessLevel, TimeSpan? duration, string message)
+        => _inner.RequestTeamAccessAsync(teamKey, accessLevel, duration, message);
+
+    /// <inheritdoc />
+    public Task CancelTeamAccessRequestAsync(string teamKey, string requestId) => _inner.CancelTeamAccessRequestAsync(teamKey, requestId);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Consents the configured consent roles — the same roles the consent selector offers — so approving a request and
+    /// setting consent by hand cannot consent different sets. Enforced downstream by <c>AuthorizationTeamServiceDecorator</c>.
+    /// </remarks>
+    public Task ApproveTeamAccessRequestAsync(string teamKey, string requestId)
+        => _inner.ApproveTeamAccessRequestAsync(teamKey, requestId, _consent.Roles ?? []);
+
+    /// <inheritdoc />
+    public Task DenyTeamAccessRequestAsync(string teamKey, string requestId) => _inner.DenyTeamAccessRequestAsync(teamKey, requestId);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Enforced here because the decorator does not gate reads. The requests carry who asked and why, so they are shown
+    /// only to a caller who could decide them.
+    /// </remarks>
+    public async Task<IReadOnlyList<TeamAccessRequest>> GetAccessRequestsAsync(string teamKey)
+    {
+        if (_userService != null)
+        {
+            var user = await _userService.GetCurrentUserAsync();
+            var member = user == null ? null : await _inner.GetTeamMemberAsync(teamKey, user.Key);
+
+            if (!await CanManageAsMemberAsync(teamKey, member))
+                throw new UnauthorizedAccessException($"Reading access requests for team '{teamKey}' requires '{TeamScopes.Manage}' held as a member of that team.");
+        }
+
+        var team = await _inner.GetTeamByKeyAsync(teamKey);
+        return [.. Newest(team?.AccessRequests, _ => true)];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TeamAccessRequestItem>> GetMyAccessRequestsAsync()
+    {
+        var user = _userService == null ? null : await _userService.GetCurrentUserAsync();
+        if (user == null) return [];
+
+        var items = new List<TeamAccessRequestItem>();
+        try
+        {
+            await foreach (var team in _inner.GetAllTeamsAsync())
+            {
+                items.AddRange(Newest(team.AccessRequests, x => x.RequesterKey == user.Key).Select(x => new TeamAccessRequestItem(team.Key, team.Name, x)));
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // No teams:read: a caller who cannot list teams cannot have found one to request, so there is nothing to show.
+        }
+
+        return [.. items.OrderByDescending(x => x.Request.RequestedAt)];
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<TeamAccessRequestItem>> GetAccessRequestsAwaitingMeAsync()
+    {
+        var user = _userService == null ? null : await _userService.GetCurrentUserAsync();
+        if (user == null) return [];
+
+        var items = new List<TeamAccessRequestItem>();
+
+        await foreach (var team in _inner.GetTeamsAsync<TMember>())
+        {
+            var pending = Newest(team.AccessRequests, x => x.Status == TeamAccessRequestStatus.Pending && x.RequesterKey != user.Key).ToArray();
+            if (pending.Length == 0) continue;
+
+            var member = team.Members?.Select(x => (ITeamMember)x).FirstOrDefault(x => x.Key == user.Key);
+            if (!await CanManageAsMemberAsync(team.Key, member)) continue;
+
+            items.AddRange(pending.Select(x => new TeamAccessRequestItem(team.Key, team.Name, x)));
+        }
+
+        return [.. items.OrderByDescending(x => x.Request.RequestedAt)];
+    }
+
+    private static IEnumerable<TeamAccessRequest> Newest(IReadOnlyList<TeamAccessRequest> requests, Func<TeamAccessRequest, bool> include)
+        => (requests ?? []).Where(include).OrderByDescending(x => x.RequestedAt);
+
+    /// <summary>
+    /// Whether <paramref name="member"/>'s own grant in the team includes <c>team:manage</c>. A member only — consent
+    /// never counts, for the reason approving requires it: deciding requests sets the team's consent.
+    /// </summary>
+    /// <remarks>
+    /// With no <see cref="IScopeRegistry"/> the application does not use scopes, so the access level stands in, as the
+    /// team UI already lets Administrator and above manage.
+    /// </remarks>
+    private async Task<bool> CanManageAsMemberAsync(string teamKey, ITeamMember member)
+    {
+        var grant = await _grants.ResolveFromMemberAsync(teamKey, member);
+        if (grant == null || member.State != MembershipState.Member) return false;
+
+        return _scopeRegistry == null
+            ? grant.AccessLevel <= AccessLevel.Administrator
+            : grant.Scopes.Contains(TeamScopes.Manage);
+    }
 
     /// <remarks>
     /// Enforced downstream on <see cref="SystemTeamScopes.Read"/> by

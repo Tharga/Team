@@ -129,6 +129,31 @@ public interface ITeamManagementService
     Task SetTeamConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null);
 
     /// <summary>
+    /// The team's access requests, pending and recently decided. Requires <c>team:manage</c> held as a member.
+    /// </summary>
+    /// <remarks>
+    /// Default interface members, so a host substituting this facet keeps compiling; they throw rather than answer
+    /// nothing, because an empty list reads as "nobody is waiting".
+    /// </remarks>
+    [RequireScope(TeamScopes.Manage)]
+    Task<IReadOnlyList<TeamAccessRequest>> GetAccessRequestsAsync(string teamKey)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetAccessRequestsAsync)}.");
+
+    /// <summary>
+    /// Approves a pending request: the team consents the configured consent roles at the requested level for the
+    /// requested time, then returns to its previous consent. Everyone holding those roles gains that access — not only
+    /// the requester. Requires <c>team:manage</c> held as a member.
+    /// </summary>
+    [RequireScope(TeamScopes.Manage)]
+    Task ApproveTeamAccessRequestAsync(string teamKey, string requestId)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ApproveTeamAccessRequestAsync)}.");
+
+    /// <summary>Denies a pending request. Requires <c>team:manage</c> held as a member.</summary>
+    [RequireScope(TeamScopes.Manage)]
+    Task DenyTeamAccessRequestAsync(string teamKey, string requestId)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(DenyTeamAccessRequestAsync)}.");
+
+    /// <summary>
     /// Makes an existing member the <b>sole owner</b> of the team, demoting every other owner to
     /// <see cref="AccessLevel.Administrator"/>. Requires the <see cref="SystemTeamScopes.SetOwner"/> system
     /// scope. Returns the user keys of the owners demoted, empty when nothing changed.
