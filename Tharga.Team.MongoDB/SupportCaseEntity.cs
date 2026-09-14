@@ -88,6 +88,16 @@ public record SupportCaseEntity : EntityBase
     public DateTime? LastMessageAt { get; init; }
 
     [BsonIgnoreIfNull]
+    /// <summary>
+    /// Whether an assistant is answering this case.
+    /// </summary>
+    /// <remarks>
+    /// Stored by name, so appending a member never re-grades a stored case. Absent on every case written
+    /// before assistants existed, which deserializes as <see cref="SupportAssistantState.None"/>.
+    /// </remarks>
+    [BsonRepresentation(BsonType.String)]
+    public SupportAssistantState AssistantState { get; init; } = SupportAssistantState.None;
+
     public SupportChannelBindingEntity[] Bindings { get; init; }
 
     /// <summary>How far each participant has read. Absent until somebody opens the case.</summary>

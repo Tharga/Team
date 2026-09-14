@@ -27,11 +27,27 @@ namespace Tharga.Team.Support.Cases;
 /// </remarks>
 internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseService inner, TeamAuthorizer authorizer) : ISupportCaseService
 {
-    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default)
+    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
     {
         await RequireMembershipAsync(teamKey);
 
-        return await inner.RaiseCaseAsync(teamKey, subject, body, cancellationToken);
+        return await inner.RaiseCaseAsync(teamKey, subject, body, assistance, cancellationToken);
+    }
+
+    /// <remarks>Authorized as replying is — the answer lands in the transcript exactly as a reply does.</remarks>
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "answer");
+
+        return await inner.RunAssistantAsync(teamKey, caseId, cancellationToken);
+    }
+
+    /// <remarks>Authorized as replying is: whoever may answer a case may decide who answers it.</remarks>
+    public async Task RequestHumanAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "hand over");
+
+        await inner.RequestHumanAsync(teamKey, caseId, cancellationToken);
     }
 
     public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)

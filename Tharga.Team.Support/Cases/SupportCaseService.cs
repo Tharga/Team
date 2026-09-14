@@ -17,7 +17,8 @@ internal sealed class SupportCaseService(
     TeamAuthorizer authorizer,
     TimeProvider timeProvider,
     IEnumerable<ISupportChannel> channels = null,
-    ISupportCaseNotifier notifier = null) : ISupportCaseService
+    ISupportCaseNotifier notifier = null,
+    ISupportResponder responder = null) : ISupportCaseService
 {
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -27,7 +28,7 @@ internal sealed class SupportCaseService(
     /// </remarks>
     private readonly ISupportChannel[] _channels = channels?.ToArray() ?? [];
 
-    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, CancellationToken cancellationToken = default)
+    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
     {
         RequireWithinLength(body);
 
@@ -44,7 +45,10 @@ internal sealed class SupportCaseService(
             Subject = string.IsNullOrWhiteSpace(subject) ? SubjectFromMessage.Derive(body) : subject.Trim(),
             Status = SupportCaseStatus.Open,
             CreatedAt = now,
-            MessageCount = 1
+            MessageCount = 1,
+            AssistantState = assistance == SupportAssistance.Assistant && responder != null
+                ? SupportAssistantState.Active
+                : SupportAssistantState.None
         };
 
         var firstMessage = new SupportMessage
@@ -67,6 +71,55 @@ internal sealed class SupportCaseService(
         Notify(teamKey, supportCase.Id, SupportCaseChange.Raised);
 
         return supportCase;
+    }
+
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        if (responder == null) return false;
+
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        if (supportCase?.AssistantState != SupportAssistantState.Active) return false;
+
+        var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
+
+        var answer = await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
+        if (!answer.Answered) return false;
+
+        var message = new SupportMessage
+        {
+            Sequence = 0,
+            Kind = SupportMessageKind.Assistant,
+            AuthorName = SupportCaseActors.AssistantName,
+            Body = answer.Body,
+            SentAt = timeProvider.GetUtcNow().UtcDateTime
+        };
+
+        await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+
+        // Not projected onto a channel. Slack is where support watches for work arriving, and an assistant
+        // answering is the opposite of work arriving; email faces the customer, who is reading the case they
+        // are already looking at. A case the assistant could not finish reaches support when the customer
+        // replies, which is exactly when it needs to.
+        Notify(teamKey, caseId, SupportCaseChange.Replied);
+
+        return true;
+    }
+
+    /// <remarks>
+    /// Asking for a person on a case that never had an assistant is a no-op rather than an error, so a
+    /// component can offer the action without first working out whether it applies. The transition is
+    /// one-way: <see cref="SupportAssistantState.HandedOff"/> is terminal.
+    /// </remarks>
+    public async Task RequestHumanAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken)
+            ?? throw new InvalidOperationException($"No case '{caseId}' on team '{teamKey}'.");
+
+        if (supportCase.AssistantState != SupportAssistantState.Active) return;
+
+        await store.SetAssistantStateAsync(teamKey, caseId, SupportAssistantState.HandedOff, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Replied);
     }
 
     public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)

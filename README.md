@@ -267,6 +267,31 @@ A host with its own team store implements one method to resolve a token without 
 expiry. Skip the first and links naming their team still work; see
 [the implementation guide](docs/articles/implementation-guide.md#what-an-invitation-link-looks-like).
 
+## Support cases, and an assistant to answer them
+
+A support case lives on the site, and can project onto Slack (where support watches) and email (where the
+customer writes). A case raised on the site is complete and trackable with no channel configured at all.
+
+A case can also be answered by an **assistant** — and the toolkit does not choose which one. It consumes
+`IChatClient` from `Microsoft.Extensions.AI` and ships no vendor SDK, so Ollama, llama.cpp, a self-hosted
+model, OpenAI and Anthropic are all one registration in your host:
+
+```csharp
+builder.Services.AddSingleton<IChatClient>(_ => new OllamaApiClient(uri, "llama3")
+    .AsBuilder().UseFunctionInvocation().Build());
+```
+
+Register none and there is no assistant: the choice is never offered and a person answers every case, exactly
+as before. The customer picks when raising a case and can ask for a person at any point, keeping the same
+transcript. An assistant answer takes the case out of support's queue and a customer reply puts it back, so a
+dissatisfied customer is always back in front of a human.
+
+The assistant reads through the same scope-checked services as any caller — it sees what the person it is
+answering sees, and nothing more — and it answers rather than acts: closing, assigning and reopening stay
+with people. Add tools over your own product by implementing `ISupportAssistantTools`.
+
+Full article: [Support cases](docs/articles/support-cases.md).
+
 ## Reading the audit log
 
 Two kinds of entry share the log: the ones your application writes for things people did, and the per-call

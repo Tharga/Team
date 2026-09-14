@@ -197,6 +197,14 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
+    {
+        var index = _cases.FindIndex(x => x.Case.TeamKey == teamKey && x.Case.Id == caseId);
+        if (index >= 0) _cases[index] = (_cases[index].Case with { AssistantState = state }, _cases[index].Messages);
+
+        return Task.CompletedTask;
+    }
+
     public Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases
             .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity)

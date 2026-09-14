@@ -37,6 +37,7 @@ public class TextCoverageTests
     /// <summary>Components fully migrated: these must stay at zero literal strings.</summary>
     private static readonly string[] Migrated =
     [
+        "Features/Support/SupportTranscript.razor",
         "Features/Team/TeamSelector.razor",
         "Features/Authentication/LoginDisplay.razor",
         "Features/User/UsersView.razor",

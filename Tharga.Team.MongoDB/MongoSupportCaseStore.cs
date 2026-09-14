@@ -74,6 +74,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             AuthorName = supportCase.AuthorName,
             Subject = supportCase.Subject,
             Status = SupportCaseStatus.Open,
+            AssistantState = supportCase.AssistantState,
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
 
@@ -256,6 +257,13 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         var entity = await collection.GetOneAsync(Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId));
 
         return entity == null ? null : ToCase(entity);
+    }
+
+    public async Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAsync(teamKey, caseId);
+
+        await UpdateAsync(teamKey, caseId, Builders<SupportCaseEntity>.Update.Set(x => x.AssistantState, state));
     }
 
     public async Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default)
@@ -456,6 +464,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ClosedAt = entity.ClosedAt,
         ClosedBy = entity.ClosedBy,
         MessageCount = entity.Messages.Length,
+        AssistantState = entity.AssistantState,
         Bindings = entity.Bindings == null
             ? []
             : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })]

@@ -23,4 +23,14 @@ public static class SupportCaseActors
     /// its own storage. Deriving costs nothing and breaks nobody.
     /// </remarks>
     public const string AutoClose = "system:auto-close";
+
+    /// <summary>
+    /// The display name recorded against an answer an assistant wrote.
+    /// </summary>
+    /// <remarks>
+    /// A name rather than a subject, because an assistant authenticates as nobody — the entry carries no
+    /// <see cref="SupportMessage.AuthorIdentity"/> at all. What tells a reader the answer came from an
+    /// assistant is <see cref="SupportMessageKind.Assistant"/>; this is only what to print beside it.
+    /// </remarks>
+    public const string AssistantName = "Assistant";
 }
