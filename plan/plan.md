@@ -1,9 +1,9 @@
 # Plan: team access requests (spec 13)
 
 - [x] 1. Branch `feature/team-access-requests` from `origin/master` (`da70d9d`, #278/#280 merged). No outdated packages. Baseline build + full suite green (2,750).
-- [ ] 2. Contracts: `TeamAccessRequest`, `TeamAccessRequestStatus`, `TemporaryConsent`; `ITeam` default members. Tests on shape/defaults.
-- [ ] 3. `EffectiveConsent.Resolve(team, now)` + tests (unexpired, expired → previous, expired with no previous → none, standing).
-- [ ] 4. Route every consent read through it: `TeamGrantResolver`, `TeamContextResolver`, `GetConsentedTeamsAsync` post-filter, `TeamVisibility`/`TeamComponent`/`TeamsListView`, MCP team resource. Architecture test forbidding direct reads elsewhere.
+- [x] 2. Contracts: `TeamAccessRequest`, `TeamAccessRequestStatus`, `TemporaryConsent`; `ITeam` default members. Tests on shape/defaults. `TeamAccessRequest` (+ status enum), `TemporaryConsent`, `TeamAccessRequestRules` (levels, history cap 20, message max 1000) in `Tharga.Team/TeamAccessRequest.cs`; `ITeam.TemporaryConsent`, `ITeam.AccessRequests` default null.
+- [x] 3. Consent-in-force rule + tests (unexpired, expired → previous, expired with no previous → none, standing). Named `TeamConsent.Resolve(team, utcNow)` → `ConsentInForce(ConsentedRoles, AccessLevel, ExpiresAt)` with `Covers(roles)`; public (MongoDB and MCP need it). `TeamConsentTests` (13).
+- [~] 4. Route every consent read through it: `TeamGrantResolver`, `TeamContextResolver`, `GetConsentedTeamsAsync` post-filter, `TeamVisibility`/`TeamComponent`/`TeamsListView`, MCP team resource. Architecture test forbidding direct reads elsewhere.
 - [ ] 5. Security tightening: `SetTeamConsentAsync` requires `team:manage` held as a member; a direct change clears `TemporaryConsent`. Tests (consent-derived Administrator refused).
 - [ ] 6. Operations on `ITeamService` (default throwing members) + `TeamServiceBase` virtual persistence methods + rules (request/cancel/approve/deny). Tests first on the rules.
 - [ ] 7. `AuthorizationTeamServiceDecorator` checks + `AuditingTeamServiceDecorator` entries; forward in every toolkit decorator. Tests.

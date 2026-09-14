@@ -18,6 +18,19 @@ public interface ITeam
     AccessLevel? ConsentAccessLevel => null;
 
     /// <summary>
+    /// Set while the consent above is temporary — granted by an approved access request and due to return to the
+    /// previous consent. Null when the consent is standing.
+    /// </summary>
+    /// <remarks>
+    /// <b>Read consent through <see cref="TeamConsent.Resolve"/>, never from <see cref="ConsentedRoles"/> and
+    /// <see cref="ConsentAccessLevel"/> directly</b> — those still hold the temporary consent after it has run out.
+    /// </remarks>
+    TemporaryConsent TemporaryConsent => null;
+
+    /// <summary>Requests for access to this team: every pending one, and the most recent decided ones.</summary>
+    IReadOnlyList<TeamAccessRequest> AccessRequests => null;
+
+    /// <summary>
     /// Custom roles defined at runtime for this team (created / updated / deleted without a code deploy).
     /// Null or empty means only code-registered roles apply. Each role's scopes are constrained to
     /// app-registered scopes.
