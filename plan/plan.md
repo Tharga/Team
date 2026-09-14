@@ -8,10 +8,14 @@
 - [x] 6. `AccessSimulationIndicator` component + sample placement beside `<TeamSelector />`; hidden during demo. Tests on the visibility decision. `AccessSimulationIndicatorGate.Show(enabled, active)`; compact warning badge + undo button, tooltip reuses the banner sentence; `AccessSimulationIndicatorText`; recorded as Migrated. `AccessSimulationIndicatorGateTests` (13). Suite 2,750 green.
 - [x] 7. Demo mode trace sweep in the sample; hide what is found while `Kind == Demo`. **Nothing found on the caller's own team, no code change.** Top bar: no indicator, no banner, and the OWNER badge is hidden — correctly, since `AccessLevelBadge` shows only to `teams:read` holders, which an ordinary member never is. /team: the non-member team drops out, no "Not a member" badge; the consent badge stays, as it does for any member while the consent toggle is on. Menu: system items hidden. Profile: Developer role gone; the access card says "Your access is currently reduced" — the designed exit, kept. **Not verified: a team reached only through consent** (no such team available in the session).
 - [x] 8. Manual verification in the sample: #276 repro, composed dialog, indicator, demo. Full suite. Verified in Chrome on the caller's own team: dialog (level list without Custom; Viewer checks its scopes fixed and marked; code roles listed and Editor adds its scopes; hand tick counts; case-insensitive search; grant-only `case:read` locked and marked); Start keeps the same team; indicator shows beside the selector and its return button restores access; demo mode as in 7. **#276's consent-reached repro not run in the browser** — covered by `AccessSimulationTeamBindingTests` and `SimulatedTeamSelectionTests`. Member picker not seen (the caller is the team's only member).
-- [~] 9. Push for user testing.
+- [x] 9. Push for user testing. Pushed `feature/simulation-dialog-rework`; PR not opened (waits for user confirmation and #278).
 
 ## Notes
 
 - `AccessSimulationKind.Composed` is an additive enum member; audit readers matching on kind see a new value.
 - A cookie written before this release carries no team key and stops applying after upgrade — the caller sees their real access until they start a new simulation. Worth one line in the release notes.
 - README/docs when complete: `docs/articles` access-simulation section (dialog, indicator component, team binding).
+
+## Last session
+
+2026-09-14: all implementation steps done, verified in the sample on the caller's own team, pushed. Next: user tests; ideally the #276 consent-reached scenario with a second account. On confirmation: close-out (NuGet re-check, docs — access-simulation article: dialog, indicator, team binding, pre-upgrade cookies stop applying; answer + close #276; archive spec 12; remove plan/; PR after #278).
