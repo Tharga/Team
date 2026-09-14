@@ -289,6 +289,7 @@ support staff who hold more than one account.
 | `<LoginDisplay />` | `Tharga.Team.Blazor.Features.Authentication` | Profile menu with Gravatar when authenticated, login button when not. Navigates to `/login`, `/logout`, and the profile/team pages — at `o.Blazor.ProfilePath` and `o.Blazor.TeamPath` if you mounted them somewhere other than `/profile` and `/team`. The Team item can be restricted to specific roles via `TeamMenuRoles`. |
 | `<UserProfileView />` | `Tharga.Team.Blazor.Features.User` | The signed-in user's avatar, name and email, with inline editing of their own name, plus authentication claims in an expandable card. When access simulation is enabled it also renders `<AccessSimulationCard />` between the two — set `ShowAccessCard="false"` to place that yourself. |
 | `<AccessSimulationCard />` | `Tharga.Team.Blazor.Features.Simulation` | Expandable card offering **demo mode** and **view as another user**, plus the way out while either is active. Rendered by `UserProfileView` by default; draws nothing unless simulation is enabled and the caller can simulate. See [access simulation](access-simulation.md) |
+| `<AccessSimulationIndicator />` | `Tharga.Team.Blazor.Features.Simulation` | Optional compact **Access reduced** badge with a return button, for the header beside `<TeamSelector />`. Renders nothing unless a simulation is active, and nothing during demo mode. See [access simulation](access-simulation.md) |
 
 ### Usage
 
@@ -353,8 +354,8 @@ still rendering English.
 **`TeamComponent`**, `AuditLogView`, `UsersView` **and both of its tabs (`UsersListView`,
 `TeamsListView`)**, `DirectoryOnlyUsersView`, **`DeleteUserDialog`**, **`InviteUserDialog`**,
 **`TeamInviteView`**, `UserIconDialog`, `TeamIconDialog`, `TeamDialog`, `AssignOwnerDialog`,
-`SuspendedTeamNotice`, `AccessSimulationCard`, **`AccessSimulationBar`**, `RoleEditor` and
-`ScopeOverrideEditor`.
+`SuspendedTeamNotice`, `AccessSimulationCard`, **`AccessSimulationBar`**, **`AccessSimulationDialog`**,
+**`AccessSimulationIndicator`**, `RoleEditor` and `ScopeOverrideEditor`.
 
 > **`UsersView` now means the whole page.** It is a wrapper around a tab strip, and an earlier version of
 > this note said it "resolves every string it renders" while `UsersListView` and `TeamsListView` held 80
@@ -362,15 +363,13 @@ still rendering English.
 > 3.13, so the claim is now true of what you actually see.
 
 **Still literal**, largest first: `ApiKeyView` 44, `SystemApiKeyView` 35, `ScopeView` 14,
-`UserProfileView` 13, `AccessSimulationDialog` 12, `TenantRoleManager` 11, `ApiKeyRevealDialog` 2 —
-**131 strings across 7 components.**
+`UserProfileView` 13, `TenantRoleManager` 11, `ApiKeyRevealDialog` 2 — **119 strings across 6 components.**
 
-> **`AccessSimulationDialog` is the one to watch if you use simulation.** The banner is migrated as of
-> 3.13, so the way *out* of a reduced session translates — but the "View as another user" screen the
-> banner's own button opens does not yet.
+> **Access simulation is now translatable end to end.** The "View as another user" dialog was the last part
+> still in English; it resolves through `team.simulation.dialog.*` from this release.
 
-**None of those are on the surfaces #204 names.** They are API-key, scope and simulation surfaces, which
-that issue does not cover.
+**None of those are on the surfaces #204 names.** They are API-key, scope and profile surfaces, which that
+issue does not cover.
 
 ### Plurals, and what a translator can and cannot do
 
@@ -2389,6 +2388,7 @@ the built-ins. This is only about the two the toolkit renders.
 | `<TeamSelector>` | `CreateTeamRequested` (intercept the teamless "Create team" link) |
 | `<UserProfileView>` | `ShowAccessCard` (default true — renders `<AccessSimulationCard />` between the profile details and Claims) |
 | `<AccessSimulationBar>` | `Text` (overrides the resolved `team.simulation.bar.viewAs`, "View as…"), `ShowEntryPoint` (true), `ShowBanner` (true — **off means the profile card is the only way out**) |
+| `<AccessSimulationIndicator>` | none — renders only while a run-as simulation is active |
 | `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button) |
 | `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton` |
 | `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton` |
