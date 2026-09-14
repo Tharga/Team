@@ -22,6 +22,18 @@ public abstract record TeamEntityBase<TTeamMemberModel> : EntityBase, ITeam<TTea
     [BsonRepresentation(BsonType.String)]
     public AccessLevel? ConsentAccessLevel { get; init; }
 
+    /// <summary>Set while the consent is temporary. See <see cref="ITeam.TemporaryConsent"/>.</summary>
+    [BsonIgnoreIfNull]
+    public TemporaryConsentEntity TemporaryConsent { get; init; }
+
+    TemporaryConsent ITeam.TemporaryConsent => TemporaryConsent?.ToContract();
+
+    /// <summary>Access requests: every pending one and the most recent decided ones. See <see cref="ITeam.AccessRequests"/>.</summary>
+    [BsonIgnoreIfNull]
+    public TeamAccessRequestEntity[] AccessRequests { get; init; }
+
+    IReadOnlyList<TeamAccessRequest> ITeam.AccessRequests => AccessRequests?.Select(x => x.ToContract()).ToArray();
+
     [BsonIgnoreIfNull]
     public IReadOnlyList<TenantRoleDefinition> CustomRoles { get; init; }
 

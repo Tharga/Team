@@ -52,7 +52,7 @@ public class TeamMembershipClaimsBuilderTests
     {
         _teamService.Setup(t => t.GetTeamMemberAsync(TeamKey, UserKey)).ReturnsAsync((ITeamMember)null);
         _teamService.Setup(t => t.GetConsentedTeamsAsync(It.Is<string[]>(r => r.Contains("Support"))))
-            .Returns(Async(Mock.Of<ITeam>(t => t.Key == TeamKey && t.ConsentAccessLevel == AccessLevel.Viewer)));
+            .Returns(Async(Mock.Of<ITeam>(t => t.Key == TeamKey && t.ConsentedRoles == new[] { "Support" } && t.ConsentAccessLevel == AccessLevel.Viewer)));
         _scopeRegistry.Setup(s => s.GetEffectiveScopes(AccessLevel.Viewer, It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>()))
             .Returns(new[] { "team:read" });
 

@@ -311,7 +311,11 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
 
     public IAsyncEnumerable<TTeamEntity> GetTeamsByConsentAsync(string[] roles)
     {
-        return _collection.GetAsync(x => x.DeletedAt == null && x.ConsentedRoles != null && x.ConsentedRoles.Any(r => roles.Contains(r)));
+        // Also matches the consent a temporary consent returns to: after expiry that is the consent in force, and a
+        // role it covers may not be among the stored roles. TeamServiceBase filters the result by what is in force.
+        return _collection.GetAsync(x => x.DeletedAt == null
+                                         && ((x.ConsentedRoles != null && x.ConsentedRoles.Any(r => roles.Contains(r)))
+                                             || (x.TemporaryConsent != null && x.TemporaryConsent.PreviousConsentedRoles != null && x.TemporaryConsent.PreviousConsentedRoles.Any(r => roles.Contains(r)))));
     }
 
     /// <summary>

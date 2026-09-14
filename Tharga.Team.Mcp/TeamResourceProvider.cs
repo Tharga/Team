@@ -113,7 +113,7 @@ public sealed class TeamResourceProvider : IMcpResourceProvider
             key = team.Key,
             name = team.Name,
             icon = team.Icon,
-            consentedRoles = team.ConsentedRoles ?? Array.Empty<string>(),
+            consentedRoles = TeamConsent.Resolve(team, DateTime.UtcNow).Roles,
         };
 
         return new McpResourceContent

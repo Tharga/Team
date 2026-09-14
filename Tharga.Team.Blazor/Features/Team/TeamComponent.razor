@@ -1273,7 +1273,7 @@ else
 
     private AccessLevel? ConsentOf(ITeam<TMember> team)
     {
-        return TeamVisibility.Resolve(team.ConsentedRoles, team.ConsentAccessLevel, _consentDefaultLevel);
+        return TeamVisibility.Resolve(team, _consentDefaultLevel, DateTime.UtcNow);
     }
 
     private async Task BuildVisibleRolesAsync()

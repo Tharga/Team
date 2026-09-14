@@ -24,7 +24,7 @@ public class TeamConsentTests
     {
         var consent = TeamConsent.Resolve(new FakeTeam { ConsentedRoles = ["Developer"], ConsentAccessLevel = AccessLevel.Viewer }, Now);
 
-        Assert.Equal(["Developer"], consent.ConsentedRoles);
+        Assert.Equal(["Developer"], consent.Roles);
         Assert.Equal(AccessLevel.Viewer, consent.AccessLevel);
         Assert.Null(consent.ExpiresAt);
     }
@@ -34,7 +34,7 @@ public class TeamConsentTests
     {
         var consent = TeamConsent.Resolve(new FakeTeam(), Now);
 
-        Assert.Empty(consent.ConsentedRoles);
+        Assert.Empty(consent.Roles);
         Assert.False(consent.HasConsent);
     }
 
@@ -66,7 +66,7 @@ public class TeamConsentTests
 
         var consent = TeamConsent.Resolve(team, Now);
 
-        Assert.Equal(["Developer"], consent.ConsentedRoles);
+        Assert.Equal(["Developer"], consent.Roles);
         Assert.Equal(AccessLevel.Viewer, consent.AccessLevel);
         Assert.Null(consent.ExpiresAt);
     }

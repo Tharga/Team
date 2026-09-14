@@ -130,9 +130,10 @@ public sealed class TeamContextResolver
 
         // Consent is expressed by naming roles; a team that has named none has consented to nothing, and
         // the level alone does not amount to an invitation.
-        if (team.ConsentedRoles is not { Length: > 0 }) return TeamContext.Refused(TeamContextRefusal.NotConsented);
+        var consent = TeamConsent.Resolve(team, DateTime.UtcNow);
+        if (!consent.HasConsent) return TeamContext.Refused(TeamContextRefusal.NotConsented);
 
-        var level = team.ConsentAccessLevel ?? AccessLevel.Viewer;
+        var level = consent.AccessLevel ?? AccessLevel.Viewer;
 
         var scopes = _tenantRoleService != null
             ? await _tenantRoleService.GetEffectiveScopesAsync(headerTeamKey, level, [], [])

@@ -875,9 +875,19 @@ public abstract class TeamServiceBase : ITeamService
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
 
-    public IAsyncEnumerable<ITeam> GetConsentedTeamsAsync(string[] userRoles)
+    /// <remarks>
+    /// Filtered through <see cref="TeamConsent.Resolve"/>: the store matches on what it has stored, which still names
+    /// a temporary consent after it has run out. A store should also match the previous consent a
+    /// <see cref="ITeam.TemporaryConsent"/> returns to, or a role covered only after expiry is missed.
+    /// </remarks>
+    public async IAsyncEnumerable<ITeam> GetConsentedTeamsAsync(string[] userRoles)
     {
-        return GetConsentedTeamsInternalAsync(userRoles);
+        var now = DateTime.UtcNow;
+
+        await foreach (var team in GetConsentedTeamsInternalAsync(userRoles))
+        {
+            if (TeamConsent.Resolve(team, now).Covers(userRoles)) yield return team;
+        }
     }
 
     /// <inheritdoc cref="ITeamManagementService.GetTeamCustomRolesAsync"/>

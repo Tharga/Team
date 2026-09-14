@@ -1,16 +1,16 @@
 namespace Tharga.Team;
 
 /// <summary>The consent a team has in force at a moment.</summary>
-/// <param name="ConsentedRoles">The roles consented to. Never null; empty means no consent.</param>
+/// <param name="Roles">The roles consented to. Never null; empty means no consent.</param>
 /// <param name="AccessLevel">The consented level, or null to fall back to the configured default.</param>
 /// <param name="ExpiresAt">When this consent runs out, or null when it is standing.</param>
-public sealed record ConsentInForce(string[] ConsentedRoles, AccessLevel? AccessLevel, DateTime? ExpiresAt)
+public sealed record ConsentInForce(string[] Roles, AccessLevel? AccessLevel, DateTime? ExpiresAt)
 {
     /// <summary>Whether any role is consented to.</summary>
-    public bool HasConsent => ConsentedRoles.Length > 0;
+    public bool HasConsent => Roles.Length > 0;
 
     /// <summary>Whether a caller holding <paramref name="roles"/> is covered by this consent.</summary>
-    public bool Covers(IEnumerable<string> roles) => HasConsent && (roles ?? []).Any(r => ConsentedRoles.Contains(r, StringComparer.Ordinal));
+    public bool Covers(IEnumerable<string> roles) => HasConsent && (roles ?? []).Any(r => Roles.Contains(r, StringComparer.Ordinal));
 }
 
 /// <summary>

@@ -460,7 +460,7 @@ public class AuditingTeamServiceDecorator : ITeamService
         // distinct from a read that failed.
         var previous = await TryFindTeamAsync(teamKey);
         var metadata = Meta(
-            (AuditMetadataKeys.ConsentAccessLevelOld, previous == null ? null : previous.ConsentAccessLevel?.ToString() ?? ConsentNone),
+            (AuditMetadataKeys.ConsentAccessLevelOld, previous == null ? null : TeamConsent.Resolve(previous, DateTime.UtcNow).AccessLevel?.ToString() ?? ConsentNone),
             (AuditMetadataKeys.ConsentAccessLevelNew, accessLevel?.ToString() ?? ConsentNone),
             (AuditMetadataKeys.ConsentRoles, Join(consentedRoles)));
 
