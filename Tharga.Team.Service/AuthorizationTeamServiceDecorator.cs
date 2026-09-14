@@ -9,7 +9,9 @@ namespace Tharga.Team.Service;
 /// <list type="bullet">
 /// <item>Create — authenticated AND <c>AllowTeamCreation</c> (no scope; self-service).</item>
 /// <item>Delete — (<b>Owner</b> of the team AND <c>AllowTeamCreation</c>) OR <c>teams:delete</c> (system).</item>
-/// <item>Rename / Consent — <c>team:manage</c> on the team.</item>
+/// <item>Rename — <c>team:manage</c> on the team. Consent — <c>team:manage</c> held as a member or team key, never through consent.</item>
+/// <item>Request team access — the caller holds a configured consent role. Cancel — passed through (the requester is checked by the inner service).</item>
+/// <item>Approve / deny team access — <c>team:manage</c> held as a member or team key; approval may consent only configured roles.</item>
 /// <item>Custom-role CRUD — the configurable custom-role manage scope on the team (default <c>team:manage</c>).</item>
 /// <item>Member invite/remove/role/scope-overrides/display-name — <c>member:manage</c> on the team.</item>
 /// <item>Leave — no scope; the operation names no user but the caller. See <see cref="LeaveTeamAsync"/>.</item>
@@ -27,9 +29,11 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     private readonly IScopeRegistry _scopeRegistry;
     private readonly ITenantRoleRegistry _tenantRoleRegistry;
     private readonly string _customRoleManageScope;
+    private readonly ConsentOptions _consent;
 
-    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null, TeamPurgeCascade purgeCascade = null)
+    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null, TeamPurgeCascade purgeCascade = null, ConsentOptions consentOptions = null)
     {
+        _consent = consentOptions ?? new ConsentOptions();
         _inner = inner;
         _authorizer = authorizer;
         _purgeCascade = purgeCascade;
@@ -172,6 +176,47 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     {
         await RequirePresentationManageAsync(teamKey, nameof(RenameTeamAsync));
         await _inner.RenameTeamAsync<TMember>(teamKey, name);
+    }
+
+    /// <remarks>
+    /// <b>A consent role is the check, not a scope.</b> Approval grants through the team's consent, which reaches only
+    /// the configured consent roles — a caller holding none would be asking for access approval could never give them.
+    /// Membership and the level are the inner service's rules.
+    /// </remarks>
+    public async Task<TeamAccessRequest> RequestTeamAccessAsync(string teamKey, AccessLevel accessLevel, TimeSpan? duration, string message)
+    {
+        if (!await _authorizer.HoldsAnyRoleAsync(_consent.Roles))
+            throw new UnauthorizedAccessException(
+                $"Requesting access to team '{teamKey}' requires one of the consent roles: {string.Join(", ", _consent.Roles ?? [])}.");
+
+        return await _inner.RequestTeamAccessAsync(teamKey, accessLevel, duration, message);
+    }
+
+    /// <remarks>Only the requester may cancel, which the inner service checks against the caller.</remarks>
+    public Task CancelTeamAccessRequestAsync(string teamKey, string requestId) => _inner.CancelTeamAccessRequestAsync(teamKey, requestId);
+
+    /// <remarks>
+    /// <c>team:manage</c> held directly, for the reason consent changes require it: approving sets the team's consent.
+    /// The roles must be configured consent roles, so an approval cannot consent a role the host never offered.
+    /// </remarks>
+    public async Task ApproveTeamAccessRequestAsync(string teamKey, string requestId, string[] consentedRoles)
+    {
+        await RequireDirectTeamScopeAsync(TeamScopes.Manage, teamKey, nameof(ApproveTeamAccessRequestAsync));
+
+        var offered = new HashSet<string>(_consent.Roles ?? [], StringComparer.Ordinal);
+        var unoffered = (consentedRoles ?? []).Where(r => !offered.Contains(r)).ToArray();
+        if (unoffered.Length > 0)
+            throw new UnauthorizedAccessException(
+                $"Approving access to team '{teamKey}' may consent only the configured consent roles; not: {string.Join(", ", unoffered)}.");
+
+        await _inner.ApproveTeamAccessRequestAsync(teamKey, requestId, consentedRoles);
+    }
+
+    /// <remarks><c>team:manage</c> held directly, like approving.</remarks>
+    public async Task DenyTeamAccessRequestAsync(string teamKey, string requestId)
+    {
+        await RequireDirectTeamScopeAsync(TeamScopes.Manage, teamKey, nameof(DenyTeamAccessRequestAsync));
+        await _inner.DenyTeamAccessRequestAsync(teamKey, requestId);
     }
 
     /// <remarks>

@@ -479,6 +479,88 @@ public class AuditingTeamServiceDecorator : ITeamService
         }
     }
 
+    public async Task<TeamAccessRequest> RequestTeamAccessAsync(string teamKey, AccessLevel accessLevel, TimeSpan? duration, string message)
+    {
+        var metadata = Meta(
+            (AuditMetadataKeys.AccessRequestAccessLevel, accessLevel.ToString()),
+            (AuditMetadataKeys.AccessRequestDuration, DurationText(duration)));
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var request = await _inner.RequestTeamAccessAsync(teamKey, accessLevel, duration, message);
+            sw.Stop();
+            if (request != null)
+            {
+                metadata[AuditMetadataKeys.AccessRequestId] = request.Id;
+                metadata[AuditMetadataKeys.AccessRequestRequesterKey] = request.RequesterKey;
+            }
+
+            Log("request-access", nameof(RequestTeamAccessAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, metadata: metadata);
+            return request;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("request-access", nameof(RequestTeamAccessAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, metadata);
+            throw;
+        }
+    }
+
+    public Task CancelTeamAccessRequestAsync(string teamKey, string requestId)
+        => AuditAccessDecisionAsync("cancel-access-request", nameof(CancelTeamAccessRequestAsync), teamKey, requestId, null,
+            () => _inner.CancelTeamAccessRequestAsync(teamKey, requestId));
+
+    /// <remarks>
+    /// Records the consent level in force before approval, the roles consented, and — read back after the write — when
+    /// the granted consent ends. The approval entry is the record of expiry: nothing runs at the moment it happens.
+    /// </remarks>
+    public Task ApproveTeamAccessRequestAsync(string teamKey, string requestId, string[] consentedRoles)
+        => AuditAccessDecisionAsync("approve-access-request", nameof(ApproveTeamAccessRequestAsync), teamKey, requestId, consentedRoles,
+            () => _inner.ApproveTeamAccessRequestAsync(teamKey, requestId, consentedRoles));
+
+    public Task DenyTeamAccessRequestAsync(string teamKey, string requestId)
+        => AuditAccessDecisionAsync("deny-access-request", nameof(DenyTeamAccessRequestAsync), teamKey, requestId, null,
+            () => _inner.DenyTeamAccessRequestAsync(teamKey, requestId));
+
+    private async Task AuditAccessDecisionAsync(string action, string methodName, string teamKey, string requestId, string[] consentedRoles, Func<Task> operation)
+    {
+        var before = await TryFindTeamAsync(teamKey);
+        var request = before?.AccessRequests?.FirstOrDefault(x => x.Id == requestId);
+        var approving = consentedRoles != null;
+
+        var metadata = Meta(
+            (AuditMetadataKeys.AccessRequestId, requestId),
+            (AuditMetadataKeys.AccessRequestRequesterKey, request?.RequesterKey),
+            (AuditMetadataKeys.AccessRequestAccessLevel, request?.AccessLevel.ToString()),
+            (AuditMetadataKeys.AccessRequestDuration, request == null ? null : DurationText(request.Duration)),
+            (AuditMetadataKeys.ConsentRoles, approving ? Join(consentedRoles) : null),
+            (AuditMetadataKeys.ConsentAccessLevelOld, approving && before != null ? TeamConsent.Resolve(before, DateTime.UtcNow).AccessLevel?.ToString() ?? ConsentNone : null));
+
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await operation();
+            sw.Stop();
+
+            if (approving)
+            {
+                var decided = (await TryFindTeamAsync(teamKey))?.AccessRequests?.FirstOrDefault(x => x.Id == requestId);
+                if (decided != null) metadata[AuditMetadataKeys.AccessRequestGrantedUntil] = decided.GrantedUntil?.ToString("O") ?? ConsentNone;
+            }
+
+            Log(action, methodName, sw.ElapsedMilliseconds, true, teamKey: teamKey, metadata: metadata);
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log(action, methodName, sw.ElapsedMilliseconds, false, ex.Message, teamKey, metadata);
+            throw;
+        }
+    }
+
+    private static string DurationText(TimeSpan? duration) => duration?.ToString("c") ?? ConsentNone;
+
     public async Task SetTeamCustomRolesAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles)
     {
         var metadata = Meta((AuditMetadataKeys.CustomRoleNames, Join(customRoles?.Select(x => x.Name))));

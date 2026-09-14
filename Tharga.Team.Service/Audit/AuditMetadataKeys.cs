@@ -60,6 +60,21 @@ public static class AuditMetadataKeys
     /// <summary>Roles the team consented to, comma-separated.</summary>
     public const string ConsentRoles = "consent.roles";
 
+    /// <summary>The access request an operation acted on.</summary>
+    public const string AccessRequestId = "accessrequest.id";
+
+    /// <summary>Who made the access request (user key).</summary>
+    public const string AccessRequestRequesterKey = "accessrequest.requester.key";
+
+    /// <summary>The access level asked for.</summary>
+    public const string AccessRequestAccessLevel = "accessrequest.accesslevel";
+
+    /// <summary>The duration asked for, as <c>d.hh:mm:ss</c>, or <c>none</c> for no end.</summary>
+    public const string AccessRequestDuration = "accessrequest.duration";
+
+    /// <summary>On approval, when the granted consent ends (ISO 8601 UTC), or <c>none</c> when it is standing.</summary>
+    public const string AccessRequestGrantedUntil = "accessrequest.granteduntil";
+
     /// <summary>Custom (runtime-defined) tenant role names, comma-separated.</summary>
     public const string CustomRoleNames = "customroles.names";
 
