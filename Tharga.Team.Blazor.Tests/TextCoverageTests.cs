@@ -53,6 +53,7 @@ public class TextCoverageTests
         "Features/Simulation/AccessSimulationCard.razor",
         "Features/Simulation/AccessSimulationBar.razor",
         "Features/Simulation/AccessSimulationDialog.razor",
+        "Features/Simulation/AccessSimulationIndicator.razor",
         "Features/Team/TeamInviteView.razor",
         "Features/Team/InviteUserDialog.razor",
         "Features/User/DeleteUserDialog.razor",

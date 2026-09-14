@@ -1,0 +1,36 @@
+@using Tharga.Team.Blazor.Features.Simulation
+@inject AccessSimulationState SimulationState
+@inject IThargaTextProvider TextProvider
+
+@* Optional and compact, for a host to place beside the team selector. It says only that access is reduced and
+   offers the way back — a quiet alternative to the full-width banner in AccessSimulationBar, not a replacement for
+   the entry point. Renders nothing during demo mode; see AccessSimulationIndicatorGate. *@
+@if (_show)
+{
+    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem" title="@_description">
+        <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Shade="Shade.Lighter" Text="@_text[AccessSimulationIndicatorText.Label]" />
+        <RadzenButton Icon="undo" ButtonStyle="ButtonStyle.Warning" Variant="Variant.Text" Size="ButtonSize.Small"
+                      title="@_text[AccessSimulationIndicatorText.Stop]" Click="@Stop" />
+    </RadzenStack>
+}
+
+@code {
+    private bool _show;
+    private string _description;
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var active = await SimulationState.GetActiveAsync();
+        _show = AccessSimulationIndicatorGate.Show(SimulationState.Enabled, active);
+        if (!_show) return;
+
+        _text = await TextProvider.ResolveAsync([.. AccessSimulationIndicatorText.All, .. AccessSimulationBarText.All]);
+
+        var (before, after) = AccessSimulationBannerSentence.SplitAround(_text[AccessSimulationBarText.ViewingAs]);
+        _description = before + AccessSimulationBannerSentence.Describe(active, _text) + after;
+    }
+
+    /// <summary>Never gated — it only restores what the caller really holds.</summary>
+    private Task Stop() => SimulationState.StopAsync();
+}
