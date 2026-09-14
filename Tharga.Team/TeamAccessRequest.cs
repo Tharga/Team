@@ -92,8 +92,12 @@ public static class TeamAccessRequestRules
     /// </summary>
     public static IReadOnlyList<AccessLevel> RequestableLevels { get; } = [AccessLevel.Viewer, AccessLevel.User, AccessLevel.Administrator];
 
-    /// <summary>How many decided requests a team keeps, newest first. Pending requests are always kept.</summary>
-    public const int DecidedHistoryLimit = 20;
+    /// <summary>How many requests a team keeps, newest first. Older ones are dropped when a new request is added.</summary>
+    /// <remarks>
+    /// A bound on the team document, not a retention policy: the audit log is the record of what was requested and
+    /// decided. A pending request pushed out by this many newer ones has long been overtaken.
+    /// </remarks>
+    public const int HistoryLimit = 50;
 
     /// <summary>The longest message a requester may attach.</summary>
     public const int MaxMessageLength = 1000;

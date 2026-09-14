@@ -75,7 +75,7 @@ standing and clears any expiry.
 
 `TeamServiceBase` gains virtual throwing methods (the `SetTeamMemberSuspendedAsync` pattern) so custom hosts keep
 compiling; `Tharga.Team.MongoDB` implements them on `TeamEntityBase` (`AccessRequests`, `TemporaryConsent`, enums
-stored by name). Decided requests are kept, capped at the most recent 20 per team.
+stored by name). Requests are kept, capped at the 50 most recent per team (`TeamAccessRequestRules.HistoryLimit`); the audit log is the record.
 
 ### UI
 
