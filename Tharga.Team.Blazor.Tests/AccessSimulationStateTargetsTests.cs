@@ -22,9 +22,16 @@ public class AccessSimulationStateTargetsTests
             => Task.FromResult(new AuthenticationState(principal));
     }
 
+    /// <remarks>
+    /// <see cref="Name"/> defaults to null because that is what a real member carries — it is a per-team
+    /// <i>override</i>, set only when someone renames a member. This fake used to declare
+    /// <c>Name =&gt; Key</c>, which short-circuited display-name resolution in every test here and is why
+    /// the picker shipped unusable for a caller without <c>users:manage</c>. See
+    /// <see cref="AccessSimulationMemberNameTests"/>.
+    /// </remarks>
     private sealed record FakeMember(string Key, AccessLevel AccessLevel, string[] TenantRoles, string[] ScopeOverrides) : ITeamMember
     {
-        public string Name => Key;
+        public string Name { get; init; }
         public Invitation Invitation => null;
         public DateTime? LastSeen => null;
         public MembershipState? State => MembershipState.Member;
@@ -47,6 +54,7 @@ public class AccessSimulationStateTargetsTests
         var userService = new Mock<IUserService>();
         userService.Setup(x => x.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(Mock.Of<IUser>(u => u.Key == UserKey));
         userService.Setup(x => x.GetCurrentUserAsync()).ReturnsAsync(Mock.Of<IUser>(u => u.Key == UserKey));
+        userService.Setup(x => x.GetTeamMemberUsersAsync()).ReturnsAsync([]);
 
         var scopeRegistry = new Mock<IScopeRegistry>();
         scopeRegistry.SetupGet(x => x.All).Returns(registered);
