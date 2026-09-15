@@ -116,6 +116,16 @@ bare `HasClaim`: an in-team claim spelled `simulation:demo` must not satisfy it.
 > upgrade step — delete the line if you want the library's catalogue description to show, keep it if you
 > prefer your own wording, since the **first** registration's description is the one that is kept.
 
+> **On 3.21.1 or earlier, run-as needed `users:manage` in practice.** The table above was the intent, but
+> the member picker resolved each member's display name through a read gated on the `users:manage`
+> *system* scope — which no team access level grants. Opening **View as another user…** as an ordinary team
+> Owner or Administrator failed with
+> `GetUserByKeyAsync requires the 'users:manage' system scope.`
+>
+> **Fixed in 3.21.2:** names come from the caller's own co-member projection, so run-as needs nothing beyond
+> `simulation:use`. No upgrade step, and nothing to un-grant — but if you widened a role to `users:manage`
+> to work around this, that grant also carries user deletion, and you can now narrow it again.
+
 **Where each one shows.** A run-as simulation puts a banner in the navigation bar, because somebody working
 with a reduced view needs to know. **A demo shows nothing there at all** — a banner reading "demo mode"
 across a customer demonstration defeats the point of it — so the profile card is the way out. That is a rule
@@ -185,6 +195,12 @@ simulation cannot keep them — the dialog says so above the choices.
 
 **Starting from a member** fills in that member's access level, roles and scopes in one step, so the target
 is exactly the access they hold. Change anything afterwards and it becomes a composed target of your own.
+
+**How members are named.** A per-team name override wins where one is set; otherwise the name comes from the
+user record — their display name, else a name derived from their email. The records come from the caller's
+own co-member projection, or the full directory for a holder of `users:manage`. A member whose user record
+is not in that set shows their raw key, which in practice means a member of a team you reach by consent
+rather than membership, without `users:manage`.
 
 Whatever is chosen, it works the same way: the dialog names a **target scope set**, and the simulation keeps
 what the target has *and you also have*, removing everything else. Choosing nothing is allowed, and shows the
