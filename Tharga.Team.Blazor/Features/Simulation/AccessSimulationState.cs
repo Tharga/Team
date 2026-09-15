@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Options;
 using Microsoft.JSInterop;
+using Tharga.Team.Blazor.Features.User;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Service;
 
@@ -154,6 +155,7 @@ public sealed class AccessSimulationState
         if (teamKey == null) return [];
 
         var self = await _userService.GetCurrentUserAsync();
+        var users = await IdentityLookupAsync();
         var candidates = new List<AccessSimulationCandidate>();
 
         await foreach (var member in _teamService.GetMembersAsync(teamKey))
@@ -164,7 +166,7 @@ public sealed class AccessSimulationState
             var scopes = await EffectiveScopesAsync(teamKey, member);
             candidates.Add(new AccessSimulationCandidate(
                 member.Key,
-                await DisplayNameAsync(member),
+                DisplayName(member, users),
                 member.AccessLevel,
                 scopes)
             {
@@ -400,6 +402,45 @@ public sealed class AccessSimulationState
     }
 
     /// <summary>
+    /// The user records the picker may name members from, keyed by user key.
+    /// </summary>
+    /// <remarks>
+    /// <b>The co-member projection, unless the caller holds <c>users:manage</c>.</b> Resolving names used
+    /// to call <see cref="IUserService.GetUserByKeyAsync"/>, which carries
+    /// <c>[RequireScope(SystemUserScopes.Manage)]</c> — a <i>system</i> scope that no team access level
+    /// grants. <see cref="SimulationScopes.Simulate"/> is a <i>team</i> scope registered at
+    /// <c>Administrator</c>, so the read refused every caller the feature was built for: a team owner
+    /// opening the picker got <c>UnauthorizedAccessException</c> instead of a list.
+    /// <see cref="IUserService.GetTeamMemberUsersAsync"/> exists for exactly this and needs only an
+    /// authenticated caller.
+    /// <para>
+    /// A <c>users:manage</c> holder keeps the full directory, through the same
+    /// <see cref="UserDirectoryGate"/> that <c>TeamComponent</c> and <c>AuditLogView</c> use. That caller
+    /// may be acting in a team they reach by consent rather than membership, and the co-member projection
+    /// is built from memberships — so narrowing everyone to it would leave exactly that caller looking at
+    /// raw keys.
+    /// </para>
+    /// <para>
+    /// One read per dialog open rather than one per member; the previous shape was an N+1 against the user
+    /// store.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<string, IUser>> IdentityLookupAsync()
+    {
+        var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var source = UserDirectoryGate.Resolve(TeamScopeGate.HasSystemScope(state.User, SystemUserScopes.Manage));
+
+        var users = source == UserDirectorySource.FullDirectory
+            ? await _userService.GetAsync().ToArrayAsync()
+            : [.. await _userService.GetTeamMemberUsersAsync()];
+
+        return users
+            .Where(u => !string.IsNullOrEmpty(u?.Key))
+            .GroupBy(u => u.Key, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+    }
+
+    /// <summary>
     /// What to call a member: their per-team display name, else their own name, else whatever the
     /// toolkit can make of their identity.
     /// </summary>
@@ -411,12 +452,11 @@ public sealed class AccessSimulationState
     /// record carries the name and <c>TeamServiceBase.ResolveDisplayName</c> supplies the email-or-identity
     /// fallback.
     /// </remarks>
-    private async Task<string> DisplayNameAsync(ITeamMember member)
+    private static string DisplayName(ITeamMember member, IReadOnlyDictionary<string, IUser> users)
     {
         if (!string.IsNullOrEmpty(member.Name)) return member.Name;
 
-        var user = await _userService.GetUserByKeyAsync(member.Key);
-        if (user == null) return member.Key;
+        if (!users.TryGetValue(member.Key, out var user) || user == null) return member.Key;
 
         return !string.IsNullOrEmpty(user.Name)
             ? user.Name
