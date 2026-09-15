@@ -41,10 +41,21 @@ NuGet: `dotnet outdated` on the whole solution reported **no outdated dependenci
     `dotnet test`). **2,763 tests, 0 failed** — Blazor 1178, Service 963, Support 363,
     MongoDB 103, Mcp 107, Entra 38, Images 11.
 
-- [ ] 5. Docs review
-  - `docs/articles/access-simulation.md` — check for a stated scope requirement this corrects.
-  - `README.md` / `implementation-guide.md` — same check.
-  - Land as a `docs:` commit if anything changes.
+- [x] 5. Docs review
+  - `docs/articles/access-simulation.md` was already **correct** — its capability table has always
+    said `simulation:use` is a team scope at `Administrator` "reaching team owners and
+    administrators, deliberately". The code disagreed with the documentation, not the reverse,
+    so there was no wrong statement to correct.
+  - Added two things instead, both in the article's existing style: a *fixed in 3.21.2* note
+    recording the symptom and naming the `users:manage` workaround a host can now narrow, and a
+    short **How members are named** paragraph under "Starting from a member" explaining the
+    override → user record → email order and the raw-key fallback.
+  - `README.md` and `implementation-guide.md` describe the components and the scope catalogue,
+    neither of which changes. No edit needed.
+  - Landed as `docs: record the run-as users:manage defect and how members are named`.
+
+  Version: CI computes it from `MAJOR_MINOR: '3.21'` plus the next patch, and the latest tag is
+  `3.21.1`, so this releases as **3.21.2**. A bug fix with no API change is a patch.
 
 - [ ] 6. Close-out (only on the user's confirmation)
   - Re-run `dotnet outdated`.
@@ -53,7 +64,11 @@ NuGet: `dotnet outdated` on the whole solution reported **no outdated dependenci
 
 ## Last session
 
-Steps 1-4 done. The picker now names members from `GetTeamMemberUsersAsync()` for a caller
+Steps 1-5 done. The picker now names members from `GetTeamMemberUsersAsync()` for a caller
 without `users:manage`, and a reflection-driven guard covers every `users:manage`-gated
 `IUserService` member across the whole Blazor project rather than one member on components.
-Next: the docs review, then the user tests from the pushed branch.
+Full suite green at 2,763 tests. Two commits on the branch: the fix and the docs note.
+
+Next: push the branch (awaiting approval — *never push without explicit approval*) so the
+user can test run-as as a plain team Owner. Do not open the PR until they confirm; the
+close-out commit has to be last.
