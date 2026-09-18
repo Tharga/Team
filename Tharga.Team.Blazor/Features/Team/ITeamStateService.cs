@@ -67,4 +67,26 @@ public interface ITeamStateService
     }
 
     Task SetSelectedTeamAsync(ITeam selectedTeam);
+
+    /// <summary>
+    /// Records the selection, optionally without the page reload that normally follows it.
+    /// </summary>
+    /// <param name="selectedTeam">The team to select.</param>
+    /// <param name="reload">
+    /// <c>false</c> when the caller is about to navigate itself, so the selection does not race a
+    /// navigation of its own.
+    /// </param>
+    /// <remarks>
+    /// <b>The reload is not optional in general</b> — it is what applies the newly selected team's claims,
+    /// so a caller passing <c>false</c> takes on the duty of navigating. It exists for the one caller that
+    /// was already navigating: answering an invitation ends on the site's landing page rather than on the
+    /// invitation page, and two navigations for one click is a race rather than a reload.
+    /// <para>
+    /// <b>A default interface method</b>, so a host with its own <see cref="ITeamStateService"/> keeps
+    /// compiling. The default ignores <paramref name="reload"/> and reloads, which is what such an
+    /// implementation did before this existed — the safe direction, since a missing reload leaves stale
+    /// claims while a surplus one only costs a round trip.
+    /// </para>
+    /// </remarks>
+    Task SetSelectedTeamAsync(ITeam selectedTeam, bool reload) => SetSelectedTeamAsync(selectedTeam);
 }
