@@ -267,6 +267,22 @@ A host with its own team store implements one method to resolve a token without 
 expiry. Skip the first and links naming their team still work; see
 [the implementation guide](docs/articles/implementation-guide.md#what-an-invitation-link-looks-like).
 
+**Accepting selects the team that was joined, and leaves for the site root.** Answering an invitation is the
+end of that page's business, so both answers navigate away rather than reloading the invitation page with
+nothing left to show. Point them somewhere else when your root is a landing page, or when the invitation
+page is one step of a longer flow:
+
+```csharp
+o.Blazor.HomePath = "/start";
+```
+
+**Changed in 3.22.** Accepting used to reload the invitation page and leave the selection alone, so an
+invitee who already belonged to a team stayed on the old one — the team they had just chosen was discarded
+by the reload (Tharga/Team#287). Two consequences if you have built on the old behaviour: set `HomePath` if
+the invitation page needs to stay on screen, and note that `ITeamService.SelectTeamEvent` **no longer fires
+when an invitation is accepted**, because the screen that accepted it now makes the selection itself.
+Creating a team still raises it.
+
 ## Support cases, and an assistant to answer them
 
 A support case lives on the site, and can project onto Slack (where support watches) and email (where the
