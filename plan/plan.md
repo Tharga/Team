@@ -51,7 +51,7 @@ Branch: `feature/invite-accept-selects-team`
       All six acceptance criteria in `plan/feature.md`, including that exactly one navigation happens
       on each path.
 
-- [~] 8. Full test suite, then documentation.
+- [x] 8. Full test suite, then documentation.
       `README.md`, `Tharga.Team.Blazor/README.md` (which documents `TeamInviteView` and `InvitePath`
       directly) and `docs/articles/implementation-guide.md` (`InvitePath` section around line 1421).
       Land as a separate `docs:` commit.
@@ -91,7 +91,6 @@ navigating away underneath it.
 
 ## Last session
 
-Steps 1-7 complete and committed. Full suite green: 2790 tests, 22 of them new. Next is step 8 —
-documentation across `README.md`, `Tharga.Team.Blazor/README.md` and
-`docs/articles/implementation-guide.md` — then the feature waits for the user to test from the pushed
-branch before close-out.
+Steps 1-8 complete and committed (`341b958` deps, implementation, `71be7aa` docs). Full suite green: 2790 tests, 22 of them new. Awaiting approval to push the
+branch, then the user tests from origin before close-out (step 9). The PR stays unopened until the
+close-out commit, so `plan/` never reaches master.
