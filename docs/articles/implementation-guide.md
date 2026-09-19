@@ -1435,6 +1435,38 @@ can rewrite what an administrator copies to the clipboard. Unset, links point at
 The route name is yours; `/invitation` above is only an example, and worth checking against whatever your
 own stack already serves.
 
+### Where answering an invitation leaves the invitee
+
+Accepting selects the team that was joined and navigates to the site root. Declining navigates to the same
+place and changes no selection. Both are a forced load, because the answer changes the caller's teams and
+the new claims only apply on a fresh one.
+
+The root is the default because it is already where `UseThargaAuth` returns people after signing in. Where
+that is not somewhere to land — a marketing page, or an invitation page that is one step of a longer flow —
+say where instead:
+
+```csharp
+o.Blazor.HomePath = "/start";
+```
+
+`HomePath` takes the route in whatever shape you write it: `/start`, `start` and `/start/` are the same
+thing, and unset means the application root. It is deliberately not `InvitePath`: one is where an invitee
+arrives from their inbox, the other is where a member belongs once they have joined.
+
+> **Changed in 3.22.** Accepting used to reload the invitation page and leave the selection untouched.
+> Because the reload re-runs the selection resolver, which honours the remembered team first, an invitee who
+> already belonged to a team kept the old one — **the team they had just accepted was discarded** — and they
+> were left looking at an invitation page with nothing to show (Tharga/Team#287). A fresh account appeared
+> to work, because with no remembered team the resolver fell through to the only membership there was.
+>
+> **`ITeamService.SelectTeamEvent` no longer fires when an invitation is accepted.** The screen that accepts
+> it now makes the selection itself, awaited, and navigates once. The event was raised from the service and
+> bridged by an `async void` handler that could not be awaited, so the selection it wrote raced the screen's
+> own navigation and the reload it performed of its own was a second navigation for one click. If you
+> subscribe to that event to react to a new membership, move the reaction to `TeamsListChangedEvent`, which
+> still fires on both answers. `CreateTeamAsync` still raises `SelectTeamEvent`: there, nobody else is
+> present to choose.
+
 ### What an invitation link looks like
 
 ```
