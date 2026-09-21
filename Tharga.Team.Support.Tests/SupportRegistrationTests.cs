@@ -438,3 +438,148 @@ public class SupportScopeCatalogueTests
         Assert.Equal(expectedAction, action);
     }
 }
+
+/// <summary>
+/// Who is granted the team support scopes, which the host decides.
+/// </summary>
+/// <remarks>
+/// <b>Driven through the real registration, never by poking the registry.</b> The option is only worth
+/// anything if it reaches <c>AddThargaScopes</c>, and a test that configured a registry by hand would pass
+/// whether or not it did.
+/// <para>
+/// A support case holds whatever a user typed into it, so "who may read somebody else's" is the decision
+/// this whole class is about. The default must stay exactly what every host had before the option existed.
+/// </para>
+/// </remarks>
+public class SupportTeamScopeLevelTests
+{
+    private static ScopeRegistry Scopes(Action<SupportCaseOptions> configure = null)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(Substitute.For<ISupportCaseStore>());
+        services.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
+        services.AddSingleton<TeamAuthorizer>();
+        services.Configure<AuditOptions>(_ => { });
+        services.AddSingleton<CompositeAuditLogger>();
+        services.AddSingleton(Substitute.For<IAuditEntryFactory>());
+        services.AddThargaSupportCases(configure);
+
+        return (ScopeRegistry)services.BuildServiceProvider().GetRequiredService<IScopeRegistry>();
+    }
+
+    /// <summary>
+    /// The default is the behaviour of every host that has never heard of this option.
+    /// </summary>
+    [Theory]
+    [InlineData(AccessLevel.Owner)]
+    [InlineData(AccessLevel.Administrator)]
+    public void ByDefault_OwnersAndAdministratorsHoldBothScopes(AccessLevel level)
+    {
+        var granted = Scopes().GetScopesForAccessLevel(level);
+
+        Assert.Contains(SupportScopes.Read, granted);
+        Assert.Contains(SupportScopes.Manage, granted);
+    }
+
+    [Theory]
+    [InlineData(AccessLevel.Owner)]
+    [InlineData(AccessLevel.Administrator)]
+    [InlineData(AccessLevel.User)]
+    [InlineData(AccessLevel.Viewer)]
+    [InlineData(AccessLevel.Custom)]
+    public void WithNoLevel_NoAccessLevelGrantsEitherScope(AccessLevel level)
+    {
+        var granted = Scopes(o => o.TeamScopeAccessLevel = null).GetScopesForAccessLevel(level);
+
+        Assert.DoesNotContain(SupportScopes.Read, granted);
+        Assert.DoesNotContain(SupportScopes.Manage, granted);
+    }
+
+    /// <summary>
+    /// Grant-only is a registration, not an absence: the catalogue entry and its description survive, which
+    /// is what keeps the scope explicable on the reference page and enforceable everywhere else.
+    /// </summary>
+    [Fact]
+    public void WithNoLevel_TheScopesAreStillRegistered_AndFlaggedGrantOnly()
+    {
+        var all = Scopes(o => o.TeamScopeAccessLevel = null).All;
+
+        foreach (var name in new[] { SupportScopes.Read, SupportScopes.Manage })
+        {
+            var definition = Assert.Single(all, x => x.Name == name);
+
+            Assert.True(definition.GrantOnly);
+            Assert.False(string.IsNullOrWhiteSpace(definition.Description));
+        }
+    }
+
+    /// <summary>
+    /// The flag is the whole mechanism: the scope pickers filter on it, and
+    /// <c>AuthorizationTeamServiceDecorator</c> refuses a tenant-defined role that names such a scope. Both
+    /// behaviours have their own guards; this asserts the input they read.
+    /// </summary>
+    [Fact]
+    public void ByDefault_TheScopesAreNotGrantOnly()
+    {
+        var all = Scopes().All;
+
+        Assert.All(new[] { SupportScopes.Read, SupportScopes.Manage },
+            name => Assert.False(Assert.Single(all, x => x.Name == name).GrantOnly));
+    }
+
+    /// <summary>
+    /// The point of turning the level off: the grant becomes a recorded decision instead of a consequence
+    /// of being an administrator. So it has to still be grantable.
+    /// </summary>
+    [Fact]
+    public void WithNoLevel_ARoleOrAnOverrideStillGrantsTheScope()
+    {
+        var scopes = Scopes(o => o.TeamScopeAccessLevel = null);
+
+        var roles = new TenantRoleRegistry();
+        roles.Register("SupportAgent", [SupportScopes.Read, SupportScopes.Manage], "Answers support cases.");
+        scopes.SetRoleRegistry(roles);
+
+        var viaRole = scopes.GetEffectiveScopes(AccessLevel.Viewer, ["SupportAgent"]);
+        Assert.Contains(SupportScopes.Read, viaRole);
+        Assert.Contains(SupportScopes.Manage, viaRole);
+
+        var viaOverride = scopes.GetEffectiveScopes(AccessLevel.Viewer, null, [SupportScopes.Read]);
+        Assert.Contains(SupportScopes.Read, viaOverride);
+        Assert.DoesNotContain(SupportScopes.Manage, viaOverride);
+    }
+
+    /// <summary>
+    /// The host may also widen rather than withdraw, which is the other half of "the host decides".
+    /// </summary>
+    [Fact]
+    public void AnExplicitLowerLevel_WidensTheGrant()
+    {
+        var scopes = Scopes(o => o.TeamScopeAccessLevel = AccessLevel.User);
+
+        Assert.Contains(SupportScopes.Read, scopes.GetScopesForAccessLevel(AccessLevel.User));
+        Assert.DoesNotContain(SupportScopes.Read, scopes.GetScopesForAccessLevel(AccessLevel.Viewer));
+    }
+
+    /// <summary>
+    /// The system pair is not affected by the team option — different registry, different decision.
+    /// </summary>
+    [Fact]
+    public void TheOption_DoesNotTouchTheSystemScopes()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(Substitute.For<ISupportCaseStore>());
+        services.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
+        services.AddSingleton<TeamAuthorizer>();
+        services.Configure<AuditOptions>(_ => { });
+        services.AddSingleton<CompositeAuditLogger>();
+        services.AddSingleton(Substitute.For<IAuditEntryFactory>());
+        services.AddThargaSupportCases(o => o.TeamScopeAccessLevel = null);
+
+        var system = services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>().All;
+
+        Assert.Equal(4, system.Count(x => x.Name.StartsWith("support:", StringComparison.Ordinal)));
+    }
+}

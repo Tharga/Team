@@ -4,7 +4,8 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1 through 5 done; step 6 (the registration option, which is all of #295) is next.
+In progress. Steps 1 through 6 done — both issues are now implemented. What remains is step 7 (the
+decorator guard check), step 8 (the version line), step 10 (documentation) and step 11 (push).
 
 ## Steps
 
@@ -122,14 +123,30 @@ In progress. Steps 1 through 5 done; step 6 (the registration option, which is a
       **No UI.** #291 mentions a queue view; the toolkit ships plumbing and optional components, and a
       staff queue component was not in scope here. The service method is what a host needs to build one.
 
-- [~] **6. The registration option** — `SupportCaseOptions.TeamScopeAccessLevel` (`AccessLevel?`, default
+- [x] **6. The registration option** — `SupportCaseOptions.TeamScopeAccessLevel` (`AccessLevel?`, default
       `AccessLevel.Administrator`), honoured in `SupportRegistration`'s `AddThargaScopes` block by choosing
       `Register` or `RegisterGrantOnly`. XML docs state that the default is unchanged behaviour and that
       `null` means "grantable through a role or an override only".
-      *Tests:* criteria 6 and 7, driven through the real registration rather than the registry directly, so
-      the option is proved to reach it.
+      *Tests:* new `SupportTeamScopeLevelTests` in `SupportRegistrationTests.cs`, seven facts and theories
+      driven through `AddThargaSupportCases` rather than a hand-built registry, so the option is proved to
+      reach `AddThargaScopes`. Support 401 passed; full solution 2828 passed, 0 failed.
+      **Done 2026-09-21.** One `RegisterTeamScope` helper expresses the choice once rather than an if/else
+      duplicating both registrations, and the two descriptions became constants so the grant-only and
+      levelled paths cannot drift apart.
 
-- [ ] **7. Decorator default-member guard** — check whether `DecoratorDefaultMemberTests` (the #272 guard)
+      **Documented a trap the option makes reachable.** Owner and Administrator are granted every
+      registered scope regardless of the declared minimum, so `AccessLevel.Owner` behaves exactly as the
+      default — the values that actually differ are `Administrator`, `User`, `Viewer` and `null`. And
+      `AccessLevel.Custom` must not be used to mean "nobody": it grants the scope to every level, which is
+      the trap `RegisterGrantOnly` exists to avoid. Both are in the option's XML docs.
+
+      Verified rather than assumed while writing those docs: `AuthorizationTeamServiceDecorator` really
+      does refuse a tenant-defined custom role naming a grant-only scope
+      (`AuthorizationTeamServiceDecorator.cs:390`), and the three scope pickers really do filter on the
+      flag. The tests assert the `GrantOnly` flag, which is the input both behaviours read; each has its
+      own guard already.
+
+- [~] **7. Decorator default-member guard** — check whether `DecoratorDefaultMemberTests` (the #272 guard)
       covers the support decorators. If it does, extend it to the new members; if it does not, say so in
       the PR rather than widening scope here.
 
@@ -184,9 +201,9 @@ Step 3 landed: both scopes registered with descriptions, and three catalogue gua
 one. Step 4 then landed the gate itself — #291's cross-team branch and the unfiled read/write defect, plus
 the two team-wide reads. Full solution suite 2812 passed, 0 failed.
 
-Step 5 landed the cross-team listing through the whole stack — port default member, service, both
-decorators, Mongo and the in-memory fake. Full solution suite 2816 passed, 0 failed.
+Step 5 landed the cross-team listing through the whole stack; step 6 landed the registration option.
+**Both issues are now implemented** — full solution suite 2828 passed, 0 failed.
 
 **Still open:** whether a support audit entry records the basis the caller got in on. It remains an
-additive change at the gate's exit points whenever it is wanted. Next: step 6, the registration option —
-all of #295, and the last substantive step.
+additive change at the gate's exit points whenever it is wanted. Next: steps 7, 8 and 10 — the decorator
+guard check, the version line, and the documentation — then push for testing.
