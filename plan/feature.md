@@ -118,6 +118,10 @@ keeps every existing host behaving exactly as it does today.
    any team; the audit entry attributes the reply to that caller.
 2. A caller holding `support:all:read` and no membership can read and list but is refused every write verb.
 3. A cross-team list exists for the `support:all:read` holder and is refused without it.
+3b. A `support:all:read` holder can list **one team's** cases and count those awaiting support, without
+   membership. Added 2026-09-21 during step 4: the scope is registered as granting "read *and list*
+   support cases in any team", so a listing that refused it would contradict the catalogue entry a host
+   reads before granting it.
 4. Holding `support:read` on a team no longer authorizes answer, hand over, reply, close or reopen; it
    still authorizes read, list and mark-read.
 5. `support:unassigned:*` grants nothing in a team, and `support:all:*` grants nothing over the unassigned

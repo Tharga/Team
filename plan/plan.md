@@ -4,8 +4,7 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1, 2, 2b and 3 done; step 4 (the authorization gate) is next and has one decision
-open — see below.
+In progress. Steps 1 through 4 done; step 5 (the cross-team listing) is next.
 
 ## Steps
 
@@ -59,7 +58,7 @@ open — see below.
       The comment above the system-scope block said "The unassigned queue", which was no longer the whole
       truth; widened without losing its reasoning about why these are registered here.
 
-- [~] **4. Split the gate into read and write** — give `RequireCaseAccessAsync` an explicit verb kind
+- [x] **4. Split the gate into read and write** — give `RequireCaseAccessAsync` an explicit verb kind
       rather than inferring it from the `systemScope` argument, then order the checks as
       `feature.md` → Design → The gate describes. This step carries both #291's cross-team branch and
       the unfiled read/write defect, because they are the same six lines.
@@ -72,10 +71,31 @@ open — see below.
       string, since the check accepts several scopes and "which one matched" is less useful than "on what
       footing". The wrinkle needing a decision is that auditing wraps authorization, so the outer decorator
       does not learn what the inner one matched — closing that needs a scoped seam between the two.
-      *Tests:* `SupportCaseAuthorizationTests` — criteria 1, 2, 4, 5 and 8. The `support:read`-cannot-write
-      case is the regression guard for the unfiled defect.
+      *Tests:* three added to `SupportCaseAuthorizationTests`, eight in a new `CrossTeamSupportAccessTests`
+      — criteria 1, 2, 3b, 4, 5 and 8. Support 385 passed; full solution 2812 passed, 0 failed.
+      **Done 2026-09-21.** `CaseAccessKind` is a required parameter with no default, so the next method
+      added here cannot inherit the defect by forgetting it — the old signature inferred the verb from
+      which system scope the caller passed, and the team branch never read it.
 
-- [ ] **5. Cross-team listing** — `ISupportCaseService.GetAllCasesAsync(cursor, pageSize)` gated on
+      **Ordering is the rule, not a detail.** The teamless branch runs *before* the cross-team check, so a
+      cross-team grant cannot fall through onto the unassigned queue.
+      `TheCrossTeamGrant_ReachesNothingInTheUnassignedQueue` is what fails if someone reorders them, and
+      `TheUnassignedGrant_ReachesNothingInATeam` guards the other direction.
+
+      **Two methods beyond the plan**, and named in `feature.md` as criterion 3b:
+      `GetCasesAsync(teamKey)` and `GetAwaitingSupportCountAsync(teamKey)` now go through a shared
+      `RequireTeamCaseReadAsync` that accepts the cross-team grant. Without it a staff holder could open a
+      case by id but not list the team's cases, and the registered description promises listing.
+
+      **The audit question was not built.** Step 4 shipped without it, and it did not need to block: the
+      basis would be recorded at the gate's exit points, which is additive to what is there now rather
+      than a restructure of it. The earlier claim that deciding late would mean rewriting the gate twice
+      was overstated.
+
+      The refusal message now names the scopes that would actually have worked for that verb. The old one
+      offered `support:read` for a write, which described the defect rather than the rule.
+
+- [~] **5. Cross-team listing** — `ISupportCaseService.GetAllCasesAsync(cursor, pageSize)` gated on
       `support:all:read`, mirroring `GetUnassignedCasesAsync`, with a matching
       `ISupportCaseStore.GetAllCasesAsync` as a **default member returning an empty page** so a store
       written before this feature keeps compiling (criterion 9). Implement in `MongoSupportCaseStore` and
@@ -141,5 +161,9 @@ the whole class was about cases belonging to no team, which half of it no longer
 documented the scope-name grammar after a discussion of the three-segment shape.
 
 Step 3 landed: both scopes registered with descriptions, and three catalogue guards including the naming
-one. Next: step 4, the authorization gate — the substantial step, and the one carrying the open audit
-decision recorded against it above.
+one. Step 4 then landed the gate itself — #291's cross-team branch and the unfiled read/write defect, plus
+the two team-wide reads. Full solution suite 2812 passed, 0 failed.
+
+**Still open:** whether a support audit entry records the basis the caller got in on. Step 4 did not need
+it and shipped without it; it remains an additive change at the gate's exit points whenever it is wanted.
+Next: step 5, the cross-team listing.
