@@ -1340,6 +1340,39 @@ builder.Services.AddTeamService<IMyService, MyService>();
 builder.Services.AddSystemService<IMyAdminService, MyAdminService>();
 ```
 
+### Naming a scope
+
+Scope names follow a grammar, and it is worth following for your own scopes too — the audit log reads it.
+
+```
+{feature}:{action}            team:read, apikey:manage, audit:read, mcp:discover
+{feature}:{reach}:{action}    support:unassigned:read, support:all:read
+```
+
+| Part | Is | Notes |
+|---|---|---|
+| **feature** | The area acted on | Becomes `AuditEntry.Feature`, which the audit log renders as a row of filter buttons and as the category axis of two charts. Keep the set small |
+| **reach** | The population the grant covers | Present **only** where that population is not the one the scope is held against |
+| **action** | What may be done | Becomes `AuditEntry.Action`, a drop-down filter. Free to grow |
+
+**Most scopes need no reach segment.** A team scope is held against a team, and that team is its reach —
+`support:read` means "any case in the team you hold this on". A system scope has no team to imply one, so
+where it covers a specific population it says which: `support:unassigned:read` reaches the cases no team
+owns, `support:all:read` reaches every team's. Every reach-bearing scope today is a system scope.
+
+**Reach goes in the middle, not the front.** `AuditEntry.ParseScope` splits on the *first* colon and
+nowhere else, so `support:all:read` is audited as feature `support`, action `all:read` — it files under
+the support feature with everything else support does. Writing it as `support-all:read` instead would make
+a second feature: a second button on every audit filter bar, a second bar on the charts, and a key that no
+longer matches a `support:*` notification route.
+
+> [!NOTE]
+> **Two built-in scopes express reach differently.** `teams:read` pluralises the feature to mean "every
+> team", against `team:read`'s one, and `apikey:system-manage` qualifies the action instead. Both predate
+> the grammar and are staying as they are — a renamed scope is invisible to the compiler and silently
+> authorizes nothing, which is what the startup `RetiredScopeCheck` exists to catch. Follow the grammar
+> above for new scopes rather than either of those.
+
 ### Which team service to inject
 
 A component, controller or MCP provider should inject one of these — **never `ITeamService`**.

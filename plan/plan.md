@@ -4,7 +4,7 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1 and 2 done; step 3 (registering the new scopes) is next.
+In progress. Steps 1, 2 and 2b done; step 3 (registering the new scopes) is next.
 
 ## Steps
 
@@ -23,6 +23,26 @@ In progress. Steps 1 and 2 done; step 3 (registering the new scopes) is next.
       things recorded in the XML docs rather than left implicit: `AllManage` satisfies a read, exactly as
       `support:manage` does on a team; and it does **not** grant assignment, which stays on
       `SystemSupportScopes.Manage` because assigning decides which tenant an unassigned case joins.
+
+- [x] **2b. Document the scope-name grammar** — added 2026-09-21 (user), after a discussion of whether a
+      three-segment name was a new pattern and how it lands in the audit log.
+
+      Written as `{feature}:{action}` and `{feature}:{reach}:{action}`. The part names are the codebase's
+      own: **feature** and **action** are what `AuditEntry` already calls the two halves and what the audit
+      log labels its filters, and **reach** is already the README's column heading for how far a grant
+      extends. Documented in the `ScopeDefinition` remarks (the API home) and as *Naming a scope* in
+      `docs/articles/implementation-guide.md` Step 6 (the prose home, where a host names its own scopes).
+
+      Three findings recorded there rather than left to be rediscovered: `AuditEntry.ParseScope` splits on
+      the **first** colon only, so `support:all:read` audits as feature `support` / action `all:read`,
+      which is why reach belongs in the middle; a front-loaded `support-all:read` would fork one feature
+      into two on the audit filter bar and the charts, and fall outside a `support:*` notification route;
+      and `teams:read` and `apikey:system-manage` express reach two other ways, predate the grammar, and
+      are staying, because a renamed scope silently authorizes nothing — the reason `RetiredScopeCheck`
+      exists.
+
+      *Tests:* none — documentation only. `Tharga.Team.Service.Tests` re-run as the check on the claims
+      made about `ParseScope`: 965 passed, 0 failed.
 
 - [~] **3. Register them** — in `SupportRegistration.AddThargaSupportCases`, beside the existing
       `AddThargaSystemScopes` block, with descriptions in the voice of the two already there.
@@ -62,7 +82,8 @@ In progress. Steps 1 and 2 done; step 3 (registering the new scopes) is next.
       milliseconds. If local reports zero, check `dotnet --version` — SDK 10.0.301 does this to every
       Toolkit repo.
 
-- [ ] **10. Documentation** — `docs/articles/support-cases.md` and `Tharga.Team.Support/README.md`: the new
+- [ ] **10. Documentation** — the scope-name grammar landed early in step 2b; what remains is
+      `docs/articles/support-cases.md` and `Tharga.Team.Support/README.md`: the new
       scope pair, the option, and a note that `support:read` no longer authorizes replying. Decide whether
       the scope model deserves a section of its own rather than edits to existing ones. Root `README.md`
       only if it mentions support scopes. Land as a `docs:` commit.
@@ -96,5 +117,11 @@ In progress. Steps 1 and 2 done; step 3 (registering the new scopes) is next.
 2026-09-21 — branch created and the plan written from the two issues plus a verification pass over
 `AuthorizationSupportCaseServiceDecorator`, `SupportRegistration`, `ScopeRegistry` and `ISupportCaseStore`.
 Step 2 landed: `SystemSupportScopes.AllRead` / `AllManage`, and the class summary corrected — it claimed
-the whole class was about cases belonging to no team, which half of it no longer is. Next: step 3,
-registering the pair in `SupportRegistration`.
+the whole class was about cases belonging to no team, which half of it no longer is. Step 2b then
+documented the scope-name grammar after a discussion of the three-segment shape.
+
+**Open question carried into step 4:** support audit entries record no `ScopeChecked` —
+`AuditingSupportCaseServiceDecorator` hard-codes feature `support` and `IAuditEntryFactory.Create` takes
+no scope — so after #291 ships, a staff cross-team read and a team administrator's read are
+indistinguishable in the log. Raised with the user 2026-09-21; not yet decided whether it joins this
+feature. Next: step 3, registering the pair in `SupportRegistration`.
