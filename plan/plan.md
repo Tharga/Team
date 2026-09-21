@@ -4,8 +4,9 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1 through 10 done. What remains is step 11 — push the branch for testing. Do **not**
-open the PR until the user confirms it works.
+**Awaiting the user's testing.** All eleven steps done; the branch is pushed. Nothing else happens until
+the user says the feature works — then the close-out sequence below runs, and only its final commit is
+followed by opening the PR.
 
 ## Steps
 
@@ -177,8 +178,10 @@ open the PR until the user confirms it works.
       the scope model deserves a section of its own rather than edits to existing ones. Root `README.md`
       only if it mentions support scopes. Land as a `docs:` commit.
 
-- [~] **11. Push and hand over for testing** — push the branch, do **not** open the PR yet, and ask for
+- [x] **11. Push and hand over for testing** — push the branch, do **not** open the PR yet, and ask for
       confirmation before closing out.
+      **Done 2026-09-21.** Pushed to `origin/feature/support-case-authorization`, nine commits. PR
+      deliberately not opened.
 
 ## Close-out (only once the user says it is done)
 
@@ -219,9 +222,15 @@ Step 5 landed the cross-team listing through the whole stack; step 6 landed the 
 Step 7 confirmed the decorator guard already covers the support pair; step 8 moved the version line to
 3.22; step 10 updated both documentation surfaces. Full suite 2829 passed, 0 failed after the docs commit.
 
-**The feature is code-complete.** Next is step 11: push the branch so it can be tested from origin, and
-**do not open the PR** — the close-out commit (issue comments, `Requests.md`, `plan/` removal) has to be
-the last commit on the branch, and that only starts once the user says the feature is done.
+**The feature is code-complete and pushed.** The PR is deliberately not open: the close-out commit (issue
+comments, `Requests.md`, `plan/` removal) has to be the last commit on the branch, and that only starts
+once the user says the feature is done.
+
+**What to test.** Grant a user `support:all:read` or `support:all:manage` through `ConfigureSystemRoles`
+and confirm they can read, answer and list cases in a team they do not belong to; confirm a holder of
+`support:read` alone can still read but no longer reply or close; and set `TeamScopeAccessLevel = null`
+and confirm a team administrator loses `support:read` while a member holding a role that names it keeps
+it.
 
 **Still open:** whether a support audit entry records the basis the caller got in on.
 
