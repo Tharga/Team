@@ -4,8 +4,8 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1 through 6 done — both issues are now implemented. What remains is step 7 (the
-decorator guard check), step 8 (the version line), step 10 (documentation) and step 11 (push).
+In progress. Steps 1 through 7 done — both issues are implemented. What remains is step 8 (the version
+line), step 10 (documentation) and step 11 (push).
 
 ## Steps
 
@@ -146,11 +146,11 @@ decorator guard check), step 8 (the version line), step 10 (documentation) and s
       flag. The tests assert the `GrantOnly` flag, which is the input both behaviours read; each has its
       own guard already.
 
-- [~] **7. Decorator default-member guard** — check whether `DecoratorDefaultMemberTests` (the #272 guard)
+- [x] **7. Decorator default-member guard** — check whether `DecoratorDefaultMemberTests` (the #272 guard)
       covers the support decorators. If it does, extend it to the new members; if it does not, say so in
       the PR rather than widening scope here.
 
-- [ ] **8. Version line** — `MAJOR_MINOR: '3.21'` → `'3.22'` in `.github/workflows/build.yml`, in the same
+- [~] **8. Version line** — `MAJOR_MINOR: '3.21'` → `'3.22'` in `.github/workflows/build.yml`, in the same
       commit as the read/write split or later, never in a PR of its own (a merge to `master` queues a gated
       release).
 
@@ -204,6 +204,9 @@ the two team-wide reads. Full solution suite 2812 passed, 0 failed.
 Step 5 landed the cross-team listing through the whole stack; step 6 landed the registration option.
 **Both issues are now implemented** — full solution suite 2828 passed, 0 failed.
 
+Step 7 confirmed the decorator guard already covers the support pair, and pinned that with a self-check
+rather than leaving it as a reading of an assembly list.
+
 **Still open:** whether a support audit entry records the basis the caller got in on. It remains an
-additive change at the gate's exit points whenever it is wanted. Next: steps 7, 8 and 10 — the decorator
-guard check, the version line, and the documentation — then push for testing.
+additive change at the gate's exit points whenever it is wanted. Next: step 8 (version line), step 10
+(documentation), then push for testing.
