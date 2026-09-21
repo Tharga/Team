@@ -112,6 +112,19 @@ public interface ISupportCaseService
     /// </remarks>
     Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Cases across every team, for the product's own support staff.
+    /// </summary>
+    /// <remarks>
+    /// Authorized by <see cref="SystemSupportScopes.AllRead"/>. The companion to that grant: without a
+    /// listing, a holder can answer a case only once somebody hands them its id, which is not a queue.
+    /// <para>
+    /// <b>Does not include the unassigned queue</b> — that is <see cref="GetUnassignedCasesAsync"/> and
+    /// <see cref="SystemSupportScopes.Read"/>. Holding one must never confer the other.
+    /// </para>
+    /// </remarks>
+    Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
+
     /// <summary>One case, or <c>null</c> when the team has no such case.</summary>
     Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 

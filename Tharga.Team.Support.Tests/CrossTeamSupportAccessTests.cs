@@ -21,6 +21,7 @@ namespace Tharga.Team.Support.Tests;
 public class CrossTeamSupportAccessTests
 {
     private const string TeamA = "team-a";
+    private const string TeamB = "team-b";
     private const string Alice = "alice-subject";
     private const string Staff = "staff-subject";
 
@@ -90,6 +91,68 @@ public class CrossTeamSupportAccessTests
 
         Assert.Single((await staff.GetCasesAsync(TeamA)).Items);
         Assert.Equal(1, await staff.GetAwaitingSupportCountAsync(TeamA));
+    }
+
+    [Fact]
+    public async Task AllRead_ListsCasesAcrossEveryTeam()
+    {
+        var store = new InMemorySupportCaseStore();
+        await Member(store).RaiseCaseAsync(TeamA, "From A", "Body");
+        await Build(store, Alice, memberOfTeam: TeamB).RaiseCaseAsync(TeamB, "From B", "Body");
+
+        var page = await SupportStaff(store, SystemSupportScopes.AllRead).GetCasesAcrossTeamsAsync();
+
+        Assert.Equal(2, page.Items.Length);
+        Assert.Contains(page.Items, x => x.TeamKey == TeamA);
+        Assert.Contains(page.Items, x => x.TeamKey == TeamB);
+    }
+
+    /// <summary>
+    /// The listing is the cross-team grant's own, so being privileged inside a team buys nothing here.
+    /// </summary>
+    [Fact]
+    public async Task ListingAcrossTeams_IsRefusedWithoutTheCrossTeamGrant()
+    {
+        var store = new InMemorySupportCaseStore();
+        await Member(store).RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        var privilegedMember = Member(store, SupportScopes.Read, SupportScopes.Manage);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => privilegedMember.GetCasesAcrossTeamsAsync());
+
+        var queueOperator = SupportStaff(store, SystemSupportScopes.Read, SystemSupportScopes.Manage);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => queueOperator.GetCasesAcrossTeamsAsync());
+    }
+
+    /// <summary>
+    /// The listing carries the same separation the per-case check does: every team, and not the cases no
+    /// team owns.
+    /// </summary>
+    [Fact]
+    public async Task ListingAcrossTeams_LeavesOutTheUnassignedQueue()
+    {
+        var store = await StoreWithOneUnassignedCase();
+        await Member(store).RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        var page = await SupportStaff(store, SystemSupportScopes.AllRead).GetCasesAcrossTeamsAsync();
+
+        Assert.Single(page.Items);
+        Assert.Equal(TeamA, page.Items[0].TeamKey);
+    }
+
+    /// <summary>
+    /// A store written before this feature keeps compiling and simply lists nothing, rather than a host
+    /// finding out through a build break in their own repository.
+    /// </summary>
+    [Fact]
+    public async Task AStoreWithoutTheListing_AnswersAnEmptyPage()
+    {
+        var inner = new InMemorySupportCaseStore();
+        await Member(inner).RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        ISupportCaseStore written = new StoreWithoutReopen(inner);
+
+        Assert.Single((await inner.GetCasesAcrossTeamsAsync(null, 20)).Items);
+        Assert.Empty((await written.GetCasesAcrossTeamsAsync(null, 20)).Items);
     }
 
     /// <summary>

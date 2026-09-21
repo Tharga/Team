@@ -190,6 +190,9 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => inner.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
 
+    public Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+        => inner.GetCasesAcrossTeamsAsync(cursor, pageSize, cancellationToken);
+
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetCaseAsync(teamKey, caseId, cancellationToken);
 

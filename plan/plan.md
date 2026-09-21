@@ -4,7 +4,7 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1 through 4 done; step 5 (the cross-team listing) is next.
+In progress. Steps 1 through 5 done; step 6 (the registration option, which is all of #295) is next.
 
 ## Steps
 
@@ -95,14 +95,34 @@ In progress. Steps 1 through 4 done; step 5 (the cross-team listing) is next.
       The refusal message now names the scopes that would actually have worked for that verb. The old one
       offered `support:read` for a write, which described the defect rather than the rule.
 
-- [~] **5. Cross-team listing** — `ISupportCaseService.GetAllCasesAsync(cursor, pageSize)` gated on
+- [x] **5. Cross-team listing** — `ISupportCaseService.GetAllCasesAsync(cursor, pageSize)` gated on
       `support:all:read`, mirroring `GetUnassignedCasesAsync`, with a matching
       `ISupportCaseStore.GetAllCasesAsync` as a **default member returning an empty page** so a store
       written before this feature keeps compiling (criterion 9). Implement in `MongoSupportCaseStore` and
       `InMemorySupportCaseStore`.
-      *Tests:* criteria 3 and 9; a `SupportContractShapeTests` entry for the new members.
+      *Tests:* four added to `CrossTeamSupportAccessTests` — criteria 3 and 9. Support 389 passed; full
+      solution 2816 passed, 0 failed.
+      **Done 2026-09-21.** Named `GetCasesAcrossTeamsAsync`, not `GetAllCasesAsync` as planned: it
+      deliberately excludes the unassigned queue, so "all" would have been a promise the method does not
+      keep and the one most likely to be misread by whoever implements the port next.
 
-- [ ] **6. The registration option** — `SupportCaseOptions.TeamScopeAccessLevel` (`AccessLevel?`, default
+      The Mongo filter is `Exists(TeamKey, true)` — the exact complement of the unassigned one, and written
+      that way for the reason already recorded beside it: `TeamKey` is `[BsonIgnoreIfNull]`, so a
+      not-equal-null would also return cases written with an explicit null, which belong to the other
+      queue and the other grant.
+
+      **No `SupportContractShapeTests` entry was needed.** That class scans
+      `typeof(ISupportCaseStore).GetMethods()`, so the new port member is already covered by the
+      wire-shape rules rather than needing to be listed.
+
+      `AStoreWithoutTheListing_AnswersAnEmptyPage` uses the existing `StoreWithoutReopen` double — the
+      file whose whole purpose is to be "the host that must not break". Note the default member is
+      reachable only through the interface, not the concrete type, which the test shows.
+
+      **No UI.** #291 mentions a queue view; the toolkit ships plumbing and optional components, and a
+      staff queue component was not in scope here. The service method is what a host needs to build one.
+
+- [~] **6. The registration option** — `SupportCaseOptions.TeamScopeAccessLevel` (`AccessLevel?`, default
       `AccessLevel.Administrator`), honoured in `SupportRegistration`'s `AddThargaScopes` block by choosing
       `Register` or `RegisterGrantOnly`. XML docs state that the default is unchanged behaviour and that
       `null` means "grantable through a role or an override only".
@@ -164,6 +184,9 @@ Step 3 landed: both scopes registered with descriptions, and three catalogue gua
 one. Step 4 then landed the gate itself — #291's cross-team branch and the unfiled read/write defect, plus
 the two team-wide reads. Full solution suite 2812 passed, 0 failed.
 
-**Still open:** whether a support audit entry records the basis the caller got in on. Step 4 did not need
-it and shipped without it; it remains an additive change at the gate's exit points whenever it is wanted.
-Next: step 5, the cross-team listing.
+Step 5 landed the cross-team listing through the whole stack — port default member, service, both
+decorators, Mongo and the in-memory fake. Full solution suite 2816 passed, 0 failed.
+
+**Still open:** whether a support audit entry records the basis the caller got in on. It remains an
+additive change at the gate's exit points whenever it is wanted. Next: step 6, the registration option —
+all of #295, and the last substantive step.

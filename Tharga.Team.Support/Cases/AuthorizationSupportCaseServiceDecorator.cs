@@ -89,6 +89,20 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
         return await inner.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
     }
 
+    /// <remarks>
+    /// <b>The queue a cross-team grant exists to work.</b> Without a listing, a holder can answer a case
+    /// only once somebody hands them its id — and the scope is registered as granting a listing, so
+    /// refusing one here would contradict the catalogue entry a host reads before granting it.
+    /// </remarks>
+    public async Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+    {
+        if (!await HasCrossTeamAccessAsync(CaseAccessKind.Read))
+            throw new UnauthorizedAccessException(
+                $"Only a caller holding {CrossTeamScopesFor(CaseAccessKind.Read)} may list support cases across every team.");
+
+        return await inner.GetCasesAcrossTeamsAsync(cursor, pageSize, cancellationToken);
+    }
+
     public async Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "reopen", CaseAccessKind.Write);
