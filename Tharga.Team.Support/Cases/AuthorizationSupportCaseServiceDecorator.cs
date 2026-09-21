@@ -19,10 +19,16 @@ namespace Tharga.Team.Support.Cases;
 /// does.
 /// </para>
 /// <para>
-/// <b>Membership is checked before authorship on every path.</b> Authorship alone would let someone who has
-/// left the team keep acting on their old cases; membership alone would let any member act on any case. Both
-/// paths through <see cref="RequireCaseAccessAsync"/> require the caller to be in the team first, and the
-/// case itself is always loaded through the team so an id from another tenant simply does not resolve.
+/// <b>Membership is checked before authorship.</b> Authorship alone would let someone who has left the team
+/// keep acting on their old cases; membership alone would let any member act on any case. The case itself is
+/// always loaded through the team, so an id from another tenant simply does not resolve.
+/// </para>
+/// <para>
+/// <b>The product's own support staff are the one exception, and they have to be.</b>
+/// <see cref="SystemSupportScopes.AllRead"/> and <see cref="SystemSupportScopes.AllManage"/> are checked
+/// before membership, because whoever runs support belongs to none of the customers' teams — putting them
+/// in each one does not scale and would list product staff as tenant members. They reach nothing in the
+/// unassigned queue, which has its own pair.
 /// </para>
 /// </remarks>
 internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseService inner, TeamAuthorizer authorizer) : ISupportCaseService
@@ -37,7 +43,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// <remarks>Authorized as replying is — the answer lands in the transcript exactly as a reply does.</remarks>
     public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "answer");
+        await RequireCaseAccessAsync(teamKey, caseId, "answer", CaseAccessKind.Write);
 
         return await inner.RunAssistantAsync(teamKey, caseId, cancellationToken);
     }
@@ -45,21 +51,21 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// <remarks>Authorized as replying is: whoever may answer a case may decide who answers it.</remarks>
     public async Task RequestHumanAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "hand over");
+        await RequireCaseAccessAsync(teamKey, caseId, "hand over", CaseAccessKind.Write);
 
         await inner.RequestHumanAsync(teamKey, caseId, cancellationToken);
     }
 
     public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "reply to");
+        await RequireCaseAccessAsync(teamKey, caseId, "reply to", CaseAccessKind.Write);
 
         await inner.ReplyToCaseAsync(teamKey, caseId, body, cancellationToken);
     }
 
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "close");
+        await RequireCaseAccessAsync(teamKey, caseId, "close", CaseAccessKind.Write);
 
         await inner.CloseCaseAsync(teamKey, caseId, cancellationToken);
     }
@@ -83,24 +89,37 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
         return await inner.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
     }
 
+    /// <remarks>
+    /// <b>The queue a cross-team grant exists to work.</b> Without a listing, a holder can answer a case
+    /// only once somebody hands them its id — and the scope is registered as granting a listing, so
+    /// refusing one here would contradict the catalogue entry a host reads before granting it.
+    /// </remarks>
+    public async Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+    {
+        if (!await HasCrossTeamAccessAsync(CaseAccessKind.Read))
+            throw new UnauthorizedAccessException(
+                $"Only a caller holding {CrossTeamScopesFor(CaseAccessKind.Read)} may list support cases across every team.");
+
+        return await inner.GetCasesAcrossTeamsAsync(cursor, pageSize, cancellationToken);
+    }
+
     public async Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "reopen");
+        await RequireCaseAccessAsync(teamKey, caseId, "reopen", CaseAccessKind.Write);
 
         await inner.ReopenCaseAsync(teamKey, caseId, cancellationToken);
     }
 
     public async Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "read", SystemSupportScopes.Read);
+        await RequireCaseAccessAsync(teamKey, caseId, "read", CaseAccessKind.Read);
 
         return await inner.GetCaseAsync(teamKey, caseId, cancellationToken);
     }
 
     public async Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
     {
-        await RequireMembershipAsync(teamKey);
-        await RequireScopeAsync(SupportScopes.Read, teamKey);
+        await RequireTeamCaseReadAsync(teamKey);
 
         return await inner.GetCasesAsync(teamKey, cursor, pageSize, cancellationToken);
     }
@@ -114,7 +133,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
 
     public async Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "read", SystemSupportScopes.Read);
+        await RequireCaseAccessAsync(teamKey, caseId, "read", CaseAccessKind.Read);
 
         return await inner.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
     }
@@ -126,7 +145,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// </remarks>
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAccessAsync(teamKey, caseId, "mark read", SystemSupportScopes.Read);
+        await RequireCaseAccessAsync(teamKey, caseId, "mark read", CaseAccessKind.Read);
 
         await inner.MarkReadAsync(teamKey, caseId, cancellationToken);
     }
@@ -144,8 +163,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// </remarks>
     public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
-        await RequireMembershipAsync(teamKey);
-        await RequireScopeAsync(SupportScopes.Read, teamKey);
+        await RequireTeamCaseReadAsync(teamKey);
 
         return await inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
     }
@@ -178,7 +196,8 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     }
 
     /// <summary>
-    /// The caller may act on this case if they raised it, or if they hold the managing scope for the team.
+    /// The caller may act on this case if they raised it, if they hold the matching scope for the team, or
+    /// if they hold a cross-team grant.
     /// </summary>
     /// <remarks>
     /// <b>The case is loaded through the team, which is what closes the cross-tenant hole.</b> A caller
@@ -189,7 +208,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// caller that a case exists is itself a disclosure.
     /// </para>
     /// <para>
-    /// <b>No team means no membership to check, so <c>systemScope</c> is the whole check</b> —
+    /// <b>No team means no membership to check, so the unassigned scope is the whole check</b> —
     /// <see cref="SystemSupportScopes.Read"/> for a read, <see cref="SystemSupportScopes.Manage"/> for a
     /// write. That makes an
     /// unassigned case deny-by-default: nobody reaches it without a grant naming the unassigned queue.
@@ -197,19 +216,26 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// access, and that arrives with the path that lets a user raise one; today every teamless case comes
     /// from inbound mail, whose sender has no identity to match.
     /// </para>
+    /// <para>
+    /// <b>The teamless branch comes first, and the order is the rule rather than a detail.</b>
+    /// <see cref="HasCrossTeamAccessAsync"/> is tried only once a team is in hand, so a cross-team grant
+    /// cannot reach the unassigned queue by falling through — the two populations stay separate in the code
+    /// exactly as they are in the catalogue.
+    /// </para>
     /// </remarks>
-    private async Task RequireCaseAccessAsync(string teamKey, string caseId, string verb, string systemScope = SystemSupportScopes.Manage)
+    private async Task RequireCaseAccessAsync(string teamKey, string caseId, string verb, CaseAccessKind kind)
     {
         if (string.IsNullOrEmpty(teamKey))
         {
-            await RequireSystemScopeAsync(systemScope, verb);
+            await RequireSystemScopeAsync(UnassignedScopeFor(kind), verb);
             return;
         }
 
+        if (await HasCrossTeamAccessAsync(kind)) return;
+
         await RequireMembershipAsync(teamKey);
 
-        if (await authorizer.HasTeamScopeAsync(SupportScopes.Manage, teamKey)) return;
-        if (await authorizer.HasTeamScopeAsync(SupportScopes.Read, teamKey)) return;
+        if (await HasTeamCaseAccessAsync(kind, teamKey)) return;
 
         var supportCase = await inner.GetCaseAsync(teamKey, caseId);
         var subject = await authorizer.GetSubjectAsync();
@@ -217,7 +243,81 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
         if (supportCase != null && !string.IsNullOrEmpty(subject) && supportCase.AuthorIdentity == subject) return;
 
         throw new UnauthorizedAccessException(
-            $"Only the member who raised support case '{caseId}', or a caller holding " +
-            $"'{SupportScopes.Read}' or '{SupportScopes.Manage}' on team '{teamKey}', may {verb} it.");
+            $"Only the member who raised support case '{caseId}', a caller holding {TeamScopesFor(kind)} " +
+            $"on team '{teamKey}', or a caller holding {CrossTeamScopesFor(kind)}, may {verb} it.");
     }
+
+    /// <summary>
+    /// Whether an operation only reads a case, or changes it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Stated at every call site rather than inferred.</b> The two halves used to be distinguished only by
+    /// which system scope a caller passed — which the team branch never looked at, so
+    /// <see cref="SupportScopes.Read"/> authorized closing a case. A parameter with no default is what stops
+    /// the next method added here inheriting that.
+    /// </remarks>
+    private enum CaseAccessKind
+    {
+        Read,
+        Write
+    }
+
+    /// <remarks>
+    /// <b>The product's own support staff, who are members of no customer's team.</b> Checked before
+    /// membership, because a staff holder is not a member and never will be — that is the whole reason the
+    /// grant exists.
+    /// <para>
+    /// <b>Deliberately no reach over the unassigned queue.</b> That is <see cref="SystemSupportScopes.Read"/>
+    /// and <see cref="SystemSupportScopes.Manage"/>, and holding one queue must never confer the other: an
+    /// unassigned case may concern a tenant this caller has nothing to do with.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> HasCrossTeamAccessAsync(CaseAccessKind kind)
+    {
+        if (await authorizer.HasSystemScopeAsync(SystemSupportScopes.AllManage)) return true;
+
+        return kind == CaseAccessKind.Read && await authorizer.HasSystemScopeAsync(SystemSupportScopes.AllRead);
+    }
+
+    /// <remarks>
+    /// <see cref="SupportScopes.Manage"/> satisfies a read as well, because whoever may answer a case may
+    /// read it. <see cref="SupportScopes.Read"/> satisfies a read <i>only</i> — it is the grant that says
+    /// "see other people's cases", not "act on them".
+    /// </remarks>
+    private async Task<bool> HasTeamCaseAccessAsync(CaseAccessKind kind, string teamKey)
+    {
+        if (await authorizer.HasTeamScopeAsync(SupportScopes.Manage, teamKey)) return true;
+
+        return kind == CaseAccessKind.Read && await authorizer.HasTeamScopeAsync(SupportScopes.Read, teamKey);
+    }
+
+    /// <summary>
+    /// The team-wide counterpart of <see cref="RequireCaseAccessAsync"/>, for the reads that span a team's
+    /// cases rather than naming one.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SystemSupportScopes.AllRead"/> is registered as granting exactly this — "read <b>and
+    /// list</b> support cases in any team" — so a listing that refused it would contradict the catalogue
+    /// entry a host reads before granting it.
+    /// </remarks>
+    private async Task RequireTeamCaseReadAsync(string teamKey)
+    {
+        if (await HasCrossTeamAccessAsync(CaseAccessKind.Read)) return;
+
+        await RequireMembershipAsync(teamKey);
+        await RequireScopeAsync(SupportScopes.Read, teamKey);
+    }
+
+    private static string UnassignedScopeFor(CaseAccessKind kind)
+        => kind == CaseAccessKind.Read ? SystemSupportScopes.Read : SystemSupportScopes.Manage;
+
+    private static string TeamScopesFor(CaseAccessKind kind)
+        => kind == CaseAccessKind.Read
+            ? $"'{SupportScopes.Read}' or '{SupportScopes.Manage}'"
+            : $"'{SupportScopes.Manage}'";
+
+    private static string CrossTeamScopesFor(CaseAccessKind kind)
+        => kind == CaseAccessKind.Read
+            ? $"'{SystemSupportScopes.AllRead}' or '{SystemSupportScopes.AllManage}'"
+            : $"'{SystemSupportScopes.AllManage}'";
 }

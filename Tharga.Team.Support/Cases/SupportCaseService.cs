@@ -320,6 +320,9 @@ internal sealed class SupportCaseService(
     public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => store.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
 
+    public Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+        => store.GetCasesAcrossTeamsAsync(cursor, pageSize, cancellationToken);
+
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => store.GetCaseAsync(teamKey, caseId, cancellationToken);
 

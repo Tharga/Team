@@ -107,6 +107,23 @@ public interface ISupportCaseStore
         => Task.FromResult(new SupportCasePage { Items = [] });
 
     /// <summary>
+    /// Cases that belong to a team, across every team, newest first — or an empty page when the store
+    /// cannot answer.
+    /// </summary>
+    /// <remarks>
+    /// <b>Excludes the unassigned queue, and that is the whole distinction.</b> A case with no team is a
+    /// different population reached by a different grant; folding the two together here would hand the
+    /// unassigned queue to anyone holding <see cref="SystemSupportScopes.AllRead"/>.
+    /// <para>
+    /// Not team-scoped, because the caller is deliberately not bound to one — reached only from a caller
+    /// already checked against <see cref="SystemSupportScopes.AllRead"/>.
+    /// </para>
+    /// <para><b>Defaults to nothing</b>, so a store written before this existed keeps compiling.</para>
+    /// </remarks>
+    Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(new SupportCasePage { Items = [] });
+
+    /// <summary>
     /// Gives an unassigned case to a team, returning whether this call did it.
     /// </summary>
     /// <remarks>
