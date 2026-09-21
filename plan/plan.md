@@ -4,8 +4,8 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1 through 7 done — both issues are implemented. What remains is step 8 (the version
-line), step 10 (documentation) and step 11 (push).
+In progress. Steps 1 through 9 done — both issues are implemented and the version line is moved. What
+remains is step 10 (documentation) and step 11 (push).
 
 ## Steps
 
@@ -150,16 +150,28 @@ line), step 10 (documentation) and step 11 (push).
       covers the support decorators. If it does, extend it to the new members; if it does not, say so in
       the PR rather than widening scope here.
 
-- [~] **8. Version line** — `MAJOR_MINOR: '3.21'` → `'3.22'` in `.github/workflows/build.yml`, in the same
+- [x] **8. Version line** — `MAJOR_MINOR: '3.21'` → `'3.22'` in `.github/workflows/build.yml`, in the same
       commit as the read/write split or later, never in a PR of its own (a merge to `master` queues a gated
       release).
+      **Done 2026-09-21.** `3.21` → `3.22`; latest tag is `3.21.2` and no `3.22.*` exists, so CI will cut
+      `3.22.0`. The reason is recorded in the file beside the value, because the next person doing an
+      upgrade pass is looking at the version line rather than at a PR description.
 
-- [ ] **9. Full suite** — `dotnet build -c Release` then `dotnet test -c Release` from the repo root. Read
+      **Corrected the comment above it, which contradicted the rule it is meant to carry.** It read "Bump
+      by hand when a release breaks compatibility **or adds public API**" — but adding public API is
+      explicitly *not* a bump here; the rule is that a consumer must have to act. Under the old wording
+      steps 2, 5 and 6 would each have called for a bump on their own, and none of them should. The stale
+      half is removed and the rule stated as it actually is.
+
+      Checked for other version references: every `3.21` elsewhere in the docs and README is a historical
+      note about a past release and correct as written.
+
+- [x] **9. Full suite** — `dotnet build -c Release` then `dotnet test -c Release` from the repo root. Read
       the **test count**, not the exit colour: a zero-test run reports success in a couple of hundred
       milliseconds. If local reports zero, check `dotnet --version` — SDK 10.0.301 does this to every
       Toolkit repo.
 
-- [ ] **10. Documentation** — the scope-name grammar landed early in step 2b; what remains is
+- [~] **10. Documentation** — the scope-name grammar landed early in step 2b; what remains is
       `docs/articles/support-cases.md` and `Tharga.Team.Support/README.md`: the new
       scope pair, the option, and a note that `support:read` no longer authorizes replying. Decide whether
       the scope model deserves a section of its own rather than edits to existing ones. Root `README.md`
@@ -204,8 +216,9 @@ the two team-wide reads. Full solution suite 2812 passed, 0 failed.
 Step 5 landed the cross-team listing through the whole stack; step 6 landed the registration option.
 **Both issues are now implemented** — full solution suite 2828 passed, 0 failed.
 
-Step 7 confirmed the decorator guard already covers the support pair, and pinned that with a self-check
-rather than leaving it as a reading of an assembly list.
+Step 7 confirmed the decorator guard already covers the support pair. Step 8 moved the version line to
+3.22 and corrected the stale comment above it. Suite green throughout at 2829 passed, 0 failed; it is
+re-run after the documentation commit.
 
 **Still open:** whether a support audit entry records the basis the caller got in on. It remains an
 additive change at the gate's exit points whenever it is wanted. Next: step 8 (version line), step 10

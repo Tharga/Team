@@ -7,8 +7,13 @@ on:
     branches: [master]
 
 env:
-  # Bump by hand when a release breaks compatibility or adds public API; only the patch is automatic.
-  MAJOR_MINOR: '3.21'
+  # Bump by hand only when a consumer must act to keep working: a removed or renamed member, a changed
+  # default, or a grant now required for an existing capability. Purely additive API is a patch.
+  # Only the patch is automatic.
+  #
+  # 3.22: 'support:read' no longer authorizes replying to, closing or reopening a case. A host that
+  # granted only that scope must grant 'support:manage' for those people to keep working.
+  MAJOR_MINOR: '3.22'
 
 permissions:
   contents: write
