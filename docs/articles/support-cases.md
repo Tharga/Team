@@ -57,6 +57,8 @@ the same reason.
 | Reply to, close or **reopen** anyone's case | `support:manage` |
 | Read or list a case with **no team** | `support:unassigned:read` — a **system** scope |
 | Reply to, close, reopen or **assign** a case with no team | `support:unassigned:manage` — a **system** scope |
+| Read or list cases in **any** team, without belonging to it | `support:all:read` — a **system** scope |
+| Reply to, close, reopen or hand over a case in **any** team | `support:all:manage` — a **system** scope |
 
 **Not everything is a scope, deliberately.** Raising a case about your own team is what an ordinary member
 does; gating it would mean every host granting that scope to everybody, and a scope everyone holds checks
@@ -66,8 +68,14 @@ nothing. Membership and authorship are still *checks* — they are simply not gr
 > which is exactly where somebody pastes a password, a token or a customer's details. Grant it as carefully
 > as you grant `audit:read`.
 
-`support:read` and `support:manage` are team scopes registered at `Administrator`. A case with a team is
-always loaded through it, so holding a valid case id from another tenant gains nothing.
+`support:read` and `support:manage` are team scopes, registered at `Administrator` by default — see
+[Taking support off the access level](#taking-support-off-the-access-level). A case with a team is always
+loaded through it, so holding a valid case id from another tenant gains nothing.
+
+> **Changed in 3.22: `support:read` no longer authorizes writing.** It used to satisfy reply, close,
+> reopen, hand over and answer as well, which is not what the table above has ever said. If you granted
+> only `support:read` to people who have been answering cases, grant them `support:manage` as well —
+> nothing else changes, and reading, listing and marking read are unaffected.
 
 **The unassigned scopes are system-wide, and that is not a convenience.** `support:read` is held *against a
 team*, and a case with no team has nothing to hold it against — so widening the team scope to cover these
@@ -77,6 +85,68 @@ about the whole product, which is what a system scope is for. They are registere
 
 **An unassigned case is deny-by-default.** No grant, no access — authorship does not open one either, because
 every case that has no team today arrived by mail from somebody with no account to match.
+
+## Support staff who belong to no team
+
+The ordinary shape of a support queue is a customer raising a case inside their own organisation and the
+product's own staff answering it. Staff belong to none of the customers' teams, so no team scope can reach
+those cases — which is what `support:all:read` and `support:all:manage` are for.
+
+```csharp
+// Every team's cases, for whoever runs support
+var page = await supportCases.GetCasesAcrossTeamsAsync();
+```
+
+Grant them through a system role, as you would any system scope:
+
+```csharp
+builder.AddThargaTeam(o =>
+{
+    o.ConfigureSystemRoles = roles => roles.Map("Support", SystemSupportScopes.AllRead, SystemSupportScopes.AllManage);
+});
+```
+
+**Do not put staff in each customer's team instead.** It does not scale past a handful of tenants and it
+lists product staff in tenant membership lists. Access simulation is not the answer either: it is a
+deliberate *reduction* of access, and the audit trail would say a member acted when a member did not. A
+support reply has to be attributable to the person who wrote it, and with this grant it is.
+
+**These do not reach the unassigned queue, and the unassigned scopes do not reach a team.** The two pairs
+cover different populations and neither confers the other — `GetCasesAcrossTeamsAsync` lists every team's
+cases and leaves out the ones no team owns, which is `GetUnassignedCasesAsync` and its own grant.
+
+`support:all:manage` **does not grant assignment.** Assigning decides which tenant an unassigned case and
+its whole transcript become part of, so it stays with `support:unassigned:manage`.
+
+## Taking support off the access level
+
+By default `support:read` and `support:manage` are granted to every Owner and Administrator of every team,
+because in most products support is a shared team function and an administrator should see what their team
+has raised.
+
+**Where a support conversation is personal, that default is wrong.** If a case is one member talking to
+your own staff, their manager reading it is a different product from the one you are building. Turn the
+level off and the scopes become grantable only deliberately:
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.TeamScopeAccessLevel = null;   // registered, enforced, granted by no access level
+});
+```
+
+`null` does not unregister anything. Both scopes still appear in the scope catalogue with their
+descriptions and are enforced exactly as before; they are simply granted by no access level, refused in
+tenant-defined custom roles, and left out of the scope-override pickers. Holding one then takes a
+code-registered tenant role or an explicit override — a recorded decision rather than a consequence of
+being an Owner.
+
+> **Only some values differ from each other.** Owner and Administrator are granted every registered scope
+> regardless of the declared minimum, so `AccessLevel.Owner` behaves exactly as the default does. The
+> choices that actually differ are `Administrator`, `User`, `Viewer` and `null`. Do not use
+> `AccessLevel.Custom` to mean "nobody" — it grants the scope to *every* level.
+
+The author of a case still reaches their own without holding anything, whatever you set here.
 
 ## The subject is optional
 
@@ -101,7 +171,8 @@ field shown.
 await supportCases.ReopenCaseAsync(teamKey, caseId);
 ```
 
-Authorized exactly as replying is: the member who raised it, or a holder of `support:read` / `support:manage`.
+Authorized exactly as replying is: the member who raised it, a holder of `support:manage` on the team, or
+a holder of `support:all:manage`. Reading the case is not enough.
 It writes a system entry, clears the closure, and returns the case to `Open` — **keeping the history**, which
 is the whole reason it exists rather than telling somebody to raise a second case that explains nothing.
 

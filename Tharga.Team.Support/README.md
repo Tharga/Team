@@ -155,6 +155,16 @@ every way of guessing puts one customer's problem in another customer's list. Su
 unassigned, and an operator assigns a team when they know which it is — or leaves it unassigned, which is a
 supported state rather than a backlog.
 
+**Your own support staff answer across every team.** They belong to none of the customers' teams, so the
+team scopes cannot reach those cases. Two system scopes do — `support:all:read` and `support:all:manage` —
+along with `GetCasesAcrossTeamsAsync()` for the queue to enumerate. They deliberately stop at the
+unassigned queue, which has its own pair.
+
+**Who reads other people's conversations is yours to decide.** `support:read` and `support:manage` are
+granted to every team Owner and Administrator by default. Where a support conversation is personal rather
+than a team function, set `o.TeamScopeAccessLevel = null` and they are granted by no access level at all —
+still registered and still enforced, but held only through a role you register or an explicit override.
+
 Full documentation: [Support cases](https://github.com/Tharga/Team/blob/master/docs/articles/support-cases.md).
 
 ## What this package will grow into

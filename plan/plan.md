@@ -4,8 +4,8 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1 through 9 done — both issues are implemented and the version line is moved. What
-remains is step 10 (documentation) and step 11 (push).
+In progress. Steps 1 through 10 done. What remains is step 11 — push the branch for testing. Do **not**
+open the PR until the user confirms it works.
 
 ## Steps
 
@@ -171,13 +171,13 @@ remains is step 10 (documentation) and step 11 (push).
       milliseconds. If local reports zero, check `dotnet --version` — SDK 10.0.301 does this to every
       Toolkit repo.
 
-- [~] **10. Documentation** — the scope-name grammar landed early in step 2b; what remains is
+- [x] **10. Documentation** — the scope-name grammar landed early in step 2b; what remains is
       `docs/articles/support-cases.md` and `Tharga.Team.Support/README.md`: the new
       scope pair, the option, and a note that `support:read` no longer authorizes replying. Decide whether
       the scope model deserves a section of its own rather than edits to existing ones. Root `README.md`
       only if it mentions support scopes. Land as a `docs:` commit.
 
-- [ ] **11. Push and hand over for testing** — push the branch, do **not** open the PR yet, and ask for
+- [~] **11. Push and hand over for testing** — push the branch, do **not** open the PR yet, and ask for
       confirmation before closing out.
 
 ## Close-out (only once the user says it is done)
@@ -216,9 +216,14 @@ the two team-wide reads. Full solution suite 2812 passed, 0 failed.
 Step 5 landed the cross-team listing through the whole stack; step 6 landed the registration option.
 **Both issues are now implemented** — full solution suite 2828 passed, 0 failed.
 
-Step 7 confirmed the decorator guard already covers the support pair. Step 8 moved the version line to
-3.22 and corrected the stale comment above it. Suite green throughout at 2829 passed, 0 failed; it is
-re-run after the documentation commit.
+Step 7 confirmed the decorator guard already covers the support pair; step 8 moved the version line to
+3.22; step 10 updated both documentation surfaces. Full suite 2829 passed, 0 failed after the docs commit.
+
+**The feature is code-complete.** Next is step 11: push the branch so it can be tested from origin, and
+**do not open the PR** — the close-out commit (issue comments, `Requests.md`, `plan/` removal) has to be
+the last commit on the branch, and that only starts once the user says the feature is done.
+
+**Still open:** whether a support audit entry records the basis the caller got in on.
 
 **Still open:** whether a support audit entry records the basis the caller got in on. It remains an
 additive change at the gate's exit points whenever it is wanted. Next: step 8 (version line), step 10
