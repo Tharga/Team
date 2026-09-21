@@ -1,0 +1,100 @@
+# Plan: Support case authorization
+
+Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, off `master` at `094ead0`.
+
+## Status
+
+In progress. Steps 1 and 2 done; step 3 (registering the new scopes) is next.
+
+## Steps
+
+- [x] **1. NuGet update pass** — `dotnet outdated Tharga.Team.sln` run 2026-09-21 before branching and
+      reported *"No outdated dependencies were detected"*. No `chore(deps)` commit is needed. Re-run at
+      close-out per the workflow.
+
+- [x] **2. Scope constants** — add `support:all:read` and `support:all:manage` to `SystemSupportScopes`
+      (`Tharga.Team/SystemSupportScopes.cs`), and correct the class summary, which currently says these
+      scopes are for cases belonging to no team. XML docs say why the pair is separate from
+      `support:unassigned:*` rather than a widening of it.
+      *Tests:* none — constants only. `Tharga.Team.Support.Tests` re-run as a regression check: 363
+      passed, 0 failed.
+      **Done 2026-09-21.** Named `AllRead` / `AllManage`, matching the names #291 proposed, so the reporter
+      finds what they asked for. Nothing enumerates the system-scope set, so no existing test moved. Two
+      things recorded in the XML docs rather than left implicit: `AllManage` satisfies a read, exactly as
+      `support:manage` does on a team; and it does **not** grant assignment, which stays on
+      `SystemSupportScopes.Manage` because assigning decides which tenant an unassigned case joins.
+
+- [~] **3. Register them** — in `SupportRegistration.AddThargaSupportCases`, beside the existing
+      `AddThargaSystemScopes` block, with descriptions in the voice of the two already there.
+      *Tests:* extend the registration tests to assert both are in `ISystemScopeRegistry`.
+
+- [ ] **4. Split the gate into read and write** — give `RequireCaseAccessAsync` an explicit verb kind
+      rather than inferring it from the `systemScope` argument, then order the checks as
+      `feature.md` → Design → The gate describes. This step carries both #291's cross-team branch and
+      the unfiled read/write defect, because they are the same six lines.
+      *Tests:* `SupportCaseAuthorizationTests` — criteria 1, 2, 4, 5 and 8. The `support:read`-cannot-write
+      case is the regression guard for the unfiled defect.
+
+- [ ] **5. Cross-team listing** — `ISupportCaseService.GetAllCasesAsync(cursor, pageSize)` gated on
+      `support:all:read`, mirroring `GetUnassignedCasesAsync`, with a matching
+      `ISupportCaseStore.GetAllCasesAsync` as a **default member returning an empty page** so a store
+      written before this feature keeps compiling (criterion 9). Implement in `MongoSupportCaseStore` and
+      `InMemorySupportCaseStore`.
+      *Tests:* criteria 3 and 9; a `SupportContractShapeTests` entry for the new members.
+
+- [ ] **6. The registration option** — `SupportCaseOptions.TeamScopeAccessLevel` (`AccessLevel?`, default
+      `AccessLevel.Administrator`), honoured in `SupportRegistration`'s `AddThargaScopes` block by choosing
+      `Register` or `RegisterGrantOnly`. XML docs state that the default is unchanged behaviour and that
+      `null` means "grantable through a role or an override only".
+      *Tests:* criteria 6 and 7, driven through the real registration rather than the registry directly, so
+      the option is proved to reach it.
+
+- [ ] **7. Decorator default-member guard** — check whether `DecoratorDefaultMemberTests` (the #272 guard)
+      covers the support decorators. If it does, extend it to the new members; if it does not, say so in
+      the PR rather than widening scope here.
+
+- [ ] **8. Version line** — `MAJOR_MINOR: '3.21'` → `'3.22'` in `.github/workflows/build.yml`, in the same
+      commit as the read/write split or later, never in a PR of its own (a merge to `master` queues a gated
+      release).
+
+- [ ] **9. Full suite** — `dotnet build -c Release` then `dotnet test -c Release` from the repo root. Read
+      the **test count**, not the exit colour: a zero-test run reports success in a couple of hundred
+      milliseconds. If local reports zero, check `dotnet --version` — SDK 10.0.301 does this to every
+      Toolkit repo.
+
+- [ ] **10. Documentation** — `docs/articles/support-cases.md` and `Tharga.Team.Support/README.md`: the new
+      scope pair, the option, and a note that `support:read` no longer authorizes replying. Decide whether
+      the scope model deserves a section of its own rather than edits to existing ones. Root `README.md`
+      only if it mentions support scopes. Land as a `docs:` commit.
+
+- [ ] **11. Push and hand over for testing** — push the branch, do **not** open the PR yet, and ask for
+      confirmation before closing out.
+
+## Close-out (only once the user says it is done)
+
+- [ ] Re-run `dotnet outdated` across the solution and apply everything, majors included.
+- [ ] Comment on #291 and #295 with what shipped and what the reporter can now delete, then close both.
+- [ ] File the PlutusWave general scope-override request's outcome: leave the `Requests.md` row open, and
+      add a line noting that #295 was solved with a module option so the general gap is still real.
+- [ ] Decide whether the unfiled read/write defect needs a retrospective issue for the record, or whether
+      the PR description carries it.
+- [ ] Archive `plan/feature.md` to `$DOC_ROOT/Tharga/plans/Toolkit/Platform/done/support-case-authorization.md`.
+- [ ] `git rm -r plan`, commit `fix: support-case-authorization complete`, push, open the PR.
+
+## Decisions
+
+- **2026-09-21 — #295 solved with a module option, not a general registry override.** `AddThargaScopes`
+  mutates the registry eagerly in call order, so a host-side `ScopeRegistry.Replace` would only work when
+  called after the module registers. The general capability stays open as the PlutusWave request.
+- **2026-09-21 — the unfiled read/write defect ships in this feature.** It lives in the same six lines
+  #291 rewrites, so splitting it would mean editing the one authorization gate twice.
+- **2026-09-21 — `MAJOR_MINOR` moves to 3.22** because of that defect fix alone; the other two parts are
+  additive and would not have justified it.
+
+## Last session
+
+2026-09-21 — branch created and the plan written from the two issues plus a verification pass over
+`AuthorizationSupportCaseServiceDecorator`, `SupportRegistration`, `ScopeRegistry` and `ISupportCaseStore`.
+Step 2 landed: `SystemSupportScopes.AllRead` / `AllManage`, and the class summary corrected — it claimed
+the whole class was about cases belonging to no team, which half of it no longer is. Next: step 3,
+registering the pair in `SupportRegistration`.
