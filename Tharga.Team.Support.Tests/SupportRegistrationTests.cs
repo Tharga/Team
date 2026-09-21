@@ -360,3 +360,81 @@ public class AuditSeamCouplingTests
         sink.DidNotReceive().Log(Arg.Any<AuditEntry>());
     }
 }
+
+/// <summary>
+/// What the support module puts in the two scope catalogues, and the shape of the names it puts there.
+/// </summary>
+/// <remarks>
+/// A scope nobody registered is grantable by nothing: it does not appear in the catalogue, the role editor
+/// will not offer it, and <c>UnregisteredRoleScopeCheck</c> warns on a role that names it. So registering
+/// the constant is a separate act from declaring it, and both need asserting.
+/// </remarks>
+public class SupportScopeCatalogueTests
+{
+    private static ISystemScopeRegistry SystemScopes()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(Substitute.For<ISupportCaseStore>());
+        services.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
+        services.AddSingleton<TeamAuthorizer>();
+        services.Configure<AuditOptions>(_ => { });
+        services.AddSingleton<CompositeAuditLogger>();
+        services.AddSingleton(Substitute.For<IAuditEntryFactory>());
+        services.AddThargaSupportCases();
+
+        return services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>();
+    }
+
+    [Theory]
+    [InlineData(SystemSupportScopes.Read)]
+    [InlineData(SystemSupportScopes.Manage)]
+    [InlineData(SystemSupportScopes.AllRead)]
+    [InlineData(SystemSupportScopes.AllManage)]
+    public void EverySystemSupportScope_IsRegistered_WithADescription(string scope)
+    {
+        var definition = SystemScopes().All.SingleOrDefault(x => x.Name == scope);
+
+        Assert.NotNull(definition);
+        Assert.False(string.IsNullOrWhiteSpace(definition.Description));
+    }
+
+    /// <summary>
+    /// The cross-team pair is <b>additional to</b> the unassigned pair, not a replacement for it. Reaching
+    /// every team and reaching the cases no team owns are different grants, and a refactor that collapsed
+    /// them would silently widen whoever holds one.
+    /// </summary>
+    [Fact]
+    public void TheUnassignedPair_SurvivesTheCrossTeamPair()
+    {
+        var names = SystemScopes().All.Select(x => x.Name).ToList();
+
+        Assert.Equal(4, names.Count(x => x.StartsWith("support:", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// The naming guard for the grammar documented on <see cref="ScopeDefinition"/>: feature, then reach,
+    /// then action, with reach in the middle.
+    /// </summary>
+    /// <remarks>
+    /// <b>This is what stops a rename hiding half of support from the audit log.</b> The feature is
+    /// everything before the <i>first</i> colon, so <c>support:all:read</c> files under <c>support</c> with
+    /// every other support entry, while a front-loaded <c>support-all:read</c> would file under a second
+    /// feature — a second button on the audit filter bar, a second bar on its charts, and a key that no
+    /// longer matches a <c>support:*</c> notification route.
+    /// </remarks>
+    [Theory]
+    [InlineData(SupportScopes.Read, "support", "read")]
+    [InlineData(SupportScopes.Manage, "support", "manage")]
+    [InlineData(SystemSupportScopes.Read, "support", "unassigned:read")]
+    [InlineData(SystemSupportScopes.Manage, "support", "unassigned:manage")]
+    [InlineData(SystemSupportScopes.AllRead, "support", "all:read")]
+    [InlineData(SystemSupportScopes.AllManage, "support", "all:manage")]
+    public void EverySupportScope_AuditsUnderTheSupportFeature(string scope, string expectedFeature, string expectedAction)
+    {
+        var (feature, action) = AuditEntry.ParseScope(scope);
+
+        Assert.Equal(expectedFeature, feature);
+        Assert.Equal(expectedAction, action);
+    }
+}

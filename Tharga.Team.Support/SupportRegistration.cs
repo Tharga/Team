@@ -173,15 +173,19 @@ public static class SupportRegistration
                 "Reply to and close any support case in the team.");
         });
 
-        // The unassigned queue. Registered here rather than in the Blazor platform because these scopes only
-        // mean anything where support cases exist, and a catalogue entry for a capability the host has not
-        // registered is an offer it cannot honour.
+        // The unassigned queue, and answering across every team. Registered here rather than in the Blazor
+        // platform because these scopes only mean anything where support cases exist, and a catalogue entry
+        // for a capability the host has not registered is an offer it cannot honour.
         services.AddThargaSystemScopes(scopes =>
         {
             scopes.Register(SystemSupportScopes.Read,
                 "Read and list support cases that belong to no team -- inbound mail from a sender whose team could not be determined. A team scope cannot govern these, because there is no team to hold it against.");
             scopes.Register(SystemSupportScopes.Manage,
                 "Reply to, close, reopen and assign a support case that belongs to no team. Assigning decides which tenant the case and its whole transcript become part of.");
+            scopes.Register(SystemSupportScopes.AllRead,
+                "Read and list support cases in any team, without belonging to it -- for the people who run support, who are members of none of the customers' teams. This reaches every conversation every customer has had.");
+            scopes.Register(SystemSupportScopes.AllManage,
+                "Reply to, close, reopen and hand over a support case in any team, without belonging to it. Satisfies a read as well. Does not grant assignment, which decides which tenant an unassigned case joins and stays with the unassigned queue.");
         });
 
         // The assistant, and only when the host has given it something to talk to. An IChatClient is the

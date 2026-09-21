@@ -4,7 +4,8 @@ Feature scope: `plan/feature.md`. Branch `feature/support-case-authorization`, o
 
 ## Status
 
-In progress. Steps 1, 2 and 2b done; step 3 (registering the new scopes) is next.
+In progress. Steps 1, 2, 2b and 3 done; step 4 (the authorization gate) is next and has one decision
+open — see below.
 
 ## Steps
 
@@ -44,14 +45,33 @@ In progress. Steps 1, 2 and 2b done; step 3 (registering the new scopes) is next
       *Tests:* none — documentation only. `Tharga.Team.Service.Tests` re-run as the check on the claims
       made about `ParseScope`: 965 passed, 0 failed.
 
-- [~] **3. Register them** — in `SupportRegistration.AddThargaSupportCases`, beside the existing
+- [x] **3. Register them** — in `SupportRegistration.AddThargaSupportCases`, beside the existing
       `AddThargaSystemScopes` block, with descriptions in the voice of the two already there.
-      *Tests:* extend the registration tests to assert both are in `ISystemScopeRegistry`.
+      *Tests:* new `SupportScopeCatalogueTests` in `SupportRegistrationTests.cs` — 374 passed, 0 failed
+      (11 new).
+      **Done 2026-09-21.** Three guards rather than one. Every system support scope is registered *and*
+      carries a description, because an undescribed scope reaches the role editor as a bare string.
+      Exactly four `support:`-prefixed system scopes exist, so a refactor that collapsed the cross-team
+      pair into the unassigned one — silently widening whoever holds either — fails here. And every
+      support scope, team and system, parses to feature `support`: that is the regression guard for the
+      naming discussion, and it is what would fail if someone rewrote `support:all:read` as
+      `support-all:read` and quietly split support across two features in the audit log.
+      The comment above the system-scope block said "The unassigned queue", which was no longer the whole
+      truth; widened without losing its reasoning about why these are registered here.
 
-- [ ] **4. Split the gate into read and write** — give `RequireCaseAccessAsync` an explicit verb kind
+- [~] **4. Split the gate into read and write** — give `RequireCaseAccessAsync` an explicit verb kind
       rather than inferring it from the `systemScope` argument, then order the checks as
       `feature.md` → Design → The gate describes. This step carries both #291's cross-team branch and
       the unfiled read/write defect, because they are the same six lines.
+      **Decide first — carried from 2026-09-21:** whether a support audit entry records the *basis* the
+      caller got in on (author / team scope / cross-team system scope). After #291 ships, a staff
+      cross-team read and a team administrator's read are indistinguishable in the log —
+      `AuditingSupportCaseServiceDecorator` hard-codes feature `support` and `IAuditEntryFactory.Create`
+      takes no scope, so `ScopeChecked` is null on every support row and the log view renders them italic
+      "not scope checked". Recommended: record the basis as a small enum rather than plumbing a scope
+      string, since the check accepts several scopes and "which one matched" is less useful than "on what
+      footing". The wrinkle needing a decision is that auditing wraps authorization, so the outer decorator
+      does not learn what the inner one matched — closing that needs a scoped seam between the two.
       *Tests:* `SupportCaseAuthorizationTests` — criteria 1, 2, 4, 5 and 8. The `support:read`-cannot-write
       case is the regression guard for the unfiled defect.
 
@@ -120,8 +140,6 @@ Step 2 landed: `SystemSupportScopes.AllRead` / `AllManage`, and the class summar
 the whole class was about cases belonging to no team, which half of it no longer is. Step 2b then
 documented the scope-name grammar after a discussion of the three-segment shape.
 
-**Open question carried into step 4:** support audit entries record no `ScopeChecked` —
-`AuditingSupportCaseServiceDecorator` hard-codes feature `support` and `IAuditEntryFactory.Create` takes
-no scope — so after #291 ships, a staff cross-team read and a team administrator's read are
-indistinguishable in the log. Raised with the user 2026-09-21; not yet decided whether it joins this
-feature. Next: step 3, registering the pair in `SupportRegistration`.
+Step 3 landed: both scopes registered with descriptions, and three catalogue guards including the naming
+one. Next: step 4, the authorization gate — the substantial step, and the one carrying the open audit
+decision recorded against it above.
