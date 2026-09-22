@@ -28,7 +28,7 @@ so there is no leading `chore(deps)` commit.
       (`?d={style}&f=y`, `blank` labelled). Hide the controls from a caller without the scope.
 - [x] 8. Add the component to the migrated table in `TextCoverageTests`; confirm it renders no literal text.
 - [x] 9. Replace the sample page body with `<IconSettingsView />`, and drop its hardcoded `_styles`.
-- [ ] 10. Docs: `README.md` icons section and `docs/articles/icons.md` — the component, the gating scope, that
+- [x] 10. Docs: `README.md` icons section and `docs/articles/icons.md` — the component, the gating scope, that
       a stored setting outranks startup configuration, and the `f=y` reason so the next person does not
       rediscover it. Own `docs:` commit.
 - [ ] 11. Manual verification in the sample: preview changes with the selection, a non-`users:manage` caller
