@@ -1,15 +1,16 @@
 @using Microsoft.Extensions.Options
 @using Tharga.Team
 @inject ITeamManagementService TeamManagementService
-@inject ITeamAccessRequestService AccessRequestService
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 @inject IOptions<ThargaBlazorOptions> BlazorOptions
 @inject IThargaTextProvider TextProvider
 
-@* Access requests for one team, in the team's detail: what a manager can decide, and what a non-member can ask for.
-   Renders nothing when neither applies and consent is standing. *@
-@if (_temporaryNotice != null || _pending.Count > 0 || CanRequest)
+@* Access requests for one team, in the team's detail: what a manager has to decide, and how long a temporary consent
+   has left. Renders nothing when there is neither. Asking for access and withdrawing that request are team actions,
+   so they live in TeamComponent's action button beside Invite user rather than here — a requester's own control
+   belongs where every other thing they can do to a team already is. *@
+@if (_temporaryNotice != null || _pending.Count > 0 || MyPendingRequest != null)
 {
     <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" class="rz-mb-2">
         @if (_temporaryNotice != null)
@@ -42,25 +43,11 @@
             }
         }
 
-        @if (CanRequest)
+        @if (MyPendingRequest != null)
         {
-            @if (MyPendingRequest != null)
-            {
-                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
-                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
-                        @_text.Format(TeamAccessRequestText.YourPendingRequest, MyPendingRequest.AccessLevel, TeamAccessRequestGate.DurationPhrase(MyPendingRequest.Duration, _text))
-                    </RadzenText>
-                    <RadzenButton Text="@_text[TeamAccessRequestText.Withdraw]" Icon="undo" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                  Disabled="@_busy" Click="@WithdrawAsync" />
-                </RadzenStack>
-            }
-            else
-            {
-                <div>
-                    <RadzenButton Text="@_text[TeamAccessRequestText.RequestAccess]" Icon="key" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
-                                  Click="@RequestAsync" />
-                </div>
-            }
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
+                @_text.Format(TeamAccessRequestText.YourPendingRequest, MyPendingRequest.AccessLevel, TeamAccessRequestGate.DurationPhrase(MyPendingRequest.Duration, _text))
+            </RadzenText>
         }
     </RadzenStack>
 }
@@ -72,10 +59,8 @@
     /// <summary>Whether the caller can decide requests here — see <c>TeamAccessRequestGate.CanDecide</c>.</summary>
     [Parameter] public bool CanDecide { get; set; }
 
-    /// <summary>Whether the caller may ask for access here — see <c>TeamAccessRequestGate.CanRequest</c>.</summary>
-    [Parameter] public bool CanRequest { get; set; }
-
-    /// <summary>The caller's own pending request on this team, if any.</summary>
+    /// <summary>The caller's own pending request on this team, if any — shown so they can see what they asked for.</summary>
+    /// <remarks>Withdrawing it is a team action on <c>TeamComponent</c>, not a button here.</remarks>
     [Parameter] public TeamAccessRequest MyPendingRequest { get; set; }
 
     /// <summary>Raised after anything here changed the team, so the host reloads it.</summary>
@@ -100,18 +85,6 @@
             : [];
     }
 
-    private async Task RequestAsync()
-    {
-        var sent = await DialogService.OpenAsync<TeamAccessRequestDialog>(_text[TeamAccessRequestText.RequestAccess],
-            new Dictionary<string, object> { [nameof(TeamAccessRequestDialog.TeamKey)] = Team.Key },
-            new DialogOptions { Width = "520px" });
-
-        if (sent is not true) return;
-
-        NotificationService.Notify(NotificationSeverity.Success, _text[TeamAccessRequestText.Sent]);
-        await Changed.InvokeAsync();
-    }
-
     private async Task ApproveAsync(TeamAccessRequest request)
     {
         var warning = TeamAccessRequestGate.ApprovalWarning(BlazorOptions.Value.Consent.Roles, request, Team.Name, _text);
@@ -125,9 +98,6 @@
 
     private Task DenyAsync(TeamAccessRequest request)
         => RunAsync(() => TeamManagementService.DenyTeamAccessRequestAsync(Team.Key, request.Id), TeamAccessRequestText.Denied);
-
-    private Task WithdrawAsync()
-        => RunAsync(() => AccessRequestService.CancelTeamAccessRequestAsync(Team.Key, MyPendingRequest.Id), TeamAccessRequestText.Withdrawn);
 
     private async Task RunAsync(Func<Task> operation, TextKey done)
     {

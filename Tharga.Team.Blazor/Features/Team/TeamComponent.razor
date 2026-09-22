@@ -321,10 +321,12 @@ else
     }
 
     private TextSet _text = TextSet.Empty;
+    private TextSet _requestText = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(TeamComponentText.All);
+        _requestText = await TextProvider.ResolveAsync(TeamAccessRequestText.All);
 
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var claims = authState.User;
@@ -674,7 +676,6 @@ else
     @<text>
         <TeamAccessRequestPanel Team="@team"
                                 CanDecide="@TeamAccessRequestGate.CanDecide(_canManage, _selectedTeam?.Key, team.Key, IsMemberOf(team))"
-                                CanRequest="@TeamAccessRequestGate.CanRequest(IsMemberOf(team), _callerRoles, _consentRoles)"
                                 MyPendingRequest="@TeamAccessRequestGate.PendingOn(_myAccessRequests, team.Key)"
                                 Changed="@ReloadTeams" />
         <RadzenRow>
@@ -1076,6 +1077,8 @@ else
     private const string TransferAction = "transfer";
     private const string DeleteAction = "delete";
     private const string LeaveAction = "leave";
+    private const string RequestAccessAction = "request-access";
+    private const string WithdrawAccessAction = "withdraw-access";
 
     private string TeamIconUrl(ITeam<TMember> team)
         => string.IsNullOrEmpty(team.Icon) ? null : IconRoute.Url(team.Icon);
@@ -1182,6 +1185,13 @@ else
             actions.Add((RenameAction, _text[TeamComponentText.ActionRenameTeam], "edit"));
         }
         if (CanTransferOwnership(team)) actions.Add((TransferAction, _text[TeamComponentText.ActionTransferOwnership], "swap_horiz"));
+        if (TeamAccessRequestGate.CanRequest(IsMemberOf(team), _callerRoles, _consentRoles))
+        {
+            var mine = TeamAccessRequestGate.PendingOn(_myAccessRequests, team.Key);
+            actions.Add(mine == null
+                ? (RequestAccessAction, _requestText[TeamAccessRequestText.RequestAccess], "key")
+                : (WithdrawAccessAction, _requestText[TeamAccessRequestText.Withdraw], "undo"));
+        }
         if (CanLeaveTeam(team)) actions.Add((LeaveAction, _text[TeamComponentText.ActionLeaveTeam], "remove"));
         if (CanDeleteTeam(team)) actions.Add((DeleteAction, _text[TeamComponentText.ActionDeleteTeam], "delete"));
         return actions;
@@ -1200,6 +1210,37 @@ else
             case TransferAction: await TransferOwnership(team); break;
             case LeaveAction: await LeaveTeam(team); break;
             case DeleteAction: await DeleteTeam(team); break;
+            case RequestAccessAction: await RequestTeamAccessAsync(team); break;
+            case WithdrawAccessAction: await WithdrawTeamAccessAsync(team); break;
+        }
+    }
+
+    private async Task RequestTeamAccessAsync(ITeam<TMember> team)
+    {
+        var sent = await DialogService.OpenAsync<TeamAccessRequestDialog>(_requestText[TeamAccessRequestText.RequestAccess],
+            new Dictionary<string, object> { [nameof(TeamAccessRequestDialog.TeamKey)] = team.Key },
+            new DialogOptions { Width = "520px" });
+
+        if (sent is not true) return;
+
+        NotificationService.Notify(NotificationSeverity.Success, _requestText[TeamAccessRequestText.Sent]);
+        await ReloadTeams();
+    }
+
+    private async Task WithdrawTeamAccessAsync(ITeam<TMember> team)
+    {
+        var mine = TeamAccessRequestGate.PendingOn(_myAccessRequests, team.Key);
+        if (mine == null) return;
+
+        try
+        {
+            await AccessRequestService.CancelTeamAccessRequestAsync(team.Key, mine.Id);
+            NotificationService.Notify(NotificationSeverity.Success, _requestText[TeamAccessRequestText.Withdrawn]);
+            await ReloadTeams();
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _requestText[TeamAccessRequestText.Failed], e.Message);
         }
     }
 
