@@ -25,6 +25,41 @@ public class UserIconTests
         Assert.Contains("gravatar.com/avatar/55502f40dc8b7c769880b10874abc9d0", image.Url);
     }
 
+    /// <summary>The default style is one Gravatar actually understands.</summary>
+    /// <remarks>
+    /// The set used to live in prose, so a default outside it would have been found by an avatar rendering
+    /// wrong rather than by anything failing. This is the check that makes <see cref="GravatarStyles"/> worth
+    /// having beyond tidiness.
+    /// </remarks>
+    [Fact]
+    public void GravatarStyles_DefaultIsAKnownStyle()
+    {
+        Assert.True(GravatarStyles.IsKnown(GravatarStyles.Default));
+        Assert.Equal(GravatarStyles.All.Distinct(), GravatarStyles.All);
+    }
+
+    /// <summary>
+    /// A preview forces the default image, or it shows the caller's own photo for every style.
+    /// </summary>
+    [Fact]
+    public void GravatarPreview_ForcesTheDefaultImage_SoTheStyleIsWhatRenders()
+    {
+        var preview = GravatarIconSource.PreviewUrl("Test@Example.com", GravatarStyles.RoboHash);
+
+        Assert.Contains("d=robohash", preview);
+        Assert.Contains("f=y", preview);
+        Assert.DoesNotContain("f=y", GravatarIconSource.AvatarUrl("Test@Example.com", GravatarStyles.RoboHash));
+    }
+
+    /// <summary>A blank or missing style resolves to the default rather than producing <c>d=</c>.</summary>
+    [Fact]
+    public void GravatarUrl_BlankStyle_FallsBackToTheDefault()
+    {
+        Assert.Contains($"d={GravatarStyles.Default}", GravatarIconSource.AvatarUrl("a@b.c", null));
+        Assert.Contains($"d={GravatarStyles.Default}", GravatarIconSource.AvatarUrl("a@b.c", "  "));
+        Assert.Null(GravatarIconSource.AvatarUrl(null, GravatarStyles.Retro));
+    }
+
     [Fact]
     public async Task Gravatar_Team_ReturnsNull()
     {

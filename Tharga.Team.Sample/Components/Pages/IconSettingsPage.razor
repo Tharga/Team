@@ -2,49 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Authorization
-@using Tharga.Team
-@inject IconSettings IconSettings
 
 <PageTitle>Icon settings</PageTitle>
 
-@*
-    Demo page: the platform registers IconSettings as a singleton, so binding directly to it changes icon
-    behavior live. Navigate to /account, /team or /users after changing a value to see the effect (avatars
-    re-resolve on render).
-*@
-<RadzenCard>
-    <RadzenStack Gap="1rem">
-        <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">Icon display settings (live)</RadzenText>
-
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-            <RadzenSwitch @bind-Value="IconSettings.GravatarEnabled" Name="grav" />
-            <RadzenLabel Text="Gravatar enabled (fallback for users without an uploaded icon)" Component="grav" />
-        </RadzenStack>
-
-        <RadzenStack Gap="0.25rem">
-            <RadzenLabel Text="Gravatar style" />
-            <RadzenDropDown @bind-Value="IconSettings.GravatarStyle" Data="_styles" Style="width:220px;" Disabled="@(!IconSettings.GravatarEnabled)" />
-        </RadzenStack>
-
-        <RadzenStack Gap="0.25rem">
-            <RadzenLabel Text="Default user icon URL (used when Gravatar is off or produced nothing; blank = initials)" />
-            <RadzenTextBox @bind-Value="IconSettings.DefaultUserIconUrl" Style="width:100%;" Placeholder="https://…/default-avatar.png" />
-        </RadzenStack>
-
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-            <RadzenSwitch @bind-Value="IconSettings.AllowUserUpload" Name="userup" />
-            <RadzenLabel Text="Allow users to upload their own icon (profile “Change picture”)" Component="userup" />
-        </RadzenStack>
-
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-            <RadzenSwitch @bind-Value="IconSettings.AllowAdminUpload" Name="adminup" />
-            <RadzenLabel Text="Allow admins to upload icons for users (Users list → Set icon)" Component="adminup" />
-        </RadzenStack>
-
-        <RadzenText TextStyle="TextStyle.Caption">Changes take effect immediately. Re-open or navigate to a page with avatars to see them re-resolve.</RadzenText>
-    </RadzenStack>
-</RadzenCard>
-
-@code {
-    private readonly string[] _styles = ["identicon", "monsterid", "wavatar", "retro", "robohash", "mp", "blank"];
-}
+<IconSettingsView />

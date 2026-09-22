@@ -100,4 +100,19 @@ public static class AuditMetadataKeys
 
     /// <summary>Number of users processed by a bulk verification.</summary>
     public const string VerifiedCount = "verify.count";
+
+    /// <summary>Whether the Gravatar fallback is on, as stored by a site icon-settings change.</summary>
+    public const string IconGravatarEnabled = "iconsettings.gravatar.enabled";
+
+    /// <summary>The Gravatar style stored by a site icon-settings change.</summary>
+    public const string IconGravatarStyle = "iconsettings.gravatar.style";
+
+    /// <summary>The default user icon URL stored by a site icon-settings change.</summary>
+    public const string IconDefaultUserIconUrl = "iconsettings.defaultusericonurl";
+
+    /// <summary>Whether users may upload their own icon, as stored by a site icon-settings change.</summary>
+    public const string IconAllowUserUpload = "iconsettings.allowuserupload";
+
+    /// <summary>Whether administrators may upload icons for users, as stored by a site icon-settings change.</summary>
+    public const string IconAllowAdminUpload = "iconsettings.allowadminupload";
 }

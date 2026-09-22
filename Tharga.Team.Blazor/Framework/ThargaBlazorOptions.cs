@@ -302,6 +302,18 @@ public record ThargaBlazorOptions : BlazorOptions
     public ClaimRevalidationOptions ClaimRevalidation { get; set; } = new();
 
     /// <summary>
+    /// How often a stored change to the site's <see cref="IconSettings"/> is picked up by an instance that did
+    /// not make it. Default 15 minutes; <see cref="TimeSpan.Zero"/> or less loads once at startup and never
+    /// re-reads.
+    /// </summary>
+    /// <remarks>
+    /// Long on purpose. The instance handling a change applies it at once, so this interval only bounds how
+    /// long <i>other</i> instances can disagree — and avatar presentation is not worth a tighter poll. Shorten
+    /// it for a demo, as the sample does for claim revalidation.
+    /// </remarks>
+    public TimeSpan IconSettingsRefreshInterval { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
     /// Lets a team administrator view the application as a less privileged user. Off by default.
     /// </summary>
     public Features.Simulation.AccessSimulationOptions Simulation { get; set; } = new();

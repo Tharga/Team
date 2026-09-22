@@ -46,12 +46,55 @@ Registered as a singleton, so a host can change these at runtime (the sample has
 | Property | Default | Meaning |
 |---|---|---|
 | `GravatarEnabled` | true | Use Gravatar as a fallback for users without an uploaded icon. |
-| `GravatarStyle` | `identicon` | Gravatar default-image style (`identicon`, `monsterid`, `retro`, `robohash`, `mp`, …). |
+| `GravatarStyle` | `identicon` | Gravatar default-image style. The set is `GravatarStyles.All` — bind to that rather than retyping it. |
 | `DefaultUserIconUrl` | null | A generic default image for users (after/instead of Gravatar). |
 | `AllowUserUpload` | true | Whether users can upload their own icon. |
 | `AllowAdminUpload` | true | Whether admins (`users:manage`) can upload an icon for a user. |
 
 Configure initial values via `o.IconSettings`.
+
+### Changing them from the application — `<IconSettingsView />`
+
+Drop the component on a page and a holder of the **system `users:manage`** grant can change all of the above,
+with a live preview of what each Gravatar style produces:
+
+```razor
+@attribute [Authorize]
+
+<IconSettingsView />
+```
+
+- **The check is in `IIconSettingsService`, not the component.** A caller without the grant is refused by the
+  service whatever the page renders; hiding the form is courtesy. `users:manage` rather than a scope of its
+  own because it already authorizes setting a user's icon on their behalf, and a new scope is warranted when
+  an operation is irreversible or crosses a tenant boundary — this is reversible presentation config.
+- **Changes are audited** under the `iconsettings` feature, recording the values stored rather than merely
+  that a save happened.
+- **An unknown style is refused.** The value goes into a URL Gravatar interprets, so a typo would not fail
+  anywhere — it would quietly serve the wrong default image to everybody.
+
+**The preview forces Gravatar's default image (`f=y`).** Without that, an email that *has* a Gravatar returns
+the account photo whatever style is asked for, so every tile renders identically and the picker reads as
+broken. `blank` renders nothing by design and is labelled, so the empty tile is not mistaken for a failed
+load. `GravatarIconSource.PreviewUrl(email, style)` builds it if you want your own picker.
+
+### Settings are site-level, and they persist
+
+One record for the whole application — `IconSettings` is a singleton and an icon subject carries no team, so
+there is nothing per-tenant to key on.
+
+Saving writes through `IIconSettingsStore` (default `MongoIconSettingsStore`, replaceable like `IIconStore`)
+and applies the values to this instance immediately.
+
+**A host that has never saved anything is unaffected**: nothing is stored, so what `o.IconSettings` configured
+at startup stays in force. Once something *has* been saved, the stored value wins at the next start. That is
+the point of persisting it, and the one behaviour worth knowing before you first press Save.
+
+**On several instances**, the one that handled the save is correct at once; the others re-read on
+`o.Blazor.IconSettingsRefreshInterval` (default **15 minutes**, `TimeSpan.Zero` to load once and never
+re-read). The interval is long deliberately — it bounds only how long *other* instances can disagree about
+avatar presentation, which is not worth a tighter poll. A store outage leaves the last known good values in
+place rather than resetting them.
 
 ## Team icons
 

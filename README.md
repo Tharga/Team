@@ -151,6 +151,20 @@ Teams and users get real icons/avatars via two pluggable seams — **storage** (
 builder.Services.AddThargaImageProcessing();   // optional: auto-square + downscale via SkiaSharp
 ```
 
+Those settings are also changeable from inside the application. Drop `<IconSettingsView />` on a page and a
+holder of the **system `users:manage`** grant gets the switches, the style picker with a **live preview of
+every Gravatar style**, and the default-image URL:
+
+```razor
+<IconSettingsView />
+```
+
+Settings are **site-level and persisted** (`IIconSettingsStore`, default MongoDB, replaceable), so they
+survive a restart; the check lives in `IIconSettingsService` rather than the component, and every change is
+audited with the values stored. A host that never saves keeps exactly what it configured at startup. The
+instance handling a save applies it at once, and others re-read on `o.Blazor.IconSettingsRefreshInterval`
+(default 15 minutes).
+
 See [Team & user icons](docs/articles/icons.md).
 
 ## Live claim revalidation
