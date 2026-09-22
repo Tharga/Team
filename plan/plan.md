@@ -3,18 +3,20 @@
 Spec: `plan/feature.md`. Branched from `origin/master` at `d9fda2f`; `dotnet outdated` clean at branch time,
 so there is no leading `chore(deps)` commit.
 
-- [x] 1. **Multi-instance settled 2026-09-22 (user): cached with a ~60s expiry**, because consuming sites run
-      several instances and clearing on save reaches only the saving process. Reasoning and the rejected
-      alternatives are in `feature.md`. The saving instance still clears its own copy at once.
+- [x] 1. **Multi-instance settled 2026-09-22 (user): direct clear on save, plus a 15-minute expiry.** The
+      clear makes it instant for whoever made the change and instant everywhere on a single-instance host; the
+      expiry is only for instances that did not handle the save, which is why it is long rather than seconds.
+      Configurable, defaulting to 15 minutes. Reasoning and the rejected alternatives are in `feature.md`.
 - [ ] 2. `GravatarStyles.All` in `Tharga.Team`, with the styles and their display names. Point
       `IconSettings.GravatarStyle`'s XML docs at it instead of listing them, and add a test that the default
       (`identicon`) is a member — a default outside the set is the failure this constant exists to prevent.
 - [ ] 3. `IIconSettingsStore` in `Tharga.Team` + `MongoIconSettingsStore` in `Tharga.Team.MongoDB`, mirroring
       `IIconStore` / `MongoIconStore` including the host-replacement path. One site-level document; enums and
       booleans round-trip. Tests on the store shape, and on the representation per the persistence rule.
-- [ ] 3b. The ~60s expiry in front of the store, with the saving instance clearing its own copy immediately.
-      Tests with a controlled clock: a value is served from cache inside the window, re-read after it, and a
-      save is visible on the saving instance without waiting.
+- [ ] 3b. The cache in front of the store: cleared outright on save, and otherwise expiring after
+      `IconSettingsOptions.RefreshInterval` (default 15 minutes). Tests with a controlled clock: served from
+      cache inside the window, re-read after it, and — the one that matters — a save is visible immediately on
+      the saving instance without waiting for any interval.
 - [ ] 4. Load stored settings into the `IconSettings` singleton at startup, after the host's
       `o.IconSettings` configuration so a stored value wins. Test: nothing stored leaves startup
       configuration untouched; something stored overrides it.

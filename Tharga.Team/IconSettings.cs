@@ -12,10 +12,9 @@ public class IconSettings
 
     /// <summary>
     /// Gravatar default-image style used when the email has no Gravatar account — one of
-    /// <c>identicon</c>, <c>monsterid</c>, <c>wavatar</c>, <c>retro</c>, <c>robohash</c>, <c>mp</c>
-    /// (mystery-person), <c>blank</c>. Default <c>identicon</c>.
+    /// <see cref="GravatarStyles.All"/>. Null or blank resolves to <see cref="GravatarStyles.Default"/>.
     /// </summary>
-    public string GravatarStyle { get; set; } = "identicon";
+    public string GravatarStyle { get; set; } = GravatarStyles.Default;
 
     /// <summary>
     /// A generic default image URL shown for users with no uploaded icon (used after Gravatar, or instead

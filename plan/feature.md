@@ -61,8 +61,18 @@ neither the migrated nor the pending table.
 
 ## Multi-instance — settled 2026-09-22 (user)
 
-**The cached value expires (~60s) so every instance converges on its own.** Consuming sites run more than one
-instance.
+**Both halves: the saving instance clears its cache immediately, and the cached value expires after 15
+minutes so the others converge on their own.** Consuming sites run more than one instance.
+
+The direct clear is what makes it instant for the person who made the change, and instant everywhere on a
+single-instance host — which is most of the time. The expiry exists only for the instances that did not handle
+the save, which is why it can be long: 15 minutes, not seconds. **The cost is stated rather than discovered:**
+an instance that did not handle the save can render the old style for up to a quarter of an hour. For avatar
+presentation that changes rarely, that is an acceptable trade for one store read per instance per quarter
+hour; for anything security-bearing it would not be.
+
+The interval is configurable — `ClaimRevalidation.Interval` is the precedent, and the sample already sets that
+to 20 seconds so a demo does not wait. A host that wants faster convergence, or none, sets it.
 
 **Why not cache indefinitely and clear it on save**, which is the obvious and otherwise better design: clearing
 on change clears the cache *in the process that handled the save*. Nothing tells the others, so their cache
