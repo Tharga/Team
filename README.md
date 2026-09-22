@@ -220,6 +220,30 @@ To persist any of it, declare the properties on your entity (`DisabledAt`/`Disab
 `SuspendedAt`/`SuspendedBy` on the member) and implement the matching hook. Both are opt-in by shape, as
 `Icon` and `LastSeen` are. See [Suspending instead of deleting](docs/articles/user-management.md#suspending-instead-of-deleting).
 
+## Asking a team for access
+
+Consent lets a team grant a global role access to its data. From 3.23 the person who needs that access can
+**ask for it, for a stated length of time**, and the team's managers approve or deny:
+
+| | |
+|---|---|
+| **Who may ask** | Anyone holding a configured consent role who is **not** a member of the team. No new scope |
+| **What they ask for** | Viewer, User or Administrator — never Owner — for 1 hour, 8 hours, 1 day, 1 week, 30 days, or with no end |
+| **Who decides** | A member holding `team:manage`. Never the requester |
+| **What approval grants** | The team's **consent**, at that level, until the window closes — so every holder of the consent roles reaches the team, which the approval screen states plainly |
+| **On expiry** | The consent the team had before the approval, or none if it had none |
+
+The requester and manager UI sit inside `<TeamComponent>`. Add the optional `<TeamNotificationMenu />` to
+your top bar for a bell whose badge counts the requests waiting on this caller.
+
+**Expiry needs nothing to run.** Every consent read resolves through `TeamConsent.Resolve`, which returns
+the previous consent once the window has passed, so it takes effect on the next claim revalidation like any
+other access change.
+
+⚠️ **Changing consent now requires `team:manage` held as a member.** It previously accepted the scope
+however it arrived — including through consent — which with a time limit would have let a grant remove its
+own expiry. See [Team access requests](docs/articles/access-requests.md).
+
 ## Invitations
 
 An invitation link carries a short opaque token and nothing else:

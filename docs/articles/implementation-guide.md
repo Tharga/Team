@@ -2345,6 +2345,29 @@ The team admin picks the access level when consenting (Viewer/User/Administrator
 
 When `ShowToggle` is on, the picker is shown to every member of the team but is **disabled** for anyone below `AccessLevel.Administrator` — so an ordinary member can see what the team has consented to without being able to change it.
 
+**Changing consent requires `team:manage` held as a member (3.23).** Previously the scope was accepted
+however it arrived, including through consent itself — so a caller consented in at Administrator could
+change the consent that admitted them. With time-bounded consent that means extending their own window or
+removing its expiry, which is why it changed. A team API key naming its own team still counts as direct; a
+system key reaching the team through consent does not. If a host relied on a consented caller changing
+consent, have a member do it.
+
+**Consent can be time-bound, and is always read through one function:**
+
+```csharp
+ConsentInForce TeamConsent.Resolve(ITeam team, DateTime utcNow);
+```
+
+It returns the stored consent while unexpired and the **previous** consent afterwards. Expiry therefore
+needs no background job — it takes effect at the next claims issuance or revalidation, bounded by
+`ClaimRevalidation.Interval` like every other access change. An architecture test fails the build if
+anything reads `ConsentAccessLevel` or `ConsentedRoles` directly instead. A manager setting consent by hand
+clears any expiry, making the consent standing.
+
+Time-bound consent is what an approved **access request** grants — see
+[Team access requests](access-requests.md) for the request/approve flow, the `<TeamNotificationMenu />`
+bell, and the audit actions.
+
 ### Cross-team visibility for oversight roles
 
 Support and administration roles often need to see the whole estate. The `teams:read` system scope
@@ -2454,6 +2477,7 @@ the built-ins. This is only about the two the toolkit renders.
 | `<UserProfileView>` | `ShowAccessCard` (default true — renders `<AccessSimulationCard />` between the profile details and Claims) |
 | `<AccessSimulationBar>` | `Text` (overrides the resolved `team.simulation.bar.viewAs`, "View as…"), `ShowEntryPoint` (true), `ShowBanner` (true — **off means the profile card is the only way out**) |
 | `<AccessSimulationIndicator>` | none — renders only while a run-as simulation is active |
+| `<TeamNotificationMenu>` | none — optional top-bar bell; the badge counts [access requests](access-requests.md) awaiting the caller's decision |
 | `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button) |
 | `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton` |
 | `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton` |
