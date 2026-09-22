@@ -23,11 +23,11 @@ so there is no leading `chore(deps)` commit.
 - [x] 5. `IIconSettingsService` with `[RequireScope(SystemUserScopes.Manage)]` — read and save — registered by
       the library with `TryAdd`. Tests: a caller without the scope is refused at the service.
 - [x] 6. Audit the save with the actor and what changed, through the existing decorator pattern. Tests.
-- [ ] 7. `IconSettingsViewText` catalogue, then `<IconSettingsView />` in `Tharga.Team.Blazor`: the switches,
+- [x] 7. `IconSettingsViewText` catalogue, then `<IconSettingsView />` in `Tharga.Team.Blazor`: the switches,
       the style dropdown bound to `GravatarStyles.All`, the default-URL box, and the preview strip
       (`?d={style}&f=y`, `blank` labelled). Hide the controls from a caller without the scope.
-- [ ] 8. Add the component to the migrated table in `TextCoverageTests`; confirm it renders no literal text.
-- [ ] 9. Replace the sample page body with `<IconSettingsView />`, and drop its hardcoded `_styles`.
+- [x] 8. Add the component to the migrated table in `TextCoverageTests`; confirm it renders no literal text.
+- [x] 9. Replace the sample page body with `<IconSettingsView />`, and drop its hardcoded `_styles`.
 - [ ] 10. Docs: `README.md` icons section and `docs/articles/icons.md` — the component, the gating scope, that
       a stored setting outranks startup configuration, and the `f=y` reason so the next person does not
       rediscover it. Own `docs:` commit.

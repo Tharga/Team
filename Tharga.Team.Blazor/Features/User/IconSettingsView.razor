@@ -1,0 +1,168 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using Tharga.Team
+@using Tharga.Team.Blazor.Framework
+@inject IIconSettingsService IconSettingsService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NotificationService NotificationService
+@inject IThargaTextProvider TextProvider
+
+@* The site's icon behaviour, for a holder of the system users:manage grant. The service refuses a caller
+   without it whatever this renders -- hiding the form is courtesy, not the check. *@
+@if (!_loaded)
+{
+    <Loading />
+}
+else if (!_canManage)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" Variant="Variant.Flat" ShowIcon="true" AllowClose="false">
+        @_text[IconSettingsViewText.NotAllowed]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenCard>
+        <RadzenStack Gap="1rem">
+            <RadzenStack Gap="0.25rem">
+                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[IconSettingsViewText.Title]</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[IconSettingsViewText.Description]</RadzenText>
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenSwitch @bind-Value="_state.GravatarEnabled" Name="gravatarEnabled" />
+                <RadzenLabel Text="@_text[IconSettingsViewText.GravatarEnabled]" Component="gravatarEnabled" />
+            </RadzenStack>
+
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="@_text[IconSettingsViewText.GravatarStyle]" />
+                <RadzenDropDown @bind-Value="_state.GravatarStyle" Data="@GravatarStyles.All" Style="width: 220px;"
+                                Disabled="@(!_state.GravatarEnabled)" Change="@(_ => StateHasChanged())" />
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[IconSettingsViewText.GravatarStyleHelp]</RadzenText>
+            </RadzenStack>
+
+            @if (_state.GravatarEnabled && !string.IsNullOrWhiteSpace(_email))
+            {
+                <RadzenStack Gap="0.25rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Wrap="FlexWrap.Wrap">
+                        @foreach (var style in GravatarStyles.All)
+                        {
+                            var selected = style == _state.GravatarStyle;
+                            <RadzenStack Gap="0.25rem" AlignItems="AlignItems.Center" Style="width: 72px; cursor: pointer;"
+                                         class="@(selected ? "rz-border-primary rz-border-radius-2" : null)"
+                                         @onclick="@(() => _state.GravatarStyle = style)">
+                                @if (style == GravatarStyles.Blank)
+                                {
+                                    @* Renders nothing by design, so the empty tile gets a label rather than reading as a failed load. *@
+                                    <div style="width: 56px; height: 56px; border: 1px dashed var(--rz-border-color); border-radius: 4px;"></div>
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[IconSettingsViewText.BlankPreview]</RadzenText>
+                                }
+                                else
+                                {
+                                    <RadzenImage Path="@GravatarIconSource.PreviewUrl(_email, style)" Style="width: 56px; height: 56px; border-radius: 4px;" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@style</RadzenText>
+                                }
+                            </RadzenStack>
+                        }
+                    </RadzenStack>
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[IconSettingsViewText.PreviewHelp]</RadzenText>
+                </RadzenStack>
+            }
+
+            <RadzenStack Gap="0.25rem">
+                <RadzenLabel Text="@_text[IconSettingsViewText.DefaultUserIconUrl]" />
+                <RadzenTextBox @bind-Value="_state.DefaultUserIconUrl" Style="width: 100%;" />
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[IconSettingsViewText.DefaultUserIconUrlHelp]</RadzenText>
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenSwitch @bind-Value="_state.AllowUserUpload" Name="allowUserUpload" />
+                <RadzenLabel Text="@_text[IconSettingsViewText.AllowUserUpload]" Component="allowUserUpload" />
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenSwitch @bind-Value="_state.AllowAdminUpload" Name="allowAdminUpload" />
+                <RadzenLabel Text="@_text[IconSettingsViewText.AllowAdminUpload]" Component="allowAdminUpload" />
+            </RadzenStack>
+
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+                <RadzenButton Text="@_text[IconSettingsViewText.Save]" Icon="save" Disabled="@_busy" Click="@SaveAsync" />
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenCard>
+}
+
+@code {
+    /// <summary>Raised after the settings were saved, for a host that wants to react.</summary>
+    [Parameter] public EventCallback Saved { get; set; }
+
+    /// <summary>
+    /// The form's editable copy. <see cref="IconSettingsState"/> is init-only, as a contract should be, and
+    /// <c>@bind-Value</c> needs somewhere to write — so the mutability lives here rather than being conceded
+    /// by the type everything else passes around.
+    /// </summary>
+    private sealed class EditModel
+    {
+        public bool GravatarEnabled { get; set; } = true;
+        public string GravatarStyle { get; set; } = GravatarStyles.Default;
+        public string DefaultUserIconUrl { get; set; }
+        public bool AllowUserUpload { get; set; } = true;
+        public bool AllowAdminUpload { get; set; } = true;
+
+        public static EditModel From(IconSettingsState state) => new()
+        {
+            GravatarEnabled = state.GravatarEnabled,
+            GravatarStyle = state.GravatarStyle,
+            DefaultUserIconUrl = state.DefaultUserIconUrl,
+            AllowUserUpload = state.AllowUserUpload,
+            AllowAdminUpload = state.AllowAdminUpload
+        };
+
+        public IconSettingsState ToState() => new()
+        {
+            GravatarEnabled = GravatarEnabled,
+            GravatarStyle = GravatarStyle,
+            DefaultUserIconUrl = DefaultUserIconUrl,
+            AllowUserUpload = AllowUserUpload,
+            AllowAdminUpload = AllowAdminUpload
+        };
+    }
+
+    private TextSet _text = TextSet.Empty;
+    private EditModel _state = new();
+    private string _email;
+    private bool _canManage;
+    private bool _loaded;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(IconSettingsViewText.All);
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        _canManage = TeamScopeGate.HasSystemScope(authState.User, SystemUserScopes.Manage);
+        _email = authState.User.FindFirst("preferred_username")?.Value
+                 ?? authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
+        if (_canManage) _state = EditModel.From(await IconSettingsService.GetAsync());
+
+        _loaded = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        _busy = true;
+        try
+        {
+            await IconSettingsService.SaveAsync(_state.ToState());
+            NotificationService.Notify(NotificationSeverity.Success, _text[IconSettingsViewText.Saved]);
+            await Saved.InvokeAsync();
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text[IconSettingsViewText.Failed], e.Message);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
