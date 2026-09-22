@@ -1,6 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
+using Tharga.MongoDB;
 
 namespace Tharga.Team.MongoDB;
 
@@ -325,7 +326,7 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
                 .Set(x => x.AccessRequests.FirstMatchingElement().DecidedBy, request.RequesterKey)
                 .Set(x => x.AccessRequests.FirstMatchingElement().DecidedAt, request.RequestedAt);
 
-            var cancelled = await _collection.UpdateOneAsync(pendingFromRequester, cancel);
+            var cancelled = await _collection.UpdateOneAsync(pendingFromRequester, cancel, OneOption<TTeamEntity>.FirstOrDefault);
             if (cancelled?.Before == null) break;
         }
 
@@ -346,7 +347,7 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
             .Set(x => x.AccessRequests.FirstMatchingElement().DecidedBy, decidedBy)
             .Set(x => x.AccessRequests.FirstMatchingElement().DecidedAt, decidedAt);
 
-        var result = await _collection.UpdateOneAsync(PendingRequest(teamKey, requestId), update);
+        var result = await _collection.UpdateOneAsync(PendingRequest(teamKey, requestId), update, OneOption<TTeamEntity>.FirstOrDefault);
         return result?.Before != null;
     }
 
@@ -369,10 +370,16 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
             ? update.Unset(x => x.TemporaryConsent)
             : update.Set(x => x.TemporaryConsent, temporaryConsent);
 
-        var result = await _collection.UpdateOneAsync(PendingRequest(teamKey, requestId), update);
+        var result = await _collection.UpdateOneAsync(PendingRequest(teamKey, requestId), update, OneOption<TTeamEntity>.FirstOrDefault);
         return result?.Before != null;
     }
 
+    /// <remarks>
+    /// Every write using this filter must pass <see cref="OneOption{TEntity}.FirstOrDefault"/>. It is the only mode
+    /// that sends this filter to the server as the update's own filter; the others find the document first and then
+    /// update it by <c>_id</c> alone, which drops the array condition — so the positional <c>$</c> operator has
+    /// nothing to resolve and the server rejects the command, and the "still pending" condition stops being atomic.
+    /// </remarks>
     private static FilterDefinition<TTeamEntity> PendingRequest(string teamKey, string requestId)
         => Builders<TTeamEntity>.Filter.And(
             Builders<TTeamEntity>.Filter.Eq(x => x.Key, teamKey),
