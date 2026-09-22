@@ -181,6 +181,11 @@ public static class ThargaBlazorRegistration
             services.AddSingleton<IHostedService>(sp => new TeamCacheWiringCheck(
                 sp, teamServiceType, userServiceType));
 
+            // Stored icon settings, loaded at startup and re-read on an interval so an instance that did not
+            // handle a change still picks it up. No-ops when no IIconSettingsStore is registered.
+            services.AddHostedService<IconSettingsRefresher>();
+            services.AddThargaIconSettings();
+
             if (o._apiKeyService != null)
             {
                 services.AddAuditedApiKeyAdministrationService(o._apiKeyService);
