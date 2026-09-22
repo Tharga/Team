@@ -20,9 +20,9 @@ so there is no leading `chore(deps)` commit.
 - [x] 4. Load stored settings into the `IconSettings` singleton at startup, after the host's
       `o.IconSettings` configuration so a stored value wins. Test: nothing stored leaves startup
       configuration untouched; something stored overrides it.
-- [ ] 5. `IIconSettingsService` with `[RequireScope(SystemUserScopes.Manage)]` — read and save — registered by
+- [x] 5. `IIconSettingsService` with `[RequireScope(SystemUserScopes.Manage)]` — read and save — registered by
       the library with `TryAdd`. Tests: a caller without the scope is refused at the service.
-- [ ] 6. Audit the save with the actor and what changed, through the existing decorator pattern. Tests.
+- [x] 6. Audit the save with the actor and what changed, through the existing decorator pattern. Tests.
 - [ ] 7. `IconSettingsViewText` catalogue, then `<IconSettingsView />` in `Tharga.Team.Blazor`: the switches,
       the style dropdown bound to `GravatarStyles.All`, the default-URL box, and the preview strip
       (`?d={style}&f=y`, `blank` labelled). Hide the controls from a caller without the scope.

@@ -184,6 +184,7 @@ public static class ThargaBlazorRegistration
             // Stored icon settings, loaded at startup and re-read on an interval so an instance that did not
             // handle a change still picks it up. No-ops when no IIconSettingsStore is registered.
             services.AddHostedService<IconSettingsRefresher>();
+            services.AddThargaIconSettings();
 
             if (o._apiKeyService != null)
             {
