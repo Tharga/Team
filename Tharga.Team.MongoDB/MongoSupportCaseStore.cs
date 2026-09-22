@@ -212,6 +212,17 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return PageAsync(filter, cursor, pageSize);
     }
 
+    public Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        // The exact complement of the unassigned filter, and written with Exists for the same reason:
+        // TeamKey is [BsonIgnoreIfNull], so a case with a team is one where the field is present. A
+        // not-equal-null would also return cases written with an explicit null, which belong to the
+        // unassigned queue and to a different grant.
+        var filter = Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, true);
+
+        return PageAsync(filter, cursor, pageSize);
+    }
+
     public async Task<bool> TryAssignCaseAsync(string caseId, string teamKey, SupportMessage assignmentMessage, CancellationToken cancellationToken = default)
     {
         var entity = await collection.GetOneAsync(

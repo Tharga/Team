@@ -8,6 +8,7 @@ using Tharga.Team.MongoDB;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support;
+using Tharga.Team.Support.Cases;
 
 namespace Tharga.Team.Blazor.Tests;
 
@@ -100,6 +101,27 @@ public class DecoratorDefaultMemberTests
 
         Assert.Contains((typeof(AuthorizationTeamServiceDecorator), typeof(ITeamService)), decorations);
         Assert.Contains((typeof(AuditingTeamServiceDecorator), typeof(ITeamService)), decorations);
+    }
+
+    /// <summary>
+    /// The support pair, named for the same reason: the assembly is on the list above, but "is it actually
+    /// scanned" is the question a reader has, and reading the list does not answer it.
+    /// </summary>
+    /// <remarks>
+    /// <c>ISupportCaseService</c> has no default members today, so both pass with nothing to forward. That
+    /// is the state this pins — the day one is added, these two are already under the guard rather than
+    /// needing to be remembered.
+    /// </remarks>
+    [Fact]
+    public void TheGuard_FindsTheSupportCaseDecorators()
+    {
+        var decorators = Decorations(ToolkitAssemblies.SelectMany(a => a.GetTypes()))
+            .Where(x => x.Contract == typeof(ISupportCaseService))
+            .Select(x => x.Decorator.Name)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(["AuditingSupportCaseServiceDecorator", "AuthorizationSupportCaseServiceDecorator"], decorators);
     }
 
     [Fact]

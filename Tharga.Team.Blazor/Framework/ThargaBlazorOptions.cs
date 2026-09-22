@@ -232,6 +232,26 @@ public record ThargaBlazorOptions : BlazorOptions
     public string InvitePath { get; set; }
 
     /// <summary>
+    /// Optional route the toolkit navigates to when it wants the site's landing page, instead of the
+    /// application root.
+    /// </summary>
+    /// <remarks>
+    /// Read after an invitation is answered: accepting or declining ends the invitee's business with the
+    /// invitation page, so leaving them on it shows them a screen with nothing left to say (Tharga/Team#287).
+    /// <para>
+    /// <b>Distinct from <see cref="InvitePath"/>, which is where they arrive.</b> The two are separate
+    /// routes with separate audiences — one is a link in an inbox, the other is wherever a signed-in person
+    /// belongs once they have joined.
+    /// </para>
+    /// <para>
+    /// Set it where the application root is not somewhere to land: a marketing page, or an invitation page
+    /// that is one step of a longer flow. <c>null</c> (the default) means the application root, which is
+    /// where <c>UseThargaAuth</c> already returns people after signing in.
+    /// </para>
+    /// </remarks>
+    public string HomePath { get; set; }
+
+    /// <summary>
     /// Data-access consent options (cross-team access granted by a team to global roles).
     /// </summary>
     public ConsentOptions Consent { get; set; } = new();

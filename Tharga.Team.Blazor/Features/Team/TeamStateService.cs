@@ -204,7 +204,9 @@ internal class TeamStateService : ITeamStateService
         await _jSRuntime.InvokeVoidAsync("eval", $"document.cookie = '{Constants.SelectedTeamKeyCookie}={teamKey}; path=/'");
     }
 
-    public async Task SetSelectedTeamAsync(ITeam selectedTeam)
+    public Task SetSelectedTeamAsync(ITeam selectedTeam) => SetSelectedTeamAsync(selectedTeam, true);
+
+    public async Task SetSelectedTeamAsync(ITeam selectedTeam, bool reload)
     {
         await _teamService.SetMemberLastSeenAsync(selectedTeam.Key);
 
@@ -218,6 +220,7 @@ internal class TeamStateService : ITeamStateService
         await _localStorageService.SetItemAsStringAsync(Constants.SelectedTeamLocalStorageKey, selectedTeam.Key);
 
         await SetTeamCookieAsync(selectedTeam.Key);
-        _navigationManager.Refresh(true);
+
+        if (reload) _navigationManager.Refresh(true);
     }
 }

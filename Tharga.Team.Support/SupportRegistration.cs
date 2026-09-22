@@ -19,6 +19,12 @@ namespace Tharga.Team.Support;
 /// </summary>
 public static class SupportRegistration
 {
+    private const string SupportReadDescription =
+        "Read any support case in the team, not only your own. A case holds whatever a user typed into it.";
+
+    private const string SupportManageDescription =
+        "Reply to and close any support case in the team.";
+
     /// <summary>
     /// Registers Slack notifications: audited events are matched against
     /// <see cref="NotificationOptions.Routes"/> and posted to the channel the matching route names.
@@ -101,6 +107,7 @@ public static class SupportRegistration
             o.AutoCloseAfter = caseOptions.AutoCloseAfter;
             o.AutoCloseSweepInterval = caseOptions.AutoCloseSweepInterval;
             o.AutoCloseBatchSize = caseOptions.AutoCloseBatchSize;
+            o.TeamScopeAccessLevel = caseOptions.TeamScopeAccessLevel;
         });
 
         // Projected onto its own options type for the same reason the Slack section is: the mail transport
@@ -165,23 +172,28 @@ public static class SupportRegistration
         // shipped; this is the wiring that was missing, because the purge site could not reach the store.
         services.AddTransient<ITeamPurgeParticipant, SupportCasePurgeParticipant>();
 
+        // The level is the host's to choose, because whether a team administrator should read their members'
+        // conversations is a product decision rather than a library one. The default is what every host had
+        // before the option existed.
         services.AddThargaScopes(scopes =>
         {
-            scopes.Register(SupportScopes.Read, AccessLevel.Administrator,
-                "Read any support case in the team, not only your own. A case holds whatever a user typed into it.");
-            scopes.Register(SupportScopes.Manage, AccessLevel.Administrator,
-                "Reply to and close any support case in the team.");
+            RegisterTeamScope(scopes, SupportScopes.Read, caseOptions.TeamScopeAccessLevel, SupportReadDescription);
+            RegisterTeamScope(scopes, SupportScopes.Manage, caseOptions.TeamScopeAccessLevel, SupportManageDescription);
         });
 
-        // The unassigned queue. Registered here rather than in the Blazor platform because these scopes only
-        // mean anything where support cases exist, and a catalogue entry for a capability the host has not
-        // registered is an offer it cannot honour.
+        // The unassigned queue, and answering across every team. Registered here rather than in the Blazor
+        // platform because these scopes only mean anything where support cases exist, and a catalogue entry
+        // for a capability the host has not registered is an offer it cannot honour.
         services.AddThargaSystemScopes(scopes =>
         {
             scopes.Register(SystemSupportScopes.Read,
                 "Read and list support cases that belong to no team -- inbound mail from a sender whose team could not be determined. A team scope cannot govern these, because there is no team to hold it against.");
             scopes.Register(SystemSupportScopes.Manage,
                 "Reply to, close, reopen and assign a support case that belongs to no team. Assigning decides which tenant the case and its whole transcript become part of.");
+            scopes.Register(SystemSupportScopes.AllRead,
+                "Read and list support cases in any team, without belonging to it -- for the people who run support, who are members of none of the customers' teams. This reaches every conversation every customer has had.");
+            scopes.Register(SystemSupportScopes.AllManage,
+                "Reply to, close, reopen and hand over a support case in any team, without belonging to it. Satisfies a read as well. Does not grant assignment, which decides which tenant an unassigned case joins and stays with the unassigned queue.");
         });
 
         // The assistant, and only when the host has given it something to talk to. An IChatClient is the
@@ -283,5 +295,21 @@ public static class SupportRegistration
             $"Support email is configured to send from '{email.FromAddress}', which its own recipient filter " +
             $"({string.Join(", ", email.Recipients)}) does not accept. Every reply would be discarded. Add the " +
             "address or its domain to the filter, or send from an address the filter already covers.");
+    }
+
+    /// <summary>
+    /// Registers a team support scope at the level the host chose, or grant-only when it chose none.
+    /// </summary>
+    /// <remarks>
+    /// One place expressing the choice, rather than the same decision written twice. The scope is
+    /// registered either way — grant-only is a registration, so the catalogue entry, the description and
+    /// the enforcement are unchanged and only the automatic grant goes away.
+    /// </remarks>
+    private static void RegisterTeamScope(ScopeRegistry scopes, string scope, AccessLevel? level, string description)
+    {
+        if (level is { } accessLevel)
+            scopes.Register(scope, accessLevel, description);
+        else
+            scopes.RegisterGrantOnly(scope, description);
     }
 }

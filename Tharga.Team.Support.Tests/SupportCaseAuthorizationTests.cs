@@ -100,6 +100,60 @@ public class SupportCaseAuthorizationTests
     }
 
     /// <summary>
+    /// <c>support:read</c> says "see other people's cases", not "act on them".
+    /// </summary>
+    /// <remarks>
+    /// <b>It used to authorize both.</b> The gate took a system scope naming the read or the write, and the
+    /// team branch never looked at it — so a member holding only <see cref="SupportScopes.Read"/> could
+    /// answer, hand over, reply to, close and reopen anybody's case. The scope's own summary says "reply to
+    /// and close" is <see cref="SupportScopes.Manage"/>, so this restores what was documented all along.
+    /// </remarks>
+    [Fact]
+    public async Task SupportRead_DoesNotAuthorizeWritingToSomeoneElsesCase()
+    {
+        var store = new InMemorySupportCaseStore();
+        var raised = await Build(TeamA, Alice, store).RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        var reader = Build(TeamA, Bob, store, scopes: [SupportScopes.Read]);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => reader.ReplyToCaseAsync(TeamA, raised.Id, "No."));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => reader.CloseCaseAsync(TeamA, raised.Id));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => reader.ReopenCaseAsync(TeamA, raised.Id));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => reader.RequestHumanAsync(TeamA, raised.Id));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => reader.RunAssistantAsync(TeamA, raised.Id));
+    }
+
+    /// <summary>
+    /// Whoever may answer a case may read it, so the managing scope satisfies both halves on its own.
+    /// </summary>
+    [Fact]
+    public async Task SupportManage_AuthorizesReadingAsWellAsWriting()
+    {
+        var store = new InMemorySupportCaseStore();
+        var raised = await Build(TeamA, Alice, store).RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        var agent = Build(TeamA, Bob, store, scopes: [SupportScopes.Manage]);
+
+        Assert.Equal(raised.Id, (await agent.GetCaseAsync(TeamA, raised.Id)).Id);
+
+        await agent.ReplyToCaseAsync(TeamA, raised.Id, "Looking into it.");
+        await agent.CloseCaseAsync(TeamA, raised.Id);
+    }
+
+    /// <summary>
+    /// Marking read stays on the read side deliberately — it is a write to read-state, and gating it above
+    /// reading would mean a reader could open a case but never clear its unread badge.
+    /// </summary>
+    [Fact]
+    public async Task MarkingReadStaysOnTheReadSide()
+    {
+        var store = new InMemorySupportCaseStore();
+        var raised = await Build(TeamA, Alice, store).RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        await Build(TeamA, Bob, store, scopes: [SupportScopes.Read]).MarkReadAsync(TeamA, raised.Id);
+    }
+
+    /// <summary>
     /// Holding a valid case id from another tenant must gain nothing, even for a caller who is a fully
     /// privileged member of their own team.
     /// </summary>

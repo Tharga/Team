@@ -83,6 +83,40 @@ public class SupportCaseOptions
     public int AutoCloseBatchSize { get; set; } = 100;
 
     /// <summary>
+    /// The access level that is granted <c>support:read</c> and <c>support:manage</c> automatically.
+    /// Default <see cref="AccessLevel.Administrator"/>; <c>null</c> registers them so that no access level
+    /// grants them at all.
+    /// </summary>
+    /// <remarks>
+    /// <b>This decides who reads other people's conversations, which is not the same question for every
+    /// product.</b> Where support is a shared team function, the default is right: an administrator of the
+    /// team can see what their team has raised. Where a support conversation is <i>personal</i> — one
+    /// member talking to the product's own staff — it is wrong, and a member's manager reading it is a
+    /// different product from the one being built. The scope's own description says why the stake is high:
+    /// a case holds whatever a user typed into it.
+    /// <para>
+    /// <b><c>null</c> means grant-only, not unregistered.</b> The scopes still appear in the catalogue with
+    /// their descriptions and are still enforced; they are simply granted by no access level, rejected in
+    /// tenant-defined custom roles, and left out of the scope-override pickers. Holding one then requires a
+    /// code-registered tenant role or an explicit override — a recorded decision rather than a consequence
+    /// of being an Owner. See <see cref="ScopeRegistry.RegisterGrantOnly"/>.
+    /// </para>
+    /// <para>
+    /// <b>Only some values differ from each other.</b> Owner and Administrator are granted every registered
+    /// scope regardless of the declared minimum, so <see cref="AccessLevel.Owner"/> behaves exactly as the
+    /// default does. The choices that actually differ are <see cref="AccessLevel.Administrator"/>,
+    /// <see cref="AccessLevel.User"/>, <see cref="AccessLevel.Viewer"/> and <c>null</c>. Do not use
+    /// <see cref="AccessLevel.Custom"/> to mean "nobody": it grants the scope to <i>every</i> level, which
+    /// is the trap <see cref="ScopeRegistry.RegisterGrantOnly"/> exists to avoid.
+    /// </para>
+    /// <para>
+    /// <b>Changing this does not change enforcement</b>, only who is granted. Every check still runs
+    /// exactly as before, and the author of a case still reaches their own without holding anything.
+    /// </para>
+    /// </remarks>
+    public AccessLevel? TeamScopeAccessLevel { get; set; } = AccessLevel.Administrator;
+
+    /// <summary>
     /// Reading and sending mail, and which recipients this instance answers for. Leave the hosts unset to
     /// keep email off.
     /// </summary>

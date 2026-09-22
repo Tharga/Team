@@ -4,12 +4,12 @@
 @if (_url != null)
 {
     <img src="@_url" alt="@_alt" title="@_alt"
-         style="width:@Size;height:@Size;border-radius:50%;object-fit:cover;display:inline-block;vertical-align:middle;" />
+         style="width:@Size;height:@Size;border-radius:50%;object-fit:cover;display:inline-block;vertical-align:middle;flex-shrink:0;" />
 }
 else
 {
     <span title="@_alt"
-          style="width:@Size;height:@Size;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--rz-primary-lighter,#e0e7ff);color:var(--rz-primary,#3730a3);font-size:calc(@Size * 0.4);font-weight:600;vertical-align:middle;">
+          style="width:@Size;height:@Size;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--rz-primary-lighter,#e0e7ff);color:var(--rz-primary,#3730a3);font-size:calc(@Size * 0.4);font-weight:600;vertical-align:middle;flex-shrink:0;">
         @_initials
     </span>
 }

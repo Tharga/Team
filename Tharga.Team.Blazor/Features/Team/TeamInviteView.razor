@@ -1,12 +1,15 @@
 ﻿@using System.Text.Json
+@using Microsoft.Extensions.Options
 @using Tharga.Team
 @using Tharga.Toolkit
 @typeparam TMember where TMember : class, Tharga.Team.ITeamMember
 @inject ILocalStorageService LocalStorage
 @inject ITeamInvitationService TeamInvitationService
 @inject ITeamManagementService TeamManagementService
+@inject ITeamStateService TeamStateService
 @inject IUserService UserService
 @inject NavigationManager NavigationManager
+@inject IOptions<ThargaBlazorOptions> BlazorOptions
 @inject IThargaTextProvider TextProvider
 
 <RadzenStack Visible="@(!string.IsNullOrEmpty(_inviteCode) && _invitation != null)">
@@ -101,17 +104,49 @@
             : await LocalStorage.GetItemAsync<string>(Constants.TeamInviteCode);
     }
 
+    /// <summary>
+    /// Accepts the invitation, selects the team it was for, and leaves for the site's landing page.
+    /// </summary>
+    /// <remarks>
+    /// <b>The selection is taken here rather than left to the service's <c>SelectTeamEvent</c></b>, which
+    /// the accept no longer raises. That event could not be awaited by whoever raised it, so the selection
+    /// it wrote raced this navigation and the reload it performed of its own was a second navigation for
+    /// one click (Tharga/Team#287).
+    /// <para>
+    /// The team is read back through the gated <see cref="ITeamManagementService"/> rather than the
+    /// internal service a component must never inject. It resolves from live membership — which the accept
+    /// has just created — so the caller's not-yet-rebuilt claims do not refuse it.
+    /// </para>
+    /// </remarks>
     private async Task JoinTeam()
     {
         await TeamManagementService.SetInvitationResponseAsync(_invitation.TeamKey, _user.Key, _invitation.InviteKey, true);
         await LocalStorage.RemoveItemAsync(Constants.TeamInviteCode);
-        NavigationManager.NavigateTo(Tharga.Blazor.Framework.UriExtensions.RemoveQuery(new Uri(NavigationManager.Uri)).AbsoluteUri, true);
+
+        var team = await TeamManagementService.GetTeamByKeyAsync(_invitation.TeamKey);
+        if (team != null) await TeamStateService.SetSelectedTeamAsync(team, false);
+
+        NavigateHome();
     }
 
+    /// <summary>
+    /// Declines the invitation and leaves for the same place accepting does, selecting nothing — declining
+    /// grants no access, so it must leave the current selection exactly as it found it.
+    /// </summary>
     private async Task Decline()
     {
         await TeamManagementService.SetInvitationResponseAsync(_invitation.TeamKey, _user.Key, _invitation.InviteKey, false);
         await LocalStorage.RemoveItemAsync(Constants.TeamInviteCode);
-        NavigationManager.NavigateTo(Tharga.Blazor.Framework.UriExtensions.RemoveQuery(new Uri(NavigationManager.Uri)).AbsoluteUri, true);
+
+        NavigateHome();
+    }
+
+    /// <summary>
+    /// Leaves the invitation behind. Forced, because the answer changes the caller's teams and the new
+    /// claims only apply on a fresh load.
+    /// </summary>
+    private void NavigateHome()
+    {
+        NavigationManager.NavigateTo(HomePathResolver.Resolve(BlazorOptions.Value.HomePath, NavigationManager.BaseUri), true);
     }
 }

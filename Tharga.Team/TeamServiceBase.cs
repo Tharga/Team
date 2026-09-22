@@ -674,15 +674,19 @@ public abstract class TeamServiceBase : ITeamService
             // promote it to User.Name (only-if-empty) once the response has been recorded.
             var seedName = await GetInvitedMemberNameAsync(teamKey, inviteKey);
 
-            var team = await SetTeamMemberInvitationResponseAsync(teamKey, userKey, inviteKey, true);
+            await SetTeamMemberInvitationResponseAsync(teamKey, userKey, inviteKey, true);
 
             if (!string.IsNullOrWhiteSpace(seedName))
             {
                 await _userService.SeedUserNameAsync(userKey, seedName);
             }
 
+            // No SelectTeamEvent: the screen that accepted the invitation selects the team itself, and is
+            // already navigating. Raising it here put a second, unawaitable writer on the same state --
+            // TeamStateService bridges the event with an async void handler -- so the selection raced that
+            // navigation and the reload it performed of its own was a second navigation for one click
+            // (Tharga/Team#287). CreateTeamAsync still raises it: nobody else is there to choose.
             TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
-            SelectTeamEvent?.Invoke(this, new SelectTeamEventArgs(team));
         }
         else
         {

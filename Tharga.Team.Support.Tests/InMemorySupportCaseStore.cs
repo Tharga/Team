@@ -122,6 +122,9 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
         => Task.FromResult(Page(_cases.Where(x => string.IsNullOrEmpty(x.Case.TeamKey)).Select(x => x.Case)));
 
+    public Task<SupportCasePage> GetCasesAcrossTeamsAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(Page(_cases.Where(x => !string.IsNullOrEmpty(x.Case.TeamKey)).Select(x => x.Case)));
+
     /// <summary>
     /// Mirrors the real adapter, including refusing when the case already has a team — so the
     /// "two agents triage the same queue" test is about the store's condition rather than the fake's.

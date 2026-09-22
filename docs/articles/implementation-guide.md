@@ -1340,6 +1340,39 @@ builder.Services.AddTeamService<IMyService, MyService>();
 builder.Services.AddSystemService<IMyAdminService, MyAdminService>();
 ```
 
+### Naming a scope
+
+Scope names follow a grammar, and it is worth following for your own scopes too — the audit log reads it.
+
+```
+{feature}:{action}            team:read, apikey:manage, audit:read, mcp:discover
+{feature}:{reach}:{action}    support:unassigned:read, support:all:read
+```
+
+| Part | Is | Notes |
+|---|---|---|
+| **feature** | The area acted on | Becomes `AuditEntry.Feature`, which the audit log renders as a row of filter buttons and as the category axis of two charts. Keep the set small |
+| **reach** | The population the grant covers | Present **only** where that population is not the one the scope is held against |
+| **action** | What may be done | Becomes `AuditEntry.Action`, a drop-down filter. Free to grow |
+
+**Most scopes need no reach segment.** A team scope is held against a team, and that team is its reach —
+`support:read` means "any case in the team you hold this on". A system scope has no team to imply one, so
+where it covers a specific population it says which: `support:unassigned:read` reaches the cases no team
+owns, `support:all:read` reaches every team's. Every reach-bearing scope today is a system scope.
+
+**Reach goes in the middle, not the front.** `AuditEntry.ParseScope` splits on the *first* colon and
+nowhere else, so `support:all:read` is audited as feature `support`, action `all:read` — it files under
+the support feature with everything else support does. Writing it as `support-all:read` instead would make
+a second feature: a second button on every audit filter bar, a second bar on the charts, and a key that no
+longer matches a `support:*` notification route.
+
+> [!NOTE]
+> **Two built-in scopes express reach differently.** `teams:read` pluralises the feature to mean "every
+> team", against `team:read`'s one, and `apikey:system-manage` qualifies the action instead. Both predate
+> the grammar and are staying as they are — a renamed scope is invisible to the compiler and silently
+> authorizes nothing, which is what the startup `RetiredScopeCheck` exists to catch. Follow the grammar
+> above for new scopes rather than either of those.
+
 ### Which team service to inject
 
 A component, controller or MCP provider should inject one of these — **never `ITeamService`**.
@@ -1434,6 +1467,38 @@ can rewrite what an administrator copies to the clipboard. Unset, links point at
 
 The route name is yours; `/invitation` above is only an example, and worth checking against whatever your
 own stack already serves.
+
+### Where answering an invitation leaves the invitee
+
+Accepting selects the team that was joined and navigates to the site root. Declining navigates to the same
+place and changes no selection. Both are a forced load, because the answer changes the caller's teams and
+the new claims only apply on a fresh one.
+
+The root is the default because it is already where `UseThargaAuth` returns people after signing in. Where
+that is not somewhere to land — a marketing page, or an invitation page that is one step of a longer flow —
+say where instead:
+
+```csharp
+o.Blazor.HomePath = "/start";
+```
+
+`HomePath` takes the route in whatever shape you write it: `/start`, `start` and `/start/` are the same
+thing, and unset means the application root. It is deliberately not `InvitePath`: one is where an invitee
+arrives from their inbox, the other is where a member belongs once they have joined.
+
+> **Changed in 3.22.** Accepting used to reload the invitation page and leave the selection untouched.
+> Because the reload re-runs the selection resolver, which honours the remembered team first, an invitee who
+> already belonged to a team kept the old one — **the team they had just accepted was discarded** — and they
+> were left looking at an invitation page with nothing to show (Tharga/Team#287). A fresh account appeared
+> to work, because with no remembered team the resolver fell through to the only membership there was.
+>
+> **`ITeamService.SelectTeamEvent` no longer fires when an invitation is accepted.** The screen that accepts
+> it now makes the selection itself, awaited, and navigates once. The event was raised from the service and
+> bridged by an `async void` handler that could not be awaited, so the selection it wrote raced the screen's
+> own navigation and the reload it performed of its own was a second navigation for one click. If you
+> subscribe to that event to react to a new membership, move the reaction to `TeamsListChangedEvent`, which
+> still fires on both answers. `CreateTeamAsync` still raises `SelectTeamEvent`: there, nobody else is
+> present to choose.
 
 ### What an invitation link looks like
 
