@@ -25,6 +25,12 @@ public record ThargaTeamOptions
     public string IconCollectionName { get; set; } = "Icon";
 
     /// <summary>
+    /// Collection holding the site's icon settings (the built-in <see cref="MongoIconSettingsStore"/>). One
+    /// document. Default is "IconSettings".
+    /// </summary>
+    public string IconSettingsCollectionName { get; set; } = "IconSettings";
+
+    /// <summary>
     /// Collection holding support cases and their transcripts. Default <c>SupportCase</c>.
     /// </summary>
     public string SupportCaseCollectionName { get; set; } = "SupportCase";

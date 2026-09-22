@@ -24,6 +24,11 @@ public static class ThargaTeamRegistration
         services.TrackMongoCollection(typeof(IIconRepositoryCollection), typeof(IconRepositoryCollection));
         services.TryAddScoped<IIconStore, MongoIconStore>();
 
+        // Site-level icon settings, persisted so they survive a restart. TryAdd for the same reason as above.
+        services.AddTransient<IIconSettingsRepositoryCollection, IconSettingsRepositoryCollection>();
+        services.TrackMongoCollection(typeof(IIconSettingsRepositoryCollection), typeof(IconSettingsRepositoryCollection));
+        services.TryAddScoped<IIconSettingsStore, MongoIconSettingsStore>();
+
         // Purging a team destroys its icons too. Hygiene rather than security -- an orphaned icon grants
         // nothing -- but one seam should cover every per-team store, not the ones somebody remembered.
         services.AddTransient<ITeamPurgeParticipant, IconPurgeParticipant>();
