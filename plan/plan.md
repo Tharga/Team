@@ -18,6 +18,14 @@
 - [x] 12d. Version line — **3.23** (user, 2026-09-22), with the reason recorded in the `build.yml` comment beside it: consent now requires `team:manage` held as a member, and a host decorating `ITeamService` must forward the new members.
 - [x] 12f. Merge `origin/master` again (2026-09-23), after `feature/icon-settings-view` merged as PR #297. Eight commits, **no conflicts** — that feature touched icons and `build.yml` not at all, so the 3.23 line set here survives. Full suite **2,988 green**, build 18 warnings against the CI threshold of 35.
       **Asked for as a rebase, done as a merge:** `origin/feature/team-access-requests` has carried 10 commits since 2026-09-14, so rebasing would rewrite published history and could only be published with `--force`, which `shared-instructions.md` prohibits outright. A merge reaches the same state — level with master — without that.
+- [x] 12g. `<TeamAccessRequestButton TeamKey="..." />` (user, 2026-09-23) — the ask, from anywhere in a host.
+      Shows **Request access** for a consent-role holder who is not a member, **Withdraw** once they have one
+      pending, and nothing at all otherwise, so it can be placed unconditionally. Membership comes from
+      `ITeamDirectoryService.GetTeamsAsync`, the caller's own list, which needs no scope. Closes the gap that
+      moving the built-in ask into `TeamComponent`'s action button opened: the service and the dialog were
+      always reachable, but the visibility rule lived in the internal `TeamAccessRequestGate`, so a host had
+      to re-derive it. The decision still lives in that gate — the component only wires it — which is what
+      keeps it testable in a project with no bUnit. Docs on all three surfaces.
 - [ ] 13. Push for user testing.
 
 ## Notes

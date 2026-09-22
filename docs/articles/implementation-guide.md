@@ -2478,6 +2478,7 @@ the built-ins. This is only about the two the toolkit renders.
 | `<AccessSimulationBar>` | `Text` (overrides the resolved `team.simulation.bar.viewAs`, "View as…"), `ShowEntryPoint` (true), `ShowBanner` (true — **off means the profile card is the only way out**) |
 | `<AccessSimulationIndicator>` | none — renders only while a run-as simulation is active |
 | `<TeamNotificationMenu>` | none — optional top-bar bell; the badge counts [access requests](access-requests.md) awaiting the caller's decision |
+| `<TeamAccessRequestButton>` | `TeamKey` (required), `ButtonStyle`, `Size`, `Changed` — places *Request access* / *Withdraw* anywhere; renders nothing for a caller who cannot ask |
 | `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button) |
 | `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton` |
 | `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton` |

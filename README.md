@@ -250,6 +250,10 @@ Consent lets a team grant a global role access to its data. From 3.23 the person
 The requester and manager UI sit inside `<TeamComponent>`. Add the optional `<TeamNotificationMenu />` to
 your top bar for a bell whose badge counts the requests waiting on this caller.
 
+To ask from somewhere of your own, drop in `<TeamAccessRequestButton TeamKey="@team.Key" />` — it shows
+**Request access**, **Withdraw** or nothing at all depending on the caller, so it can be placed
+unconditionally. Or call `ITeamAccessRequestService` directly; the rules live there rather than in any UI.
+
 **Expiry needs nothing to run.** Every consent read resolves through `TeamConsent.Resolve`, which returns
 the previous consent once the window has passed, so it takes effect on the next claim revalidation like any
 other access change.

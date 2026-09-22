@@ -38,6 +38,7 @@ public class TextCoverageTests
     private static readonly string[] Migrated =
     [
         "Features/User/IconSettingsView.razor",
+        "Features/Team/TeamAccessRequestButton.razor",
         "Features/Support/SupportTranscript.razor",
         "Features/Team/TeamSelector.razor",
         "Features/Authentication/LoginDisplay.razor",

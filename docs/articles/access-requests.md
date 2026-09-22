@@ -40,6 +40,41 @@ The badge counts requests waiting for **this caller's** decision. The menu lists
 caller's own pending requests, uncounted — waiting on someone else is not a task. Choosing one selects that
 team and opens the team page, because `team:manage` is issued for the selected team only.
 
+## Asking from somewhere of your own
+
+Inside `TeamComponent` the ask sits in the team action button, beside *Invite user*. To put it anywhere else —
+a tenant overview, a search result, your own dashboard — drop in the button and give it a team:
+
+```razor
+<TeamAccessRequestButton TeamKey="@team.Key" />
+```
+
+It decides for itself what to show, so it can be placed unconditionally:
+
+| The caller | Sees |
+|---|---|
+| Holds a consent role, is **not** a member | **Request access**, opening the same dialog the built-in path uses |
+| Already has a request pending here | **Withdraw** |
+| Anyone else | nothing at all |
+
+`Changed` fires after a request is sent or withdrawn, for a host that needs to reload around it;
+`ButtonStyle` and `Size` let it match the surface it sits on.
+
+**Or drive it yourself.** `ITeamAccessRequestService` is a public, library-registered facade, and the dialog
+is a component you can open directly:
+
+```csharp
+@inject ITeamAccessRequestService AccessRequests
+
+await AccessRequests.RequestTeamAccessAsync(teamKey, AccessLevel.User, TimeSpan.FromHours(8), "why");
+await AccessRequests.CancelTeamAccessRequestAsync(teamKey, requestId);
+var mine     = await AccessRequests.GetMyAccessRequestsAsync();
+var awaiting = await AccessRequests.GetAccessRequestsAwaitingMeAsync();
+```
+
+The rules live in the service, not in any of these surfaces, so a hand-rolled button is as safe as the
+built-in one — it simply has to decide for itself when to appear.
+
 ## What can be asked for
 
 | | |

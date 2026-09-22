@@ -1,0 +1,124 @@
+@using Microsoft.Extensions.Options
+@using Tharga.Team
+@using Tharga.Team.Blazor.Framework
+@inject ITeamAccessRequestService AccessRequestService
+@inject ITeamDirectoryService TeamDirectoryService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject IOptions<ThargaBlazorOptions> BlazorOptions
+@inject IThargaTextProvider TextProvider
+
+@* Ask a team for access, from anywhere. Renders nothing for a caller who cannot ask -- a member, or somebody
+   holding none of the consented roles -- so a host can place it unconditionally. *@
+@if (_pending != null)
+{
+    <RadzenButton Text="@_text[TeamAccessRequestText.Withdraw]" Icon="undo" ButtonStyle="@ButtonStyle" Size="@Size"
+                  Disabled="@_busy" Click="@WithdrawAsync" />
+}
+else if (_canRequest)
+{
+    <RadzenButton Text="@_text[TeamAccessRequestText.RequestAccess]" Icon="key" ButtonStyle="@ButtonStyle" Size="@Size"
+                  Disabled="@_busy" Click="@RequestAsync" />
+}
+
+@code {
+    /// <summary>The team to ask for access to.</summary>
+    [Parameter, EditorRequired] public string TeamKey { get; set; }
+
+    /// <summary>Button style, so the button can match the surface a host puts it on. Default <c>Primary</c>.</summary>
+    [Parameter] public ButtonStyle ButtonStyle { get; set; } = ButtonStyle.Primary;
+
+    /// <summary>Button size. Default <c>Small</c>.</summary>
+    [Parameter] public ButtonSize Size { get; set; } = ButtonSize.Small;
+
+    /// <summary>Raised after a request was sent or withdrawn, so a host can reload what it shows.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private TeamAccessRequest _pending;
+    private bool _canRequest;
+    private bool _busy;
+    private string _loadedFor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(TeamAccessRequestText.All);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Keyed on the team so a host re-rendering for other reasons does not re-query on every pass.
+        if (_loadedFor == TeamKey) return;
+        _loadedFor = TeamKey;
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (string.IsNullOrWhiteSpace(TeamKey))
+        {
+            _canRequest = false;
+            _pending = null;
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var callerRoles = authState.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(x => x.Value).ToArray();
+
+        // Membership decides this, and the caller's own team list is the one read that needs no scope --
+        // GetTeamsAsync is self-service metadata, so a non-member asking about a team they cannot see is
+        // answered without being refused.
+        var isMember = false;
+        await foreach (var team in TeamDirectoryService.GetTeamsAsync())
+        {
+            if (team.Key != TeamKey) continue;
+            isMember = true;
+            break;
+        }
+
+        _canRequest = TeamAccessRequestGate.CanRequest(isMember, callerRoles, BlazorOptions.Value.Consent.Roles ?? []);
+        _pending = _canRequest
+            ? TeamAccessRequestGate.PendingOn(await AccessRequestService.GetMyAccessRequestsAsync(), TeamKey)
+            : null;
+    }
+
+    private async Task RequestAsync()
+    {
+        var sent = await DialogService.OpenAsync<TeamAccessRequestDialog>(_text[TeamAccessRequestText.RequestAccess],
+            new Dictionary<string, object> { [nameof(TeamAccessRequestDialog.TeamKey)] = TeamKey },
+            new DialogOptions { Width = "520px" });
+
+        if (sent is not true) return;
+
+        NotificationService.Notify(NotificationSeverity.Success, _text[TeamAccessRequestText.Sent]);
+        await ReloadAsync();
+    }
+
+    private async Task WithdrawAsync()
+    {
+        _busy = true;
+        try
+        {
+            await AccessRequestService.CancelTeamAccessRequestAsync(TeamKey, _pending.Id);
+            NotificationService.Notify(NotificationSeverity.Success, _text[TeamAccessRequestText.Withdrawn]);
+            await ReloadAsync();
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text[TeamAccessRequestText.Failed], e.Message);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        await LoadAsync();
+        await Changed.InvokeAsync();
+        StateHasChanged();
+    }
+}
