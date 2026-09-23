@@ -79,13 +79,25 @@ aware of, to hide a role the same page still has to credit when they hold it.
 
 ## Acceptance criteria
 
-- [ ] A team's custom role appears in the Roles select bar and the Roles column on `<ScopeView />`.
-- [ ] A member assigned a custom role has it preselected, and the scopes it grants are **not** greyed out.
-- [ ] A host can pass `Roles` and have it win over resolution.
-- [ ] With `ITenantRoleService` unregistered (`EnableDynamicRoles = false`), behaviour is unchanged.
-- [ ] The first synchronous render is not empty — code roles show before the team resolves.
-- [ ] `ScopeView.razor` still reports 14 literal strings to the text ratchet.
-- [ ] Full suite green.
+**Verified by test, not by hand.** The sample check in plan step 8 was not run — the user chose to finalize
+without it (2026-09-23). Everything below is covered by unit tests; nobody has watched the page render a
+custom role. The one thing tests cannot cover is the render path itself, since the project has no bUnit,
+which is exactly why the decisions were extracted into `ScopeReference` rather than left in the component.
+
+- [x] A team's custom role appears in the Roles select bar and the Roles column on `<ScopeView />`.
+      `BuildForRoles_CreditsACustomRole`, `BuildForRoles_CreditsAGrantOnlyScopeToTheCustomRoleThatNamesIt`.
+- [x] A member assigned a custom role has it preselected, and the scopes it grants are **not** greyed out.
+      `AMemberHoldingACustomRole_IsCreditedWithItsScopes` — the whole chain, with
+      `TheSameMember_AgainstCodeRolesOnly_LosesTheRoleAndTheScope` pinning the old behaviour beside it.
+- [x] A host can pass `Roles` and have it win over resolution. `ApplyRoles` prefers it; `ApplyTeamRolesAsync`
+      returns immediately when it is supplied.
+- [x] With `ITenantRoleService` unregistered (`EnableDynamicRoles = false`), behaviour is unchanged.
+      `ApiKeyRolePicker.ResolveAsync` falls back to the registry, and `Build(scopes, registry)` still
+      delegates to the same projection — `BuildFromRegistry_MatchesBuildForItsOwnRoleList`.
+- [x] The first synchronous render is not empty — code roles show before the team resolves.
+      `ApplyRoles` runs with the registry's roles before the first `await`.
+- [x] `ScopeView.razor` still reports 14 literal strings to the text ratchet.
+- [x] Full suite green — 3,000.
 
 ## Done condition
 
