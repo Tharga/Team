@@ -257,4 +257,133 @@ public class ScopeReferenceTests
     [Fact]
     public void UserSystemScopes_NoneHeld_ReturnsEmpty()
         => Assert.Empty(ScopeReference.UserSystemScopes(BuildSystemRegistry(), Array.Empty<string>()));
+
+    // ---- Building from a role list rather than the registry (#292) ----
+
+    /// <summary>
+    /// A team's custom role credits the scopes it names, exactly as a code-registered one does.
+    /// </summary>
+    /// <remarks>
+    /// The registry-taking overload cannot express this: <see cref="ITenantRoleRegistry"/> holds
+    /// code-registered roles only, and a team's own roles need an async per-team read. Taking the resolved
+    /// list is what lets the page show what a member actually holds.
+    /// </remarks>
+    [Fact]
+    public void BuildFromRoleList_CreditsACustomRole()
+    {
+        var (scopes, _) = BuildRegistries();
+        var roles = new List<TenantRoleDefinition>
+        {
+            new("Support", ["orders:read"], null),
+            new("Refunder", ["orders:refund"], "Defined by the team at runtime.")
+        };
+
+        var rows = ScopeReference.BuildForRoles(scopes, roles);
+
+        Assert.Equal(["Refunder"], Row(rows, "orders:refund").Roles);
+        Assert.Equal(["Support"], Row(rows, "orders:read").Roles);
+    }
+
+    /// <summary>
+    /// A scope granted by <b>no access level</b> and only by a custom role is still credited to it.
+    /// </summary>
+    /// <remarks>
+    /// This is the shape behind the reported symptom: the member holds the scope through the role, the
+    /// claims pipeline resolves it correctly, and the page used to show nothing granting it at all.
+    /// </remarks>
+    [Fact]
+    public void BuildFromRoleList_CreditsAGrantOnlyScopeToTheCustomRoleThatNamesIt()
+    {
+        var (scopes, _) = BuildRegistries();
+        scopes.RegisterGrantOnly("case:read", "Read secrecy-classified case records.");
+
+        var rows = ScopeReference.BuildForRoles(scopes, [new TenantRoleDefinition("CaseOfficer", ["case:read"], null)]);
+        var row = Row(rows, "case:read");
+
+        Assert.Equal(["CaseOfficer"], row.Roles);
+        Assert.Empty(row.AccessLevels);
+        Assert.True(row.GrantOnly);
+    }
+
+    /// <summary>The registry-taking overload keeps behaving exactly as it did.</summary>
+    [Fact]
+    public void BuildFromRegistry_MatchesBuildForItsOwnRoleList()
+    {
+        var (scopes, roles) = BuildRegistries();
+
+        var fromRegistry = ScopeReference.Build(scopes, roles);
+        var fromList = ScopeReference.BuildForRoles(scopes, roles.All);
+
+        Assert.Equal(fromRegistry.Select(x => x.Name), fromList.Select(x => x.Name));
+        Assert.Equal(fromRegistry.Select(x => string.Join(",", x.Roles)), fromList.Select(x => string.Join(",", x.Roles)));
+    }
+
+    /// <summary>
+    /// <b>The regression guard for #292.</b> A member assigned a team's custom role has it preselected, and
+    /// the scope it grants resolves as granted — not greyed out.
+    /// </summary>
+    /// <remarks>
+    /// Walks the chain the page walks: resolved roles → rows → the member's preselected roles → the grant.
+    /// Asserting only one link would miss the defect, which was that the *narrowing* used a different role
+    /// list from the *crediting*.
+    /// </remarks>
+    [Fact]
+    public void AMemberHoldingACustomRole_IsCreditedWithItsScopes()
+    {
+        var (scopes, _) = BuildRegistries();
+        IReadOnlyList<TenantRoleDefinition> teamRoles =
+        [
+            new("Support", ["orders:read"], null),
+            new("Refunder", ["orders:refund"], "Defined by the team at runtime.")
+        ];
+
+        var rows = ScopeReference.BuildForRoles(scopes, teamRoles);
+        var selected = ScopeReference.PreselectedRoles(["Refunder"], teamRoles);
+        var grant = ScopeReference.Resolve(Row(rows, "orders:refund"), AccessLevel.Viewer, new HashSet<string>(selected), new HashSet<string>());
+
+        Assert.Equal(["Refunder"], selected);
+        Assert.True(grant.Granted);
+        Assert.Equal(["Refunder"], grant.ByRoles);
+        Assert.False(grant.ByLevel);
+    }
+
+    /// <summary>
+    /// The same member against the code-registered roles alone — the old behaviour, kept as a test so the
+    /// defect is described rather than just fixed.
+    /// </summary>
+    [Fact]
+    public void TheSameMember_AgainstCodeRolesOnly_LosesTheRoleAndTheScope()
+    {
+        var (scopes, codeRoles) = BuildRegistries();
+
+        var rows = ScopeReference.BuildForRoles(scopes, codeRoles.All);
+        var selected = ScopeReference.PreselectedRoles(["Refunder"], codeRoles.All);
+        var grant = ScopeReference.Resolve(Row(rows, "orders:refund"), AccessLevel.Viewer, new HashSet<string>(selected), new HashSet<string>());
+
+        Assert.Empty(selected);
+        Assert.False(grant.Granted);
+    }
+
+    /// <summary>An assignment naming a role the team no longer defines is dropped — there is nothing to credit.</summary>
+    [Fact]
+    public void PreselectedRoles_DropsAnAssignmentWithNoMatchingDefinition()
+        => Assert.Equal(["Support"], ScopeReference.PreselectedRoles(
+            ["Support", "Deleted"],
+            [new TenantRoleDefinition("Support", ["orders:read"], null)]));
+
+    [Fact]
+    public void PreselectedRoles_WithNoAssignments_IsEmpty()
+        => Assert.Empty(ScopeReference.PreselectedRoles(null, [new TenantRoleDefinition("Support", [], null)]));
+
+    /// <summary>No roles at all is not an error — every scope simply has none crediting it.</summary>
+    [Fact]
+    public void BuildFromRoleList_WithNoRoles_CreditsNothing()
+    {
+        var (scopes, _) = BuildRegistries();
+
+        var rows = ScopeReference.BuildForRoles(scopes, null);
+
+        Assert.NotEmpty(rows);
+        Assert.All(rows, r => Assert.Empty(r.Roles));
+    }
 }

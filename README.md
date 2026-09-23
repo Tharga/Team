@@ -113,7 +113,8 @@ builder.AddThargaTeam(o =>
     // o.Blazor.HiddenAccessLevels = [AccessLevel.Viewer];
 
     // Optional: let team admins define their own custom roles at runtime (assignable to members and
-    // API keys via <TenantRoleManager /> and <ApiKeyView ShowRoles="true" />).
+    // API keys via <TenantRoleManager /> and <ApiKeyView ShowRoles="true" />, and explained by
+    // <ScopeView />, which credits them alongside the code-registered ones).
     // o.EnableDynamicRoles = true;
     // o.DynamicRoleManageScope = "access:manage"; // scope for custom-role CRUD (default team:manage)
 
