@@ -102,17 +102,33 @@ decorator, so hosts can route them with existing notification routes.
 
 ## Acceptance criteria
 
-- [ ] A consent-role holder who is not a member can request Viewer, User or Administrator, for a duration or no end.
-- [ ] Owner, Custom, non-consent-role callers and members are refused, at the service, not only in the UI.
-- [ ] A member holding `team:manage` can approve or deny; the requester cannot approve their own; a consent-derived manager cannot approve or change consent.
-- [ ] Approval sets consent for the window atomically and records the previous consent.
-- [ ] After expiry every consent read — claims, API-key team context, consented-team lookup, badges, MCP — sees the previous consent; guarded by an architecture test.
-- [ ] A direct consent change by a manager clears the expiry.
-- [ ] Every operation is audited with its metadata.
-- [ ] Requester and manager UI as described; the notification menu shows the count and items.
-- [ ] Custom `TeamServiceBase` hosts compile; unimplemented operations throw a clear `NotSupportedException`.
-- [ ] Enums persisted by name (asserted).
-- [ ] Full suite green.
+Confirmed in the sample by the user 2026-09-23, on the pushed branch, after the withdraw defect was fixed.
+
+- [x] A consent-role holder who is not a member can request Viewer, User or Administrator, for a duration or no end.
+- [x] Owner, Custom, non-consent-role callers and members are refused, at the service, not only in the UI.
+      `AccessRequestAuthorizationTests` (11).
+- [x] A member holding `team:manage` can approve or deny; the requester cannot approve their own; a consent-derived manager cannot approve or change consent.
+      `DirectTeamScopeTests` (10), `AccessRequestAuthorizationTests`.
+- [x] Approval sets consent for the window atomically and records the previous consent.
+      One conditional positional update; `TeamRepositoryAccessRequestTests`, `TeamAccessApprovalTests` (6).
+- [x] After expiry every consent read — claims, API-key team context, consented-team lookup, badges, MCP — sees the previous consent; guarded by an architecture test.
+      `TeamConsent.Resolve` + `ConsentExpiryReadsTests` (7); the architecture test fails any direct read.
+- [x] A direct consent change by a manager clears the expiry. `TeamRepositoryConsentTests` (2).
+- [x] Every operation is audited with its metadata. `AccessRequestAuditTests` (6).
+- [x] Requester and manager UI as described; the notification menu shows the count and items.
+      Plus `<TeamAccessRequestButton />`, added 2026-09-23 so a host can place the ask anywhere.
+- [x] Custom `TeamServiceBase` hosts compile; unimplemented operations throw a clear `NotSupportedException`.
+- [x] Enums persisted by name (asserted). `TeamEntityAccessRequestSerializationTests` (2), plus the enum sweep.
+- [x] Full suite green — 2,992.
+
+**One defect found by the manual verification, which is why it was deferred to it.** Withdrawing threw
+`MongoCommandException: The positional operator did not find the match needed from the query` — every
+positional array write went through `Tharga.MongoDB.UpdateOneAsync` in its default mode, which finds the
+document and then updates it by `_id` alone, so the `$elemMatch` never reached the update. Approve and deny
+carried it identically. Fixed by passing `OneOption<TTeamEntity>.FirstOrDefault`, which also restores the
+atomicity the code's own remarks claimed; guarded by `EveryPositionalWrite_IsAtomic`, verified to fail
+without the fix while every rendered-shape assertion stayed green. **The shape tests could not have caught
+it** — they assert what is sent, and the mode is invisible to them.
 
 ## Done condition
 
