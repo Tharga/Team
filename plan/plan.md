@@ -29,8 +29,12 @@ Spec: `plan/feature.md`. Branched from `origin/master` at `1dac7e8`; packages cl
       `Migrated`, so any display string added here fails the build.
 - [x] 7. Docs: the implementation guide's component parameter reference, and the README where `TeamComponent`
       is described. Show the member-column case, since that is the reported need.
-- [ ] 8. Full suite. Manual check in the sample: add a column and an action to `<TeamComponent>` and confirm
-      both render and the click arrives.
+- [x] 8. Full suite (3,012). **Verified in the sample in a browser, 2026-09-23.** The sample's `/team` page
+      now demonstrates all three hooks: a **Project** column, a **Next project** item in the member's action
+      menu, and a handler receiving `MemberRowAction<TeamMember>` — the sample's own type, no cast. Clicked
+      it: the menu item rendered below the built-in Audit log, the click arrived, and the cell went from
+      `—` to `Apollo` and survived a reload. No server-side error. Demo state is a singleton held in
+      memory — persisting a host's own member field is the host's job and out of scope, as the issue says.
 - [ ] 9. Push for user testing.
 
 ## Notes

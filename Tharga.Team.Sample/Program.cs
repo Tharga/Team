@@ -195,6 +195,10 @@ builder.AddMongoDB();
 
 builder.Services.AddScoped<AppUserAdminService>();
 
+// Demo state behind the member-grid extension points on /team. Singleton so one browser tab's change is
+// visible in another; in memory because persisting a host's own member field is the host's job.
+builder.Services.AddSingleton<Tharga.Team.Sample.Framework.Team.MemberProjectDemo>();
+
 // Auto-downscale uploaded icons larger than IconOptions.MaxDimension (256px) instead of rejecting them.
 builder.Services.AddThargaImageProcessing();
 

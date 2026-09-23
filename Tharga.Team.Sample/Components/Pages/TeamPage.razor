@@ -18,13 +18,45 @@
 </RadzenStack>
 
 @* ShowAuditLogButton is on because the sample configures MongoDB audit storage; the per-member action
-   still hides itself for anyone without audit:read. *@
+   still hides itself for anyone without audit:read.
+
+   MemberColumns / MemberActionItems / MemberActionInvoked demonstrate the host extension points added for
+   Tharga/Team#294: an extra column and an extra row action, with the click arriving typed as the sample's
+   own TeamMember. The "project" behind them is in-memory demo state -- persisting a host's own member field
+   is the host's job and deliberately out of scope for the hooks. *@
 <TeamComponent TMember="Tharga.Team.Sample.Framework.Team.TeamMember" EnableMemberNameEdit="true"
                ShowAuditLogButton="true"
-               ShowScopeTooltip="_showScopeTooltip" ShowScopeOverrides="_showScopeOverrides" ShowRoles="_showRoles" />
+               ShowScopeTooltip="_showScopeTooltip" ShowScopeOverrides="_showScopeOverrides" ShowRoles="_showRoles"
+               MemberActionInvoked="@OnMemberActionAsync">
+    <MemberColumns>
+        <RadzenDataGridColumn TItem="Tharga.Team.Sample.Framework.Team.TeamMember" Title="Project" Sortable="false" Width="120px">
+            <Template>
+                <span id="@($"project-{context.Key}")">@Projects.Get(context.Key)</span>
+            </Template>
+        </RadzenDataGridColumn>
+    </MemberColumns>
+    <MemberActionItems>
+        <RadzenSplitButtonItem Text="Next project" Value="set-project" Icon="folder" />
+    </MemberActionItems>
+</TeamComponent>
 
 @code {
+    [Inject] private Tharga.Team.Sample.Framework.Team.MemberProjectDemo Projects { get; set; }
+    [Inject] private NotificationService NotificationService { get; set; }
+
     private bool _showScopeTooltip = true;
     private bool _showScopeOverrides;
     private bool _showRoles;
+
+    private Task OnMemberActionAsync(MemberRowAction<Tharga.Team.Sample.Framework.Team.TeamMember> action)
+    {
+        if (action.Action != "set-project") return Task.CompletedTask;
+
+        // action.Member is the sample's own type, which is the point of the generic callback -- no cast.
+        var project = Projects.Cycle(action.Member.Key);
+        NotificationService.Notify(NotificationSeverity.Info, $"{action.Member.Name ?? action.Member.Key} → {project}");
+
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
 }
