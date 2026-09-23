@@ -2,25 +2,32 @@
 
 Spec: `plan/feature.md`. Branched from `origin/master` at `1dac7e8`; packages clean at branch time.
 
-- [ ] 1. `MemberRowAction<TMember>(string Action, TMember Member)` beside `TeamRowAction` / `UserRowAction`,
+- [x] 1. `MemberRowAction<TMember>(string Action, TMember Member)` beside `TeamRowAction` / `UserRowAction`,
       with XML docs matching theirs. A test that the record carries what a handler needs.
-- [ ] 2. The three action hooks on `TeamComponent`: `MemberActionsTemplate` (beside the built-in button),
+- [x] 2. The three action hooks on `TeamComponent`: `MemberActionsTemplate` (beside the built-in button),
       `MemberActionItems` (inside the split-button dropdown), `MemberActionInvoked` (the click). Doc each
       one by pointing at its `TeamsListView` counterpart, so the family reads as one thing.
-- [ ] 3. Wire them into the member action column. **Both layouts** — the component renders a card and a grid
+- [x] 3. Wire them into the member action column. **Confirmed both layouts are covered by one edit** — the
+      member grid lives in the shared `TeamDetail` fragment (line 710), rendered by the card layout at 144
+      and the grid layout at 165. **Two cases the issue did not raise, found while wiring:** a row with
+      exactly one built-in action plus host items must become a split button rather than a plain one, or
+      the host's items have nowhere to go; and a row with *no* built-in actions — the caller's own, or the
+      owner's — must still render the menu for host items alone, icon-only, since the primary half would
+      otherwise have to invent a label for a menu the toolkit knows nothing about. Its left half is a
+      handle rather than a command, so a null action returns instead of raising the callback. Originally:  **Both layouts** — the component renders a card and a grid
       through a shared fragment, so check the hook lands in each rather than assuming.
       - A host item must be distinguishable from a built-in one when the click arrives: the built-ins are
         matched by their own constants first, and anything else is forwarded to `MemberActionInvoked`.
       - With only host items and no built-ins, the button must still render.
-- [ ] 4. `MemberColumns` appended inside the grid's own `<Columns>`, after the built-in columns and before
+- [x] 4. `MemberColumns` appended inside the grid's own `<Columns>`, after the built-in columns and before
       the action column — an appended column should not displace the actions to the middle of the row.
-- [ ] 5. Tests. The decisions that can be tested without bUnit are which actions exist for a member and how a
+- [x] 5. Tests. The decisions that can be tested without bUnit are which actions exist for a member and how a
       click is routed; extract anything decided in markup, as `TeamAccessRequestGate` did. Cover: a host
       item reaches `MemberActionInvoked`; a built-in still routes internally; nothing supplied leaves the
       action list exactly as it is today.
-- [ ] 6. Confirm `TeamComponent.razor` still reports **zero** literals to the text ratchet — it is
+- [x] 6. Confirm `TeamComponent.razor` still reports **zero** literals to the text ratchet — it is
       `Migrated`, so any display string added here fails the build.
-- [ ] 7. Docs: the implementation guide's component parameter reference, and the README where `TeamComponent`
+- [x] 7. Docs: the implementation guide's component parameter reference, and the README where `TeamComponent`
       is described. Show the member-column case, since that is the reported need.
 - [ ] 8. Full suite. Manual check in the sample: add a column and an action to `<TeamComponent>` and confirm
       both render and the click arrives.

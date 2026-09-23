@@ -250,6 +250,41 @@ else
     /// </summary>
     [Parameter] public EventCallback CreateTeamRequested { get; set; }
 
+    /// <summary>
+    /// Optional template rendered beside the built-in action control on each member row.
+    /// </summary>
+    /// <remarks>
+    /// The <c>TeamComponent</c> counterpart of <c>TeamsListView.TeamActionsTemplate</c>: use this to place a
+    /// control <i>next to</i> the member's action button, and <see cref="MemberActionItems"/> to put one
+    /// <i>inside</i> its menu.
+    /// </remarks>
+    [Parameter] public RenderFragment<TMember> MemberActionsTemplate { get; set; }
+
+    /// <summary>
+    /// Optional extra items for each member row's split-button dropdown (supply
+    /// <c>RadzenSplitButtonItem</c> components). Clicks arrive via <see cref="MemberActionInvoked"/>.
+    /// </summary>
+    /// <remarks>
+    /// The member-row counterpart of <c>TeamsListView.TeamActionItems</c>. An item whose <c>Value</c>
+    /// matches one the component owns is handled as that built-in rather than forwarded — see
+    /// <c>MemberActionValues</c> for the five names to avoid.
+    /// </remarks>
+    [Parameter] public RenderFragment MemberActionItems { get; set; }
+
+    /// <summary>Raised when a consumer-supplied split-button item (<see cref="MemberActionItems"/>) is clicked.</summary>
+    [Parameter] public EventCallback<MemberRowAction<TMember>> MemberActionInvoked { get; set; }
+
+    /// <summary>
+    /// Optional extra columns appended to the member grid, after the built-in ones and before the action
+    /// column. Supply <c>RadzenDataGridColumn</c> components.
+    /// </summary>
+    /// <remarks>
+    /// Raw columns rather than a per-row template, so an added column carries its own header, width and
+    /// sorting — a host binding a member to something of its own needs a named column, not an unlabelled
+    /// cell. Appended before the actions so a new column does not push them into the middle of the row.
+    /// </remarks>
+    [Parameter] public RenderFragment MemberColumns { get; set; }
+
     private string _editingMemberKey;
     private string _editingMemberName;
 
@@ -828,6 +863,7 @@ else
                                 <DateTimeView Date="@context.LastSeen"/>
                             </Template>
                         </RadzenDataGridColumn>
+                        @MemberColumns
                         <RadzenDataGridColumn>
                             <Template>
                                 @{
@@ -836,25 +872,40 @@ else
                                 @* Same Text/Icon/style as the split button's primary half, so a
                                    member with one available action does not look like a
                                    different kind of control from the member beside them. *@
-                                @if (memberActions.Count == 1)
+                                @if (memberActions.Count == 1 && MemberActionItems == null)
                                 {
                                     <RadzenButton Text="@memberActions[0].Text" Icon="@memberActions[0].Icon"
                                                   ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                                  Click="@(() => InvokeMemberActionAsync(memberActions[0].Value, team, context.Key))"/>
+                                                  Click="@(() => InvokeMemberActionAsync(memberActions[0].Value, team, context))"/>
                                 }
-                                else if (memberActions.Count > 1)
+                                else if (memberActions.Count > 0)
                                 {
                                     <RadzenSplitButton Text="@memberActions[0].Text" Icon="@memberActions[0].Icon"
                                                        ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                                       Click="@(item => OnMemberActionAsync(item, team, context.Key, memberActions[0].Value))">
+                                                       Click="@(item => OnMemberActionAsync(item, team, context, memberActions[0].Value))">
                                         <ChildContent>
                                             @foreach (var action in memberActions.Skip(1))
                                             {
                                                 <RadzenSplitButtonItem Text="@action.Text" Value="@action.Value" Icon="@action.Icon"/>
                                             }
+                                            @MemberActionItems
                                         </ChildContent>
                                     </RadzenSplitButton>
                                 }
+                                else if (MemberActionItems != null)
+                                {
+                                    @* A member the caller can act on in no built-in way -- their own row,
+                                       or the owner's -- still has to carry a host's action. Icon-only,
+                                       because the primary half would otherwise have to invent a label for
+                                       a menu whose contents the toolkit does not know. *@
+                                    <RadzenSplitButton Icon="more_vert" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                       Click="@(item => OnMemberActionAsync(item, team, context, null))">
+                                        <ChildContent>
+                                            @MemberActionItems
+                                        </ChildContent>
+                                    </RadzenSplitButton>
+                                }
+                                @MemberActionsTemplate?.Invoke(context)
                             </Template>
                         </RadzenDataGridColumn>
                     </Columns>
@@ -1087,11 +1138,11 @@ else
     /// The actions available on a team, in priority order — the first is the split button's default
     /// (primary) action, with "Invite user" preferred when available.
     /// </summary>
-    private const string CopyInviteAction = "copy-invite";
-    private const string RemoveMemberAction = "remove-member";
-    private const string MemberAuditAction = "member-audit";
-    private const string SuspendMemberAction = "suspend-member";
-    private const string RestoreMemberAction = "restore-member";
+    private const string CopyInviteAction = MemberActionValues.CopyInvite;
+    private const string RemoveMemberAction = MemberActionValues.RemoveMember;
+    private const string MemberAuditAction = MemberActionValues.MemberAudit;
+    private const string SuspendMemberAction = MemberActionValues.SuspendMember;
+    private const string RestoreMemberAction = MemberActionValues.RestoreMember;
 
     /// <summary>
     /// Row actions for one member, in the order they collapse: the first is the primary button, the rest
@@ -1160,11 +1211,24 @@ else
         return actions;
     }
 
-    private Task OnMemberActionAsync(RadzenSplitButtonItem item, ITeam<TMember> team, string memberKey, string defaultValue)
-        => InvokeMemberActionAsync(item?.Value ?? defaultValue, team, memberKey);
+    private Task OnMemberActionAsync(RadzenSplitButtonItem item, ITeam<TMember> team, TMember member, string defaultValue)
+        => InvokeMemberActionAsync(item?.Value ?? defaultValue, team, member);
 
-    private async Task InvokeMemberActionAsync(string value, ITeam<TMember> team, string memberKey)
+    private async Task InvokeMemberActionAsync(string value, ITeam<TMember> team, TMember member)
     {
+        // The icon-only button rendered for a row with no built-in actions has no primary action: its
+        // left half is the menu's handle, not a command. Clicking it must do nothing rather than raise
+        // MemberActionInvoked with a null action.
+        if (string.IsNullOrEmpty(value)) return;
+
+        // Anything the component does not own came from MemberActionItems and belongs to the host.
+        if (!MemberActionValues.IsBuiltIn(value))
+        {
+            await MemberActionInvoked.InvokeAsync(new MemberRowAction<TMember>(value, member));
+            return;
+        }
+
+        var memberKey = member.Key;
         switch (value)
         {
             case CopyInviteAction: await CopyInvitationLink(team, memberKey); break;
