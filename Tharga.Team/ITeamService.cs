@@ -168,6 +168,33 @@ public interface ITeamService
     /// </remarks>
     Task<SetOwnerResult> SetOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember;
     Task SetTeamConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null);
+
+    /// <summary>
+    /// Asks for access to a team the caller is not a member of, at <paramref name="accessLevel"/> for
+    /// <paramref name="duration"/> (null for no end). Replaces any request the caller already has pending on the team.
+    /// </summary>
+    /// <remarks>
+    /// A default interface method, like <see cref="RestoreTeamAsync{TMember}"/>, so a host implementing this contract
+    /// directly keeps compiling — and one decorating it must forward it. It throws rather than no-opping: a request
+    /// reported as filed that nobody can see strands the requester waiting.
+    /// </remarks>
+    Task<TeamAccessRequest> RequestTeamAccessAsync(string teamKey, AccessLevel accessLevel, TimeSpan? duration, string message)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(RequestTeamAccessAsync)}.");
+
+    /// <summary>Withdraws the caller's own pending request.</summary>
+    Task CancelTeamAccessRequestAsync(string teamKey, string requestId)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(CancelTeamAccessRequestAsync)}.");
+
+    /// <summary>
+    /// Approves a pending request: in one write, the team consents <paramref name="consentedRoles"/> at the requested
+    /// level for the requested window, and the request is marked approved.
+    /// </summary>
+    Task ApproveTeamAccessRequestAsync(string teamKey, string requestId, string[] consentedRoles)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ApproveTeamAccessRequestAsync)}.");
+
+    /// <summary>Denies a pending request.</summary>
+    Task DenyTeamAccessRequestAsync(string teamKey, string requestId)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(DenyTeamAccessRequestAsync)}.");
     IAsyncEnumerable<ITeam> GetConsentedTeamsAsync(string[] userRoles);
     Task<IReadOnlyList<TenantRoleDefinition>> GetTeamCustomRolesAsync(string teamKey);
     Task SetTeamCustomRolesAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles);

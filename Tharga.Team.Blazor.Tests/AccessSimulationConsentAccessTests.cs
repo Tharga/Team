@@ -32,6 +32,9 @@ public class AccessSimulationConsentAccessTests
     {
         public string Name => Key;
         public string Icon => null;
+
+        /// <summary>A consented team names the roles it consented to; the grant resolver checks the caller holds one.</summary>
+        public string[] ConsentedRoles => [Roles.Developer];
     }
 
     private sealed class FakeAuthStateProvider(ClaimsPrincipal principal) : AuthenticationStateProvider

@@ -152,6 +152,64 @@ internal class TestTeamService : TeamServiceBase
         return Task.CompletedTask;
     }
 
+    /// <summary>Stands in for a host store that never overrode the access-request hooks, so the base throws.</summary>
+    public bool SimulateNoAccessRequestHooks { get; init; }
+
+    public TestTeam Team(string teamKey) => _teams[teamKey];
+
+    public void SeedConsent(string teamKey, string[] roles, AccessLevel? level, TemporaryConsent temporary = null)
+        => _teams[teamKey] = _teams[teamKey] with { ConsentedRoles = roles, ConsentAccessLevel = level, TemporaryConsent = temporary };
+
+    public void SeedAccessRequest(string teamKey, TeamAccessRequest request)
+        => _teams[teamKey] = _teams[teamKey] with { AccessRequests = [.. _teams[teamKey].AccessRequests ?? [], request] };
+
+    protected override Task AddAccessRequestAsync(string teamKey, TeamAccessRequest request)
+    {
+        if (SimulateNoAccessRequestHooks) return base.AddAccessRequestAsync(teamKey, request);
+
+        var team = _teams[teamKey];
+        var existing = (team.AccessRequests ?? [])
+            .Select(x => x.Status == TeamAccessRequestStatus.Pending && x.RequesterKey == request.RequesterKey
+                ? x with { Status = TeamAccessRequestStatus.Cancelled, DecidedBy = request.RequesterKey, DecidedAt = request.RequestedAt }
+                : x);
+
+        _teams[teamKey] = team with
+        {
+            AccessRequests = [.. new[] { request }.Concat(existing).OrderByDescending(x => x.RequestedAt).Take(TeamAccessRequestRules.HistoryLimit)]
+        };
+        return Task.CompletedTask;
+    }
+
+    protected override Task<bool> DecideAccessRequestAsync(string teamKey, string requestId, TeamAccessRequestStatus status, string decidedBy, DateTime decidedAt)
+    {
+        if (SimulateNoAccessRequestHooks) return base.DecideAccessRequestAsync(teamKey, requestId, status, decidedBy, decidedAt);
+
+        return Task.FromResult(UpdatePending(teamKey, requestId, x => x with { Status = status, DecidedBy = decidedBy, DecidedAt = decidedAt }));
+    }
+
+    protected override Task<bool> ApproveAccessRequestAsync(string teamKey, string requestId, string decidedBy, DateTime decidedAt, DateTime? grantedUntil,
+        string[] consentedRoles, AccessLevel accessLevel, TemporaryConsent temporaryConsent)
+    {
+        if (SimulateNoAccessRequestHooks)
+            return base.ApproveAccessRequestAsync(teamKey, requestId, decidedBy, decidedAt, grantedUntil, consentedRoles, accessLevel, temporaryConsent);
+
+        if (!UpdatePending(teamKey, requestId, x => x with { Status = TeamAccessRequestStatus.Approved, DecidedBy = decidedBy, DecidedAt = decidedAt, GrantedUntil = grantedUntil }))
+            return Task.FromResult(false);
+
+        _teams[teamKey] = _teams[teamKey] with { ConsentedRoles = consentedRoles, ConsentAccessLevel = accessLevel, TemporaryConsent = temporaryConsent };
+        return Task.FromResult(true);
+    }
+
+    private bool UpdatePending(string teamKey, string requestId, Func<TeamAccessRequest, TeamAccessRequest> change)
+    {
+        var team = _teams[teamKey];
+        var request = team.AccessRequests?.FirstOrDefault(x => x.Id == requestId);
+        if (request is not { Status: TeamAccessRequestStatus.Pending }) return false;
+
+        _teams[teamKey] = team with { AccessRequests = [.. team.AccessRequests.Select(x => x.Id == requestId ? change(x) : x)] };
+        return true;
+    }
+
     /// <summary>
     /// Puts custom roles into the store <b>without</b> going through <c>SetTeamCustomRolesAsync</c>, so a
     /// test can establish what the store holds without the write path invalidating the cache first.
@@ -172,6 +230,9 @@ internal record TestTeam : ITeam<TestMember>
     public AccessLevel? ConsentAccessLevel { get; init; }
     public IReadOnlyList<TenantRoleDefinition> CustomRoles { get; init; }
     public TestMember[] Members { get; init; } = [];
+    public TemporaryConsent TemporaryConsent { get; init; }
+    public IReadOnlyList<TeamAccessRequest> AccessRequests { get; init; }
+    public DateTime? DeletedAt { get; init; }
 }
 
 internal record TestMember : ITeamMember

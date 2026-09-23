@@ -39,6 +39,16 @@ internal static class TeamVisibility
     }
 
     /// <summary>
+    /// The access level <paramref name="team"/> has consented to grant at <paramref name="utcNow"/>, through
+    /// <see cref="TeamConsent.Resolve"/> — so a temporary consent reads as its previous consent once it has run out.
+    /// </summary>
+    public static AccessLevel? Resolve(ITeam team, AccessLevel defaultAccessLevel, DateTime utcNow)
+    {
+        var consent = TeamConsent.Resolve(team, utcNow);
+        return Resolve(consent.Roles, consent.AccessLevel, defaultAccessLevel);
+    }
+
+    /// <summary>
     /// Label shown alongside the tint — colour alone is not an accessible encoding. Names the granted
     /// level rather than a coarse band, so "Viewer" and "User" are told apart.
     /// </summary>

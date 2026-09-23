@@ -13,7 +13,12 @@ env:
   #
   # 3.22: 'support:read' no longer authorizes replying to, closing or reopening a case. A host that
   # granted only that scope must grant 'support:manage' for those people to keep working.
-  MAJOR_MINOR: '3.22'
+  #
+  # 3.23: changing a team's consent now requires 'team:manage' held as a member. A caller who held it
+  # through consent could previously change that same consent, which with time-bounded consent means
+  # removing their own expiry. A host with its own ITeamService decorator must also forward the new
+  # access-request members, or they resolve to the throwing defaults.
+  MAJOR_MINOR: '3.23'
 
 permissions:
   contents: write

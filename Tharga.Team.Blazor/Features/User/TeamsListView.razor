@@ -319,7 +319,7 @@ else
                 IsOwnerless = TeamActivity.Owner(members) == null,
                 OwnerCount = members.Count(m => m.AccessLevel == AccessLevel.Owner),
                 LastUsed = TeamActivity.LastUsed(members),
-                Consent = TeamVisibility.Resolve(t.ConsentedRoles, t.ConsentAccessLevel, BlazorOptions.Value.Consent.AccessLevel),
+                Consent = TeamVisibility.Resolve(t, BlazorOptions.Value.Consent.AccessLevel, DateTime.UtcNow),
                 Members = members
             };
         }).OrderBy(t => t.Name).ToList();

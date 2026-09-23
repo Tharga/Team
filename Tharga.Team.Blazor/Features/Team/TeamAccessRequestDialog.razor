@@ -1,0 +1,102 @@
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Extensions.Options
+@using Tharga.Team
+@attribute [Authorize]
+@inject DialogService DialogService
+@inject ITeamAccessRequestService AccessRequestService
+@inject IOptions<ThargaBlazorOptions> BlazorOptions
+@inject IThargaTextProvider TextProvider
+
+<RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem" Style="height: 100%;">
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
+            @_text.Format(TeamAccessRequestText.RequestAccessDescription, string.Join(", ", BlazorOptions.Value.Consent.Roles ?? []))
+        </RadzenText>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenLabel Text="@_text[TeamAccessRequestText.AccessLevel]" />
+            <RadzenSelectBar @bind-Value="_level" TValue="AccessLevel" Size="ButtonSize.Small">
+                <Items>
+                    @foreach (var level in _levels)
+                    {
+                        <RadzenSelectBarItem Text="@level.ToString()" Value="@level" />
+                    }
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenLabel Text="@_text[TeamAccessRequestText.Duration]" />
+            <RadzenSelectBar @bind-Value="_durationKey" TValue="string" Size="ButtonSize.Small">
+                <Items>
+                    @foreach (var choice in TeamAccessRequestGate.DurationChoices)
+                    {
+                        <RadzenSelectBarItem Text="@_text[choice.Label]" Value="@choice.Key" />
+                    }
+                </Items>
+            </RadzenSelectBar>
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+            <RadzenLabel Text="@_text[TeamAccessRequestText.Message]" />
+            <RadzenTextArea @bind-Value="_message" MaxLength="@TeamAccessRequestRules.MaxMessageLength" Rows="3" Style="width: 100%;" />
+        </RadzenStack>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" ShowIcon="true" AllowClose="false" class="rz-m-0">@_error</RadzenAlert>
+        }
+    </RadzenStack>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+        <RadzenButton Text="@_text[TeamAccessRequestText.Send]" Icon="send" Disabled="@_sending" Click="@SendAsync" />
+        <CancelButton Click="@Cancel" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    /// <summary>The team to request access to.</summary>
+    [Parameter] public string TeamKey { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private AccessLevel[] _levels = [];
+    private AccessLevel _level = AccessLevel.Viewer;
+    private string _durationKey = TeamAccessRequestGate.DurationChoices[0].Key;
+    private string _message;
+    private string _error;
+    private bool _sending;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(TeamAccessRequestText.All);
+        _levels = AccessLevelVisibility.Apply(TeamAccessRequestRules.RequestableLevels, BlazorOptions.Value.HiddenAccessLevels);
+        if (_levels.Length > 0) _level = _levels[0];
+    }
+
+    private async Task SendAsync()
+    {
+        _sending = true;
+        _error = null;
+
+        try
+        {
+            var duration = TeamAccessRequestGate.DurationChoices.First(x => x.Key == _durationKey).Duration;
+            await AccessRequestService.RequestTeamAccessAsync(TeamKey, _level, duration, _message);
+            DialogService.Close(true);
+        }
+        catch (Exception e) when (e is UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+
+    private Task Cancel()
+    {
+        DialogService.Close(false);
+        return Task.CompletedTask;
+    }
+}

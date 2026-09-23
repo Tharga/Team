@@ -70,7 +70,8 @@ public class ConsentAuditWiringTests
     }
 
     // Authorized for team-1: AuthorizationTeamServiceDecorator (outermost since 3.1.2) requires
-    // team:manage bound to the acted-on team before the call reaches the audit decorator.
+    // team:manage bound to the acted-on team before the call reaches the audit decorator — and, for consent,
+    // held as a member, which the member key says.
     private sealed class StubAuthStateProvider : AuthenticationStateProvider
     {
         public override Task<AuthenticationState> GetAuthenticationStateAsync()
@@ -78,6 +79,7 @@ public class ConsentAuditWiringTests
             var identity = new ClaimsIdentity(
             [
                 new Claim(TeamClaimTypes.TeamKey, TeamKey),
+                new Claim(TeamClaimTypes.MemberKey, "member-1"),
                 new Claim(TeamClaimTypes.Scope, TeamScopes.Manage)
             ], authenticationType: "Test");
             return Task.FromResult(new AuthenticationState(new ClaimsPrincipal(identity)));

@@ -91,7 +91,13 @@ internal sealed class TeamGrantResolver
 
         if (consented == null) return null;
 
-        var level = consented.ConsentAccessLevel ?? defaultConsentLevel;
+        // Through TeamConsent, so a temporary consent stops counting when it runs out — and checked again here
+        // rather than trusted from the lookup, because a host implementing ITeamService directly may return a team
+        // on its stored roles alone.
+        var inForce = TeamConsent.Resolve(consented, DateTime.UtcNow);
+        if (!inForce.Covers(roles)) return null;
+
+        var level = inForce.AccessLevel ?? defaultConsentLevel;
         var consentScopes = _scopeRegistry?.GetEffectiveScopes(level, [], []) ?? [];
 
         return new TeamGrant(level, [.. consentScopes], MemberKey: null, IsMember: false);

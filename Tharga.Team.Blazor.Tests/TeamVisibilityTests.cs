@@ -86,4 +86,39 @@ public class TeamVisibilityTests
         Assert.Equal(label, TeamVisibility.Label(consent));
         Assert.Equal(badgeStyle, TeamVisibility.BadgeStyle(consent));
     }
+
+    private sealed record ConsentTeam : ITeam
+    {
+        public string Key => "team-1";
+        public string Name => "Team";
+        public string Icon => null;
+        public string[] ConsentedRoles { get; init; }
+        public AccessLevel? ConsentAccessLevel { get; init; }
+        public TemporaryConsent TemporaryConsent { get; init; }
+    }
+
+    /// <summary>The badge shows the consent in force, so an expired temporary consent reads as the previous one.</summary>
+    [Fact]
+    public void ResolveForATeam_ShowsThePreviousConsent_AfterATemporaryConsentExpires()
+    {
+        var now = new DateTime(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
+        var team = new ConsentTeam
+        {
+            ConsentedRoles = ["Developer"],
+            ConsentAccessLevel = AccessLevel.Administrator,
+            TemporaryConsent = new TemporaryConsent { ExpiresAt = now.AddMinutes(-1), PreviousConsentedRoles = ["Developer"], PreviousConsentAccessLevel = AccessLevel.Viewer }
+        };
+
+        Assert.Equal(AccessLevel.Viewer, TeamVisibility.Resolve(team, AccessLevel.User, now));
+        Assert.Equal(AccessLevel.Administrator, TeamVisibility.Resolve(team, AccessLevel.User, now.AddMinutes(-2)));
+    }
+
+    [Fact]
+    public void ResolveForATeam_IsNoAccess_AfterExpiry_WithNoPreviousConsent()
+    {
+        var now = new DateTime(2026, 9, 14, 12, 0, 0, DateTimeKind.Utc);
+        var team = new ConsentTeam { ConsentedRoles = ["Developer"], TemporaryConsent = new TemporaryConsent { ExpiresAt = now } };
+
+        Assert.Null(TeamVisibility.Resolve(team, AccessLevel.User, now));
+    }
 }

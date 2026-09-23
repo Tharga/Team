@@ -23,6 +23,7 @@ public static class TeamServiceFacets
         typeof(ITeamLifecycleService),
         typeof(ITeamDirectoryService),
         typeof(ITeamOversightService),
-        typeof(ITeamInvitationService)
+        typeof(ITeamInvitationService),
+        typeof(ITeamAccessRequestService)
     ];
 }

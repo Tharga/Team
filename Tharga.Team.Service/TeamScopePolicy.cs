@@ -31,6 +31,29 @@ internal static class TeamScopePolicy
     }
 
     /// <summary>
+    /// Whether the caller holds <paramref name="scope"/> for <paramref name="teamKey"/> <b>directly</b> — as a member
+    /// of the team, or as a key issued for it — and not through the team's consent.
+    /// </summary>
+    /// <remarks>
+    /// <b>For acts that decide consent itself.</b> A caller consented in at Administrator holds <c>team:manage</c>
+    /// like a member does, and <see cref="HasTeamScope"/> cannot tell them apart. Letting that caller change the
+    /// team's consent — or approve a request for it — would let the grant extend itself: remove its own expiry, raise
+    /// its own level. The provenance is on the principal: <see cref="TeamClaimTypes.MemberKey"/> is issued only from
+    /// a membership, and a team API key carries <see cref="TeamClaimTypes.ApiKeyId"/> without
+    /// <see cref="TeamClaimTypes.IsSystemKey"/>. A system key acting through a team's consent has neither.
+    /// </remarks>
+    public static bool HasDirectTeamScope(ClaimsPrincipal principal, string scope, string teamKey)
+    {
+        if (!HasTeamScope(principal, scope, teamKey)) return false;
+
+        var isMember = !string.IsNullOrEmpty(principal.FindFirst(TeamClaimTypes.MemberKey)?.Value);
+        var isTeamKey = principal.HasClaim(c => c.Type == TeamClaimTypes.ApiKeyId)
+                        && !principal.HasClaim(c => c.Type == TeamClaimTypes.IsSystemKey);
+
+        return isMember || isTeamKey;
+    }
+
+    /// <summary>
     /// Whether the caller holds the system <paramref name="scope"/>. Authorizes across any team and
     /// requires no team to be selected — system scopes come from app roles or a system API key,
     /// independently of membership.

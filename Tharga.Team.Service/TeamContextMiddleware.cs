@@ -49,6 +49,7 @@ public sealed class TeamContextMiddleware(RequestDelegate next, IOptions<TeamCon
             {
                 var claims = new List<Claim> { new(TeamClaimTypes.TeamKey, resolved.TeamKey) };
                 claims.AddRange(resolved.Scopes.Select(s => new Claim(TeamClaimTypes.Scope, s)));
+                if (!string.IsNullOrEmpty(resolved.MemberKey)) claims.Add(new Claim(TeamClaimTypes.MemberKey, resolved.MemberKey));
 
                 context.User.AddIdentity(new ClaimsIdentity(claims, "TeamContext"));
             }

@@ -34,6 +34,28 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt) => Task.CompletedTask;
 
     /// <summary>
+    /// Adds an access request, cancelling the requester's other pending requests on the team and keeping the
+    /// <see cref="TeamAccessRequestRules.HistoryLimit"/> most recent.
+    /// </summary>
+    /// <remarks>
+    /// A default interface method that throws, so a host with its own repository keeps compiling and learns at the point
+    /// of use that access requests need implementing — a request silently dropped would leave the requester waiting.
+    /// </remarks>
+    Task AddAccessRequestAsync(string teamKey, TeamAccessRequestEntity request)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddAccessRequestAsync)}.");
+
+    /// <summary>Marks a request decided, only if still pending. False when it was not.</summary>
+    Task<bool> DecideAccessRequestAsync(string teamKey, string requestId, TeamAccessRequestStatus status, string decidedBy, DateTime decidedAt)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(DecideAccessRequestAsync)}.");
+
+    /// <summary>
+    /// Approves a pending request and sets the team's consent in one update. False when the request was no longer pending.
+    /// </summary>
+    Task<bool> ApproveAccessRequestAsync(string teamKey, string requestId, string decidedBy, DateTime decidedAt, DateTime? grantedUntil,
+        string[] consentedRoles, AccessLevel accessLevel, TemporaryConsentEntity temporaryConsent)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ApproveAccessRequestAsync)}.");
+
+    /// <summary>
     /// The single live team holding an outstanding invitation with this code, or null when none or more than
     /// one does. Backed by the <c>Members.Invitation.InviteKey</c> index.
     /// </summary>

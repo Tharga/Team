@@ -162,6 +162,43 @@ public abstract class TeamServiceBase : ITeamService
             $"and declare {nameof(ITeamMember.SuspendedAt)}/{nameof(ITeamMember.SuspendedBy)} on your " +
             $"member entity, to support suspending members.");
     protected abstract Task SetTeamConsentInternalAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel);
+
+    /// <summary>
+    /// Stores a new access request on the team. Marks any other request pending from the same requester
+    /// <see cref="TeamAccessRequestStatus.Cancelled"/>, and keeps at most <see cref="TeamAccessRequestRules.HistoryLimit"/>
+    /// requests, newest first.
+    /// </summary>
+    /// <remarks>
+    /// Virtual with a throwing body rather than abstract, so a host deriving from this class keeps compiling — the
+    /// <see cref="SetTeamMemberSuspendedAsync"/> pattern. Override to support access requests.
+    /// </remarks>
+    protected virtual Task AddAccessRequestAsync(string teamKey, TeamAccessRequest request)
+        => throw AccessRequestsNotSupported(nameof(AddAccessRequestAsync));
+
+    /// <summary>
+    /// Marks a request <paramref name="status"/> — only if it is still pending. Returns false when it was not, so a
+    /// decision racing another one does not overwrite it.
+    /// </summary>
+    protected virtual Task<bool> DecideAccessRequestAsync(string teamKey, string requestId, TeamAccessRequestStatus status, string decidedBy, DateTime decidedAt)
+        => throw AccessRequestsNotSupported(nameof(DecideAccessRequestAsync));
+
+    /// <summary>
+    /// Approves a request <b>in one write</b>, only if it is still pending: marks it approved with
+    /// <paramref name="grantedUntil"/>, sets the team's consent to <paramref name="consentedRoles"/> at
+    /// <paramref name="accessLevel"/>, and stores <paramref name="temporaryConsent"/> — removing any stored one when it
+    /// is null. Returns false when the request was no longer pending.
+    /// </summary>
+    /// <remarks>
+    /// One write because the consent and the request's status are one fact: a store that set consent and then failed
+    /// to mark the request would grant access nobody can see was approved.
+    /// </remarks>
+    protected virtual Task<bool> ApproveAccessRequestAsync(string teamKey, string requestId, string decidedBy, DateTime decidedAt, DateTime? grantedUntil,
+        string[] consentedRoles, AccessLevel accessLevel, TemporaryConsent temporaryConsent)
+        => throw AccessRequestsNotSupported(nameof(ApproveAccessRequestAsync));
+
+    private NotSupportedException AccessRequestsNotSupported(string method)
+        => new($"'{GetType().Name}' does not implement {method}. Implement it, and declare {nameof(ITeam.AccessRequests)} and " +
+               $"{nameof(ITeam.TemporaryConsent)} on your team entity, to support access requests.");
     protected abstract IAsyncEnumerable<ITeam> GetConsentedTeamsInternalAsync(string[] userRoles);
     protected abstract Task SetTeamCustomRolesInternalAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles);
 
@@ -879,9 +916,135 @@ public abstract class TeamServiceBase : ITeamService
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
 
-    public IAsyncEnumerable<ITeam> GetConsentedTeamsAsync(string[] userRoles)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Who may request — a holder of a consent role — is enforced by <c>AuthorizationTeamServiceDecorator</c>, which
+    /// reads the caller's claims. The rules here are the ones the request itself must satisfy.
+    /// </remarks>
+    public async Task<TeamAccessRequest> RequestTeamAccessAsync(string teamKey, AccessLevel accessLevel, TimeSpan? duration, string message)
     {
-        return GetConsentedTeamsInternalAsync(userRoles);
+        var user = await RequireCurrentUserAsync();
+
+        if (!TeamAccessRequestRules.RequestableLevels.Contains(accessLevel))
+            throw new ArgumentException($"Access level '{accessLevel}' cannot be requested. Request one of: {string.Join(", ", TeamAccessRequestRules.RequestableLevels)}.", nameof(accessLevel));
+
+        if (duration is { } length && length <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(duration), "A requested duration must be positive. Pass null to ask for no end.");
+
+        var note = string.IsNullOrWhiteSpace(message) ? null : message.Trim();
+        if (note?.Length > TeamAccessRequestRules.MaxMessageLength)
+            throw new ArgumentException($"The message may be at most {TeamAccessRequestRules.MaxMessageLength} characters.", nameof(message));
+
+        var team = await GetTeamAsync(teamKey);
+        if (team == null || team.DeletedAt != null)
+            throw new InvalidOperationException($"Team '{teamKey}' was not found.");
+
+        // Membership outranks consent in the grant resolver, so for a member an approved request would grant nothing.
+        if (await GetTeamMemberAsync(teamKey, user.Key) != null)
+            throw new InvalidOperationException($"You are already a member of team '{teamKey}'. Ask a team manager to change your access level instead.");
+
+        var request = new TeamAccessRequest
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            RequesterKey = user.Key,
+            RequesterName = ResolveDisplayName(user),
+            AccessLevel = accessLevel,
+            Duration = duration,
+            Message = note,
+            RequestedAt = DateTime.UtcNow
+        };
+
+        await AddAccessRequestAsync(teamKey, request);
+        TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+
+        return request;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The requester is the check: only the person who asked may withdraw the request, whatever scopes anyone holds.
+    /// </remarks>
+    public async Task CancelTeamAccessRequestAsync(string teamKey, string requestId)
+    {
+        var user = await RequireCurrentUserAsync();
+        var request = await RequirePendingAccessRequestAsync(teamKey, requestId);
+
+        if (request.RequesterKey != user.Key)
+            throw new UnauthorizedAccessException("Only the person who made an access request can cancel it.");
+
+        if (!await DecideAccessRequestAsync(teamKey, requestId, TeamAccessRequestStatus.Cancelled, user.Key, DateTime.UtcNow))
+            throw new InvalidOperationException(AccessRequestNoLongerPendingMessage);
+
+        TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// <c>team:manage</c> held as a member is enforced by <c>AuthorizationTeamServiceDecorator</c>. Refusing the
+    /// requester here as well costs nothing and holds even for a host that wires the service without the decorator.
+    /// </remarks>
+    public async Task ApproveTeamAccessRequestAsync(string teamKey, string requestId, string[] consentedRoles)
+    {
+        var user = await RequireCurrentUserAsync();
+
+        if (consentedRoles is not { Length: > 0 })
+            throw new ArgumentException("Approving an access request consents at least one role.", nameof(consentedRoles));
+
+        var team = await GetTeamAsync(teamKey);
+        var request = RequirePending(team, teamKey, requestId);
+
+        if (request.RequesterKey == user.Key)
+            throw new UnauthorizedAccessException("An access request cannot be approved by the person who made it.");
+
+        var now = DateTime.UtcNow;
+        var (grantedUntil, temporary) = TeamAccessApproval.Plan(team, request, now);
+
+        if (!await ApproveAccessRequestAsync(teamKey, requestId, user.Key, now, grantedUntil, consentedRoles, request.AccessLevel, temporary))
+            throw new InvalidOperationException(AccessRequestNoLongerPendingMessage);
+
+        TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+    }
+
+    /// <inheritdoc />
+    public async Task DenyTeamAccessRequestAsync(string teamKey, string requestId)
+    {
+        var user = await RequireCurrentUserAsync();
+        await RequirePendingAccessRequestAsync(teamKey, requestId);
+
+        if (!await DecideAccessRequestAsync(teamKey, requestId, TeamAccessRequestStatus.Denied, user.Key, DateTime.UtcNow))
+            throw new InvalidOperationException(AccessRequestNoLongerPendingMessage);
+
+        TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
+    }
+
+    private const string AccessRequestNoLongerPendingMessage = "This access request has already been decided or withdrawn.";
+
+    private async Task<TeamAccessRequest> RequirePendingAccessRequestAsync(string teamKey, string requestId)
+        => RequirePending(await GetTeamAsync(teamKey), teamKey, requestId);
+
+    private static TeamAccessRequest RequirePending(ITeam team, string teamKey, string requestId)
+    {
+        var request = team?.AccessRequests?.FirstOrDefault(x => x.Id == requestId)
+                      ?? throw new InvalidOperationException($"Access request '{requestId}' was not found on team '{teamKey}'.");
+
+        return request.Status == TeamAccessRequestStatus.Pending
+            ? request
+            : throw new InvalidOperationException(AccessRequestNoLongerPendingMessage);
+    }
+
+    /// <remarks>
+    /// Filtered through <see cref="TeamConsent.Resolve"/>: the store matches on what it has stored, which still names
+    /// a temporary consent after it has run out. A store should also match the previous consent a
+    /// <see cref="ITeam.TemporaryConsent"/> returns to, or a role covered only after expiry is missed.
+    /// </remarks>
+    public async IAsyncEnumerable<ITeam> GetConsentedTeamsAsync(string[] userRoles)
+    {
+        var now = DateTime.UtcNow;
+
+        await foreach (var team in GetConsentedTeamsInternalAsync(userRoles))
+        {
+            if (TeamConsent.Resolve(team, now).Covers(userRoles)) yield return team;
+        }
     }
 
     /// <inheritdoc cref="ITeamManagementService.GetTeamCustomRolesAsync"/>

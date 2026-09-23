@@ -483,7 +483,8 @@ public static class ThargaBlazorRegistration
             var tenantRoleRegistry = sp.GetService<ITenantRoleRegistry>();
             var dynamicRoleOptions = sp.GetService<DynamicTenantRoleOptions>();
             var purgeCascade = sp.GetService<TeamPurgeCascade>();
-            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade);
+            var consentOptions = sp.GetService<IOptions<ConsentOptions>>()?.Value;
+            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade, consentOptions);
         });
     }
 

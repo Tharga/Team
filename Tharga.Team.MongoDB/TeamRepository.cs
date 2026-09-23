@@ -1,5 +1,7 @@
 ﻿using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
+using MongoDB.Driver.Linq;
+using Tharga.MongoDB;
 
 namespace Tharga.Team.MongoDB;
 
@@ -298,9 +300,92 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         var filter = new FilterDefinitionBuilder<TTeamEntity>().Eq(x => x.Key, teamKey);
         var update = new UpdateDefinitionBuilder<TTeamEntity>()
             .Set(x => x.ConsentedRoles, consentedRoles)
-            .Set(x => x.ConsentAccessLevel, accessLevel);
+            .Set(x => x.ConsentAccessLevel, accessLevel)
+            .Unset(x => x.TemporaryConsent);
+        // A manager setting consent directly makes it standing: any time-bound window from an approved request ends.
         return _collection.UpdateOneAsync(filter, update);
     }
+
+    /// <remarks>
+    /// Pushed rather than written back as a whole array, so a request filed while another is being decided cannot
+    /// overwrite that decision. The requester's earlier pending requests are cancelled first, one conditional update
+    /// each; there is normally at most one.
+    /// </remarks>
+    public async Task AddAccessRequestAsync(string teamKey, TeamAccessRequestEntity request)
+    {
+        for (var attempt = 0; attempt < TeamAccessRequestRules.HistoryLimit; attempt++)
+        {
+            var pendingFromRequester = Builders<TTeamEntity>.Filter.And(
+                Builders<TTeamEntity>.Filter.Eq(x => x.Key, teamKey),
+                Builders<TTeamEntity>.Filter.ElemMatch(x => x.AccessRequests, Builders<TeamAccessRequestEntity>.Filter.And(
+                    Builders<TeamAccessRequestEntity>.Filter.Eq(r => r.RequesterKey, request.RequesterKey),
+                    Builders<TeamAccessRequestEntity>.Filter.Eq(r => r.Status, TeamAccessRequestStatus.Pending))));
+
+            var cancel = Builders<TTeamEntity>.Update
+                .Set(x => x.AccessRequests.FirstMatchingElement().Status, TeamAccessRequestStatus.Cancelled)
+                .Set(x => x.AccessRequests.FirstMatchingElement().DecidedBy, request.RequesterKey)
+                .Set(x => x.AccessRequests.FirstMatchingElement().DecidedAt, request.RequestedAt);
+
+            var cancelled = await _collection.UpdateOneAsync(pendingFromRequester, cancel, OneOption<TTeamEntity>.FirstOrDefault);
+            if (cancelled?.Before == null) break;
+        }
+
+        var filter = Builders<TTeamEntity>.Filter.Eq(x => x.Key, teamKey);
+        var push = Builders<TTeamEntity>.Update.PushEach(
+            x => x.AccessRequests,
+            [request],
+            slice: TeamAccessRequestRules.HistoryLimit,
+            sort: Builders<TeamAccessRequestEntity>.Sort.Descending(r => r.RequestedAt));
+
+        await _collection.UpdateOneAsync(filter, push);
+    }
+
+    public async Task<bool> DecideAccessRequestAsync(string teamKey, string requestId, TeamAccessRequestStatus status, string decidedBy, DateTime decidedAt)
+    {
+        var update = Builders<TTeamEntity>.Update
+            .Set(x => x.AccessRequests.FirstMatchingElement().Status, status)
+            .Set(x => x.AccessRequests.FirstMatchingElement().DecidedBy, decidedBy)
+            .Set(x => x.AccessRequests.FirstMatchingElement().DecidedAt, decidedAt);
+
+        var result = await _collection.UpdateOneAsync(PendingRequest(teamKey, requestId), update, OneOption<TTeamEntity>.FirstOrDefault);
+        return result?.Before != null;
+    }
+
+    /// <remarks>
+    /// One update: the request's status and the team's consent are one fact, so neither can land without the other.
+    /// Conditional on the request still being pending, so two managers approving at once cannot both write.
+    /// </remarks>
+    public async Task<bool> ApproveAccessRequestAsync(string teamKey, string requestId, string decidedBy, DateTime decidedAt, DateTime? grantedUntil,
+        string[] consentedRoles, AccessLevel accessLevel, TemporaryConsentEntity temporaryConsent)
+    {
+        var update = Builders<TTeamEntity>.Update
+            .Set(x => x.AccessRequests.FirstMatchingElement().Status, TeamAccessRequestStatus.Approved)
+            .Set(x => x.AccessRequests.FirstMatchingElement().DecidedBy, decidedBy)
+            .Set(x => x.AccessRequests.FirstMatchingElement().DecidedAt, decidedAt)
+            .Set(x => x.AccessRequests.FirstMatchingElement().GrantedUntil, grantedUntil)
+            .Set(x => x.ConsentedRoles, consentedRoles)
+            .Set(x => x.ConsentAccessLevel, accessLevel);
+
+        update = temporaryConsent == null
+            ? update.Unset(x => x.TemporaryConsent)
+            : update.Set(x => x.TemporaryConsent, temporaryConsent);
+
+        var result = await _collection.UpdateOneAsync(PendingRequest(teamKey, requestId), update, OneOption<TTeamEntity>.FirstOrDefault);
+        return result?.Before != null;
+    }
+
+    /// <remarks>
+    /// Every write using this filter must pass <see cref="OneOption{TEntity}.FirstOrDefault"/>. It is the only mode
+    /// that sends this filter to the server as the update's own filter; the others find the document first and then
+    /// update it by <c>_id</c> alone, which drops the array condition — so the positional <c>$</c> operator has
+    /// nothing to resolve and the server rejects the command, and the "still pending" condition stops being atomic.
+    /// </remarks>
+    private static FilterDefinition<TTeamEntity> PendingRequest(string teamKey, string requestId)
+        => Builders<TTeamEntity>.Filter.And(
+            Builders<TTeamEntity>.Filter.Eq(x => x.Key, teamKey),
+            Builders<TTeamEntity>.Filter.ElemMatch(x => x.AccessRequests, Builders<TeamAccessRequestEntity>.Filter.And(
+                Builders<TeamAccessRequestEntity>.Filter.Eq(r => r.Id, requestId),
+                Builders<TeamAccessRequestEntity>.Filter.Eq(r => r.Status, TeamAccessRequestStatus.Pending))));
 
     public Task SetCustomRolesAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles)
     {
@@ -311,7 +396,11 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
 
     public IAsyncEnumerable<TTeamEntity> GetTeamsByConsentAsync(string[] roles)
     {
-        return _collection.GetAsync(x => x.DeletedAt == null && x.ConsentedRoles != null && x.ConsentedRoles.Any(r => roles.Contains(r)));
+        // Also matches the consent a temporary consent returns to: after expiry that is the consent in force, and a
+        // role it covers may not be among the stored roles. TeamServiceBase filters the result by what is in force.
+        return _collection.GetAsync(x => x.DeletedAt == null
+                                         && ((x.ConsentedRoles != null && x.ConsentedRoles.Any(r => roles.Contains(r)))
+                                             || (x.TemporaryConsent != null && x.TemporaryConsent.PreviousConsentedRoles != null && x.TemporaryConsent.PreviousConsentedRoles.Any(r => roles.Contains(r)))));
     }
 
     /// <summary>

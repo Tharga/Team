@@ -180,7 +180,10 @@ public class AuthorizationTeamServiceDecoratorTests
     [Fact]
     public async Task Consent_TeamManage_Delegates()
     {
-        var (sut, inner) = Build(Principal("T1", TeamScopes.Manage));
+        // A member: consent may only be changed with team:manage held directly (DirectTeamScopeTests).
+        var principal = Principal("T1", TeamScopes.Manage);
+        ((ClaimsIdentity)principal.Identity).AddClaim(new Claim(TeamClaimTypes.MemberKey, "member-1"));
+        var (sut, inner) = Build(principal);
         await sut.SetTeamConsentAsync("T1", ["Dev"], AccessLevel.Viewer);
         await inner.Received(1).SetTeamConsentAsync("T1", Arg.Any<string[]>(), AccessLevel.Viewer);
     }
