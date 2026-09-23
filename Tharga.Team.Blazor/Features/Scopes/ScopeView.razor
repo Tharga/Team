@@ -12,8 +12,9 @@
 @*
     Interactive scope explorer: pick an access level and roles to see which scopes a member would have.
     Scopes not granted by the current selection are greyed out; the signed-in member's personal scope
-    overrides are highlighted. Built dynamically from IScopeRegistry / ITenantRoleRegistry, so it always
-    reflects the live configuration. Defaults to the current member's access level, roles and overrides.
+    overrides are highlighted. Built dynamically from IScopeRegistry and the roles in force for the selected
+    team -- its own custom definitions merged with the code-registered ones -- so it always reflects the live
+    configuration. Defaults to the current member's access level, roles and overrides.
 *@
 @if (_rows.Count == 0 && !ShowSystemSection)
 {
@@ -165,10 +166,21 @@
     /// </summary>
     [Parameter] public bool ShowSystemScopes { get; set; } = true;
 
+    /// <summary>
+    /// The tenant roles to credit, overriding what the component would resolve for the selected team.
+    /// </summary>
+    /// <remarks>
+    /// Mirrors <c>RoleEditor.Roles</c>. Left null — the usual case — the component resolves the team's own
+    /// roles itself, merging the team's custom definitions with the code-registered ones. Supply it when the
+    /// host composes that list, or to render the page for a team other than the selected one.
+    /// </remarks>
+    [Parameter] public IReadOnlyList<TenantRoleDefinition> Roles { get; set; }
+
     private static readonly ScopeGrant NotGranted = new(false, false, Array.Empty<string>(), false);
 
     private IReadOnlyList<ScopeRow> _rows = Array.Empty<ScopeRow>();
     private IReadOnlyList<string> _allRoleNames = Array.Empty<string>();
+    private IReadOnlyList<TenantRoleDefinition> _resolvedRoles = Array.Empty<TenantRoleDefinition>();
     private Dictionary<string, ScopeGrant> _grants = new();
     private IReadOnlyList<SystemScopeDefinition> _systemScopes = Array.Empty<SystemScopeDefinition>();
 
@@ -189,12 +201,18 @@
         var roleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
         var systemRegistry = ServiceProvider.GetService<ISystemScopeRegistry>();
 
-        _rows = ScopeReference.Build(scopeRegistry, roleRegistry);
-        _allRoleNames = roleRegistry?.All?.Select(r => r.Name).ToList() ?? (IReadOnlyList<string>)Array.Empty<string>();
+        // Code-registered roles only, so the grid is not empty on the first synchronous render. The team's
+        // own roles need an async per-team read and arrive below, before the member's defaults are applied.
+        ApplyRoles(scopeRegistry, roleRegistry?.All);
 
         RecomputeGrants(); // populate for the initial render before any await
 
         var principal = await GetCurrentPrincipalAsync();
+
+        // The team's own roles, merged with the code-registered ones. Done here rather than inside
+        // ApplyCurrentUserDefaultsAsync because that returns early under an access simulation and is skipped
+        // without a principal -- and the role bar and the Roles column have to be right in both cases.
+        await ApplyTeamRolesAsync(scopeRegistry);
 
         // System scopes the current user holds: their Scope claims that are registered system scopes.
         _systemScopes = ScopeReference.UserSystemScopes(
@@ -205,6 +223,57 @@
             await ApplyCurrentUserDefaultsAsync(principal);
 
         RecomputeGrants(); // refine with the loaded defaults
+    }
+
+    /// <summary>
+    /// Rebuilds the rows and the role bar from <paramref name="roles"/>, or from <see cref="Roles"/> when a
+    /// host supplied it.
+    /// </summary>
+    private void ApplyRoles(IScopeRegistry scopeRegistry, IReadOnlyList<TenantRoleDefinition> roles)
+    {
+        _resolvedRoles = Roles ?? roles ?? Array.Empty<TenantRoleDefinition>();
+
+        _rows = ScopeReference.BuildForRoles(scopeRegistry, _resolvedRoles);
+        _allRoleNames = _resolvedRoles.Select(r => r.Name).ToList();
+    }
+
+    /// <summary>
+    /// Rebuilds from the selected team's roles. A host-supplied <see cref="Roles"/> wins, and no selected
+    /// team leaves the code-registered roles in place.
+    /// </summary>
+    private async Task ApplyTeamRolesAsync(IScopeRegistry scopeRegistry)
+    {
+        if (Roles != null) return;
+
+        try
+        {
+            var team = await (ServiceProvider.GetService<ITeamStateService>()?.GetSelectedTeamAsync() ?? Task.FromResult<ITeam>(null));
+            if (string.IsNullOrEmpty(team?.Key)) return;
+
+            ApplyRoles(scopeRegistry, await ResolveTeamRolesAsync(team.Key));
+        }
+        catch { /* best-effort; the code-registered roles already rendered */ }
+    }
+
+    /// <summary>
+    /// The roles in force for <paramref name="teamKey"/>: the team's own definitions merged with the
+    /// code-registered ones, through the same resolver the member and API-key pickers use.
+    /// </summary>
+    /// <remarks>
+    /// <b><see cref="ITenantRoleVisibilityProvider"/> is deliberately not consulted here</b>, unlike in
+    /// <c>TeamComponent</c>'s picker. Its own contract says hiding a role "does not prune existing
+    /// assignments and does not affect scope resolution — a member already assigned a hidden role keeps it
+    /// and still receives its scopes at runtime". Filtering by it on this page would therefore tell such a
+    /// member they lack scopes they hold, which is the exact defect this resolution fixes (Tharga/Team#292).
+    /// On a page whose purpose is explaining access, omitting a role that is granting access is the one
+    /// thing that cannot be right.
+    /// </remarks>
+    private async Task<IReadOnlyList<TenantRoleDefinition>> ResolveTeamRolesAsync(string teamKey)
+    {
+        var registry = ServiceProvider.GetService<ITenantRoleRegistry>();
+        var tenantRoleService = ServiceProvider.GetService<ITenantRoleService>();
+
+        return await ApiKeyRolePicker.ResolveAsync(tenantRoleService, registry, teamKey);
     }
 
     private async Task<ClaimsPrincipal> GetCurrentPrincipalAsync()
@@ -246,8 +315,7 @@
                     if (member != null)
                     {
                         _selectedLevel = ScopeReference.ToSelectableLevel(member.AccessLevel);
-                        var configured = new HashSet<string>(_allRoleNames);
-                        _selectedRolesValue = (member.TenantRoles ?? Array.Empty<string>()).Where(configured.Contains).ToList();
+                        _selectedRolesValue = ScopeReference.PreselectedRoles(member.TenantRoles, _resolvedRoles);
                         _overrides = new HashSet<string>(member.ScopeOverrides ?? Array.Empty<string>());
                         _loadedFromMember = true;
                     }

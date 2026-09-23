@@ -45,13 +45,36 @@ public static class ScopeReference
     /// </summary>
     /// <param name="scopes">The configured scope registry, or null when scopes are not configured.</param>
     /// <param name="roles">The configured tenant role registry, or null when roles are not configured.</param>
+    /// <remarks>
+    /// <b>Sees code-registered roles only.</b> <see cref="ITenantRoleRegistry"/> is team-blind, so a team's
+    /// own custom roles are absent from the rows this produces. Prefer <see cref="BuildForRoles"/> with a
+    /// list resolved for the team — building from the registry alone is what made <c>ScopeView</c> tell a
+    /// member they lacked scopes a custom role had granted them (Tharga/Team#292).
+    /// </remarks>
     public static IReadOnlyList<ScopeRow> Build(IScopeRegistry scopes, ITenantRoleRegistry roles)
+        => BuildForRoles(scopes, roles?.All);
+
+    /// <summary>
+    /// Projects every registered scope to a <see cref="ScopeRow"/> against an explicit role list — the
+    /// team's roles, merged from code and its own definitions.
+    /// </summary>
+    /// <param name="scopes">The configured scope registry, or null when scopes are not configured.</param>
+    /// <param name="roles">
+    /// The roles to credit, usually from <c>ITenantRoleService.GetRolesAsync(teamKey)</c>. Null or empty
+    /// credits nothing, which is not an error — it is what a team with no roles looks like.
+    /// </param>
+    /// <remarks>
+    /// <b>Named rather than overloaded on purpose.</b> A second <c>Build</c> taking a list would make the
+    /// existing <c>Build(scopes, null)</c> ambiguous — a compile error in every caller passing a bare null,
+    /// consumers included. A fix for a display defect should not cost anyone a cast.
+    /// </remarks>
+    public static IReadOnlyList<ScopeRow> BuildForRoles(IScopeRegistry scopes, IReadOnlyList<TenantRoleDefinition> roles)
     {
         if (scopes == null) return Array.Empty<ScopeRow>();
 
         // Resolve level -> scope-set via the registry's own logic rather than reimplementing the math.
         var byLevel = Levels.ToDictionary(l => l, l => new HashSet<string>(scopes.GetScopesForAccessLevel(l)));
-        var roleList = roles?.All ?? Array.Empty<TenantRoleDefinition>();
+        var roleList = roles ?? Array.Empty<TenantRoleDefinition>();
 
         return scopes.All
             .OrderBy(s => s.Name, StringComparer.Ordinal)
@@ -62,6 +85,25 @@ public static class ScopeReference
                 roleList.Where(r => r.Scopes != null && r.Scopes.Contains(s.Name)).Select(r => r.Name).ToList(),
                 s.GrantOnly))
             .ToList();
+    }
+
+    /// <summary>
+    /// The member's own role assignments, narrowed to those the page knows about — what the role bar shows
+    /// as already selected.
+    /// </summary>
+    /// <param name="memberRoles">The member's assigned role names, from their team member record.</param>
+    /// <param name="known">The roles resolved for the team, from <see cref="BuildForRoles"/>'s own list.</param>
+    /// <remarks>
+    /// <b>Pure so it can be tested; the narrowing is where the defect lived.</b> Filtering against the
+    /// code-registered roles alone dropped every custom role the member held, and the scopes those roles
+    /// granted then rendered as not held — on the page people open to find out what they hold
+    /// (Tharga/Team#292). An assignment naming a role the team no longer defines is still dropped, which is
+    /// correct: there is nothing to credit it with.
+    /// </remarks>
+    public static IReadOnlyList<string> PreselectedRoles(IEnumerable<string> memberRoles, IReadOnlyList<TenantRoleDefinition> known)
+    {
+        var names = new HashSet<string>((known ?? Array.Empty<TenantRoleDefinition>()).Select(r => r.Name), StringComparer.Ordinal);
+        return (memberRoles ?? Array.Empty<string>()).Where(names.Contains).ToList();
     }
 
     /// <summary>
