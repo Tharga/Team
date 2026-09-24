@@ -1,4 +1,4 @@
-using Tharga.Team;
+﻿using Tharga.Team;
 using Tharga.Team.Blazor.Features.Authentication;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
@@ -77,6 +77,11 @@ public class ThargaTeamOptions
     /// Map app/global roles (e.g. "Developer") to system scopes, so privileged users gain those scopes as
     /// claims (team-independent). When null, no role→system-scope mapping is applied.
     /// </summary>
+    /// <remarks>
+    /// Granting is where a scope's prerequisites take effect. <see cref="SystemTeamScopes.Read"/> in particular
+    /// needs a team service that can list every team — see its remarks before mapping it on a host with its
+    /// own <see cref="TeamServiceBase"/> derivative.
+    /// </remarks>
     public Action<SystemRoleRegistry> ConfigureSystemRoles { get; set; }
 
     /// <summary>

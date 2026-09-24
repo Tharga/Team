@@ -44,6 +44,16 @@ public static class SystemTeamScopes
     /// is not a member of still yields only the scopes that team has consented to, and none if it has
     /// consented to nothing. Contrast with the in-team <see cref="TeamScopes.Read"/>, which authorizes
     /// reading the caller's own team.
+    /// <para>
+    /// <b>Granting it needs a store that can list every team.</b> It switches the consuming UI —
+    /// <c>TeamComponent</c>, <c>TeamSelector</c>, the Users view — into cross-team oversight mode, which lists
+    /// teams from <c>GetAllTeamsAsync</c> instead of from the caller's memberships. The built-in store
+    /// (<c>TeamServiceRepositoryBase</c>) implements it. A team service deriving <see cref="TeamServiceBase"/>
+    /// directly must override <c>GetAllTeamsInternalAsync</c>; without it the call throws
+    /// <see cref="NotSupportedException"/>, and a startup check reports the gap as soon as anything can grant
+    /// this scope. The default used to return nothing instead, and the symptom was every holder, Owners
+    /// included, being told they are not a member of a team.
+    /// </para>
     /// </remarks>
     public const string Read = "teams:read";
 

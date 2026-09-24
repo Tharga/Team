@@ -2394,6 +2394,32 @@ o.Blazor.Consent.GrantTeamsRead = true;   // default false
 access for existing hosts on upgrade, so it must be opted into. The flag composes with any
 `ConfigureSystemRoles` mapping for the same role rather than conflicting with it.
 
+**Before granting it: your team service must be able to list every team.** Oversight mode lists teams from
+`ITeamService.GetAllTeamsAsync` instead of from the caller's memberships.
+
+- On the built-in store (`TeamServiceRepositoryBase`, or `DefaultTeamService`) there is nothing to do.
+- A service deriving `TeamServiceBase` directly must override `GetAllTeamsInternalAsync` to enumerate its
+  store — every team, regardless of membership:
+
+  ```csharp
+  protected override async IAsyncEnumerable<ITeam> GetAllTeamsInternalAsync()
+  {
+      await foreach (var team in _myStore.GetAllTeamsAsync())
+          yield return team;
+  }
+  ```
+
+- Without it, the call throws `NotSupportedException` naming the member and the scope. Startup reports it
+  first: as soon as a system role maps `teams:read`, `GrantTeamsRead` is on, or the scope is registered for
+  system API keys, `AddThargaTeamBlazor` logs an error naming your service. Set
+  `o.Blazor.ThrowOnIncompleteTeamService = true` to fail the boot instead.
+
+**The symptom on older releases** was quieter and misleading: the default returned no teams, so every user
+holding the scope — team Owners included — was told *"You are not member of a team"*, with nothing in the
+log. It looks like a data problem and is not. If you see it, check this override before the database. The
+full list of `TeamServiceBase` members with defaults is in the **Tharga.Team** README, under
+*`TeamServiceBase`: what you must override*.
+
 **What a `teams:read` holder sees.** Each team carries a consent badge — *No access* (red), *Partial
 access* (yellow, Viewer/User) or *Full access* (green, Administrator) — preceded by a **Not a member**
 badge on teams they don't belong to, so the qualifier is read before the level it qualifies. The `TeamSelector` shows the same state as a tinted dot.

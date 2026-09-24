@@ -26,12 +26,15 @@ Spec: `plan/feature.md`. Branched from `origin/master` at `f964eb8`; packages cl
       `ThrowOnIncompleteTeamService`. Tests alongside `TeamServiceRegistrationCompletenessTests`.
       **Done:** reported before the facet check, through one shared `Report`. Tests in
       `TeamsReadCompletenessCheckTests` boot a real registration. 3,028 green.
-- [~] 5. **XML docs**: `SystemTeamScopes.Read`, `ThargaTeamOptions.ConfigureSystemRoles`,
+- [x] 5. **XML docs**: `SystemTeamScopes.Read`, `ThargaTeamOptions.ConfigureSystemRoles`,
       `ConsentOptions.GrantTeamsRead`, `ThrowOnIncompleteTeamService` (it now covers a second kind of gap).
-- [ ] 6. **Docs**: `Tharga.Team/README.md` contract table gains the TeamServiceBase members (silent vs throwing);
+      **Done.** No version number in the prose: the line is 3.23, and the release number is CI's to decide.
+- [x] 6. **Docs**: `Tharga.Team/README.md` contract table gains the TeamServiceBase members (silent vs throwing);
       implementation guide *Cross-team visibility for oversight roles* and `Tharga.Team.Blazor/README.md`
       section of the same name state the store requirement and name the symptom.
-- [ ] 7. Full suite. Verify in the sample: a team service without the override plus a `teams:read` role —
+      **Done.** Contract table verified against `TeamServiceBase` before writing, not taken from the survey.
+      Root README has no `teams:read` content, so nothing to change there.
+- [~] 7. Full suite. Verify in the sample: a team service without the override plus a `teams:read` role —
       startup error logged, oversight page fails with the named exception rather than "not a member".
 - [ ] 8. File the stale-doc findings (`InvitationExpiryWiringCheck`, `SetInvitationExpiryAsync`) on the backlog.
 - [ ] 9. Push for user testing.

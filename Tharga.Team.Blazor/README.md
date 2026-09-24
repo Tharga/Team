@@ -178,6 +178,14 @@ builder.AddThargaTeam(o =>
 to", and silently promoting that to a global enumeration privilege would widen access for existing hosts
 on upgrade.
 
+**Your team service must be able to list every team.** Oversight mode lists teams from `GetAllTeamsAsync`
+instead of from the caller's memberships. The built-in store (`TeamServiceRepositoryBase`) does this. A
+service deriving `TeamServiceBase` directly must override `GetAllTeamsInternalAsync`. If it does not, the
+call throws `NotSupportedException` naming the member, and startup logs an error as soon as anything can grant
+`teams:read` (fatal under `o.Blazor.ThrowOnIncompleteTeamService`). If you see *"You are not member of a
+team"* for every user after granting `teams:read`, you are on a release from before this check, and the
+missing override is the cause — not your data.
+
 A holder of `teams:read` sees every team in `TeamComponent`, `TeamSelector` and `UsersView` → Teams,
 each tagged with a **Not a member** badge where applicable, followed by what that team has consented to —
 **No access**, **Partial access** or **Full access**. You can select any team you can see, and the choice is
