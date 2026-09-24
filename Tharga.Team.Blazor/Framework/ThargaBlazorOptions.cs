@@ -134,7 +134,8 @@ public record ThargaBlazorOptions : BlazorOptions
     public bool ThrowOnIncompleteUserService { get; set; }
 
     /// <summary>
-    /// Throw at startup when a team-service facet cannot be resolved, instead of logging an error.
+    /// Throw at startup when a team-service facet cannot be resolved, or when the team service cannot list
+    /// every team while <see cref="SystemTeamScopes.Read"/> is grantable, instead of logging an error.
     /// Default false.
     /// </summary>
     /// <remarks>

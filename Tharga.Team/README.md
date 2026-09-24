@@ -1,4 +1,4 @@
-# Tharga Team
+﻿# Tharga Team
 [![NuGet](https://img.shields.io/nuget/v/Tharga.Team)](https://www.nuget.org/packages/Tharga.Team)
 ![Nuget](https://img.shields.io/nuget/dt/Tharga.Team)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -62,6 +62,32 @@ are not reported, so the message stays about real mistakes.
 does not appear in an interface map — a test asserting "my service implements `IUserService`" cannot see
 it. The startup check reflects over the concrete type and walks the base chain instead, so an override on
 your own intermediate base counts.
+
+#### `TeamServiceBase`: what you must override
+
+`TeamServiceBase`'s abstract members are the storage seam, and the compiler makes you implement them. The
+members below were added later as `virtual`, so an existing service keeps compiling — which also means
+nothing tells you when one of them is missing. Most **throw `NotSupportedException` naming themselves** when
+reached. A few **return quietly**, and those are the ones to check before you rely on the feature behind
+them.
+
+| Member | Default | Reached by | If you do not override it |
+|---|---|---|---|
+| `GetAllTeamsInternalAsync` | **Throws**; reported at startup | Any caller holding the `teams:read` system scope | Every team page fails for that caller. Override it, or do not grant `teams:read` |
+| `GetTeamKeyByInviteKeyInternalAsync` | Returns `null` | Opening a short invitation link (the only form the toolkit generates) | The link resolves to "no invitation" |
+| `GetInvitationInternalAsync` | Returns `null` | Accepting an invitation while `InvitationOptions.Lifetime` is set | Expiry is never enforced on accept |
+| `GetInvitedMemberNameAsync` | Returns `null` | Accepting an invitation | The name the inviter typed is not carried over to the new user |
+| `SupportsSoftDelete` / `SoftDeleteTeamAsync` | `false` / hard delete | Deleting a team | Delete is permanent; there is nothing to restore. Deliberate for a store that cannot soft-delete |
+| Suspension, access requests, invitation expiry updates, owner lookup, user removal, team icons | **Throw** | The feature that uses each | The feature fails loudly, naming the member |
+
+**The startup check covers `GetAllTeamsInternalAsync`.** When anything can grant `teams:read` — a system role,
+`Consent.GrantTeamsRead`, or registering it as a system scope for API keys — and your service overrides
+neither it nor `GetAllTeamsAsync`, `AddThargaTeamBlazor` logs an error naming the type. Set
+`o.Blazor.ThrowOnIncompleteTeamService = true` to make it fatal. This used to return nothing silently, and
+the symptom was every user with the scope, Owners included, being told they are not a member of a team.
+
+> Deriving from `TeamServiceRepositoryBase` (in **Tharga.Team.MongoDB**) implements all of these. The table
+> only applies to a service extending `TeamServiceBase` directly.
 
 #### The user cache
 

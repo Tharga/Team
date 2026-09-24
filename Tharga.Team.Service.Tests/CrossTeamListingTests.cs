@@ -6,7 +6,7 @@ namespace Tharga.Team.Service.Tests;
 
 /// <summary>
 /// Cross-team discovery (<c>ITeamService.GetAllTeamsAsync</c>) gated on the
-/// <see cref="SystemTeamScopes.Read"/> system scope, plus the non-breaking default on
+/// <see cref="SystemTeamScopes.Read"/> system scope, plus the loud default on
 /// <see cref="TeamServiceBase"/> for services that don't support it.
 /// </summary>
 public class CrossTeamListingTests
@@ -96,15 +96,66 @@ public class CrossTeamListingTests
     }
 
     /// <summary>
-    /// A service deriving from <see cref="TeamServiceBase"/> that predates this feature still compiles
-    /// (the member is virtual, not abstract) and yields nothing rather than throwing.
+    /// A service deriving from <see cref="TeamServiceBase"/> without cross-team support still compiles (the
+    /// member is virtual, not abstract), but says so when asked instead of yielding nothing. An empty list
+    /// reads as "this caller has no teams": granting <see cref="SystemTeamScopes.Read"/> to such a host
+    /// emptied the team page for every user, Owners included, with nothing in the log.
     /// </summary>
     [Fact]
-    public async Task TeamServiceBase_DefaultGetAllTeams_IsEmpty()
+    public async Task TeamServiceBase_DefaultGetAllTeams_Throws()
     {
-        var userService = Substitute.For<IUserService>();
-        var sut = new TestTeamService(userService);
+        var sut = new TestTeamService(Substitute.For<IUserService>());
 
-        Assert.Equal(0, await CountAsync(sut.GetAllTeamsAsync()));
+        var ex = await Assert.ThrowsAsync<NotSupportedException>(async () => await CountAsync(sut.GetAllTeamsAsync()));
+        Assert.Contains(nameof(TestTeamService), ex.Message);
+        Assert.Contains("GetAllTeamsInternalAsync", ex.Message);
+        Assert.Contains(SystemTeamScopes.Read, ex.Message);
+    }
+
+    [Fact]
+    public async Task TeamServiceBase_DefaultGetAllTeamsOfMember_Throws()
+    {
+        var sut = new TestTeamService(Substitute.For<IUserService>());
+
+        await Assert.ThrowsAsync<NotSupportedException>(async () =>
+        {
+            await foreach (var _ in sut.GetAllTeamsAsync<TestMember>()) { }
+        });
+    }
+
+    [Fact]
+    public async Task TeamServiceBase_OverriddenGetAllTeams_IsHonoured()
+    {
+        var sut = new EnumeratingTeamService(Substitute.For<IUserService>());
+        sut.AddTeam("T1", "One");
+        sut.AddTeam("T2", "Two");
+
+        Assert.Equal(2, await CountAsync(sut.GetAllTeamsAsync()));
+    }
+
+    /// <summary>
+    /// The throw is reachable only by a <see cref="SystemTeamScopes.Read"/> holder: everyone else is refused
+    /// by the decorator before the store is asked, so a host that never grants the scope is unaffected.
+    /// </summary>
+    [Fact]
+    public async Task TeamServiceBase_DefaultGetAllTeams_WithoutTeamsRead_IsRefusedBeforeTheStore()
+    {
+        var inner = new TestTeamService(Substitute.For<IUserService>());
+        var accessor = Substitute.For<ITeamPrincipalAccessor>();
+        accessor.GetCurrentAsync().Returns(new ValueTask<ClaimsPrincipal>(Principal("T1", TeamScopes.Manage)));
+        var sut = new AuthorizationTeamServiceDecorator(inner, new TeamAuthorizer(accessor), new TeamLifecycleOptions());
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(async () => await CountAsync(sut.GetAllTeamsAsync()));
+    }
+
+    private sealed class EnumeratingTeamService(IUserService userService) : TestTeamService(userService)
+    {
+        protected override async IAsyncEnumerable<ITeam> GetAllTeamsInternalAsync()
+        {
+            foreach (var key in new[] { "T1", "T2" })
+            {
+                yield return await GetTeamAsync(key);
+            }
+        }
     }
 }

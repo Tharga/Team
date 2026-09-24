@@ -1,4 +1,4 @@
-namespace Tharga.Team;
+﻿namespace Tharga.Team;
 
 /// <summary>
 /// Data-access consent options — controls cross-team access granted by a team to global roles.
@@ -35,6 +35,10 @@ public class ConsentOptions
     /// silently widen access for existing hosts on upgrade. Opt in explicitly, or map the scope yourself
     /// via <c>ConfigureSystemRoles</c>. Grants discovery only — access inside a team remains governed by
     /// that team's consent.
+    /// <para>
+    /// Turning this on grants <see cref="SystemTeamScopes.Read"/>, so its prerequisite applies: the team service
+    /// must be able to list every team. See that scope's remarks.
+    /// </para>
     /// </remarks>
     public bool GrantTeamsRead { get; set; } = false;
 

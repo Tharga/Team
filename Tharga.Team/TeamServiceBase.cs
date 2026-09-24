@@ -225,14 +225,22 @@ public abstract class TeamServiceBase : ITeamService
     }
 
     /// <summary>
-    /// Backs <see cref="GetAllTeamsAsync()"/>. Virtual rather than abstract so existing derived services
-    /// keep compiling; the default returns nothing, and storage-backed bases override it.
+    /// Backs <see cref="GetAllTeamsAsync()"/> — every team, regardless of membership, for callers holding
+    /// <see cref="SystemTeamScopes.Read"/>. Virtual rather than abstract so existing derived services keep
+    /// compiling; storage-backed bases override it.
     /// </summary>
-    protected virtual async IAsyncEnumerable<ITeam> GetAllTeamsInternalAsync()
-    {
-        await Task.CompletedTask;
-        yield break;
-    }
+    /// <remarks>
+    /// The default throws rather than returning empty. <see cref="SystemTeamScopes.Read"/> switches the
+    /// consuming UI into cross-team oversight mode, which lists teams from here — so an empty default reads
+    /// as "this caller belongs to no team" and the team page tells every user, Owners included, that they
+    /// are not a member of one. It is reached only by callers the authorization decorator has already
+    /// admitted with that scope, so a host that never grants it is unaffected.
+    /// </remarks>
+    protected virtual IAsyncEnumerable<ITeam> GetAllTeamsInternalAsync()
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(GetAllTeamsInternalAsync)}. " +
+            $"Implement it to support cross-team listing (the '{SystemTeamScopes.Read}' system scope), or stop " +
+            "granting that scope — without it, every team page shows the caller as belonging to no team.");
 
     public virtual IAsyncEnumerable<ITeam> GetAllTeamsAsync() => GetAllTeamsInternalAsync();
 
