@@ -34,10 +34,22 @@ Spec: `plan/feature.md`. Branched from `origin/master` at `f964eb8`; packages cl
       section of the same name state the store requirement and name the symptom.
       **Done.** Contract table verified against `TeamServiceBase` before writing, not taken from the survey.
       Root README has no `teams:read` content, so nothing to change there.
-- [~] 7. Full suite. Verify in the sample: a team service without the override plus a `teams:read` role —
-      startup error logged, oversight page fails with the named exception rather than "not a member".
-- [ ] 8. File the stale-doc findings (`InvitationExpiryWiringCheck`, `SetInvitationExpiryAsync`) on the backlog.
-- [ ] 9. Push for user testing.
+- [x] 7. Full suite — **3,028 green.** Sample booted clean (no `ERR`/`WRN`, home page 200) **with `teams:read`
+      registered** — the reachability rule fired and correctly found the override on the built-in store, which
+      is the false positive that must not happen. **Not browser-verified: the failing path.** The sample has no
+      direct `TeamServiceBase` derivative, and writing one means implementing ~17 abstract members for a
+      throwaway; the failing path is covered instead by `TeamsReadCompletenessCheckTests`, which boot a real
+      `AddThargaTeamBlazor` registration and run the hosted check.
+- [x] 8. Stale-doc findings filed at the top of *Bugs* in `Toolkit/Team.md` (2026-09-24).
+- [x] 9. Push for user testing — pushed 2026-09-24, no PR opened per the close-out rule.
+
+## Last session (2026-09-24)
+
+All nine steps done; the branch is on origin for user testing. Next, once the user says it is done: re-run
+`dotnet outdated`; mark the `Requests.md` entry Done citing `TeamServiceCompleteness`,
+`TeamsReadCompletenessCheckTests` and the throwing default; archive `feature.md` to `done/`; close-out commit
+removing `plan/`; push; open the PR (release-notes level, saying plainly that the default now throws). No
+GitHub issue to close — the request came through `Requests.md`. Docs already landed in `1a2b660`.
 
 ## Notes
 
