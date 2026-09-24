@@ -144,6 +144,28 @@ builder.AddThargaTeam(o =>
 
 The `<UsersView />` admin component picks it all up automatically. Its two tabs show each record's key with a copy control, the signed-in user's own row highlighted, and — on the Teams tab — owner, last used, a pending-invitation split, avatars and an empty-team badge. Two host opt-ins: grant the `teams:delete` **system** scope through `o.ConfigureSystemRoles` to offer team deletion, and set `<UsersView ShowAuditLogButton="true" />` for a per-row audit-history dialog. See [User management & directory](docs/articles/user-management.md).
 
+## Extending the member grid
+
+A host that adds a field to its member type can surface it on the member row itself rather than in a second
+grid beside the first — `<TeamComponent>` takes an extra column, extra menu items, and a callback carrying
+**your** member type:
+
+```razor
+<TeamComponent TMember="TeamMember" MemberActionInvoked="@OnMemberAction">
+    <MemberColumns>
+        <RadzenDataGridColumn TItem="TeamMember" Title="Project" Property="Project" />
+    </MemberColumns>
+    <MemberActionItems>
+        <RadzenSplitButtonItem Text="Set project" Value="set-project" Icon="folder" />
+    </MemberActionItems>
+</TeamComponent>
+```
+
+Your action appears even on rows where the built-in ones do not — the caller's own, or the owner's. Five
+action values are the component's own (`copy-invite`, `remove-member`, `member-audit`, `suspend-member`,
+`restore-member`); pick anything else. `TeamsListView` and `UsersListView` have had the same trio since
+3.7.x. See the [Implementation guide](docs/articles/implementation-guide.md).
+
 ## Team & user icons
 
 Teams and users get real icons/avatars via two pluggable seams — **storage** (`IIconStore`, default MongoDB, no extra package) and **sourcing** (`IIconSource`: stored icon → custom → Gravatar → default → initials). Team icons need no entity change; add `Icon` to your user entity to enable user icons. A `team:manage` holder sets a team icon (upload or URL) from the team component; users upload their own from the profile page (an alternative to Gravatar), and admins (`users:manage`) can set a user's icon. Behavior is configurable and runtime-adjustable via `o.IconSettings` (Gravatar on/off + style, a default image, upload toggles). Add the optional `Tharga.Team.Images` package to auto-downscale oversized uploads (256 px) instead of rejecting them:

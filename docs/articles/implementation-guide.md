@@ -2479,9 +2479,43 @@ the built-ins. This is only about the two the toolkit renders.
 | `<AccessSimulationIndicator>` | none — renders only while a run-as simulation is active |
 | `<TeamNotificationMenu>` | none — optional top-bar bell; the badge counts [access requests](access-requests.md) awaiting the caller's decision |
 | `<TeamAccessRequestButton>` | `TeamKey` (required), `ButtonStyle`, `Size`, `Changed` — places *Request access* / *Withdraw* anywhere; renders nothing for a caller who cannot ask |
-| `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button) |
+| `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button), plus the member-row hooks below |
 | `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton` |
 | `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton` |
+
+### Extending the member grid
+
+A host that adds a field to its member type can put the UI for it on the member row itself, rather than in a
+second grid beside the first:
+
+```razor
+<TeamComponent TMember="TeamMember" MemberActionInvoked="@OnMemberAction">
+    <MemberColumns>
+        <RadzenDataGridColumn TItem="TeamMember" Title="Project" Property="Project" />
+    </MemberColumns>
+    <MemberActionItems>
+        <RadzenSplitButtonItem Text="Set project" Value="set-project" Icon="folder" />
+    </MemberActionItems>
+</TeamComponent>
+```
+
+| Parameter | Kind | Renders |
+|---|---|---|
+| `MemberColumns` | `RenderFragment` of `RadzenDataGridColumn` | appended after the built-in columns, before the action column |
+| `MemberActionItems` | `RenderFragment` of `RadzenSplitButtonItem` | inside the member's action menu |
+| `MemberActionInvoked` | `EventCallback<MemberRowAction<TMember>>` | raised when one of your items is clicked, carrying **your** member type |
+| `MemberActionsTemplate` | `RenderFragment<TMember>` | beside the built-in action control |
+
+Raw columns rather than a per-row template, so an added column carries its own header, width and sorting.
+
+**Five action values are the component's own** — `copy-invite`, `remove-member`, `member-audit`,
+`suspend-member`, `restore-member`. An item using one of those is handled as that built-in rather than
+forwarded, so pick something else; matching is exact, so a prefix or a different casing is yours.
+
+**Your action appears even where the built-ins do not.** On a row the caller can take no built-in action on —
+their own, or the owner's — the menu still renders for your items alone. This mirrors
+`TeamsListView`/`UsersListView`, which have had `TeamActionsTemplate` / `TeamActionItems` /
+`TeamActionInvoked` since 3.7.x; `TeamComponent` was the surface still missing them.
 
 Access to manage keys is gated on `apikey:manage`; the audit log on `audit:read`. (The former per-component
 `CrossTeamRoles` / `RequiredScopes` parameters were removed — grant cross-team access via the role→system-scope
