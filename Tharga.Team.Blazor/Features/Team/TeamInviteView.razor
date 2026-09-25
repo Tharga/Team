@@ -12,7 +12,7 @@
 @inject IOptions<ThargaBlazorOptions> BlazorOptions
 @inject IThargaTextProvider TextProvider
 
-<RadzenStack Visible="@(!string.IsNullOrEmpty(_inviteCode) && _invitation != null)">
+<RadzenStack Visible="@(_outcome == InviteOutcome.Open)">
     <CascadingAuthenticationState>
         <AuthorizeView>
             <Authorized>
@@ -26,17 +26,22 @@
     </CascadingAuthenticationState>
 </RadzenStack>
 
-@if (ShowEmptyMessage && string.IsNullOrEmpty(_inviteCode))
+@{
+    var message = Message();
+}
+@if (message != null)
 {
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-p-2">
         <RadzenIcon Icon="mail" />
-        <RadzenText TextStyle="TextStyle.Body1">@_text[TeamInviteViewText.NoInvitations]</RadzenText>
+        <RadzenText TextStyle="TextStyle.Body1">@message</RadzenText>
     </RadzenStack>
 }
 
 @code
 {
-    private string _inviteCode;
+    private enum InviteOutcome { NoCode, Invalid, AlreadyMember, Expired, Open }
+
+    private InviteOutcome _outcome = InviteOutcome.NoCode;
     private TeamInvitation _invitation;
     private IUser _user;
     private TextSet _text = TextSet.Empty;
@@ -45,9 +50,14 @@
     public string InviteCode { get; set; }
 
     /// <summary>
-    /// When true, shows a "no pending invitations" message if there is no active invite. Use on a
+    /// When true, shows a "no pending invitations" message when no invitation code was presented. Use on a
     /// standalone invites page; leave false (the default) when embedding the view elsewhere.
     /// </summary>
+    /// <remarks>
+    /// Governs only the case with no code. A presented code that cannot be answered — invalid, expired, or
+    /// for a team the caller already belongs to — is always reported, because the visitor followed a link and
+    /// saying nothing would read as the link being broken silently.
+    /// </remarks>
     [Parameter]
     public bool ShowEmptyMessage { get; set; }
 
@@ -67,19 +77,17 @@
 
         // Null covers malformed, unknown and already-answered alike; the service does not distinguish
         // them, so neither can this.
-        if (_invitation == null || _invitation.AlreadyMember)
+        _outcome = _invitation switch
         {
-            _invitation = null;
-            inviteCode = null;
-        }
-        else
+            null => InviteOutcome.Invalid,
+            { AlreadyMember: true } => InviteOutcome.AlreadyMember,
+            { Status: InvitationStatus.Expired } => InviteOutcome.Expired,
+            _ => InviteOutcome.Open
+        };
+
+        if (_outcome == InviteOutcome.Open)
         {
             _user = await UserService.GetCurrentUserAsync();
-        }
-
-        if (!string.IsNullOrEmpty(inviteCode))
-        {
-            _inviteCode = inviteCode;
             await LocalStorage.SetItemAsync(Constants.TeamInviteCode, inviteCode);
         }
         else
@@ -87,6 +95,16 @@
             await LocalStorage.RemoveItemAsync(Constants.TeamInviteCode);
         }
     }
+
+    /// <summary>What to tell the visitor when there is nothing to answer, or null when the join prompt shows.</summary>
+    private string Message() => _outcome switch
+    {
+        InviteOutcome.NoCode => ShowEmptyMessage ? _text[TeamInviteViewText.NoInvitations] : null,
+        InviteOutcome.Invalid => _text[TeamInviteViewText.InvalidLink],
+        InviteOutcome.AlreadyMember => _text.Format(TeamInviteViewText.AlreadyMember, _invitation.TeamName),
+        InviteOutcome.Expired => _text.Format(TeamInviteViewText.Expired, _invitation.TeamName),
+        _ => null
+    };
 
     private async Task<string> GetInviteCode()
     {

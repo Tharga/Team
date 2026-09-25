@@ -725,31 +725,29 @@ public abstract class TeamServiceBase : ITeamService
     /// host with its own store keeps compiling. The default returns null, which reads as "no expiry to
     /// enforce".
     /// <para>
-    /// <b>That default is a hole if a lifetime is configured and this is not overridden</b> — expiry would
-    /// silently not apply. It is a startup check rather than a silent default for exactly that reason: see
-    /// <c>InvitationExpiryWiringCheck</c>, which fails the boot naming this method when
-    /// <see cref="InvitationOptions.Lifetime"/> is set and the store cannot answer it. Nothing is asked of a
-    /// host that has not opted into expiry.
+    /// <b>That default is a hole if a lifetime is configured and this is not overridden</b> — expiry
+    /// silently does not apply, and no startup check reports it yet. Nothing is asked of a host that has not
+    /// opted into expiry.
     /// </para>
     /// </remarks>
+    protected virtual Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
+    {
+        return Task.FromResult<Invitation>(null);
+    }
+
     /// <summary>
     /// Backs <see cref="GetTeamKeyByInviteKeyAsync"/>. Null when nothing matches, when more than one team
     /// matches, or when this store cannot look an invitation up without its team.
     /// </summary>
     /// <remarks>
-    /// <b>Virtual, and null is a legitimate answer</b> — unlike the expiry seam, which throws. A store that
-    /// cannot answer this loses nothing it had: links minted before this existed carry their team key and
-    /// still resolve. Only the short link form needs it, so degrading is the correct behaviour rather than a
-    /// hidden failure.
+    /// <b>Virtual so a host with its own store keeps compiling, but the default is not a working one.</b>
+    /// Every invitation link the toolkit mints carries only its code, so a store that cannot answer this
+    /// produces links none of which resolves. <c>TeamServiceCompletenessCheck</c> reports it at startup,
+    /// naming this member (Tharga/Team#286).
     /// </remarks>
     protected virtual Task<string> GetTeamKeyByInviteKeyInternalAsync(string inviteKey)
     {
         return Task.FromResult<string>(null);
-    }
-
-    protected virtual Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
-    {
-        return Task.FromResult<Invitation>(null);
     }
 
     /// <summary>

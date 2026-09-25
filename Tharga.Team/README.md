@@ -74,7 +74,7 @@ them.
 | Member | Default | Reached by | If you do not override it |
 |---|---|---|---|
 | `GetAllTeamsInternalAsync` | **Throws**; reported at startup | Any caller holding the `teams:read` system scope | Every team page fails for that caller. Override it, or do not grant `teams:read` |
-| `GetTeamKeyByInviteKeyInternalAsync` | Returns `null` | Opening a short invitation link (the only form the toolkit generates) | The link resolves to "no invitation" |
+| `GetTeamKeyByInviteKeyInternalAsync` | Returns `null`; reported at startup | Opening a short invitation link (the only form the toolkit generates) | Every invitation link opens on "This invitation link is no longer valid" |
 | `GetInvitationInternalAsync` | Returns `null` | Accepting an invitation while `InvitationOptions.Lifetime` is set | Expiry is never enforced on accept |
 | `GetInvitedMemberNameAsync` | Returns `null` | Accepting an invitation | The name the inviter typed is not carried over to the new user |
 | `SupportsSoftDelete` / `SoftDeleteTeamAsync` | `false` / hard delete | Deleting a team | Delete is permanent; there is nothing to restore. Deliberate for a store that cannot soft-delete |
@@ -85,6 +85,11 @@ them.
 neither it nor `GetAllTeamsAsync`, `AddThargaTeamBlazor` logs an error naming the type. Set
 `o.Blazor.ThrowOnIncompleteTeamService = true` to make it fatal. This used to return nothing silently, and
 the symptom was every user with the scope, Owners included, being told they are not a member of a team.
+
+**It also covers `GetTeamKeyByInviteKeyInternalAsync`, unconditionally.** Every invitation link the toolkit
+generates carries only its code, so any host that invites anybody reaches the lookup. A service that does not
+override it is reported the same way, naming the member. With Tharga.Team.MongoDB, a replacement
+`ITeamRepository` that does not implement `GetByInviteKeyAsync` is reported too, as an error in the log.
 
 > Deriving from `TeamServiceRepositoryBase` (in **Tharga.Team.MongoDB**) implements all of these. The table
 > only applies to a service extending `TeamServiceBase` directly.
