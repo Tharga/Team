@@ -32,7 +32,8 @@ public static class TeamServiceCompleteness
     /// <param name="teamServiceType">The registered team service.</param>
     /// <param name="teamsReadReachable">
     /// Whether any caller can hold <see cref="SystemTeamScopes.Read"/> — through a system role, or a system
-    /// API key. Without it nobody gets past the authorization check to the store, so there is nothing to report.
+    /// API key. Without it nobody gets past the authorization check to cross-team listing, so that gap is not
+    /// reported. The invitation lookup is reported regardless, since any invitation reaches it.
     /// </param>
     public static IReadOnlyList<TeamServiceGap> Find(Type teamServiceType, bool teamsReadReachable)
     {
@@ -44,7 +45,17 @@ public static class TeamServiceCompleteness
         if (teamsReadReachable && !Overrides(teamServiceType, "GetAllTeamsInternalAsync") && !Overrides(teamServiceType, nameof(TeamServiceBase.GetAllTeamsAsync)))
         {
             gaps.Add(new TeamServiceGap("GetAllTeamsInternalAsync",
-                $"'{SystemTeamScopes.Read}' is grantable, and cross-team listing throws — every team page fails for a caller holding it"));
+                $"'{SystemTeamScopes.Read}' is grantable, and cross-team listing throws — every team page fails for a " +
+                $"caller holding it. Override it to enumerate your store, or stop granting the scope"));
+        }
+
+        // Unconditional: every invitation link the toolkit mints is the short form, which only this lookup resolves.
+        if (!Overrides(teamServiceType, "GetTeamKeyByInviteKeyInternalAsync"))
+        {
+            gaps.Add(new TeamServiceGap("GetTeamKeyByInviteKeyInternalAsync",
+                "every invitation link carries only its code, and without this lookup none of them resolves — the " +
+                "recipient is told the link is no longer valid. Override it to find the single live team holding " +
+                "an outstanding invitation with that code"));
         }
 
         return gaps;

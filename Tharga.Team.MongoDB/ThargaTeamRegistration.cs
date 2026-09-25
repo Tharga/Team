@@ -88,6 +88,9 @@ public static class ThargaTeamRegistration
             // first one after a restart took 3.4 s, all of it creating the ledger and assuring its indexes.
             services.AddSingleton<IHostedService, SupportCollectionWarmUp>();
 
+            // Reports a replacement repository that cannot resolve short invitation links (Tharga/Team#286).
+            services.AddSingleton(typeof(IHostedService), typeof(InviteLookupRepositoryCheck<,>).MakeGenericType(teamEntityType, teamMemberModelType));
+
             // Reports members stored with no access level, which are silently being treated as Owner.
             // Registered only alongside a team repository, because without one there is nothing to read.
             if (o.CheckMemberAccessLevels)

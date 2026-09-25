@@ -59,6 +59,11 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     /// The single live team holding an outstanding invitation with this code, or null when none or more than
     /// one does. Backed by the <c>Members.Invitation.InviteKey</c> index.
     /// </summary>
+    /// <remarks>
+    /// The default returns null so a host with its own repository keeps compiling, but every invitation link
+    /// the toolkit mints needs this to resolve, so left at the default none of them does. Reported at startup
+    /// by <c>InviteLookupRepositoryCheck</c> (Tharga/Team#286).
+    /// </remarks>
     Task<TTeamEntity> GetByInviteKeyAsync(string inviteKey) => Task.FromResult<TTeamEntity>(null);
     Task SetConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null);
     Task SetCustomRolesAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles);
