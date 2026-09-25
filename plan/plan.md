@@ -15,8 +15,14 @@
 - [x] 6. #285: `InvalidLink`, `AlreadyMember`, `Expired` keys; the view maps the resolved invitation to one
   outcome and shows its message outside `AuthorizeView` (anonymous visitors see it too). Join buttons only when
   Open. Stored code cleared for all three. `InviteViewOutcomeTests`: 12 cases.
-- [~] 7. Full suite (3054 green), commit, push for user testing — push awaits the user's approval.
-- [ ] 8. Close-out (on user's go): NuGet re-check, README/docs, backlog + issues, archive, remove `plan/`.
+- [x] 7. Full suite (3054 green), committed, pushed to `origin/feature/invite-link-wiring` for user testing.
+- [~] 8. Close-out (on user's go): NuGet re-check, README/docs, backlog + issues, archive, remove `plan/`.
+
+## Last session (2026-09-25)
+
+Implementation complete and pushed; waiting for the user to test. Next: on the user's go, run close-out (step 8).
+Open question for the PR: patch or minor — embedded invite views now show messages, and hosts with an
+incomplete store get a new startup error line.
 
 ## Notes
 
