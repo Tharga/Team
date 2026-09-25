@@ -12,9 +12,10 @@
 - [x] 5. #286 docs: corrected on `ITeamService`, `TeamServiceBase` and `ITeamRepository`. Also moved the
   orphaned `GetInvitationInternalAsync` doc back onto its member and removed its claim about a non-existent
   `InvitationExpiryWiringCheck` (the expiry check itself stays out of scope).
-- [~] 6. #285: new `TeamInviteViewText` keys and the state branches in `TeamInviteView`. bUnit tests for each
-  state first.
-- [ ] 7. Full suite, commit, push for user testing.
+- [x] 6. #285: `InvalidLink`, `AlreadyMember`, `Expired` keys; the view maps the resolved invitation to one
+  outcome and shows its message outside `AuthorizeView` (anonymous visitors see it too). Join buttons only when
+  Open. Stored code cleared for all three. `InviteViewOutcomeTests`: 12 cases.
+- [~] 7. Full suite (3054 green), commit, push for user testing — push awaits the user's approval.
 - [ ] 8. Close-out (on user's go): NuGet re-check, README/docs, backlog + issues, archive, remove `plan/`.
 
 ## Notes
