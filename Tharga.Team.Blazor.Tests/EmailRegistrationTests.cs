@@ -43,6 +43,56 @@ public class EmailRegistrationTests
         Assert.IsType<FakeEmailSender>(sender);
     }
 
+    /// <summary>Tharga/Team#290: the built-in sender goes through the outbound-mail policy.</summary>
+    [Fact]
+    public void AddThargaTeam_WithEmailOptions_RegistersTheOutboundMailPolicy()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.AddThargaTeam(o =>
+        {
+            o.Auth.ValidateConfiguration = false;
+            o.Email = new EmailOptions { SmtpHost = "smtp.test.com", FromAddress = "test@test.com" };
+        });
+
+        var provider = builder.Services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetService<IOutboundMailPolicy>());
+    }
+
+    /// <summary>A custom sender can inject the same policy and apply the same rules.</summary>
+    [Fact]
+    public void AddThargaTeam_WithCustomEmailService_StillRegistersTheOutboundMailPolicy()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.AddThargaTeam(o =>
+        {
+            o.Auth.ValidateConfiguration = false;
+            o.AddEmailService<FakeEmailSender>();
+        });
+
+        var provider = builder.Services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetService<IOutboundMailPolicy>());
+    }
+
+    /// <summary>The policy reads <c>Email:Override</c> from the host's own configuration.</summary>
+    [Fact]
+    public void AddThargaTeam_ThePolicyReadsTheEmailOverrideSection()
+    {
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration["Email:Override:Address"] = "test-inbox@example.com";
+        builder.AddThargaTeam(o =>
+        {
+            o.Auth.ValidateConfiguration = false;
+            o.Email = new EmailOptions { SmtpHost = "smtp.test.com", FromAddress = "test@test.com" };
+        });
+
+        var provider = builder.Services.BuildServiceProvider();
+        var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<OutboundMailPolicyOptions>>().Value;
+
+        Assert.Equal("test-inbox@example.com", options.Address);
+    }
+
     [Fact]
     public void AddThargaTeam_WithoutEmail_DoesNotRegisterSender()
     {

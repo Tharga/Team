@@ -351,6 +351,21 @@ builder.AddThargaTeam(o => o.AddApiKeyLifecycleHandler<MyHandler>());
 
 A throwing handler propagates out of the originating operation (capture failures are not swallowed). You own whatever you capture — encrypt it at rest.
 
+## Mail outside production
+
+Every mail the toolkit sends goes through `IOutboundMailPolicy`. In production it is sent unchanged. Outside
+production (`IHostEnvironment.IsProduction()` is false) it reaches only recipients in an allowed domain;
+anyone else is redirected to the override address, with the intended recipient in the subject, or — with no
+override address — not sent at all.
+
+```json
+"Email": { "Override": { "Address": "test-inbox@example.com", "AllowedDomains": [ "example.com" ] } }
+```
+
+**Upgrading changes what a test environment sends.** Set `Email:Override` first if it should keep receiving
+mail. A custom `ITeamEmailSender` can inject `IOutboundMailPolicy` to apply the same rules; see *Mail outside
+production* in the implementation guide.
+
 ## Dependencies
 
 - [Tharga.Team](https://www.nuget.org/packages/Tharga.Team) - Domain models, authorization primitives, and service abstractions.

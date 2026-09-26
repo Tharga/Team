@@ -150,6 +150,11 @@ Slack when a team is created" should not acquire a case store and a scope pair f
 **Configure nothing and cases live on the site.** No channel, no mailbox, no poller — the ordinary shape for
 a host that never wanted either, rather than a degraded one.
 
+**Outside production, support mail reaches only allowed domains or the override address** — the same rule as
+invitations, configured once under `Email:Override` (see *Mail outside production* in the implementation
+guide). A reply that is withheld is recorded as not delivered. Upgrading changes what a test environment sends:
+set `Email:Override` first if it should keep receiving mail.
+
 **Email arrives without a team**, because a `From:` header does not say which tenant a problem concerns and
 every way of guessing puts one customer's problem in another customer's list. Such a case is created
 unassigned, and an operator assigns a team when they know which it is — or leaves it unassigned, which is a
