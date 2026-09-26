@@ -46,7 +46,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Identity.Web" Version="4.14.2" />
+    <PackageReference Include="Microsoft.Identity.Web" Version="4.15.0" />
     <PackageReference Include="System.Linq.Async" Version="7.0.1" />
     <PackageReference Include="Tharga.Blazor" Version="2.3.4" />
   </ItemGroup>

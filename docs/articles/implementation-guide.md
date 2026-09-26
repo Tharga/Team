@@ -1454,6 +1454,21 @@ Then point generated links at it:
 o.Blazor.InvitePath = "/invitation";
 ```
 
+**What the view says** (from 3.23.1, Tharga/Team#285). Only an open invitation offers to join; each other
+outcome has its own sentence and a text key of its own in `TeamInviteViewText`:
+
+| Outcome | Text key | Shown |
+|---|---|---|
+| No code presented | `team.invite.noInvitations` | Only with `ShowEmptyMessage="true"` |
+| Code does not resolve — unknown, superseded by a re-invite, withdrawn, or already answered | `team.invite.invalidLink` | Always |
+| Caller is already a member of the team | `team.invite.alreadyMember` (`{0}` = team name) | Always |
+| Invitation has expired | `team.invite.expired` (`{0}` = team name) | Always |
+
+The last three show even where `ShowEmptyMessage` is off, and to a visitor who has not signed in: a code
+means the visitor followed a link, so saying nothing would look like a broken link. The invalid-link wording
+is deliberately vague, because the service does not tell an unknown code from a withdrawn one to someone who
+only holds the link.
+
 `InvitePath` covers the invitation **email** and the **"Copy invitation link"** action alike — both go
 through one builder. That matters: a host can rewrite what its own `ITeamEmailSender` sends, but nothing
 can rewrite what an administrator copies to the clipboard. Unset, links point at `/team` as before.
@@ -1520,10 +1535,16 @@ A twelve-character opaque token and nothing else. The store resolves it to its t
 > opened on "no invitation", whatever the store held (Tharga/Team#272). Nothing needs re-sending — the same
 > links resolve once the host is on 3.21.1.
 
-**A host with its own team store gets this only if it can look an invitation up without its team.** That is
-one method — `TeamServiceBase.GetTeamKeyByInviteKeyInternalAsync` — and if you do not implement it, nothing
-breaks: links that name their team still resolve, and the short form simply does not. The MongoDB store
-implements it, backed by an index on the invitation code.
+**A host with its own team store must be able to look an invitation up without its team.** That is one
+method — `TeamServiceBase.GetTeamKeyByInviteKeyInternalAsync` — and it is not optional: the short form is the
+only one the toolkit generates, so without it **every new invitation link fails**. Links that name their team
+are legacy — still accepted, no longer produced. The MongoDB store implements it, backed by an index on the
+invitation code.
+
+From 3.23.1 this is reported at startup (Tharga/Team#286). `TeamServiceCompletenessCheck` logs an error naming
+the member when your service does not override it — fatal under `o.Blazor.ThrowOnIncompleteTeamService` — and
+with Tharga.Team.MongoDB, a replacement `ITeamRepository` that leaves `GetByInviteKeyAsync` at its default is
+logged the same way.
 
 **A host that wraps `ITeamService` in a decorator of its own must implement `GetTeamKeyByInviteKeyAsync` and
 forward it.** It is a default interface member returning `null`, so a decorator that leaves it out compiles,

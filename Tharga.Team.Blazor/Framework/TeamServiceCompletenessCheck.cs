@@ -67,8 +67,9 @@ internal sealed class TeamServiceCompletenessCheck(
     }
 
     /// <summary>
-    /// Storage extension points the host has not implemented but has granted a way to reach — today, the
-    /// cross-team listing behind <see cref="SystemTeamScopes.Read"/>. Null when there is nothing to say.
+    /// Storage extension points the host has not implemented but can reach — the cross-team listing behind
+    /// <see cref="SystemTeamScopes.Read"/> when the scope is grantable, and the invitation lookup behind every
+    /// short invitation link. Null when there is nothing to say.
     /// </summary>
     private string DescribeUnreachableGaps(IServiceProvider sp)
     {
@@ -77,11 +78,8 @@ internal sealed class TeamServiceCompletenessCheck(
 
         var detail = string.Join(Environment.NewLine, gaps.Select(g => $"  - {g}"));
         return
-            $"'{teamServiceType.Name}' derives from TeamServiceBase without implementing what the " +
-            $"'{SystemTeamScopes.Read}' system scope needs:{Environment.NewLine}{detail}{Environment.NewLine}" +
-            $"The scope switches team pages into cross-team oversight mode, which lists every team from the " +
-            $"service. Override GetAllTeamsInternalAsync to enumerate your store, or stop granting the scope. " +
-            $"Left as it is, a caller holding it cannot load a team page.";
+            $"'{teamServiceType.Name}' derives from TeamServiceBase without implementing storage extension " +
+            $"points this application reaches:{Environment.NewLine}{detail}";
     }
 
     /// <summary>

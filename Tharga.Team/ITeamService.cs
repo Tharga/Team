@@ -134,8 +134,10 @@ public interface ITeamService
     /// nobody invited them to.
     /// </para>
     /// <para>
-    /// The default returns null, so a host with its own store keeps compiling and keeps working: invitation
-    /// links carrying the team key still resolve, and only the short form is unavailable.
+    /// <b>The default returns null so a host with its own store keeps compiling — not because it keeps
+    /// working.</b> Every link the toolkit mints is the short form, which only this resolves; links carrying
+    /// the team key are legacy, still accepted but no longer produced. Left at the default, every new
+    /// invitation link fails. A host on <c>TeamServiceBase</c> is told so at startup (Tharga/Team#286).
     /// </para>
     /// </remarks>
     Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey) => Task.FromResult<string>(null);
