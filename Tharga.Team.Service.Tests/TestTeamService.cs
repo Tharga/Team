@@ -13,8 +13,16 @@ internal class TestTeamService : TeamServiceBase
     /// <summary>Counts calls so a test can tell "renewed the existing invitation" from "added a second one".</summary>
     public int AddTeamMemberCallCount { get; private set; }
 
+    /// <summary>
+    /// Leaves the invitation lookups to <see cref="TeamServiceBase"/>'s defaults, as a host with its own store
+    /// that never overrode them would.
+    /// </summary>
+    public bool UseDefaultInvitationLookups { get; init; }
+
     protected override Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
     {
+        if (UseDefaultInvitationLookups) return base.GetInvitationInternalAsync(teamKey, inviteKey);
+
         _teams.TryGetValue(teamKey, out var team);
         var member = team?.Members?.FirstOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey);
         return Task.FromResult(member?.Invitation);
@@ -92,6 +100,8 @@ internal class TestTeamService : TeamServiceBase
 
     protected override Task<string> GetInvitedMemberNameAsync(string teamKey, string inviteKey)
     {
+        if (UseDefaultInvitationLookups) return base.GetInvitedMemberNameAsync(teamKey, inviteKey);
+
         if (!_teams.TryGetValue(teamKey, out var team)) return Task.FromResult<string>(null);
         var member = team.Members.FirstOrDefault(m => m.Invitation != null && m.Invitation.InviteKey == inviteKey);
         return Task.FromResult(member?.Name);

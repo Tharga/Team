@@ -1577,11 +1577,18 @@ recipient's link dying, because the expiry lives on the invitation record rather
 it was created. **Re-inviting an address that already has an outstanding invitation does the same thing** —
 it renews rather than issuing a second live code for one seat, and applies any changed access level or name.
 
-Two things a host with its own store should know:
+Three things a host with its own store should know:
 
+- **Expiry is enforced without an override.** `TeamServiceBase` finds the invitation on the roster through
+  `GetMembersAsync`, so a store that exposes its members needs nothing more. Up to 3.23.0 the default found
+  nothing, which read as "never expires", and an expired invitation was accepted by any path that skipped the
+  invitation screen. With a lifetime set, accepting a code the roster does not hold is now refused.
 - **Extending needs `TeamServiceBase.SetTeamMemberInvitationExpiryAsync`.** Unlike the lookup above this one
   throws rather than no-opping: a store that silently discarded an extension would report success for an
   invitation that stays expired, and the operator would find out from the person who could not accept it.
+  With Tharga.Team.MongoDB, the same holds one layer down: `ITeamRepository.SetInvitationExpiryAsync` throws
+  by default, and a replacement repository that leaves it out is logged as an error at startup when a
+  lifetime is set.
 - **Forward `InvitationOptions` from your own service's constructor**, the same as `ITeamCache`. Left
   unforwarded, the base receives defaults and invitations never expire however the host configured them.
 
