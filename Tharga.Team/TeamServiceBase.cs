@@ -7,6 +7,7 @@ public abstract class TeamServiceBase : ITeamService
 {
     private const string OwnerCannotLeaveMessage = "The owner cannot leave the team. Transfer ownership first.";
     private const string LastAdministratorCannotLeaveMessage = "Cannot leave the team as the last administrator.";
+    private const string NoOutstandingInvitationMessage = "No outstanding invitation matches that code on team '{0}'.";
 
     private readonly IUserService _userService;
     private readonly ILogger<TeamServiceBase> _logger;
@@ -631,7 +632,7 @@ public abstract class TeamServiceBase : ITeamService
     {
         var invitation = await GetInvitationInternalAsync(teamKey, inviteKey);
         if (invitation == null)
-            throw new InvalidOperationException($"No outstanding invitation matches that code on team '{teamKey}'.");
+            throw new InvalidOperationException(string.Format(NoOutstandingInvitationMessage, teamKey));
 
         // Null lifetime means invitations do not expire, so extending clears whatever expiry the record was
         // carrying rather than inventing one. The code is untouched either way -- that is the whole point.
@@ -674,6 +675,9 @@ public abstract class TeamServiceBase : ITeamService
             // Declining is deliberately still allowed once expired -- refusing it would leave the row behind
             // with no way for the invitee to clear it, and declining grants nothing.
             var invitation = await GetInvitationInternalAsync(teamKey, inviteKey);
+            if (invitation == null && _invitationOptions.Lifetime != null)
+                throw new InvalidOperationException(string.Format(NoOutstandingInvitationMessage, teamKey));
+
             if (InvitationPolicy.HasExpired(invitation, _invitationOptions.Lifetime, DateTime.UtcNow))
                 throw new InvalidOperationException(
                     $"The invitation to team '{teamKey}' expired on {InvitationPolicy.ExpiresAt(invitation, _invitationOptions.Lifetime):u}.");
@@ -706,14 +710,16 @@ public abstract class TeamServiceBase : ITeamService
     }
 
     /// <summary>
-    /// Look up the (admin-entered) Name of the member identified by <paramref name="inviteKey"/>
-    /// inside the given team. Used to capture the invitation Name *before* accept clears it,
-    /// so it can be promoted to <c>User.Name</c>. Default implementation returns null;
-    /// derivatives that have access to the typed team document override it.
+    /// The admin-entered name of the member invited with <paramref name="inviteKey"/>, captured before accept
+    /// clears it so it can be promoted to <c>User.Name</c>.
     /// </summary>
-    protected virtual Task<string> GetInvitedMemberNameAsync(string teamKey, string inviteKey)
+    /// <remarks>
+    /// The default reads the roster through <see cref="GetMembersAsync"/>, so a store that exposes its members
+    /// needs no override.
+    /// </remarks>
+    protected virtual async Task<string> GetInvitedMemberNameAsync(string teamKey, string inviteKey)
     {
-        return Task.FromResult<string>(null);
+        return (await FindInvitedMemberAsync(teamKey, inviteKey))?.Name;
     }
 
     /// <summary>
@@ -721,18 +727,25 @@ public abstract class TeamServiceBase : ITeamService
     /// null. Backs expiry enforcement.
     /// </summary>
     /// <remarks>
-    /// <b>Virtual rather than abstract</b>, like the other members added after the seam was first drawn, so a
-    /// host with its own store keeps compiling. The default returns null, which reads as "no expiry to
-    /// enforce".
+    /// The default reads the roster through <see cref="GetMembersAsync"/>, so a store that exposes its members
+    /// gets expiry enforced without an override. Override it when the store can answer more cheaply.
     /// <para>
-    /// <b>That default is a hole if a lifetime is configured and this is not overridden</b> — expiry
-    /// silently does not apply, and no startup check reports it yet. Nothing is asked of a host that has not
-    /// opted into expiry.
+    /// <b>Null never reads as "not expired".</b> With a <see cref="InvitationOptions.Lifetime"/> configured,
+    /// accepting a code this cannot find is refused, because an invitation whose expiry cannot be read must not
+    /// be treated as one that has none.
     /// </para>
     /// </remarks>
-    protected virtual Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
+    protected virtual async Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
     {
-        return Task.FromResult<Invitation>(null);
+        return (await FindInvitedMemberAsync(teamKey, inviteKey))?.Invitation;
+    }
+
+    private async Task<ITeamMember> FindInvitedMemberAsync(string teamKey, string inviteKey)
+    {
+        if (string.IsNullOrWhiteSpace(inviteKey)) return null;
+
+        return await GetMembersAsync(teamKey).FirstOrDefaultAsync(x =>
+            x.Invitation != null && string.Equals(x.Invitation.InviteKey, inviteKey, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -754,11 +767,10 @@ public abstract class TeamServiceBase : ITeamService
     /// Moves the expiry of the invitation matching <paramref name="inviteKey"/>, leaving its code alone.
     /// </summary>
     /// <remarks>
-    /// <b>Throws rather than no-opping when unimplemented</b>, unlike
-    /// <see cref="GetInvitationInternalAsync"/>. The difference is what silence would mean: a store that
-    /// cannot read an expiry has nothing to enforce, but a store that silently discards an extension reports
-    /// success for an invitation that stays expired, and the operator finds out from the person who could
-    /// not accept it.
+    /// <b>Throws rather than no-opping when unimplemented.</b> Unlike <see cref="GetInvitationInternalAsync"/>
+    /// there is no roster-reading default to fall back on, since writing needs the store. A store that
+    /// silently discarded an extension would report success for an invitation that stays expired, and the
+    /// operator would find out from the person who could not accept it.
     /// </remarks>
     protected virtual Task SetTeamMemberInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
         => throw new NotSupportedException(

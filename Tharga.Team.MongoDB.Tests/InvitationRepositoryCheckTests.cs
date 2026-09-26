@@ -1,17 +1,21 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Tharga.Team;
 using Tharga.Team.MongoDB;
 
 namespace Tharga.Team.MongoDB.Tests;
 
 /// <summary>
-/// The store half of Tharga/Team#286: a host replacing the team repository without implementing
-/// <c>GetByInviteKeyAsync</c> mints links that never resolve. The service-side check cannot see it, because
-/// the repository base overrides the service's half.
+/// A host replacing the team repository without the invitation members. Without <c>GetByInviteKeyAsync</c> it
+/// mints links that never resolve (the store half of Tharga/Team#286); without <c>SetInvitationExpiryAsync</c>,
+/// re-inviting with a lifetime configured cannot renew the invitation. The service-side check cannot see either,
+/// because the repository base overrides the service's half.
 /// </summary>
-public class InviteLookupRepositoryCheckTests
+public class InvitationRepositoryCheckTests
 {
+    private static readonly TimeSpan Fortnight = TimeSpan.FromDays(14);
+
     private interface IProbe
     {
         Task<string> FindAsync() => Task.FromResult<string>(null);
@@ -49,6 +53,61 @@ public class InviteLookupRepositoryCheckTests
     }
 
     [Fact]
+    public void TheBuiltInRepository_ImplementsTheExpiryWrite()
+    {
+        Assert.False(TeamRepositoryCompleteness.UsesDefault(
+            typeof(TeamRepository<DefaultTeamEntity, DefaultTeamMember>),
+            typeof(ITeamRepository<DefaultTeamEntity, DefaultTeamMember>),
+            nameof(ITeamRepository<DefaultTeamEntity, DefaultTeamMember>.SetInvitationExpiryAsync)));
+    }
+
+    /// <summary>The default used to report success and change nothing, while documented as throwing.</summary>
+    [Fact]
+    public async Task TheDefaultExpiryWrite_Throws()
+    {
+        ITeamRepository<DefaultTeamEntity, DefaultTeamMember> repository = new RepositoryWithInviteLookup();
+
+        var exception = await Assert.ThrowsAsync<NotSupportedException>(
+            () => repository.SetInvitationExpiryAsync("team", "code", DateTime.UtcNow));
+
+        Assert.Contains(nameof(RepositoryWithInviteLookup), exception.Message);
+    }
+
+    [Fact]
+    public async Task WithALifetime_ARepositoryWithoutTheExpiryWrite_IsLoggedAsAnError_NamingItAndTheMember()
+    {
+        var logger = new CapturingLogger();
+
+        await RunAsync(new RepositoryWithInviteLookup(), logger, Fortnight);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Error, entry.Level);
+        Assert.Contains(nameof(RepositoryWithInviteLookup), entry.Message);
+        Assert.Contains("SetInvitationExpiryAsync", entry.Message);
+    }
+
+    /// <summary>Without a lifetime nothing extends an invitation on its own, so a host is not asked for it.</summary>
+    [Fact]
+    public async Task WithoutALifetime_TheExpiryWriteIsNotAskedFor()
+    {
+        var logger = new CapturingLogger();
+
+        await RunAsync(new RepositoryWithInviteLookup(), logger);
+
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
+    public async Task WithALifetime_ARepositoryWithBoth_LogsNothing()
+    {
+        var logger = new CapturingLogger();
+
+        await RunAsync(new RepositoryWithInvitations(), logger, Fortnight);
+
+        Assert.Empty(logger.Entries);
+    }
+
+    [Fact]
     public async Task ARepositoryWithoutTheLookup_IsLoggedAsAnError_NamingItAndTheMember()
     {
         var logger = new CapturingLogger();
@@ -79,22 +138,24 @@ public class InviteLookupRepositoryCheckTests
         services.AddTransient<ITeamRepository<DefaultTeamEntity, DefaultTeamMember>>(_ => throw new InvalidOperationException("no store"));
         var logger = new CapturingLogger();
 
-        await new InviteLookupRepositoryCheck<DefaultTeamEntity, DefaultTeamMember>(services.BuildServiceProvider(), logger)
+        await new InvitationRepositoryCheck<DefaultTeamEntity, DefaultTeamMember>(services.BuildServiceProvider(), logger)
             .StartAsync(CancellationToken.None);
 
         Assert.Equal(LogLevel.Warning, Assert.Single(logger.Entries).Level);
     }
 
-    private static Task RunAsync(ITeamRepository<DefaultTeamEntity, DefaultTeamMember> repository, CapturingLogger logger)
+    private static Task RunAsync(ITeamRepository<DefaultTeamEntity, DefaultTeamMember> repository, CapturingLogger logger, TimeSpan? lifetime = null)
     {
         var services = new ServiceCollection();
         services.AddSingleton(repository);
 
-        return new InviteLookupRepositoryCheck<DefaultTeamEntity, DefaultTeamMember>(services.BuildServiceProvider(), logger)
+        var options = Options.Create(new InvitationOptions { Lifetime = lifetime });
+
+        return new InvitationRepositoryCheck<DefaultTeamEntity, DefaultTeamMember>(services.BuildServiceProvider(), logger, options)
             .StartAsync(CancellationToken.None);
     }
 
-    private sealed class CapturingLogger : ILogger<InviteLookupRepositoryCheck<DefaultTeamEntity, DefaultTeamMember>>
+    private sealed class CapturingLogger : ILogger<InvitationRepositoryCheck<DefaultTeamEntity, DefaultTeamMember>>
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];
 
@@ -127,8 +188,13 @@ public class InviteLookupRepositoryCheckTests
         public IAsyncEnumerable<DefaultTeamEntity> GetTeamsByConsentAsync(string[] roles) => throw new NotImplementedException();
     }
 
-    private sealed class RepositoryWithInviteLookup : RepositoryWithoutInviteLookup, ITeamRepository<DefaultTeamEntity, DefaultTeamMember>
+    private class RepositoryWithInviteLookup : RepositoryWithoutInviteLookup, ITeamRepository<DefaultTeamEntity, DefaultTeamMember>
     {
         public Task<DefaultTeamEntity> GetByInviteKeyAsync(string inviteKey) => Task.FromResult<DefaultTeamEntity>(null);
+    }
+
+    private sealed class RepositoryWithInvitations : RepositoryWithInviteLookup, ITeamRepository<DefaultTeamEntity, DefaultTeamMember>
+    {
+        public Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt) => Task.CompletedTask;
     }
 }

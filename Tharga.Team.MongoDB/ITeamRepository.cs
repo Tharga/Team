@@ -27,11 +27,15 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     /// untouched so an already-mailed link keeps working.
     /// </summary>
     /// <remarks>
-    /// A default interface method that no-ops, so a host with its own repository keeps compiling. The base
-    /// service that calls it throws when it is not overridden, so the gap surfaces as an error at the point
-    /// of use rather than as an extension that quietly did nothing.
+    /// A default interface method that throws, so a host with its own repository keeps compiling and the gap
+    /// surfaces as an error at the point of use rather than as an extension that reports success and changes
+    /// nothing. With <see cref="InvitationOptions.Lifetime"/> set, <c>InvitationRepositoryCheck</c> also
+    /// reports it at startup.
     /// </remarks>
-    Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt) => Task.CompletedTask;
+    Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetInvitationExpiryAsync)}. Implement it to support " +
+            "extending an invitation.");
 
     /// <summary>
     /// Adds an access request, cancelling the requester's other pending requests on the team and keeping the
@@ -62,7 +66,7 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     /// <remarks>
     /// The default returns null so a host with its own repository keeps compiling, but every invitation link
     /// the toolkit mints needs this to resolve, so left at the default none of them does. Reported at startup
-    /// by <c>InviteLookupRepositoryCheck</c> (Tharga/Team#286).
+    /// by <c>InvitationRepositoryCheck</c> (Tharga/Team#286).
     /// </remarks>
     Task<TTeamEntity> GetByInviteKeyAsync(string inviteKey) => Task.FromResult<TTeamEntity>(null);
     Task SetConsentAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel = null);
@@ -83,6 +87,12 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
             $"'{GetType().Name}' does not implement {nameof(GetAllTeamsAsync)}. Implement it to support " +
             $"cross-team listing (the '{SystemTeamScopes.Read}' system scope).");
 
+    /// <summary>A team by key whether or not it is deleted — for restore, purge and key reservation.</summary>
+    Task<TTeamEntity> GetIncludingDeletedAsync(string teamKey)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(GetIncludingDeletedAsync)}. Implement it to " +
+            "support soft delete, restore and purge.");
+
     /// <summary>
     /// Marks a team deleted, or clears the mark when <paramref name="deletedAt"/> is null.
     /// </summary>
@@ -96,12 +106,6 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     /// resolves to the irreversible one the store already had.
     /// </para>
     /// </remarks>
-    /// <summary>A team by key whether or not it is deleted — for restore, purge and key reservation.</summary>
-    Task<TTeamEntity> GetIncludingDeletedAsync(string teamKey)
-        => throw new NotSupportedException(
-            $"'{GetType().Name}' does not implement {nameof(GetIncludingDeletedAsync)}. Implement it to " +
-            "support soft delete, restore and purge.");
-
     Task SetDeletedAsync(string teamKey, DateTime? deletedAt, string deletedBy)
         => throw new NotSupportedException(
             $"'{GetType().Name}' does not implement {nameof(SetDeletedAsync)}. Implement it to support " +

@@ -1,29 +1,31 @@
 # Plan: invitation seams on a custom store
 
-Spec: `plan/feature.md`. Branched from `origin/master` at `bc4346f`.
+Spec: `plan/feature.md`. Branched from `origin/master` at `bc4346f`; `origin/master` (`f318804`, PR #302) merged
+in 2026-09-26 — merged rather than rebased, because the branch was already pushed.
 
 - [x] 0. `chore(deps): nuget update` — Moq 4.20.72 → 4.21.0 (test project only). Full suite 3,028 green.
-- [ ] 1. **Expiry — tests first.** A `TeamServiceBase` derivative that does *not* override
-      `GetInvitationInternalAsync`, lifetime set: expired accept refused; unexpired accept succeeds; decline of an
-      expired invitation succeeds; accept of an unknown code refused. Watch them go red.
-- [ ] 2. **Expiry — the fix.** Roster-reading default for `GetInvitationInternalAsync` and
-      `GetInvitedMemberNameAsync`; fail closed on accept when a lifetime is set and nothing matches. Correct and
-      relocate the orphaned doc; remove the `InvitationExpiryWiringCheck` reference.
-- [ ] 3. **Short links — startup rule.** `TeamServiceCompleteness` gains `GetTeamKeyByInviteKeyInternalAsync`,
-      always reachable. Extend `TeamServiceCompletenessTests` and `TeamsReadCompletenessCheckTests` (or a sibling)
-      so the built-in store and an overriding host stay silent. Rewrite the member's remarks.
-- [ ] 4. **Repository layer.** `ITeamRepository.SetInvitationExpiryAsync` default throws; a startup check in
-      `Tharga.Team.MongoDB` reports a registered repository implementing neither `GetByInviteKeyAsync` nor
-      `SetInvitationExpiryAsync` (interface map: an unimplemented default member maps to the interface itself).
-      Built-in `TeamRepository<,>` must report nothing.
-- [ ] 5. **Docs.** `Tharga.Team/README.md` contract table rows for the invitation members; implementation guide
-      *What an invitation link looks like* and *Invitations that expire* custom-store notes.
-- [ ] 6. Full suite; sample boots clean (no false positive on the built-in store).
-- [ ] 7. Push for user testing.
+- [x] 1. **Expiry — tests first.** `InvitationDefaultLookupTests` (Service.Tests), via a new
+      `TestTeamService.UseDefaultInvitationLookups` switch. Went red on exactly the three expected cases: expired
+      accept, unknown code with a lifetime, invited name not carried over.
+- [x] 2. **Expiry — the fix.** `GetInvitationInternalAsync` and `GetInvitedMemberNameAsync` default to reading the
+      roster through `GetMembersAsync`; accept refuses a code it cannot find when a lifetime is set (same message as
+      `ExtendInvitationAsync`, now a constant). Service.Tests 1,079 green. The orphaned doc had already been fixed on
+      master by #302; its "no startup check reports it" remark is replaced by the new behaviour.
+- [x] 3. **Short links — startup rule.** Already shipped on master by #302 (`9b0b7a5`,
+      `InviteLookupCompletenessCheckTests`). Nothing left to do here.
+- [x] 4. **Repository layer.** `ITeamRepository.SetInvitationExpiryAsync` default now throws `NotSupportedException`
+      naming the type. Master's check renamed `InviteLookupRepositoryCheck` → `InvitationRepositoryCheck` (internal)
+      and also reports `SetInvitationExpiryAsync` left at the default — only when `InvitationOptions.Lifetime` is set,
+      since without one nothing extends an invitation on its own. Tests renamed to `InvitationRepositoryCheckTests`
+      (11 green), including the built-in `TeamRepository<,>` implementing both.
+- [x] 5. **Docs.** `Tharga.Team/README.md` contract table + startup-check paragraph; implementation guide
+      *Invitations that expire* now has three custom-store notes. Misplaced `SetDeletedAsync` summary moved onto its
+      member in `ITeamRepository.cs`. Version wording avoids naming the unreleased patch (only 3.23.0 is tagged).
+- [x] 6. Full suite 3,065 green (`dotnet test`, SDK 10.0.302). Sample boots with no check errors — note it sets no
+      lifetime, so the expiry half is covered by the unit test, not the boot.
+- [~] 7. Push for user testing — awaiting approval to push.
 
 ## Notes
 
 - Tier 1 part first: expiry is the one granting access it should refuse.
-- The existing check-in-the-team-service pattern from #301 (`TeamServiceCompleteness` + `Report`) is where step 3
-  goes — one more rule, not a new check.
-- Do not add `LinkFormat` (#286 option 2); answer it on the issue at close.
+- Do not add `LinkFormat` (#286 option 2). #286 was closed by #302.
