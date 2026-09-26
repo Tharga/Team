@@ -52,7 +52,8 @@ internal sealed class SupportMailClient(IOptions<MailOptions> options, ILogger<S
         }
         catch (Exception e)
         {
-            logger?.LogError(e, "Support mail to {Recipient} could not be sent.", mail.To);
+            // The recipient is deliberately not logged: an address is personal data, and logs travel further than mail.
+            logger?.LogError(e, "A support mail could not be sent.");
 
             return MailSendResult.Failed(e.Message);
         }
