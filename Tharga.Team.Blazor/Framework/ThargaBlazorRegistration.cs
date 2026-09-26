@@ -408,11 +408,15 @@ public static class ThargaBlazorRegistration
     {
         if (o._emailSenderType != null)
         {
+            // Registered for a custom sender too, so it can inject IOutboundMailPolicy and apply the same rules.
+            services.AddOutboundMailPolicy();
             services.AddScoped(typeof(ITeamEmailSender), o._emailSenderType);
             return;
         }
 
         if (o.Email == null) return;
+
+        services.AddOutboundMailPolicy();
 
         // Copied whole rather than property-by-property: a named list is what dropped two IconOptions
         // properties on this same path (Tharga/Team#177). FromName is assigned after the copy because it

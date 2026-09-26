@@ -1632,9 +1632,10 @@ somebody guessed and the log should not hand candidate codes to everyone who can
 
 ### Sending the invitation email
 
-**Invitations are the only mail the toolkit sends.** `ITeamEmailSender` has a single member,
-`SendInviteAsync`, so configuring email here is a decision about invitation delivery — not about handing the
-toolkit your mail pipeline.
+`ITeamEmailSender` has a single member, `SendInviteAsync`, so configuring email here is a decision about
+invitation delivery — not about handing the toolkit your mail pipeline. (The only other mail the toolkit sends
+is support mail, configured separately in **Tharga.Team.Support**. Both obey the same rules outside production;
+see *Mail outside production* below.)
 
 Three-way choice, and it works identically on the facade and granular paths:
 
@@ -1663,6 +1664,65 @@ On the granular path set these on `AddThargaTeamBlazor`; on the facade set them 
 >
 > Before 3.10, `AddThargaTeamBlazor` could not register a sender at all, so a granular host hit this state
 > without having chosen it (Tharga/Team#176).
+
+### Mail outside production
+
+**Outside production, the toolkit mails only your own people** (Tharga/Team#290). The same build deployed to a
+test environment would otherwise invite real customers while someone tries something out. Every mail the
+toolkit sends — invitations and support mail alike — goes through one policy:
+
+| Environment | Recipient | What happens |
+|---|---|---|
+| Production | anyone | Sent unchanged |
+| Not production | in an allowed domain | Sent unchanged |
+| Not production | anyone else, override address set | Sent to the override address instead; the subject says who it was for: `[Staging -> kund@kommun.se] You've been invited…` |
+| Not production | anyone else, no override address | **Not sent**, and logged |
+
+```json
+"Email": {
+  "Override": {
+    "Address": "test-inbox@example.com",
+    "AllowedDomains": [ "example.com", "example.se" ]
+  }
+}
+```
+
+Or in code: `builder.Services.Configure<OutboundMailPolicyOptions>(o => o.Address = "test-inbox@example.com");`
+
+- **Production is `IHostEnvironment.IsProduction()`.** A host that configures nothing gets the safe behaviour:
+  outside production, nothing reaches a customer.
+- **Allowed domains match exactly**, case-insensitively. `example.com` does not admit `mail.example.com`; list it
+  as well if wanted.
+- **A value like `$(MailOverride)`** — an undefined pipeline variable arriving as its own name — counts as unset.
+- **At startup, outside production**, the log states the policy in force, and warns when everything is being
+  withheld.
+- **A withheld invitation still exists**; its link can be copied from the team page. A withheld support reply is
+  recorded as not delivered.
+
+> [!IMPORTANT]
+> **Upgrading changes what a test environment sends.** A staging or test deployment that mailed everyone before
+> this release mails only allowed domains and the override address after it — and with neither configured,
+> nothing. Set `Email:Override` before upgrading if that environment should keep receiving mail.
+
+**Your own sender can apply the same rules.** The toolkit cannot enforce the policy in code it does not own, but
+it registers `IOutboundMailPolicy` for a custom `ITeamEmailSender` as well. Inject it and send according to its
+decision:
+
+```csharp
+public class MyEmailSender(IOutboundMailPolicy policy, IMyMailQueue queue) : ITeamEmailSender
+{
+    public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
+    {
+        var decision = policy.Decide(recipientEmail, $"Join {teamName}");
+        if (!decision.ShouldSend) return Task.CompletedTask;
+
+        return queue.EnqueueAsync(decision.Recipient, decision.Subject, inviteLink);
+    }
+}
+```
+
+A host that sends mail outside the toolkit altogether can call `services.AddOutboundMailPolicy()` itself to get
+the same policy, configuration and startup report.
 
 ### Team services and system services
 

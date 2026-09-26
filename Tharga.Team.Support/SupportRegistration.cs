@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Service.Email;
 using Tharga.Team.Support.Email;
 using Tharga.Team.Support.Notifications;
 using Tharga.Team.Support.Slack;
@@ -123,7 +124,13 @@ public static class SupportRegistration
         // and one facing support at the same time.
         if (caseOptions.Email.Imap.IsConfigured || caseOptions.Email.Smtp.IsConfigured)
         {
-            services.TryAddScoped<ISupportMailClient, SupportMailClient>();
+            // The transport is wrapped rather than changed, so it stays ignorant of Team types (Tharga/Team#290).
+            services.AddOutboundMailPolicy();
+            services.TryAddScoped<SupportMailClient>();
+            services.TryAddScoped<ISupportMailClient>(sp => new PolicyGovernedMailClient(
+                sp.GetRequiredService<SupportMailClient>(),
+                sp.GetRequiredService<IOutboundMailPolicy>(),
+                sp.GetService<ILogger<PolicyGovernedMailClient>>()));
             services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportChannel, EmailSupportChannel>());
         }
 
