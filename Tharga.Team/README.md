@@ -77,6 +77,7 @@ them.
 | `GetTeamKeyByInviteKeyInternalAsync` | Returns `null`; reported at startup | Opening a short invitation link (the only form the toolkit generates) | Every invitation link opens on "This invitation link is no longer valid" |
 | `GetInvitationInternalAsync` | Reads the roster through `GetMembersAsync` | Accepting an invitation while `InvitationOptions.Lifetime` is set | Nothing, provided your store exposes its members. With a lifetime set, a code the roster does not hold is refused |
 | `GetInvitedMemberNameAsync` | Reads the roster through `GetMembersAsync` | Accepting an invitation | Nothing, provided your store exposes its members |
+| `GetMembersAsync` | Reads a `Members` property (array or list) off the team `GetTeamAsync` returns | Removing a member, leaving, and the invitation defaults above | If your team type has no `Members` property, removing and leaving are **refused** — the Owner and last-administrator guards cannot run without a roster. Override it to return the roster |
 | `SupportsSoftDelete` / `SoftDeleteTeamAsync` | `false` / hard delete | Deleting a team | Delete is permanent; there is nothing to restore. Deliberate for a store that cannot soft-delete |
 | Suspension, access requests, invitation expiry updates, owner lookup, user removal, team icons | **Throw** | The feature that uses each | The feature fails loudly, naming the member |
 

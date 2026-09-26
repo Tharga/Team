@@ -7,6 +7,7 @@ public abstract class TeamServiceBase : ITeamService
 {
     private const string OwnerCannotLeaveMessage = "The owner cannot leave the team. Transfer ownership first.";
     private const string LastAdministratorCannotLeaveMessage = "Cannot leave the team as the last administrator.";
+    private const string NotAMemberMessage = "User '{0}' is not a member of team '{1}'.";
     private const string NoOutstandingInvitationMessage = "No outstanding invitation matches that code on team '{0}'.";
 
     private readonly IUserService _userService;
@@ -481,22 +482,28 @@ public abstract class TeamServiceBase : ITeamService
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
 
+    /// <summary>
+    /// Removes a member in any state — withdrawing an invitation included. Refuses the Owner, and a member
+    /// removing themselves as the last administrator.
+    /// </summary>
+    /// <remarks>
+    /// <b>Fails closed on a roster it cannot read.</b> The guards need the roster, read through
+    /// <see cref="GetMembersAsync"/>; a member not found there is refused rather than removed unchecked. A host
+    /// store whose team type exposes its members needs nothing more; one that does not should override
+    /// <see cref="GetMembersAsync"/>.
+    /// </remarks>
     public async Task RemoveMemberAsync(string teamKey, string userKey)
     {
-        var team = await GetTeamAsync(teamKey);
-        var members = GetMembersFromTeam(team);
-        if (members != null)
-        {
-            var member = members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
-            if (member != null)
-            {
-                if (member.AccessLevel == AccessLevel.Owner)
-                    throw new InvalidOperationException(OwnerCannotLeaveMessage);
+        var members = await GetMembersAsync(teamKey).ToArrayAsync();
+        var member = members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
+        if (member == null)
+            throw new InvalidOperationException(string.Format(NotAMemberMessage, userKey, teamKey));
 
-                var user = await RequireCurrentUserAsync();
-                if (member.Key == user.Key) RequireNotLastAdministrator(member, members);
-            }
-        }
+        if (member.AccessLevel == AccessLevel.Owner)
+            throw new InvalidOperationException(OwnerCannotLeaveMessage);
+
+        var user = await RequireCurrentUserAsync();
+        if (member.Key == user.Key) RequireNotLastAdministrator(member, members);
 
         await DetachMemberAsync(teamKey, userKey);
     }
@@ -525,7 +532,9 @@ public abstract class TeamServiceBase : ITeamService
 
     /// <summary>
     /// Refuses a member who is the only administrator left. Counts the Owner, who outranks
-    /// <see cref="AccessLevel.Administrator"/>, so this bites only on a team that has no owner.
+    /// <see cref="AccessLevel.Administrator"/>, so this bites only on a team that has no owner. A suspended
+    /// administrator is not counted: suspension withdraws every scope, so they cannot be the one left holding
+    /// <c>member:manage</c>.
     /// </summary>
     private static void RequireNotLastAdministrator(ITeamMember member, IEnumerable<ITeamMember> members)
     {
@@ -534,6 +543,7 @@ public abstract class TeamServiceBase : ITeamService
         var otherAdminsOrOwners = members.Count(x =>
             x.Key != member.Key &&
             x.State == MembershipState.Member &&
+            x.SuspendedAt == null &&
             x.AccessLevel <= AccessLevel.Administrator);
         if (otherAdminsOrOwners == 0)
             throw new InvalidOperationException(LastAdministratorCannotLeaveMessage);
@@ -593,7 +603,7 @@ public abstract class TeamServiceBase : ITeamService
         // unhelpful. Reading the team directly is the only way to tell the two apart.
         var member = await GetMembersAsync(teamKey).FirstOrDefaultAsync(x => x.Key == userKey);
         if (member == null)
-            throw new InvalidOperationException($"User '{userKey}' is not a member of team '{teamKey}'.");
+            throw new InvalidOperationException(string.Format(NotAMemberMessage, userKey, teamKey));
 
         if (member.State != null && member.State != MembershipState.Member)
         {
@@ -1142,6 +1152,6 @@ public abstract class TeamServiceBase : ITeamService
     private static ITeamMember[] GetMembersFromTeam(ITeam team)
     {
         var membersProperty = team?.GetType().GetProperty("Members");
-        return membersProperty?.GetValue(team) as ITeamMember[];
+        return (membersProperty?.GetValue(team) as IEnumerable<ITeamMember>)?.ToArray();
     }
 }
