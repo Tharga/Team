@@ -63,6 +63,32 @@ public class SupportMailClientPolicyTests
         await _inner.DidNotReceive().SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>An address is personal data, and logs travel further than mail does (CodeQL, PR #305).</summary>
+    [Fact]
+    public async Task Withheld_TheLogDoesNotContainTheRecipientAddress()
+    {
+        var policy = Substitute.For<IOutboundMailPolicy>();
+        policy.Decide(Arg.Any<string>(), Arg.Any<string>()).Returns(new OutboundMailDecision(OutboundMailAction.Withhold, Customer, Subject));
+        var logger = new CapturingLogger();
+
+        await new PolicyGovernedMailClient(_inner, policy, logger).SendAsync(Mail());
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.DoesNotContain(Customer, entry);
+        Assert.DoesNotContain("kommun.se", entry);
+    }
+
+    private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger<PolicyGovernedMailClient>
+    {
+        public List<string> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+            => Entries.Add(formatter(state, exception));
+    }
+
     [Fact]
     public async Task ReadingIsNotAffected()
     {

@@ -58,6 +58,36 @@ public class SmtpTeamEmailSenderPolicyTests
         await sender.SendInviteAsync(Customer, "Kund", "https://example.com/i", "Acme");
     }
 
+    /// <summary>An address is personal data, and logs travel further than mail does (CodeQL, PR #305).</summary>
+    [Fact]
+    public void Withheld_TheLogDoesNotContainTheRecipientAddress()
+    {
+        var policy = Substitute.For<IOutboundMailPolicy>();
+        policy.Decide(Arg.Any<string>(), Arg.Any<string>())
+            .Returns(new OutboundMailDecision(OutboundMailAction.Withhold, Customer, "x"));
+        var logger = new CapturingLogger();
+        var sender = new SmtpTeamEmailSender(
+            Options.Create(new EmailOptions { SmtpHost = "smtp.example.com", FromAddress = "noreply@example.com" }), policy, logger);
+
+        sender.CreateMessage(Customer, "Kund", "https://example.com/i", "Acme");
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.DoesNotContain(Customer, entry);
+        Assert.DoesNotContain("kommun.se", entry);
+        Assert.Contains("Acme", entry);
+    }
+
+    private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger<SmtpTeamEmailSender>
+    {
+        public List<string> Entries { get; } = [];
+
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => null;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
+            => Entries.Add(formatter(state, exception));
+    }
+
     [Fact]
     public void ThePolicyIsAskedAboutTheIntendedRecipientAndSubject()
     {

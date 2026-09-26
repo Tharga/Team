@@ -58,10 +58,11 @@ public class SmtpTeamEmailSender : ITeamEmailSender
         var decision = _policy.Decide(recipientEmail, $"You've been invited to join {teamName}");
         if (!decision.ShouldSend)
         {
+            // The recipient is deliberately not logged: an address is personal data, and logs travel further than mail.
             _logger?.LogWarning(
-                "An invitation to {Recipient} was not sent: outside production, mail reaches only an allowed domain or " +
+                "An invitation to team '{Team}' was not sent: outside production, mail reaches only an allowed domain or " +
                 "the override address, and neither applies. Set {Section} to receive it. The invitation itself exists.",
-                recipientEmail, OutboundMailPolicyOptions.SectionName);
+                teamName, OutboundMailPolicyOptions.SectionName);
             return null;
         }
 

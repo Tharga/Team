@@ -33,7 +33,8 @@ internal sealed class PolicyGovernedMailClient(
         var decision = policy.Decide(mail.To, mail.Subject);
         if (!decision.ShouldSend)
         {
-            logger?.LogWarning("Support mail to {Recipient} was not sent. {Reason}", mail.To, WithheldMessage);
+            // The recipient is deliberately not logged: an address is personal data, and logs travel further than mail.
+            logger?.LogWarning("A support mail was not sent. {Reason}", WithheldMessage);
             return Task.FromResult(MailSendResult.Failed(WithheldMessage));
         }
 
