@@ -1914,7 +1914,9 @@ Team mutations are enforced in the **service layer** (`AuthorizationTeamServiceD
 
 **Any member can leave a team they belong to.** The Owner cannot — they transfer ownership first — and
 neither can the last administrator of a team that has no owner. Both are refused by the service, not
-merely hidden in the UI.
+merely hidden in the UI. **A suspended administrator does not count as cover**: suspension withdraws every
+scope, so they cannot be the one left holding `member:manage`. The same guards apply to an administrator
+removing themselves through `RemoveMemberAsync`.
 
 ```csharp
 @inject ITeamDirectoryService TeamDirectory

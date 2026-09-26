@@ -19,6 +19,12 @@ internal class TestTeamService : TeamServiceBase
     /// </summary>
     public bool UseDefaultInvitationLookups { get; init; }
 
+    /// <summary>How <see cref="GetTeamAsync"/> presents the stored team — as a host's own team type might.</summary>
+    public TestTeamShape Shape { get; init; }
+
+    /// <summary>Counts removals that reached the store, so a test can tell "refused" from "removed".</summary>
+    public int RemoveTeamMemberCallCount { get; private set; }
+
     protected override Task<Invitation> GetInvitationInternalAsync(string teamKey, string inviteKey)
     {
         if (UseDefaultInvitationLookups) return base.GetInvitationInternalAsync(teamKey, inviteKey);
@@ -64,7 +70,14 @@ internal class TestTeamService : TeamServiceBase
         GetTeamCallCount++;
         if (teamKey == null) return Task.FromResult<ITeam>(null);
         _teams.TryGetValue(teamKey, out var team);
-        return Task.FromResult<ITeam>(team);
+        if (team == null) return Task.FromResult<ITeam>(null);
+
+        return Task.FromResult<ITeam>(Shape switch
+        {
+            TestTeamShape.WithoutMembers => new TestTeamWithoutMembers { Key = team.Key, Name = team.Name },
+            TestTeamShape.MembersAsList => new TestTeamWithMemberList { Key = team.Key, Name = team.Name, Members = team.Members.ToList() },
+            _ => team
+        });
     }
 
     protected override Task<ITeam> CreateTeamAsync(string teamKey, string name, IUser user, string displayName = null)
@@ -86,6 +99,7 @@ internal class TestTeamService : TeamServiceBase
     /// </summary>
     protected override Task RemoveTeamMemberAsync(string teamKey, string userKey)
     {
+        RemoveTeamMemberCallCount++;
         if (_teams.TryGetValue(teamKey, out var team) && team.Members != null)
             _teams[teamKey] = team with { Members = team.Members.Where(x => x.Key != userKey).ToArray() };
 
@@ -243,6 +257,30 @@ internal record TestTeam : ITeam<TestMember>
     public TemporaryConsent TemporaryConsent { get; init; }
     public IReadOnlyList<TeamAccessRequest> AccessRequests { get; init; }
     public DateTime? DeletedAt { get; init; }
+}
+
+public enum TestTeamShape
+{
+    MembersAsArray,
+    WithoutMembers,
+    MembersAsList
+}
+
+/// <summary>A team type exposing no roster at all.</summary>
+internal record TestTeamWithoutMembers : ITeam
+{
+    public string Key { get; init; }
+    public string Name { get; init; }
+    public string Icon { get; init; }
+}
+
+/// <summary>A team type exposing its roster as a list rather than an array.</summary>
+internal record TestTeamWithMemberList : ITeam
+{
+    public string Key { get; init; }
+    public string Name { get; init; }
+    public string Icon { get; init; }
+    public List<TestMember> Members { get; init; } = [];
 }
 
 internal record TestMember : ITeamMember
