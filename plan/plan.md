@@ -16,11 +16,20 @@ Branch: `feature/host-seams` (from `master` at a155b64). Scope: `plan/feature.md
       default-member store returns empty).
 - [x] 5. (Done, 3128 tests. `SmtpTeamEmailSender` deliberately unchanged, see notes.) #289: `TeamInviteMail` record plus a default member on `ITeamEmailSender`. `SmtpTeamEmailSender`
       implements it. `TeamComponent` passes the team key. Tests for forwarding and for the SMTP sender.
-- [~] 6. MCP: make `McpContextExtensions` / `AsTeamContext` public and document the `TeamMcpContext`
+- [x] 6. (Done: `HostProviderContextSurfaceTests`, which checks visibility by reflection because the test assembly sees internals.) MCP: make `McpContextExtensions` / `AsTeamContext` public and document the `TeamMcpContext`
       constructor. Add a test that a host-built context narrows and a foreign one yields null.
-- [ ] 7. Bump `MAJOR_MINOR` to 3.24 in `.github/workflows/build.yml`.
-- [ ] 8. Full build and test run. Commit per milestone (2–4, 5, 6–7).
-- [ ] 9. Push the branch and ask the user to test. **No PR yet.**
+- [x] 7. Bump `MAJOR_MINOR` to 3.24 in `.github/workflows/build.yml`.
+- [x] 8. Full build and test run: **3132 passed, 0 failed** (baseline 3110, +22). Three milestone commits.
+- [~] 9. Push the branch and ask the user to test. **No PR yet.**
+
+## Last session (2026-09-28)
+All three items are implemented and tested on `feature/host-seams`, and the branch is pushed for testing.
+Next: user testing, then close-out (below). **README/docs changes needed at close-out:**
+`docs/articles/implementation-guide.md`: the custom-sender example (~line 1712) should use
+`SendInviteAsync(TeamInviteMail)`; add an MCP section on reading the caller in a host provider and building
+`TeamMcpContext` in tests; add a support section on the two escalation queries, including dedup on
+`(Id, MessageCount)` and newest-first ordering. Release notes: plan 05 should record removing the
+four-string `SendInviteAsync` in 4.0.
 
 ## Close-out (after user confirms)
 Re-run `dotnet outdated`. Update docs (`implementation-guide.md`: custom sender, MCP host providers,

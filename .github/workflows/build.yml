@@ -18,7 +18,7 @@ env:
   # through consent could previously change that same consent, which with time-bounded consent means
   # removing their own expiry. A host with its own ITeamService decorator must also forward the new
   # access-request members, or they resolve to the throwing defaults.
-  MAJOR_MINOR: '3.23'
+  MAJOR_MINOR: '3.24'
 
 permissions:
   contents: write
