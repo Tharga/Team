@@ -95,6 +95,68 @@ public interface ISupportCaseStore
         => Task.FromResult<SupportCase[]>([]);
 
     /// <summary>
+    /// Open cases, across every team, whose newest entry was written by the person who raised them before
+    /// <paramref name="waitingSince"/> — the ones nobody has answered in time.
+    /// </summary>
+    /// <remarks>
+    /// <b>For a host escalating unanswered cases</b>, typically from a single-instance worker. The same state
+    /// <see cref="GetAwaitingSupportCountAsync"/> counts per team, asked across every team at once.
+    /// <para>
+    /// <b>Includes unassigned cases.</b> A case with no team is waiting on support just as much as one that
+    /// has a team.
+    /// </para>
+    /// <para>
+    /// <b>A case keeps matching on every pass until somebody answers it</b>, so deduplication is the
+    /// caller's. Key "already escalated" on <see cref="SupportCase.Id"/> together with
+    /// <see cref="SupportCase.MessageCount"/>: the pair names exactly one newest entry, so a case that is
+    /// answered and then written to again escalates afresh. <see cref="ISupportEventLedger.TryRecordAsync"/>
+    /// fits as-is.
+    /// </para>
+    /// <para>
+    /// <b>Newest first — most recent entry on top.</b> Because matching cases stay matching, an arbitrary
+    /// order under <paramref name="limit"/> could return the same already-escalated cases on every pass and
+    /// never reach the rest. Newest first puts the cases that have only just crossed the window on top.
+    /// </para>
+    /// <para>
+    /// <b>Not team-scoped, because a sweep has no caller and no team</b> — framework code, like
+    /// <see cref="GetCasesForInactivityCloseAsync"/>. Never reach it from a user-facing path.
+    /// </para>
+    /// <para><b>Defaults to nothing</b>, so a store written before this existed keeps compiling and never escalates.</para>
+    /// </remarks>
+    /// <param name="waitingSince">Cases whose newest entry is older than this are returned.</param>
+    /// <param name="limit">Most cases to return, so one pass cannot load an unbounded set.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    Task<SupportCase[]> GetCasesAwaitingSupportSinceAsync(DateTime waitingSince, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCase[]>([]);
+
+    /// <summary>
+    /// Open cases, across every team, whose newest entry is an answer written before
+    /// <paramref name="answeredBefore"/> that the person who raised the case has not read.
+    /// </summary>
+    /// <remarks>
+    /// <b>For a host delivering unread answers by mail</b>, so the customer need not keep the page open. The
+    /// read state is the same one <see cref="GetUnreadCountAsync"/> computes per team and per person.
+    /// <para>
+    /// <b>An answer is an entry by a person other than the author, or by an assistant.</b> A
+    /// <see cref="SupportMessageKind.System"/> entry — a reopen or assignment note — is never an answer, so
+    /// it neither matches nor hides an earlier one: a case whose newest entry is the toolkit's is not returned.
+    /// </para>
+    /// <para>
+    /// <b>Includes unassigned cases</b>, is ordered newest first, and leaves deduplication to the caller,
+    /// keyed the same way as <see cref="GetCasesAwaitingSupportSinceAsync"/>.
+    /// </para>
+    /// <para>
+    /// <b>Not team-scoped</b> and <b>defaults to nothing</b>, for the same reasons as
+    /// <see cref="GetCasesAwaitingSupportSinceAsync"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="answeredBefore">Answers older than this are returned.</param>
+    /// <param name="limit">Most cases to return, so one pass cannot load an unbounded set.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    Task<SupportCase[]> GetCasesWithUnreadAnswerSinceAsync(DateTime answeredBefore, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCase[]>([]);
+
+    /// <summary>
     /// Cases belonging to no team, newest first, or an empty page when the store cannot answer.
     /// </summary>
     /// <remarks>

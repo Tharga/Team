@@ -8,6 +8,28 @@ namespace Tharga.Team.Mcp;
 /// <see cref="IMcpContext"/> implementation backed by a <see cref="ClaimsPrincipal"/>.
 /// Reads UserId, TeamId, and the Developer role from standard Team claim types.
 /// </summary>
+/// <remarks>
+/// A host provider reaches it through <see cref="McpContextExtensions.AsTeamContext"/>.
+/// <para>
+/// <b>Where each value comes from</b> — which is also how to build one in a unit test:
+/// <list type="bullet">
+/// <item><see cref="TeamId"/>: the <c>selectedTeamKey</c> argument; failing that, the principal's
+/// <see cref="TeamClaimTypes.TeamKey"/> claim.</item>
+/// <item><see cref="UserId"/>: the principal's <see cref="ClaimTypes.NameIdentifier"/> claim; failing that,
+/// <c>sub</c>.</item>
+/// <item><see cref="IsDeveloper"/>: the principal is in the role named by <c>developerRole</c>.</item>
+/// </list>
+/// </para>
+/// <code>
+/// var principal = new ClaimsPrincipal(new ClaimsIdentity(
+/// [
+///     new Claim(ClaimTypes.NameIdentifier, "user-1"),
+///     new Claim(TeamClaimTypes.TeamKey, "team-1")
+/// ], "test"));
+///
+/// IMcpContext context = new TeamMcpContext(principal, McpScope.Team, developerRole: "Developer");
+/// </code>
+/// </remarks>
 public sealed class TeamMcpContext : IMcpContext
 {
     /// <param name="principal">The authenticated user, or null for anonymous.</param>

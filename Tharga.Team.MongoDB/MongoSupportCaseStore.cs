@@ -163,6 +163,67 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return [.. due];
     }
 
+    public Task<SupportCase[]> GetCasesAwaitingSupportSinceAsync(DateTime waitingSince, int limit, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true),
+            Builders<SupportCaseEntity>.Filter.Lt(x => x.LastMessageAt, waitingSince));
+
+        return NewestFirstAsync(filter, _ => true, limit, cancellationToken);
+    }
+
+    /// <remarks>
+    /// The read marker and the transcript tail are compared in memory, for the same reason as the inactivity
+    /// query: neither "last element of an array" nor a comparison between two fields is a plain filter.
+    /// </remarks>
+    public Task<SupportCase[]> GetCasesWithUnreadAnswerSinceAsync(DateTime answeredBefore, int limit, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, false),
+            Builders<SupportCaseEntity>.Filter.Lt(x => x.LastMessageAt, answeredBefore));
+
+        return NewestFirstAsync(filter, HasUnreadAnswer, limit, cancellationToken);
+    }
+
+    /// <remarks>
+    /// <b>Newest first, and that is what keeps a sweep from starving.</b> Neither escalation query changes the
+    /// state it reads, so a case the host has already escalated keeps matching. Taking the first
+    /// <paramref name="limit"/> in arbitrary order could return the same already-handled cases on every pass
+    /// and never reach the rest; newest first puts the cases that have only just crossed the window on top.
+    /// </remarks>
+    private async Task<SupportCase[]> NewestFirstAsync(FilterDefinition<SupportCaseEntity> filter, Func<SupportCaseEntity, bool> predicate, int limit, CancellationToken cancellationToken)
+    {
+        var matching = new List<SupportCaseEntity>();
+
+        await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
+        {
+            if (predicate(entity)) matching.Add(entity);
+        }
+
+        return [.. matching.OrderByDescending(x => x.LastMessageAt).ThenBy(x => x.CaseId).Take(limit).Select(ToCase)];
+    }
+
+    /// <summary>
+    /// Whether the newest entry is an answer — a person other than the author, or an assistant — that the
+    /// author has not read.
+    /// </summary>
+    internal static bool HasUnreadAnswer(SupportCaseEntity entity)
+    {
+        var last = entity.Messages.Length == 0
+            ? null
+            : entity.Messages.OrderBy(x => x.Sequence).Last();
+
+        var isAnswer = last is { Kind: SupportMessageKind.Assistant }
+                       || (last is { Kind: SupportMessageKind.User } && last.AuthorIdentity != entity.AuthorIdentity);
+        if (!isAnswer) return false;
+
+        var read = Array.Find(entity.Reads ?? [], x => x.Identity == entity.AuthorIdentity);
+
+        return (read?.LastReadSequence ?? 0) < last.Sequence;
+    }
+
     /// <summary>
     /// Whether a person other than the author wrote the newest entry — as opposed to the toolkit itself.
     /// </summary>

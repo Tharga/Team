@@ -11,6 +11,15 @@ namespace Tharga.Team.Mcp;
 /// context in the first place (<see cref="HttpContextMcpContextAccessor"/> constructs a
 /// <see cref="TeamMcpContext"/>), so its own providers recover that state by asking for the concrete type.
 /// <para>
+/// <b>Public so a host's own provider can use it.</b> A host writing its own <c>IMcpToolProvider</c> needs
+/// the calling team and user exactly as this bridge's providers do, and should not have to re-implement the
+/// narrowing to get them:
+/// <code>
+/// var teamKey = context.AsTeamContext()?.TeamId;
+/// if (string.IsNullOrEmpty(teamKey)) return Refuse("Select a team first.");
+/// </code>
+/// </para>
+/// <para>
 /// The same pattern already appears in <see cref="McpScopeChecker"/>, which matches
 /// <c>Current is TeamMcpContext { SelectedTeamScopes: not null }</c>.
 /// </para>
@@ -22,10 +31,13 @@ namespace Tharga.Team.Mcp;
 /// was null.
 /// </para>
 /// </remarks>
-internal static class McpContextExtensions
+public static class McpContextExtensions
 {
     /// <summary>
     /// The context as this bridge's own <see cref="TeamMcpContext"/>, or null when it came from elsewhere.
     /// </summary>
-    internal static TeamMcpContext AsTeamContext(this IMcpContext context) => context as TeamMcpContext;
+    /// <remarks>
+    /// Null means "no identity": treat it as refusal, never as a caller with no team or an ordinary user.
+    /// </remarks>
+    public static TeamMcpContext AsTeamContext(this IMcpContext context) => context as TeamMcpContext;
 }

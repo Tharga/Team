@@ -1632,7 +1632,7 @@ somebody guessed and the log should not hand candidate codes to everyone who can
 
 ### Sending the invitation email
 
-`ITeamEmailSender` has a single member, `SendInviteAsync`, so configuring email here is a decision about
+`ITeamEmailSender` has one job, `SendInviteAsync` (two overloads, see below), so configuring email here is a decision about
 invitation delivery — not about handing the toolkit your mail pipeline. (The only other mail the toolkit sends
 is support mail, configured separately in **Tharga.Team.Support**. Both obey the same rules outside production;
 see *Mail outside production* below.)
@@ -1709,17 +1709,28 @@ it registers `IOutboundMailPolicy` for a custom `ITeamEmailSender` as well. Inje
 decision:
 
 ```csharp
-public class MyEmailSender(IOutboundMailPolicy policy, IMyMailQueue queue) : ITeamEmailSender
+public class MyEmailSender(IOutboundMailPolicy policy, IMyMailQueue queue, ITeamLanguages languages) : ITeamEmailSender
 {
-    public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
+    // The overload the toolkit calls. It carries the team key, so per-team choices need no ambient state.
+    public async Task SendInviteAsync(TeamInviteMail mail)
     {
-        var decision = policy.Decide(recipientEmail, $"Join {teamName}");
-        if (!decision.ShouldSend) return Task.CompletedTask;
+        var decision = policy.Decide(mail.RecipientEmail, $"Join {mail.TeamName}");
+        if (!decision.ShouldSend) return;
 
-        return queue.EnqueueAsync(decision.Recipient, decision.Subject, inviteLink);
+        var language = await languages.GetAsync(mail.TeamKey);
+        await queue.EnqueueAsync(decision.Recipient, decision.Subject, mail.InviteLink, language);
     }
+
+    // Still required until 4.0. Nothing in the toolkit calls it once the overload above is implemented.
+    public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
+        => throw new NotSupportedException("Invitations are sent through SendInviteAsync(TeamInviteMail).");
 }
 ```
+
+**Implement `SendInviteAsync(TeamInviteMail)` when the mail depends on the team** (3.24, Tharga/Team#289).
+Language, branding and sender address are per-team choices. A display name is neither unique nor stable,
+and the selected team is right only while every invitation is raised from a page. A sender that implements
+only the four-string overload keeps working unchanged, because the new member defaults to calling it.
 
 A host that sends mail outside the toolkit altogether can call `services.AddOutboundMailPolicy()` itself to get
 the same policy, configuration and startup report.
