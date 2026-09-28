@@ -758,6 +758,51 @@ if (TeamScopeGate.HasTeamScope(principal, SupportScopes.Read, teamKey))
 > necessarily the one holding the viewer's circuit. Re-reading the count on navigation always works;
 > live-updating everywhere needs a backplane, which is not built.
 
+### Escalating from your own worker
+
+The counts above answer "how many, in this team". A worker that escalates needs a different question
+answered: *which cases, in any team, have waited too long?* Two store queries answer it (3.24,
+Tharga/Team#293):
+
+| Method on `ISupportCaseStore` | Returns open cases, across every team, where… |
+|---|---|
+| `GetCasesAwaitingSupportSinceAsync(waitingSince, limit)` | the newest entry is from the person who raised the case, and older than `waitingSince` |
+| `GetCasesWithUnreadAnswerSinceAsync(answeredBefore, limit)` | the newest entry is an answer, older than `answeredBefore`, and its author has not read it |
+
+An answer is an entry by a person other than the author, or by the assistant. A toolkit note (a reopen or
+an assignment) is never an answer, and a case whose newest entry is one is not returned. Unassigned cases
+are included in both queries.
+
+```csharp
+public class SupportEscalationWorker(ISupportCaseStore store, ISupportEventLedger ledger, IMyMailer mail)
+{
+    public async Task RunOnceAsync(CancellationToken cancellationToken)
+    {
+        var unanswered = await store.GetCasesAwaitingSupportSinceAsync(DateTime.UtcNow.AddMinutes(-1), 50, cancellationToken);
+
+        foreach (var supportCase in unanswered)
+        {
+            // One escalation per newest entry: the pair names exactly one, so a later message escalates again.
+            if (!await ledger.TryRecordAsync("escalation", $"{supportCase.Id}:{supportCase.MessageCount}", cancellationToken)) continue;
+
+            await mail.NotifySupportAsync(supportCase);
+        }
+    }
+}
+```
+
+**A matching case keeps matching, so deduplication is yours.** Neither query changes what it reads. Key
+"already handled" on `Id` plus `MessageCount`, as above. `ISupportEventLedger` already does this atomically
+across instances.
+
+**Results are newest first.** A case you have already handled stays in the results, so with a `limit` and
+no ordering a pass could return the same handled cases every time. Newest first puts the cases that have
+only just crossed the window on top.
+
+**These are framework reads, not user-facing ones.** They name no team and check no scope, like the
+inactivity sweep. Call them from a background worker and never from a page, controller or MCP provider.
+A custom store that does not implement them returns nothing, so the worker simply never escalates.
+
 ## What happens when things are deleted
 
 | Event | Effect on cases |

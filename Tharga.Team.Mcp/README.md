@@ -189,6 +189,43 @@ Each entry therefore asks the same question its read asks, rather than one check
 them. For audit that means asking `IAuditOversightService`, which is what the read is gated on: a
 registered logger says the *feature* exists, not that *this caller* may use it.
 
+## Reading the caller in your own provider
+
+`IMcpContext` carries only the scope. Your own `IMcpToolProvider` or `IMcpResourceProvider` reads the calling
+team and user through `AsTeamContext()`, which is public from 3.24:
+
+```csharp
+using Tharga.Team.Mcp;
+
+var caller = context.AsTeamContext();
+if (string.IsNullOrEmpty(caller?.TeamId)) return Refuse("Select a team first.");
+
+await valuations.GetAsync(caller.TeamId, caller.UserId);
+```
+
+**Null means no identity, so refuse.** It is what you get when the context came from another bridge or none
+did. Never read it as "no team" or as an ordinary user.
+
+Where each value comes from:
+
+| Property | Source |
+|---|---|
+| `TeamId` | the team named on the call; failing that, the `TeamClaimTypes.TeamKey` claim |
+| `UserId` | the `ClaimTypes.NameIdentifier` claim; failing that, `sub` |
+| `IsDeveloper` | the principal is in the configured Developer role |
+
+**In a unit test, construct the context directly.** `TeamMcpContext` has a public constructor:
+
+```csharp
+var principal = new ClaimsPrincipal(new ClaimsIdentity(
+[
+    new Claim(ClaimTypes.NameIdentifier, "user-1"),
+    new Claim(TeamClaimTypes.TeamKey, "team-1")
+], "test"));
+
+IMcpContext context = new TeamMcpContext(principal, McpScope.Team, developerRole: "Developer");
+```
+
 ## System-scope diagnostic resources (opt-in)
 
 Expose read-only diagnostic data under `team://system/*` for callers with the Developer role. Non-developers see no resources and get `UnauthorizedAccessException` on read.
