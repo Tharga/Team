@@ -22,5 +22,23 @@ namespace Tharga.Team;
 /// </remarks>
 public interface ITeamEmailSender
 {
+    /// <summary>
+    /// Sends one invitation. Implement this overload; the toolkit calls <see cref="SendInviteAsync(TeamInviteMail)"/>,
+    /// which forwards here unless it is implemented too.
+    /// </summary>
     Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName);
+
+    /// <summary>
+    /// Sends one invitation, given the team's key as well as its name. This is the overload the toolkit calls.
+    /// </summary>
+    /// <remarks>
+    /// <b>Implement this one when the mail depends on the team</b> — its language, branding or sender — so the
+    /// team is looked up by <see cref="TeamInviteMail.TeamKey"/> rather than by display name or ambient state.
+    /// <para>
+    /// <b>Defaults to the four-string overload</b>, so a sender written before this existed keeps compiling and
+    /// keeps sending exactly what it sent. That overload is still required, and is expected to go in 4.0.
+    /// </para>
+    /// </remarks>
+    Task SendInviteAsync(TeamInviteMail mail)
+        => SendInviteAsync(mail.RecipientEmail, mail.RecipientName, mail.InviteLink, mail.TeamName);
 }

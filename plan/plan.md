@@ -14,9 +14,9 @@ Branch: `feature/host-seams` (from `master` at a155b64). Scope: `plan/feature.md
 - [x] 4. (Changed, see notes.) #293: implement both in `InMemorySupportCaseStore`. Add behaviour tests (window boundary, limit,
       system entry excluded, assistant answer included, read marker, unassigned case, closed case excluded,
       default-member store returns empty).
-- [~] 5. #289: `TeamInviteMail` record plus a default member on `ITeamEmailSender`. `SmtpTeamEmailSender`
+- [x] 5. (Done, 3128 tests. `SmtpTeamEmailSender` deliberately unchanged, see notes.) #289: `TeamInviteMail` record plus a default member on `ITeamEmailSender`. `SmtpTeamEmailSender`
       implements it. `TeamComponent` passes the team key. Tests for forwarding and for the SMTP sender.
-- [ ] 6. MCP: make `McpContextExtensions` / `AsTeamContext` public and document the `TeamMcpContext`
+- [~] 6. MCP: make `McpContextExtensions` / `AsTeamContext` public and document the `TeamMcpContext`
       constructor. Add a test that a host-built context narrows and a foreign one yields null.
 - [ ] 7. Bump `MAJOR_MINOR` to 3.24 in `.github/workflows/build.yml`.
 - [ ] 8. Full build and test run. Commit per milestone (2–4, 5, 6–7).
@@ -39,3 +39,7 @@ Archive `feature.md` to `done/host-seams.md`, `git rm -r plan`, `feat: host-seam
   is tested instead: `SupportEscalationQueryTests` (rendered filter, ordering, limit, predicate, over a
   substituted collection) and `HasUnreadAnswerTests`. `EscalationQueryDefaultTests` pins the empty default.
   The suite is at 3124 after steps 2–4.
+- Step 5: `SmtpTeamEmailSender` is **not** changed. It has no use for the key, and the default member
+  already forwards to it. Tests: `TeamInviteMailTests` (forwarding, and an override receiving the key) and
+  `InviteMailCallSiteTests`, a source scan that every `SendInviteAsync` call in the components passes a
+  `new TeamInviteMail`. The old overload still compiles, so reverting to it would silently drop the key.

@@ -523,7 +523,14 @@ else
                 {
                     try
                     {
-                        await emailSender.SendInviteAsync(inviteResult.Email, inviteResult.Name, link, team.Name);
+                        await emailSender.SendInviteAsync(new TeamInviteMail
+                        {
+                            RecipientEmail = inviteResult.Email,
+                            RecipientName = inviteResult.Name,
+                            InviteLink = link,
+                            TeamKey = updatedTeam.Key,
+                            TeamName = team.Name
+                        });
                         NotificationService.Notify(NotificationSeverity.Success,
                             _text[TeamComponentText.InvitationSent], _text.Format(TeamComponentText.EmailSentTo, inviteResult.Email));
                     }
