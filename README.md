@@ -144,6 +144,35 @@ builder.AddThargaTeam(o =>
 
 The `<UsersView />` admin component picks it all up automatically. Its two tabs show each record's key with a copy control, the signed-in user's own row highlighted, and — on the Teams tab — owner, last used, a pending-invitation split, avatars and an empty-team badge. Two host opt-ins: grant the `teams:delete` **system** scope through `o.ConfigureSystemRoles` to offer team deletion, and set `<UsersView ShowAuditLogButton="true" />` for a per-row audit-history dialog. See [User management & directory](docs/articles/user-management.md).
 
+## Which claim identifies a user
+
+By default a user is found by the first non-empty claim of `NameIdentifier`, `sub`, `oid`, `nameid`, `uid`.
+With OpenID Connect sign-in that is `sub`. **On Microsoft Entra — workforce and External ID alike — `sub` is
+pairwise: a different value for the same person in every application.** Replace the app registration and every
+user gets a new key, so their user record and team memberships are orphaned and duplicates are created; and two
+applications in one tenant can never share user records.
+
+Key users on the tenant-wide object id instead:
+
+```csharp
+builder.AddThargaTeam(o =>
+{
+    o.UserIdentityClaimTypes = [DirectoryClaimTypes.ObjectId];   // "oid"
+});
+```
+
+- `oid` matches both the raw claim and the mapped `http://schemas.microsoft.com/identity/claims/objectidentifier`,
+  so it works whether or not inbound claim mapping is on.
+- It applies everywhere a user is identified: the stored user record, the team claims built from it, the
+  audit trail's `CallerUserIdentity`, support-case authorship and the MCP user id.
+- Listed types are tried in order with **no fallback** to the default chain — a principal with none of them
+  resolves to no user rather than to a second record for the same person.
+- **Turning it on for a host that already has users re-keys them.** Existing records are stored under the old
+  value; migrate `Identity` on the user collection to the `oid` first, or everyone gets a new record on their
+  next sign-in.
+
+Leave it unset and nothing changes. See [Which claim identifies a user](docs/articles/implementation-guide.md#which-claim-identifies-a-user).
+
 ## Extending the member grid
 
 A host that adds a field to its member type can surface it on the member row itself rather than in a second
