@@ -70,9 +70,9 @@ public static class ThargaAuthRegistration
                     // that already happened, so it cannot be allowed to undo it.
                     try
                     {
-                        context.HttpContext.RequestServices
-                            .GetService<CompositeAuditLogger>()
-                            ?.Log(AuthAuditEntries.SignIn(context.Principal));
+                        var services = context.HttpContext.RequestServices;
+                        services.GetService<CompositeAuditLogger>()
+                            ?.Log(AuthAuditEntries.SignIn(context.Principal, services.GetService<UserIdentityResolver>()));
                     }
                     catch (Exception ex)
                     {

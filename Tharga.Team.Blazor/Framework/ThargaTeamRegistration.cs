@@ -40,6 +40,8 @@ public static class ThargaTeamRegistration
         // disagree about which roles a team may consent to, or at what level.
         builder.Services.AddSingleton(Options.Create(options.Blazor.Consent));
 
+        builder.Services.AddSingleton(new UserIdentityResolver(options.UserIdentityClaimTypes));
+
         // Auth (Azure AD + OIDC)
         builder.AddThargaAuth(o =>
         {

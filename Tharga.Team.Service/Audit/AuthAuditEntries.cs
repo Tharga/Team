@@ -33,6 +33,10 @@ public static class AuthAuditEntries
     /// No team: sign-in precedes team selection, so naming one here would be an invention.
     /// </remarks>
     public static AuditEntry SignIn(ClaimsPrincipal principal)
+        => SignIn(principal, UserIdentityResolver.Default);
+
+    /// <summary>An interactive sign-in completing, with the subject read by the host's identity resolver.</summary>
+    public static AuditEntry SignIn(ClaimsPrincipal principal, UserIdentityResolver identityResolver)
         => new()
         {
             Timestamp = DateTime.UtcNow,
@@ -44,7 +48,7 @@ public static class AuthAuditEntries
             CallerType = AuditCallerType.User,
             CallerSource = AuditCallerSource.Web,
             CallerIdentity = Identity(principal),
-            CallerUserIdentity = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            CallerUserIdentity = (identityResolver ?? UserIdentityResolver.Default).GetSubject(principal)
         };
 
     /// <summary>
@@ -56,6 +60,10 @@ public static class AuthAuditEntries
     /// distinguishes it from an administrator creating a user through <c>IUserManagementService</c>.
     /// </remarks>
     public static AuditEntry UserCreated(IUser user, ClaimsPrincipal principal)
+        => UserCreated(user, principal, UserIdentityResolver.Default);
+
+    /// <summary>A first-sign-in user record, with the subject read by the host's identity resolver.</summary>
+    public static AuditEntry UserCreated(IUser user, ClaimsPrincipal principal, UserIdentityResolver identityResolver)
         => new()
         {
             Timestamp = DateTime.UtcNow,
@@ -67,7 +75,7 @@ public static class AuthAuditEntries
             CallerType = AuditCallerType.User,
             CallerSource = AuditCallerSource.Web,
             CallerIdentity = user?.Identity ?? Identity(principal),
-            CallerUserIdentity = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+            CallerUserIdentity = (identityResolver ?? UserIdentityResolver.Default).GetSubject(principal),
             Metadata = Describe(user)
         };
 

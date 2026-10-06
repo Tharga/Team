@@ -97,6 +97,14 @@ now throws by default instead of silently doing nothing.
 > Deriving from `TeamServiceRepositoryBase` (in **Tharga.Team.MongoDB**) implements all of these. The table
 > only applies to a service extending `TeamServiceBase` directly.
 
+#### Looking users up by the configured claim
+
+A service that overrides `GetUserAsync` must find the user by `ResolveUserIdentity(principal)`, never by
+reading a claim itself. That is what honours `UserIdentityClaimTypes` — the host's choice of which claim
+identifies a user, typically `oid` on Microsoft Entra, where `sub` differs per application. Reading a claim
+directly keeps your store on the old key while the rest of the toolkit moves to the new one.
+`UserServiceRepositoryBase` already does this.
+
 #### The user cache
 
 `UserServiceBase` caches resolved users. Overriding a persistence member replaces the path that

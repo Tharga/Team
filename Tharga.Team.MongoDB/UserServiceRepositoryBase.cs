@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using System.Security.Claims;
 using Tharga.MongoDB;
-using Tharga.Toolkit;
 
 namespace Tharga.Team.MongoDB;
 
@@ -31,7 +30,7 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
 
     protected override async Task<IUser> GetUserAsync(ClaimsPrincipal claimsPrincipal)
     {
-        var identity = claimsPrincipal.GetIdentity().Identity;
+        var identity = ResolveUserIdentity(claimsPrincipal);
 
         var user = await _userRepository.GetAsync(identity);
         if (user != null) return user;

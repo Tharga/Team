@@ -271,6 +271,49 @@ a click on every sign-in.
 Turn it on where signing in as a different person is routine rather than exceptional: a shared machine, or
 support staff who hold more than one account.
 
+### Which claim identifies a user
+
+Every user record is stored under one value read from the signed-in principal — `IUser.Identity`. By default
+it is the first non-empty claim of `NameIdentifier`, `sub`, `oid`, `nameid`, `uid`; with OpenID Connect and
+inbound claim mapping (the `Microsoft.Identity.Web` default), `NameIdentifier` is filled from `sub`.
+
+**On Microsoft Entra that is the wrong claim to key on.** Entra issues `sub` *pairwise*: it is unique to the
+combination of user and application, in workforce tenants and External ID (CIAM) alike. Two consequences
+follow, and neither produces an error:
+
+- **Replacing the app registration re-keys every user.** The next sign-in finds no record under the new
+  `sub`, so a new user is created, the old record and its team memberships are orphaned, and the person
+  appears to have lost every team.
+- **Two applications in one tenant can never share user records**, because the same person arrives with a
+  different `sub` in each.
+
+`oid` is the user's object id in the tenant and is the same for every application. Configure it:
+
+```csharp
+builder.AddThargaTeam(o =>
+{
+    o.UserIdentityClaimTypes = [DirectoryClaimTypes.ObjectId];
+});
+```
+
+| | |
+|---|---|
+| **Mapped or not** | `oid` and its mapped form `http://schemas.microsoft.com/identity/claims/objectidentifier` are treated as one claim, so either name works with inbound claim mapping on or off. |
+| **Order** | Several types may be listed; the first one present wins, e.g. `[DirectoryClaimTypes.ObjectId, ClaimTypes.NameIdentifier]` for a host that also signs in non-Entra users. |
+| **No fallback** | Only the listed types are read. A principal carrying none of them resolves to no user, rather than silently to a second identity for the same person. |
+| **Where it applies** | The user record lookup and creation, the cached user, the team claims built from it, `CallerUserIdentity` on every audit entry (sign-in and first sign-in included), support-case authorship and read state, and `TeamMcpContext.UserId`. Display-only strings such as `CallerIdentity` are unchanged. |
+| **Unset** | Exactly the previous behaviour, everywhere. |
+
+> **Switching an existing host re-keys its users.** Records already stored under `sub` are not found under
+> `oid`. Before enabling the option, rewrite `Identity` on each user record to that user's `oid` — the
+> `DirectoryId` field, where the user entity declares it, already holds it for anyone who signed in since it
+> was introduced. Audit entries and support cases keep the subject they were written with.
+
+**A user service that implements its own lookup** — deriving from `UserServiceBase` and overriding
+`GetUserAsync` — must look users up by `ResolveUserIdentity(principal)` rather than reading a claim itself, or
+it will keep keying on the old claim while the rest of the toolkit uses the new one. `UserServiceRepositoryBase`
+already does, and passes the resolved value to `CreateUserEntityAsync`.
+
 ### _Imports.razor
 
 ```razor
@@ -2768,7 +2811,7 @@ Three fields describe the actor, and they answer different questions:
 | Field | Holds | Match |
 |---|---|---|
 | `CallerIdentity` | A display string, resolved `name` → `preferred_username` → subject → `name` | Substring — its content depends on which claims your IdP emits |
-| `CallerUserIdentity` | The acting user's authentication subject, or null | **Exact** — the subject or nothing, never a fallback |
+| `CallerUserIdentity` | The acting user's authentication subject, or null — `NameIdentifier`, or the claim [`UserIdentityClaimTypes`](#which-claim-identifies-a-user) names | **Exact** — the subject or nothing, never a fallback |
 | `CallerKeyId` | The API key's id, or null | Exact |
 
 Use `CallerUserIdentity` to correlate rows to one person; `CallerIdentity` is for reading.

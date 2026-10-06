@@ -16,7 +16,8 @@ namespace Tharga.Team.Mcp;
 /// <item><see cref="TeamId"/>: the <c>selectedTeamKey</c> argument; failing that, the principal's
 /// <see cref="TeamClaimTypes.TeamKey"/> claim.</item>
 /// <item><see cref="UserId"/>: the principal's <see cref="ClaimTypes.NameIdentifier"/> claim; failing that,
-/// <c>sub</c>.</item>
+/// <c>sub</c>. When the host configured its user identity claims, the claim <see cref="UserIdentityResolver"/>
+/// names instead.</item>
 /// <item><see cref="IsDeveloper"/>: the principal is in the role named by <c>developerRole</c>.</item>
 /// </list>
 /// </para>
@@ -51,15 +52,30 @@ public sealed class TeamMcpContext : IMcpContext
         string developerRole,
         string selectedTeamKey = null,
         IReadOnlyList<string> selectedTeamScopes = null)
+        : this(principal, scope, developerRole, UserIdentityResolver.Default, selectedTeamKey, selectedTeamScopes)
+    {
+    }
+
+    internal TeamMcpContext(
+        ClaimsPrincipal principal,
+        McpScope scope,
+        string developerRole,
+        UserIdentityResolver identityResolver,
+        string selectedTeamKey = null,
+        IReadOnlyList<string> selectedTeamScopes = null)
     {
         Scope = scope;
-        UserId = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                 ?? principal?.FindFirst("sub")?.Value;
+        UserId = ResolveUserId(principal, identityResolver ?? UserIdentityResolver.Default);
         TeamId = selectedTeamKey ?? principal?.FindFirst(TeamClaimTypes.TeamKey)?.Value;
         IsDeveloper = principal?.IsInRole(developerRole) ?? false;
         SelectedTeamKey = selectedTeamKey;
         SelectedTeamScopes = selectedTeamScopes;
     }
+
+    private static string ResolveUserId(ClaimsPrincipal principal, UserIdentityResolver identityResolver)
+        => identityResolver.IsConfigured
+            ? identityResolver.GetUserIdentity(principal)
+            : principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? principal?.FindFirst("sub")?.Value;
 
     /// <summary>The team named on this call, or null when none was.</summary>
     internal string SelectedTeamKey { get; }
