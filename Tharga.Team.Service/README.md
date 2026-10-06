@@ -178,6 +178,14 @@ depends on a type marked `EditorBrowsableState.Never`.
 the invitee is not yet a member and holds nothing. The rule is that a first-level call is *checked*, not
 that it is checked by a scope.
 
+**A system-granted operator acting on one team.** A team service checks the scope as held *for the named
+team*, so a system grant of it does not pass. Where an operation is team-bound but must stay a system scope —
+so the team's own Administrator cannot grant it to themselves (a per-organisation feature switch, say) — opt
+the method in with `[RequireScope("features:manage", AllowSystemGrant = true)]`. The call then also passes
+for a caller holding the scope as a system grant, member of the team or not, and is audited with
+`authorization.via = system-grant` against the named team. Off by default; rejected at registration on a
+system service. See the implementation guide, *Team services and system services*.
+
 ## Which policy to gate an endpoint with
 
 Three are registered. **The first two are disjoint, not a hierarchy** — `SystemApiKeyPolicy` is not

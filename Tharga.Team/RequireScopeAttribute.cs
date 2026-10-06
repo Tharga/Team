@@ -19,6 +19,12 @@ public class RequireScopeAttribute : Attribute
     /// </remarks>
     public AuditMode Audit { get; set; }
 
+    /// <summary>
+    /// On a team service, also admits a caller holding this scope as a system grant, acting on the named team
+    /// without being a member of it; defaults to <c>false</c>, and a system service rejects it at registration.
+    /// </summary>
+    public bool AllowSystemGrant { get; init; }
+
     public RequireScopeAttribute(string scope)
     {
         Scope = scope;
