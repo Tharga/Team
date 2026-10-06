@@ -10,7 +10,8 @@ public static class EntraDirectoryRegistration
     private const string AzureAdSectionName = "AzureAd";
 
     /// <summary>
-    /// Registers Microsoft Entra ID as the platform's user directory (<see cref="IUserDirectoryService"/>).
+    /// Registers Microsoft Entra ID as the platform's user directory (<see cref="IUserDirectoryService"/>),
+    /// and as <see cref="IUserIdentityDirectory"/> unless the host registered its own.
     /// Binds <see cref="EntraDirectoryOptions"/> from the <c>AzureAd</c> configuration section
     /// (TenantId, ClientId, ClientSecret) — the section the platform sign-in already uses — then applies
     /// <paramref name="configure"/>. Requires app-only Graph permissions: <c>User.Read.All</c> for
@@ -31,6 +32,11 @@ public static class EntraDirectoryRegistration
             var options = provider.GetRequiredService<IOptions<EntraDirectoryOptions>>().Value;
             client.BaseAddress = options.GraphBaseAddress;
         });
+
+        services.TryAddTransient<IUserIdentityDirectory>(provider =>
+            provider.GetRequiredService<IUserDirectoryService>() as IUserIdentityDirectory
+            ?? throw new InvalidOperationException(
+                $"The registered {nameof(IUserDirectoryService)} does not implement {nameof(IUserIdentityDirectory)}. Register an {nameof(IUserIdentityDirectory)} explicitly."));
 
         return services;
     }

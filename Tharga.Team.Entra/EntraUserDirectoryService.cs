@@ -10,9 +10,10 @@ namespace Tharga.Team.Entra;
 /// directory object id when present (a 404 then means the user is gone — no email fallback, since a
 /// broken link is a finding, not a lookup miss); unlinked users are matched by mail or UPN, and the
 /// found object id is returned so the caller can relink. Enumeration streams pages via
-/// <c>@odata.nextLink</c>. Deletion is Graph's org-wide soft delete (30-day restore window).
+/// <c>@odata.nextLink</c>. Deletion is Graph's org-wide soft delete (30-day restore window). Sign-in
+/// identities are read through <see cref="IUserIdentityDirectory"/>.
 /// </summary>
-public class EntraUserDirectoryService : IUserDirectoryService
+public class EntraUserDirectoryService : IUserDirectoryService, IUserIdentityDirectory
 {
     private const string SelectFields = "id,displayName,mail,userPrincipalName,accountEnabled";
     private const int PageSize = 999;
@@ -86,6 +87,25 @@ public class EntraUserDirectoryService : IUserDirectoryService
             throw new InvalidOperationException($"Directory user '{directoryId}' was not found.");
 
         await EnsureSuccessAsync(response, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Graph <c>GET /users/{id}?$select=identities</c>, needing only <c>User.Read.All</c>. An unknown
+    /// <paramref name="directoryId"/> throws <see cref="InvalidOperationException"/>, as deletion and renaming do.
+    /// </remarks>
+    public async Task<IReadOnlyList<DirectoryUserIdentity>> GetIdentitiesAsync(string directoryId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(directoryId);
+
+        using var response = await SendAsync(HttpMethod.Get, $"users/{Uri.EscapeDataString(directoryId)}?$select=identities", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+            throw new InvalidOperationException($"Directory user '{directoryId}' was not found.");
+
+        await EnsureSuccessAsync(response, cancellationToken);
+
+        var graphUser = await response.Content.ReadFromJsonAsync<GraphUserIdentities>(cancellationToken);
+        return (graphUser?.Identities ?? []).Select(x => x.ToDirectoryUserIdentity()).ToArray();
     }
 
     public async IAsyncEnumerable<DirectoryUser> GetUsersAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)

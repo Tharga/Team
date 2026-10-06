@@ -220,4 +220,95 @@ public class EntraUserDirectoryServiceTests
 
         await Assert.ThrowsAsync<HttpRequestException>(async () => await sut.GetUsersAsync().ToListAsync());
     }
+
+    // ---- GetIdentitiesAsync ----
+
+    [Fact]
+    public async Task GetIdentities_ParsesEveryIdentityInOrder()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK,
+            """{"id":"oid-1","identities":[{"signInType":"emailAddress","issuer":"contoso.onmicrosoft.com","issuerAssignedId":"a@b.c"},{"signInType":"federated","issuer":"https://legacy.example/","issuerAssignedId":"sub-42"},{"signInType":"userPrincipalName","issuer":"contoso.onmicrosoft.com","issuerAssignedId":"oid-1@contoso.onmicrosoft.com"}]}""");
+
+        var identities = await sut.GetIdentitiesAsync("oid-1");
+
+        Assert.Equal(["emailAddress", "federated", "userPrincipalName"], identities.Select(x => x.SignInType));
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Get, request.Method);
+        Assert.Equal($"{BaseAddress}users/oid-1?$select=identities", request.Uri);
+        Assert.Equal("Bearer token-123", request.Authorization);
+    }
+
+    [Fact]
+    public async Task GetIdentities_MapsFederatedIdentityFields()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK,
+            """{"identities":[{"signInType":"federated","issuer":"https://legacy.example/","issuerAssignedId":"sub-42"}]}""");
+
+        var identities = await sut.GetIdentitiesAsync("oid-1");
+
+        Assert.Equal(new DirectoryUserIdentity("federated", "https://legacy.example/", "sub-42"), Assert.Single(identities));
+    }
+
+    [Theory]
+    [InlineData("""{"identities":[]}""")]
+    [InlineData("""{"identities":null}""")]
+    [InlineData("""{"id":"oid-1"}""")]
+    public async Task GetIdentities_NoIdentities_ReturnsEmpty(string json)
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK, json);
+
+        var identities = await sut.GetIdentitiesAsync("oid-1");
+
+        Assert.Empty(identities);
+    }
+
+    [Fact]
+    public async Task GetIdentities_UnknownUser_Throws()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.NotFound);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.GetIdentitiesAsync("oid-gone"));
+
+        Assert.Contains("oid-gone", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetIdentities_Forbidden_ThrowsWithStatus()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.Forbidden, """{"error":{"message":"Insufficient privileges"}}""");
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => sut.GetIdentitiesAsync("oid-1"));
+
+        Assert.Equal(HttpStatusCode.Forbidden, ex.StatusCode);
+        Assert.Contains("Insufficient privileges", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetIdentities_EscapesDirectoryId()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK, """{"identities":[]}""");
+
+        await sut.GetIdentitiesAsync("a/b?c#d");
+
+        var request = Assert.Single(handler.Requests);
+        Assert.StartsWith($"{BaseAddress}users/a%2Fb%3Fc%23d?$select=identities", request.Uri);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task GetIdentities_MissingDirectoryId_ThrowsWithoutRequest(string directoryId)
+    {
+        var (sut, handler) = Build();
+
+        await Assert.ThrowsAnyAsync<ArgumentException>(() => sut.GetIdentitiesAsync(directoryId));
+
+        Assert.Empty(handler.Requests);
+    }
 }
