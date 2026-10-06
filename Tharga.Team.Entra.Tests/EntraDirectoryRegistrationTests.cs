@@ -46,6 +46,45 @@ public class EntraDirectoryRegistrationTests
     }
 
     [Fact]
+    public void Registration_ResolvesIdentityDirectoryAsTheEntraDirectory()
+    {
+        var services = new ServiceCollection();
+        services.AddThargaEntraUserDirectory(configure: o => o.GraphBaseAddress = new Uri("https://graph.test/v1.0/"));
+
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true });
+        var service = provider.GetRequiredService<IUserIdentityDirectory>();
+
+        Assert.IsType<EntraUserDirectoryService>(service);
+    }
+
+    [Fact]
+    public void Registration_KeepsAHostsOwnIdentityDirectory()
+    {
+        var hostOwn = Substitute.For<IUserIdentityDirectory>();
+        var services = new ServiceCollection();
+        services.AddSingleton(hostOwn);
+        services.AddThargaEntraUserDirectory();
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Same(hostOwn, provider.GetRequiredService<IUserIdentityDirectory>());
+    }
+
+    [Fact]
+    public void Registration_DirectoryReplacedByOneWithoutIdentities_NamesTheMissingInterface()
+    {
+        var services = new ServiceCollection();
+        services.AddThargaEntraUserDirectory();
+        services.AddScoped(_ => Substitute.For<IUserDirectoryService>());
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+
+        var ex = Assert.Throws<InvalidOperationException>(() => scope.ServiceProvider.GetRequiredService<IUserIdentityDirectory>());
+        Assert.Contains(nameof(IUserIdentityDirectory), ex.Message);
+    }
+
+    [Fact]
     public async Task TokenProvider_MissingConfiguration_ThrowsInformative()
     {
         var provider = new CredentialEntraTokenProvider(Options.Create(new EntraDirectoryOptions()));

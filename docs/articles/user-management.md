@@ -94,8 +94,18 @@ Grant the app registration **application** permissions in Entra, with admin cons
 
 | Feature | Graph permission |
 |---|---|
-| Verify users, list directory-only users | `User.Read.All` |
+| Verify users, list directory-only users, read sign-in identities | `User.Read.All` |
 | Delete users from Entra | `User.ReadWrite.All` |
+
+### Reading a user's sign-in identities
+
+`IUserIdentityDirectory.GetIdentitiesAsync(directoryId)` returns the user's sign-in identities as
+`DirectoryUserIdentity(SignInType, Issuer, IssuerAssignedId)` — for Entra, the Graph `identities`
+collection. A user federated through a custom OIDC provider carries one with `SignInType == "federated"`,
+the provider as `Issuer` and the upstream subject as `IssuerAssignedId`, which is what links the
+directory user to an identity in another system. `AddThargaEntraUserDirectory` registers it; an unknown
+directory id throws `InvalidOperationException`. It is unchecked, so call it only from code that has
+already authorized the caller.
 
 When no directory service is registered, all directory features (verify actions, the Directory column,
 the directory-only tab, the delete-from-directory opt-in) are hidden — the rest of user administration

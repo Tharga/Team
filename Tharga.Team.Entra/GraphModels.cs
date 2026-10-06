@@ -31,3 +31,24 @@ internal sealed record GraphUserPage
     [JsonPropertyName("@odata.nextLink")]
     public string NextLink { get; init; }
 }
+
+internal sealed record GraphUserIdentities
+{
+    [JsonPropertyName("identities")]
+    public IReadOnlyList<GraphObjectIdentity> Identities { get; init; }
+}
+
+internal sealed record GraphObjectIdentity
+{
+    [JsonPropertyName("signInType")]
+    public string SignInType { get; init; }
+
+    [JsonPropertyName("issuer")]
+    public string Issuer { get; init; }
+
+    [JsonPropertyName("issuerAssignedId")]
+    public string IssuerAssignedId { get; init; }
+
+    public DirectoryUserIdentity ToDirectoryUserIdentity()
+        => new(SignInType, Issuer, IssuerAssignedId);
+}

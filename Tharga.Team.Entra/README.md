@@ -71,13 +71,29 @@ The driver: an application that collects no attributes at sign-up holds the real
 holds a placeholder such as `"unknown"`, so the good name exists and cannot reach anyone administering the
 tenant. A host federating from a corporate directory wants the opposite, which is why this is opt-in.
 
+## Reading sign-in identities
+
+`AddThargaEntraUserDirectory` also registers `IUserIdentityDirectory`, which reads a user's Graph
+`identities` (`GET /users/{id}?$select=identities`):
+
+```csharp
+var identities = await identityDirectory.GetIdentitiesAsync(user.DirectoryId);
+var upstream = identities.FirstOrDefault(x => x.SignInType == "federated" && x.Issuer == "https://legacy.example/");
+// upstream?.IssuerAssignedId is the subject the external provider assigned
+```
+
+In an Entra External ID tenant, a user federated through a custom OIDC provider carries a `federated`
+identity whose `IssuerAssignedId` is the upstream subject — the key for linking the directory user to an
+account in an older system. Needs only `User.Read.All`. An unknown directory id throws
+`InvalidOperationException`, as deletion and renaming do; a user with no identities yields an empty list.
+
 ## Entra app-registration permissions
 
 Grant the app registration **application** (app-only) Graph permissions, with admin consent:
 
 | Feature | Permission |
 |---|---|
-| Verify users, list directory-only users | `User.Read.All` |
+| Verify users, list directory-only users, read sign-in identities | `User.Read.All` |
 | Delete users from Entra | `User.ReadWrite.All` |
 
 Deleting also requires the app's service principal to hold a directory role allowed to delete users
