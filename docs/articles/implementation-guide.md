@@ -636,8 +636,9 @@ audit* is a property of the shape rather than a check somebody remembered to wri
 | System key naming a team that has not consented | `403`, indistinguishable from naming one that does not exist |
 
 A system grant reads one named team by *filtering* the oversight read. `ScopeProxy`'s team check does not
-accept a system grant — that provenance split is deliberate, so an in-team scope can never be spent
-cross-team — so the two are separate calls, and the REST endpoint tries both on the caller's behalf.
+accept a system grant unless the method opts in with `AllowSystemGrant` (see *Team services and system
+services*) — that provenance split is deliberate, so an in-team scope can never be spent cross-team — so the
+two are separate calls, and the REST endpoint tries both on the caller's behalf.
 
 `audit:read` is registered at `AccessLevel.Administrator`, so a Viewer- or User-level caller is refused
 even for its own team.
@@ -1797,6 +1798,40 @@ service to escape the team check.
 
 An interface must therefore be wholly one kind. Split it if it is not — that is why
 `ISystemApiKeyManagementService` exists separately from `IApiKeyManagementService`.
+
+#### A system-granted operator acting on one team — `AllowSystemGrant`
+
+Some operations act on one named team but belong to staff, not to the team: a feature switch per
+organisation, say, that the team's own Administrator must not be able to grant themselves. The scope has
+to stay a **system** scope for that reason, yet the method is team-bound, so neither kind fits on its own.
+Opt the method in:
+
+```csharp
+public interface IFeatureSettingsService
+{
+    [RequireScope("features:read")]
+    Task<FeatureSet> GetAsync(string teamKey);
+
+    [RequireScope("features:manage", AllowSystemGrant = true)]
+    Task UpdateAsync(string teamKey, FeatureSet features);
+}
+
+builder.Services.AddTeamService<IFeatureSettingsService, FeatureSettingsService>();
+```
+
+On that method the check passes if the caller holds `features:manage` **for the named team** (as without
+the flag) **or** holds it as a **system grant** — and the system-granted caller need not be a member of,
+or have selected, that team. A system grant of a *different* scope, or a team-level grant of this one for
+another team, is still refused. The default is `false`, so every existing method behaves exactly as before.
+
+A call admitted this way is recorded as such: the ambient `TeamAccess.Current` is a team decision for the
+named team with a `Reason` naming the system grant, and the audit entry carries the named team as
+`TeamKey` and `authorization.via = system-grant` in its metadata (`AuditMetadataKeys.AuthorizedVia`), so
+the team's own audit log shows staff acting on it.
+
+`AllowSystemGrant` on a method of a service registered with `AddSystemService` is rejected at
+registration: a system service is already authorized by the system grant alone, so the flag could only
+mislead a reader into thinking the method is team-bound.
 
 ### Service implementation
 

@@ -64,14 +64,18 @@ public class ScopeProxy<T> : DispatchProxy where T : class
                 $"All methods on services registered with AddScopedWithScopes must declare their required scope.");
 
         var (feature, action) = AuditEntry.ParseScope(attribute.Scope);
+        var path = AuthorizationPath.None;
 
         return ProxyInvoker.Invoke(targetMethod, args, _target, _principalAccessor,
             enforce: principal =>
             {
-                CheckScope(principal, attribute.Scope, _scopeKind, targetMethod, args);
-                return _scopeKind == ServiceScopeKind.Team
-                    ? TeamAccess.ForTeam(ResolveTeamKey(targetMethod, args))
-                    : TeamAccess.System(attribute.Scope);
+                path = CheckScope(principal, attribute, _scopeKind, targetMethod, args);
+                return path switch
+                {
+                    AuthorizationPath.TeamScope => TeamAccess.ForTeam(ResolveTeamKey(targetMethod, args)),
+                    AuthorizationPath.SystemGrantOnTeam => TeamAccess.ForTeam(ResolveTeamKey(targetMethod, args), $"system grant of '{attribute.Scope}'"),
+                    _ => TeamAccess.System(attribute.Scope)
+                };
             },
             audit: (principal, ms, success, ex) =>
             {
@@ -83,16 +87,21 @@ public class ScopeProxy<T> : DispatchProxy where T : class
                 var mode = AuditModeResolver.Resolve(attribute.Audit, _defaultAuditMode);
                 if (!AuditModeResolver.ShouldWrite(mode, denied)) return;
 
-                LogAudit(principal, attribute.Scope, feature, action, targetMethod.Name, ms, success, scopeResult,
+                var entry = BuildAuditEntry(principal, attribute.Scope, feature, action, targetMethod.Name, ms, success, scopeResult,
                     AuditModeResolver.EventTypeFor(mode, denied, AuditEventType.ScopeDenial),
                     success ? null : ex?.Message);
+                if (path == AuthorizationPath.SystemGrantOnTeam)
+                    entry = entry with
+                    {
+                        TeamKey = ResolveTeamKey(targetMethod, args),
+                        Metadata = new Dictionary<string, string> { [AuditMetadataKeys.AuthorizedVia] = AuditMetadataKeys.AuthorizedViaSystemGrant }
+                    };
+                _auditLogger?.Log(entry);
             });
     }
 
-    private void LogAudit(ClaimsPrincipal user, string scope, string feature, string action, string methodName, long durationMs, bool success, AuditScopeResult scopeResult, AuditEventType eventType, string errorMessage = null)
+    private static AuditEntry BuildAuditEntry(ClaimsPrincipal user, string scope, string feature, string action, string methodName, long durationMs, bool success, AuditScopeResult scopeResult, AuditEventType eventType, string errorMessage = null)
     {
-        if (_auditLogger == null) return;
-
         var callerSource = user?.Identity?.AuthenticationType switch
         {
             ApiKeyConstants.SchemeName => AuditCallerSource.Api,
@@ -100,7 +109,7 @@ public class ScopeProxy<T> : DispatchProxy where T : class
             _ => AuditCallerSource.Unknown
         };
 
-        var entry = new AuditEntry
+        return new AuditEntry
         {
             Timestamp = DateTime.UtcNow,
             EventType = eventType,
@@ -122,8 +131,6 @@ public class ScopeProxy<T> : DispatchProxy where T : class
             ScopeChecked = scope,
             ScopeResult = scopeResult,
         };
-
-        _auditLogger.Log(entry);
     }
 
     private RequireScopeAttribute GetAttribute(MethodInfo methodInfo)
@@ -135,13 +142,16 @@ public class ScopeProxy<T> : DispatchProxy where T : class
                ?? methodInfo.GetCustomAttribute<RequireScopeAttribute>();
     }
 
-    private static void CheckScope(ClaimsPrincipal user, string requiredScope, ServiceScopeKind scopeKind, MethodInfo method, object[] args)
+    private enum AuthorizationPath { None, System, TeamScope, SystemGrantOnTeam }
+
+    private static AuthorizationPath CheckScope(ClaimsPrincipal user, RequireScopeAttribute attribute, ServiceScopeKind scopeKind, MethodInfo method, object[] args)
     {
+        var requiredScope = attribute.Scope;
         if (scopeKind == ServiceScopeKind.System)
         {
             if (!TeamScopePolicy.HasSystemScope(user, requiredScope))
                 throw new UnauthorizedAccessException($"Missing required scope '{requiredScope}'.");
-            return;
+            return AuthorizationPath.System;
         }
 
         var targetTeamKey = ResolveTeamKey(method, args);
@@ -149,9 +159,15 @@ public class ScopeProxy<T> : DispatchProxy where T : class
             throw new UnauthorizedAccessException(
                 $"'{typeof(T).Name}.{method.Name}' is registered as a team service but the call names no team.");
 
-        if (!TeamScopePolicy.HasTeamScope(user, requiredScope, targetTeamKey))
-            throw new UnauthorizedAccessException(
-                $"This operation on team '{targetTeamKey}' requires the '{requiredScope}' scope on that team.");
+        if (TeamScopePolicy.HasTeamScope(user, requiredScope, targetTeamKey))
+            return AuthorizationPath.TeamScope;
+
+        if (attribute.AllowSystemGrant && TeamScopePolicy.HasSystemScope(user, requiredScope))
+            return AuthorizationPath.SystemGrantOnTeam;
+
+        throw new UnauthorizedAccessException(attribute.AllowSystemGrant
+            ? $"This operation on team '{targetTeamKey}' requires the '{requiredScope}' scope on that team, or as a system grant."
+            : $"This operation on team '{targetTeamKey}' requires the '{requiredScope}' scope on that team.");
     }
 
     /// <summary>

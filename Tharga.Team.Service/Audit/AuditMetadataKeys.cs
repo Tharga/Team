@@ -130,4 +130,10 @@ public static class AuditMetadataKeys
 
     /// <summary>Whether administrators may upload icons for users, as stored by a site icon-settings change.</summary>
     public const string IconAllowAdminUpload = "iconsettings.allowadminupload";
+
+    /// <summary>How a team-bound call was authorized, written only when it was not by the caller's own team scope.</summary>
+    public const string AuthorizedVia = "authorization.via";
+
+    /// <summary>The <see cref="AuthorizedVia"/> value for a team-bound call admitted by a system grant of the scope.</summary>
+    public const string AuthorizedViaSystemGrant = "system-grant";
 }

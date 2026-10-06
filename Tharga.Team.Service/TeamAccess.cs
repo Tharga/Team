@@ -30,7 +30,7 @@ public sealed record TeamAccessContext
     /// <summary>The team the call was authorized against, or null for system and unchecked access.</summary>
     public string TeamKey { get; }
 
-    /// <summary>Why access was granted. Always set for system and unchecked access.</summary>
+    /// <summary>Why access was granted. Always set for system and unchecked access, and for team access admitted by a system grant.</summary>
     public string Reason { get; }
 }
 
@@ -64,6 +64,9 @@ public static class TeamAccess
     /// <summary>Records that the caller was authorized against <paramref name="teamKey"/>.</summary>
     public static IDisposable ForTeam(string teamKey)
         => Enter(new TeamAccessContext(TeamAccessKind.Team, teamKey, null));
+
+    internal static IDisposable ForTeam(string teamKey, string reason)
+        => Enter(new TeamAccessContext(TeamAccessKind.Team, teamKey, Require(reason)));
 
     /// <summary>Records that the caller holds a system scope, spanning no particular team.</summary>
     public static IDisposable System(string reason)

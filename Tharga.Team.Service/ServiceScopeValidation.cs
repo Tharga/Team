@@ -23,13 +23,16 @@ internal static class ServiceScopeValidation
     {
         var offenders = scopeKind == ServiceScopeKind.Team
             ? serviceType.GetMethods().Where(m => !NamesATeam(m)).Select(m => $"{m.Name} names no '{TeamKeyParameterName}' parameter").ToArray()
-            : serviceType.GetMethods().Where(TakesATeam).Select(m => $"{m.Name} takes a '{TeamKeyParameterName}' parameter").ToArray();
+            : serviceType.GetMethods().Where(TakesATeam).Select(m => $"{m.Name} takes a '{TeamKeyParameterName}' parameter")
+                .Concat(serviceType.GetMethods().Where(AllowsSystemGrant).Select(m => $"{m.Name} sets {nameof(RequireScopeAttribute.AllowSystemGrant)}"))
+                .ToArray();
 
         if (offenders.Length == 0) return;
 
         var expectation = scopeKind == ServiceScopeKind.Team
             ? $"Every method on a team service must take the team it acts on as its first parameter, named '{TeamKeyParameterName}'."
-            : $"No method on a system service may take a '{TeamKeyParameterName}' parameter — move those to a team service.";
+            : $"No method on a system service may take a '{TeamKeyParameterName}' parameter — move those to a team service. " +
+              $"Nor may it set {nameof(RequireScopeAttribute.AllowSystemGrant)}, which only widens a team service: a system service is already authorized by the system grant alone.";
 
         throw new InvalidOperationException(
             $"'{serviceType.Name}' cannot be registered as a {scopeKind} service. {expectation} " +
@@ -46,4 +49,7 @@ internal static class ServiceScopeValidation
 
     private static bool TakesATeam(MethodInfo method)
         => method.GetParameters().Any(p => p.Name == TeamKeyParameterName);
+
+    private static bool AllowsSystemGrant(MethodInfo method)
+        => method.GetCustomAttribute<RequireScopeAttribute>()?.AllowSystemGrant == true;
 }
