@@ -2,7 +2,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
-using Tharga.Toolkit;
 
 namespace Tharga.Team;
 
@@ -44,6 +43,18 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
     /// <see cref="ITeamCache"/> from the process-local fallback. Internal: a diagnostic, not API.
     /// </summary>
     internal ITeamCache CacheInUse => _cache;
+
+    /// <summary>
+    /// Decides which claim identifies the caller. Set by the registration from the host's
+    /// <c>UserIdentityClaimTypes</c> option; <see cref="UserIdentityResolver.Default"/> otherwise.
+    /// </summary>
+    internal UserIdentityResolver IdentityResolver { get; set; } = UserIdentityResolver.Default;
+
+    /// <summary>
+    /// The identity <paramref name="claimsPrincipal"/> is stored under, honouring the host's configured
+    /// identity claim. A store overriding <see cref="GetUserAsync"/> must look users up by this value.
+    /// </summary>
+    protected string ResolveUserIdentity(ClaimsPrincipal claimsPrincipal) => IdentityResolver.GetUserIdentity(claimsPrincipal);
 
     /// <summary>
     /// How often (at most) <see cref="IUser.LastSeen"/> is written on resolve. Null disables stamping;
@@ -89,6 +100,7 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
         UserCreatedEvent?.Invoke(this, new UserCreatedEventArgs(user, claimsPrincipal));
     }
 
+    /// <summary>Finds or creates the user for <paramref name="claimsPrincipal"/>, keyed by <see cref="ResolveUserIdentity"/>.</summary>
     protected abstract Task<IUser> GetUserAsync(ClaimsPrincipal claimsPrincipal);
     protected abstract IAsyncEnumerable<IUser> GetAllAsync();
 
@@ -97,7 +109,7 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
         claimsPrincipal = await GetClaims(claimsPrincipal);
         if (claimsPrincipal == null) return null;
 
-        var identity = claimsPrincipal.GetIdentity().Identity;
+        var identity = ResolveUserIdentity(claimsPrincipal);
         if (identity == null) return null;
 
         var cached = await _cache.GetUserAsync(identity);

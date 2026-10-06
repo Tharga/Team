@@ -1,6 +1,7 @@
 ﻿using System.Diagnostics;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Tharga.Team.Service.Audit;
 
@@ -51,6 +52,14 @@ internal static class AuditHelper
 
         return Guid.ParseExact(traceId.Value.ToHexString(), "N");
     }
+
+    /// <summary>
+    /// The host's identity resolver, from the request that supplied the principal. Without a request there
+    /// is no principal either, so the default is never consulted for a real caller.
+    /// </summary>
+    internal static UserIdentityResolver IdentityResolverFor(IHttpContextAccessor httpContextAccessor)
+        => httpContextAccessor?.HttpContext?.RequestServices?.GetService<UserIdentityResolver>()
+           ?? UserIdentityResolver.Default;
 
     public static AuditEntry BuildEntry(
         IHttpContextAccessor httpContextAccessor,
@@ -115,7 +124,7 @@ internal static class AuditHelper
             CallerKeyId = user?.FindFirst(TeamClaimTypes.ApiKeyId)?.Value,
             // Deliberately no fallback chain: this is the subject or nothing, which is what makes it
             // exact-matchable. CallerIdentity stays the human-readable one.
-            CallerUserIdentity = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value,
+            CallerUserIdentity = IdentityResolverFor(httpContextAccessor).GetSubject(user),
             TeamKey = teamKey ?? user?.FindFirst(TeamClaimTypes.TeamKey)?.Value ?? ambient?.TeamKey,
             AccessLevel = user?.FindFirst(TeamClaimTypes.AccessLevel)?.Value,
             CallerSource = callerSource,

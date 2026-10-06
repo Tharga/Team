@@ -78,8 +78,10 @@ public sealed class HttpContextMcpContextAccessor : IMcpContextAccessor
                     ? McpScope.Team
                 : McpScope.User;
 
+            var identityResolver = ctx.RequestServices?.GetService<UserIdentityResolver>();
+
             if (string.IsNullOrEmpty(selectedTeamKey))
-                return new TeamMcpContext(user, scope, _options.DeveloperRole);
+                return new TeamMcpContext(user, scope, _options.DeveloperRole, identityResolver);
 
             // Resolved synchronously because IMcpContextAccessor.Current is a property. The alternative
             // is an async seam through every provider signature, which is the same cost the header was
@@ -98,7 +100,7 @@ public sealed class HttpContextMcpContextAccessor : IMcpContextAccessor
                       "or the caller has neither membership nor consent for it.");
             }
 
-            return new TeamMcpContext(user, scope, _options.DeveloperRole, selectedTeamKey, resolved.Scopes);
+            return new TeamMcpContext(user, scope, _options.DeveloperRole, identityResolver, selectedTeamKey, resolved.Scopes);
         }
         set
         {

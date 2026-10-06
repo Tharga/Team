@@ -21,10 +21,18 @@ namespace Tharga.Team.Service;
 public sealed class TeamAuthorizer
 {
     private readonly ITeamPrincipalAccessor _principalAccessor;
+    private readonly UserIdentityResolver _identityResolver;
 
     public TeamAuthorizer(ITeamPrincipalAccessor principalAccessor)
+        : this(principalAccessor, null)
+    {
+    }
+
+    /// <summary>Creates an authorizer whose subject honours the host's configured user identity claim.</summary>
+    public TeamAuthorizer(ITeamPrincipalAccessor principalAccessor, UserIdentityResolver identityResolver)
     {
         _principalAccessor = principalAccessor;
+        _identityResolver = identityResolver ?? UserIdentityResolver.Default;
     }
 
     /// <summary>True when there is an authenticated caller (any identity).</summary>
@@ -135,7 +143,8 @@ public sealed class TeamAuthorizer
     /// </summary>
     /// <remarks>
     /// <b>Deliberately the same value the audit trail records as <c>CallerUserIdentity</c></b> —
-    /// <see cref="ClaimTypes.NameIdentifier"/>, with no fallback chain. Anything that identifies a person
+    /// <see cref="UserIdentityResolver.GetSubject"/>: <see cref="ClaimTypes.NameIdentifier"/> with no fallback
+    /// chain unless the host configured its identity claims. Anything that identifies a person
     /// durably has to agree with the audit trail, or two records of the same act cannot be joined. A
     /// per-team <c>MemberKey</c> would be wrong here for a second reason: it stops resolving when someone
     /// leaves the team, and the things keyed on this outlive membership.
@@ -144,7 +153,7 @@ public sealed class TeamAuthorizer
     {
         var principal = await _principalAccessor.GetCurrentAsync();
 
-        return principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return _identityResolver.GetSubject(principal);
     }
 
     /// <summary>

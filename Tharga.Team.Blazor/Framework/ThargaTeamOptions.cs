@@ -29,6 +29,30 @@ public class ThargaTeamOptions
     public ThargaAuthOptions Auth { get; } = new();
 
     /// <summary>
+    /// The claim types that identify a user, in order; the first one present wins. Null (default) keeps the
+    /// built-in resolution.
+    /// </summary>
+    /// <remarks>
+    /// <b>On Microsoft Entra, set this to <c>[DirectoryClaimTypes.ObjectId]</c>.</b> By default a user is keyed
+    /// on <c>sub</c> (via <c>NameIdentifier</c>), and Entra issues <c>sub</c> pairwise — a different value per
+    /// application. Replacing the app registration then re-keys every user, and two applications in one tenant
+    /// can never share user records. <c>oid</c> is the same for every application in the tenant.
+    /// <para>
+    /// <c>oid</c> matches both its raw form and the mapped
+    /// <c>http://schemas.microsoft.com/identity/claims/objectidentifier</c>, so it works whether or not
+    /// inbound claim mapping is on. There is no fallback beyond the listed types: a principal carrying none of
+    /// them resolves to no user rather than to a second identity for the same person.
+    /// </para>
+    /// <para>
+    /// It applies everywhere a user is identified: the stored user record (<see cref="IUser.Identity"/>), the
+    /// claims built from it, the audit subject (<c>CallerUserIdentity</c>), support-case authorship and the MCP
+    /// user id. <b>Changing it on a host with existing users re-keys them</b> — existing records were stored
+    /// under the old claim and must be migrated, or every user gets a new record on next sign-in.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> UserIdentityClaimTypes { get; set; }
+
+    /// <summary>
     /// Options for API key authentication scheme.
     /// Set to null to skip API key authentication registration.
     /// </summary>

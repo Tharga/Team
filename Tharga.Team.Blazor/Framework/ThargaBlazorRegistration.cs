@@ -56,6 +56,9 @@ public static class ThargaBlazorRegistration
         // request and cache nothing across the requests it exists to serve.
         services.TryAddSingleton<ITeamCache, InMemoryTeamCache>();
 
+        // TryAdd, so the resolver AddThargaTeam registered from UserIdentityClaimTypes wins.
+        services.TryAddSingleton(UserIdentityResolver.Default);
+
         // The composition root owns the cascade; each store registers its own ITeamPurgeParticipant. An
         // adapter package cannot register this - it depends on contracts, not on the domain.
         //
@@ -88,7 +91,16 @@ public static class ThargaBlazorRegistration
             services.AddScoped(o._teamService);
             services.AddScoped(typeof(ITeamService), sp => sp.GetRequiredService(o._teamService));
 
-            services.AddScoped(o._userService);
+            // Built here, not by the container, so a host resolving its concrete service keys users the same way.
+            var concreteUserService = o._userService;
+            services.AddScoped(concreteUserService, sp =>
+            {
+                var instance = ActivatorUtilities.CreateInstance(sp, concreteUserService);
+                if (instance is UserServiceBase identityKeyed)
+                    identityKeyed.IdentityResolver = sp.GetRequiredService<UserIdentityResolver>();
+
+                return instance;
+            });
             services.AddScoped(typeof(IUserService), sp =>
             {
                 var userService = sp.GetRequiredService(o._userService);
@@ -103,11 +115,12 @@ public static class ThargaBlazorRegistration
 
                     if (auditLogger != null)
                     {
+                        var identityResolver = sp.GetRequiredService<UserIdentityResolver>();
                         auditable.UserCreatedEvent += (_, e) =>
                         {
                             try
                             {
-                                auditLogger.Log(AuthAuditEntries.UserCreated(e.User, e.Principal));
+                                auditLogger.Log(AuthAuditEntries.UserCreated(e.User, e.Principal, identityResolver));
                             }
                             catch (Exception ex)
                             {
