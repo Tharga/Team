@@ -872,7 +872,10 @@ else
                             </Template>
                         </RadzenDataGridColumn>
                         @MemberColumns
-                        <RadzenDataGridColumn>
+                        @* Sized for the widest built-in action, "Copy invitation link" with its menu
+                           arrow, and matched to the team grid's actions column. Unsized, it took an equal
+                           share of the row and clipped that split button. *@
+                        <RadzenDataGridColumn Width="240px">
                             <Template>
                                 @{
                                     var memberActions = MemberActions(team, context);
