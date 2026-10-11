@@ -71,6 +71,10 @@
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
                         <TeamAvatar Team="@((ITeam)team)" Size="20px" />
                         <span>@(((ITeam)team).Name)</span>
+                        @if (_showAccess)
+                        {
+                            @ListAccess((ITeam)team)
+                        }
                         @if (IsSuspended((ITeam)team))
                         {
                             <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[TeamSelectorText.Suspended]"
@@ -150,7 +154,32 @@
     private bool IsSuspended(ITeam team) => team != null && _suspendedTeamKeys.Contains(team.Key);
 
     private bool _canSeeAllTeams;
+    private bool _showAccess;
+    private Dictionary<string, CallerTeamAccess> _accessByTeam = new();
     private ITeam _selectedTeam;
+
+    /// <summary>
+    /// The caller's access to a team in the open list: a marker when they reach it without belonging to it,
+    /// then the level as a short tag, with the full words in tooltips.
+    /// </summary>
+    /// <remarks>
+    /// Only for a caller whose access varies from team to team — oversight or a consent role. Anyone else
+    /// holds exactly their membership everywhere they are listed, and the tag would be noise.
+    /// </remarks>
+    private RenderFragment ListAccess(ITeam team) =>
+    @<text>
+        @{
+            var access = _accessByTeam.GetValueOrDefault(team.Key);
+            var level = access?.AccessLevel;
+        }
+        @if (access is { IsMember: false })
+        {
+            <RadzenIcon Icon="person_off" Style="font-size: 1.05em; opacity: 0.7;" title="@_text[TeamSelectorText.NotAMember]" />
+        }
+        <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(level)))" Variant="Variant.Flat"
+                     Text="@_text[AccessLevelText.ShortFor(level)]"
+                     title="@($"{_text[TeamSelectorText.AccessLevelTooltip]}: {_text[AccessLevelText.For(level)]}")" />
+    </text>;
     // One pass over every key this component renders, rather than an await and a field per label.
     private TextSet _text = TextSet.Empty;
     private string _loadingText => _text[TeamMenuText.Loading];
@@ -211,6 +240,10 @@
         // them, and would make one lookup per team in the system.
         _suspendedTeamKeys = _canSeeAllTeams ? [] : await ResolveSuspendedAsync(_teams);
 
+        var callerRoles = current.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value);
+        _showAccess = TeamVisibility.CanSeeConsent(_canSeeAllTeams, callerRoles, BlazorOptions.Value.Consent.Roles);
+        _accessByTeam = _showAccess ? await ResolveAccessAsync(_teams) : new();
+
         var selectedTeam = await TeamStateService.GetSelectedTeamAsync();
         SelectedTeam ??= selectedTeam;
         StateHasChanged();
@@ -224,6 +257,20 @@
             if (await TeamDirectoryService.IsSuspendedAsync(team.Key)) suspended.Add(team.Key);
         }
         return suspended;
+    }
+
+    /// <summary>
+    /// One lookup per listed team. Accepted for the audience that sees the tags: the alternative is a list
+    /// read carrying every roster, which the selector deliberately does not take.
+    /// </summary>
+    private async Task<Dictionary<string, CallerTeamAccess>> ResolveAccessAsync(ITeam[] teams)
+    {
+        var access = new Dictionary<string, CallerTeamAccess>(StringComparer.OrdinalIgnoreCase);
+        foreach (var team in teams ?? [])
+        {
+            access[team.Key] = await TeamDirectoryService.GetMyAccessAsync(team.Key);
+        }
+        return access;
     }
 
     private async Task InvokeCreateTeamRequested()

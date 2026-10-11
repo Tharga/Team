@@ -1,4 +1,4 @@
-using Tharga.Team;
+﻿using Tharga.Team;
 
 namespace Tharga.Team.Blazor.Framework;
 
@@ -15,8 +15,11 @@ public static class TeamSelectorText
     /// </summary>
     public static readonly TextKey SelectTeam = new("team.selector.selectTeam", "Select a team");
 
+    /// <summary>Tooltip on the open list's marker for a team the caller can reach without belonging to it.</summary>
+    public static readonly TextKey NotAMember = new("team.selector.notAMember", "Not a member");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Suspended, AccessLevelTooltip, SuspendedTitle, SelectTeam];
+    public static readonly TextKey[] All = [Suspended, AccessLevelTooltip, SuspendedTitle, SelectTeam, NotAMember];
 }
 
 /// <summary>
@@ -40,6 +43,12 @@ public static class AccessLevelText
     public static readonly TextKey Custom = new("team.accesslevel.custom", "Custom");
     public static readonly TextKey None = new("team.accesslevel.none", "No access");
 
+    /// <summary>"Admin" — the one level whose name is too long for a tag beside a team name.</summary>
+    public static readonly TextKey AdministratorShort = new("team.accesslevel.administrator.short", "Admin");
+
+    /// <summary>"None" — having no access, as a tag beside a team name.</summary>
+    public static readonly TextKey NoneShort = new("team.accesslevel.none.short", "None");
+
     /// <summary>The key naming <paramref name="accessLevel"/>, or <see cref="None"/> when there is no level.</summary>
     /// <remarks>
     /// An unrecognised level also maps to <see cref="None"/>, matching the existing badge behaviour: an
@@ -55,6 +64,17 @@ public static class AccessLevelText
         _ => None
     };
 
+    /// <summary>
+    /// The key for a compact tag: the same as <see cref="For"/> except where that name is too long to sit
+    /// beside a team name. The full name belongs in the tag's tooltip.
+    /// </summary>
+    public static TextKey ShortFor(AccessLevel? accessLevel) => accessLevel switch
+    {
+        AccessLevel.Administrator => AdministratorShort,
+        null => NoneShort,
+        _ => For(accessLevel)
+    };
+
     /// <summary>Every key here, for a component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Owner, Administrator, User, Viewer, Custom, None];
+    public static readonly TextKey[] All = [Owner, Administrator, User, Viewer, Custom, None, AdministratorShort, NoneShort];
 }

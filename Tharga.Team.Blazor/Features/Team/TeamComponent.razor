@@ -15,6 +15,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IUserService UserService
 @inject IJSRuntime Js
+@inject ILocalStorageService LocalStorage
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -57,6 +58,13 @@ else
 {
     <RadzenStack Gap="1rem">
         <TeamInviteView TMember="TMember" />
+        @if (TeamAccessFilter.ShowToggle(_teams, MyAccessLevel))
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenSwitch Value="@_hideNoAccess" ValueChanged="@((bool hide) => SetHideNoAccessAsync(hide))" Name="hideNoAccessTeams" />
+                <RadzenLabel Text="@_text[TeamComponentText.HideNoAccessTeams]" Component="hideNoAccessTeams" />
+            </RadzenStack>
+        }
         @if (_teams.Any())
         {
             @* Two shapes for two situations, chosen by the same threshold the selector uses.
@@ -73,7 +81,7 @@ else
                its members. A paged, member-less read is a service-contract change and is out of scope. *@
             @if (TeamListPresentation.ShowAsGrid(_teams.Length, TeamFilterThreshold, TeamLayout))
             {
-                <RadzenDataGrid @ref="_teamGrid" Data="@_teams" TItem="ITeam<TMember>"
+                <RadzenDataGrid @ref="_teamGrid" Data="@_shownTeams" TItem="ITeam<TMember>"
                                 AllowSorting="@AllowTeamSorting"
                                 AllowFiltering="@TeamSelectorGate.ShowFilter(_teams.Length, TeamFilterThreshold, AllowTeamFiltering)"
                                 AllowPaging="@TeamSelectorGate.ShowFilter(_teams.Length, TeamPageSize + 1, AllowTeamPaging)"
@@ -131,7 +139,7 @@ else
             }
             else
             {
-                @foreach (var team in _teams)
+                @foreach (var team in _shownTeams)
                 {
                     <ExpandableCard Text="@team.Name" Icon="groups" ImageUrl="@TeamIconUrl(team)" Selected="@(_selectedTeam?.Key == team.Key)">
                         @* Membership only. Consent stays out of the title: a bare "No access" there read as
@@ -272,6 +280,8 @@ else
     private string _editingMemberName;
 
     private ITeam<TMember>[] _teams;
+    private ITeam<TMember>[] _shownTeams = [];
+    private bool _hideNoAccess;
     /// <summary>
     /// Show a per-member action opening the audit log for that member, scoped to this team. Off by
     /// default — the log is only queryable when audit storage is configured, and the action is hidden
@@ -330,9 +340,11 @@ else
     {
         await base.OnAfterRenderAsync(firstRender);
 
+        if (firstRender) await RestoreHideNoAccessAsync();
+
         if (_selectedRowExpanded || _teamGrid == null || _teams == null || _selectedTeam == null) return;
 
-        var row = _teams.FirstOrDefault(x => x.Key == _selectedTeam.Key);
+        var row = _shownTeams.FirstOrDefault(x => x.Key == _selectedTeam.Key);
         if (row == null) return;
 
         _selectedRowExpanded = true;
@@ -1399,6 +1411,42 @@ else
         return TeamActionGate.CanTransferOwnership(HasAccessLevel(team, AccessLevel.Owner), team.Members.Length > 1, _selectedTeam?.Key, team.Key);
     }
 
+    /// <summary>
+    /// Reads the remembered switch. After the first render, because browser storage is unreachable while
+    /// prerendering; an unreadable store leaves every team showing, the safe default.
+    /// </summary>
+    private async Task RestoreHideNoAccessAsync()
+    {
+        try
+        {
+            if (!await LocalStorage.GetItemAsync<bool>(Constants.HideNoAccessTeamsLocalStorageKey)) return;
+        }
+        catch (Exception e) when (e is JSException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return;
+        }
+
+        await SetHideNoAccessAsync(true, remember: false);
+    }
+
+    private async Task SetHideNoAccessAsync(bool hide, bool remember = true)
+    {
+        _hideNoAccess = hide;
+        _shownTeams = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
+        _selectedRowExpanded = false;
+        StateHasChanged();
+
+        if (!remember) return;
+        try
+        {
+            await LocalStorage.SetItemAsync(Constants.HideNoAccessTeamsLocalStorageKey, hide);
+        }
+        catch (JSException)
+        {
+            // Not remembered; the switch still applies for this visit.
+        }
+    }
+
     private bool CanEditConsent(ITeam<TMember> team)
     {
         return TeamActionGate.CanEditConsent(_canManage, _selectedTeam?.Key, team.Key, HasAccessLevel(team, AccessLevel.Administrator));
@@ -1416,6 +1464,7 @@ else
             ? await TeamOversightService.GetAllTeamsAsync<TMember>().ToArrayAsync()
             : await TeamDirectoryService.GetTeamsAsync<TMember>().ToArrayAsync();
         _teams = teams.OrderBy(x => x.Name).ToArray();
+        _shownTeams = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
         await BuildVisibleRolesAsync();
 
         // Only a caller who can request somewhere has requests to find, and finding them reads every team.

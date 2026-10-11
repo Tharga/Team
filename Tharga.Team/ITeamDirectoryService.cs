@@ -81,4 +81,25 @@ public interface ITeamDirectoryService
     Task LeaveTeamAsync(string teamKey)
         => throw new NotSupportedException(
             $"'{GetType().Name}' does not implement {nameof(LeaveTeamAsync)}.");
+
+    /// <summary>
+    /// The caller's own access to this team — through membership, or through the team's consent to a role
+    /// they hold — or null when they have neither, or are a suspended member.
+    /// </summary>
+    /// <remarks>
+    /// Ungated, beside <see cref="IsSuspendedAsync"/> and for the same reason: it concerns only the caller's
+    /// own standing, and there is no user key to point at anyone else. It answers with the rule that issues
+    /// the caller's claims, so a list labelled with it agrees with what selecting the team then grants.
+    /// <para>
+    /// A default interface method returning null, so a host that substitutes or decorates this facet keeps
+    /// compiling; null reads as "no access shown", which hides a label rather than inventing one.
+    /// </para>
+    /// </remarks>
+    Task<CallerTeamAccess> GetMyAccessAsync(string teamKey)
+        => Task.FromResult<CallerTeamAccess>(null);
 }
+
+/// <summary>The caller's own access to one team.</summary>
+/// <param name="AccessLevel">The level held.</param>
+/// <param name="IsMember">Whether it comes from membership rather than consent.</param>
+public sealed record CallerTeamAccess(AccessLevel AccessLevel, bool IsMember);

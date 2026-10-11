@@ -281,6 +281,20 @@ public class TeamManagementService<TMember> : ITeamManagementService, ITeamLifec
         return member?.SuspendedAt != null;
     }
 
+    /// <inheritdoc />
+    public async Task<CallerTeamAccess> GetMyAccessAsync(string teamKey)
+    {
+        if (_userService == null) return null;
+
+        var user = await _userService.GetCurrentUserAsync();
+        if (user == null) return null;
+
+        var principal = _principalAccessor == null ? null : await _principalAccessor.GetCurrentAsync();
+        var grant = await _grants.ResolveAsync(principal, user.Key, teamKey, _consent.AccessLevel);
+
+        return grant == null ? null : new CallerTeamAccess(grant.AccessLevel, grant.IsMember);
+    }
+
 
     /// <inheritdoc />
     /// <remarks>

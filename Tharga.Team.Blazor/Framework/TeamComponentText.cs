@@ -1,4 +1,4 @@
-namespace Tharga.Team.Blazor.Framework;
+﻿namespace Tharga.Team.Blazor.Framework;
 
 /// <summary>Localizable strings rendered by <c>TeamComponent</c>.</summary>
 /// <remarks>
@@ -98,6 +98,7 @@ public static class TeamComponentText
     public static readonly TextKey ConsentTooltip = new("team.component.consentTooltip",
         "What this team has consented to grant. Select the team to change it.");
     public static readonly TextKey NoAccess = new("team.component.noAccess", "No access");
+    public static readonly TextKey HideNoAccessTeams = new("team.component.hideNoAccessTeams", "Hide teams I have no access to");
 
     /// <summary>Label above the consent picker. <c>{0}</c> is the comma-separated list of consent roles.</summary>
     /// <remarks>
@@ -154,6 +155,6 @@ public static class TeamComponentText
         ConsentAccessFor, ConfirmDeleteTeam, ConfirmSuspendTitle, ConfirmSuspendDetail, CouldNotSuspend,
         CouldNotRestore, SuspendedTooltip, SuspendedByTooltip, ActionCopyInviteLink, ActionAuditLog,
         ActionRestoreAccess, ActionSuspendAccess, ActionRemoveMember, ActionInviteUser, ActionSetIcon,
-        ActionTransferOwnership, ActionLeaveTeam, ActionDeleteTeam, ActionRenameTeam, AuditLogTitle
+        ActionTransferOwnership, ActionLeaveTeam, ActionDeleteTeam, ActionRenameTeam, AuditLogTitle, HideNoAccessTeams
     ];
 }
