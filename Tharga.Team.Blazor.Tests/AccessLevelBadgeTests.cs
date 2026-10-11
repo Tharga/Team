@@ -108,4 +108,36 @@ public class AccessLevelBadgeTests
     {
         Assert.Equal("Danger", AccessLevelBadge.Style(null));
     }
+
+    [Theory]
+    [InlineData(true, "Flat")]
+    [InlineData(false, "Outlined")]
+    public void Variant_IsOutlinedForConsentAccess(bool isMember, string expected)
+    {
+        Assert.Equal(expected, AccessLevelBadge.Variant(isMember));
+    }
+
+    [Fact]
+    public void ShowNotAMember_OversightCallerWithNoAccess_IsShown()
+    {
+        Assert.True(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: true, isMember: false, accessLevel: null));
+    }
+
+    [Fact]
+    public void ShowNotAMember_AccessThroughConsent_IsHidden()
+    {
+        Assert.False(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: true, isMember: false, accessLevel: AccessLevel.Administrator));
+    }
+
+    [Fact]
+    public void ShowNotAMember_Member_IsHidden()
+    {
+        Assert.False(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: true, isMember: true, accessLevel: AccessLevel.Owner));
+    }
+
+    [Fact]
+    public void ShowNotAMember_CallerWhoCannotSeeAllTeams_IsHidden()
+    {
+        Assert.False(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: false, isMember: false, accessLevel: null));
+    }
 }

@@ -159,26 +159,23 @@
     private ITeam _selectedTeam;
 
     /// <summary>
-    /// The caller's access to a team in the open list: a marker when they reach it without belonging to it,
-    /// then the level as a short tag, with the full words in tooltips.
+    /// A short, outlined level tag on a team in the open list that the caller reaches through consent, with
+    /// the full level in the tooltip. Teams they belong to, and teams they cannot reach, carry no tag.
     /// </summary>
     /// <remarks>
-    /// Only for a caller whose access varies from team to team — oversight or a consent role. Anyone else
-    /// holds exactly their membership everywhere they are listed, and the tag would be noise.
+    /// Consent is the exception worth marking: a member's own level is what they expect, while access
+    /// through consent is borrowed and can be withdrawn. Outlined, matching the team page's "Your access"
+    /// column. Only for a caller consent can concern — oversight or a consent role.
     /// </remarks>
     private RenderFragment ListAccess(ITeam team) =>
     @<text>
-        @{
-            var access = _accessByTeam.GetValueOrDefault(team.Key);
-            var level = access?.AccessLevel;
-        }
-        @if (access is { IsMember: false })
+        @if (_accessByTeam.GetValueOrDefault(team.Key) is { IsMember: false } access)
         {
-            <RadzenIcon Icon="person_off" Style="font-size: 1.05em; opacity: 0.7;" title="@_text[TeamSelectorText.NotAMember]" />
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(access.AccessLevel)))"
+                         Variant="@(Enum.Parse<Variant>(AccessLevelBadge.Variant(isMember: false)))"
+                         Text="@_text[AccessLevelText.ShortFor(access.AccessLevel)]"
+                         title="@($"{_text[TeamSelectorText.ConsentAccessTooltip]}: {_text[AccessLevelText.For(access.AccessLevel)]}")" />
         }
-        <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(level)))" Variant="Variant.Flat"
-                     Text="@_text[AccessLevelText.ShortFor(level)]"
-                     title="@($"{_text[TeamSelectorText.AccessLevelTooltip]}: {_text[AccessLevelText.For(level)]}")" />
     </text>;
     // One pass over every key this component renders, rather than an await and a field per label.
     private TextSet _text = TextSet.Empty;

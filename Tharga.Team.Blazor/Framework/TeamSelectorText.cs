@@ -15,11 +15,11 @@ public static class TeamSelectorText
     /// </summary>
     public static readonly TextKey SelectTeam = new("team.selector.selectTeam", "Select a team");
 
-    /// <summary>Tooltip on the open list's marker for a team the caller can reach without belonging to it.</summary>
-    public static readonly TextKey NotAMember = new("team.selector.notAMember", "Not a member");
+    /// <summary>Tooltip on the open list's tag for a team the caller reaches through consent; the level follows it.</summary>
+    public static readonly TextKey ConsentAccessTooltip = new("team.selector.consentAccessTooltip", "Your access through consent");
 
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Suspended, AccessLevelTooltip, SuspendedTitle, SelectTeam, NotAMember];
+    public static readonly TextKey[] All = [Suspended, AccessLevelTooltip, SuspendedTitle, SelectTeam, ConsentAccessTooltip];
 }
 
 /// <summary>

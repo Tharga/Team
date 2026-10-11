@@ -941,35 +941,36 @@ else
     </text>;
 
     /// <summary>
-    /// The grid's "Your access" cell: whether the caller belongs to the team, then the level they hold.
+    /// The grid's "Your access" cell: the level the caller holds, filled when it comes from membership and
+    /// outlined when it comes through consent; or, holding nothing, a not-a-member marker.
     /// </summary>
     /// <remarks>
-    /// Membership is an icon here rather than the header's text badge, so both fit a narrow column; the
-    /// tooltip carries the words. It comes first because it qualifies the level that follows — "not a
-    /// member, but Administrator" is the sentence an oversight caller is reading.
+    /// The marker is an icon rather than the header's text badge so it fits a narrow column; the tooltip
+    /// carries the words.
     /// </remarks>
     private RenderFragment YourAccessCell(ITeam<TMember> team) =>
     @<text>
         @{
             var myLevel = MyAccessLevel(team);
+            var isMember = IsMemberOf(team);
         }
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.35rem">
-            @if (_canSeeAllTeams && !IsMemberOf(team))
-            {
-                <RadzenIcon Icon="person_off" Style="font-size: 1.15em; opacity: 0.7; cursor: help;"
-                            title="@($"{_text[TeamComponentText.NotAMember]}. {_text[TeamComponentText.NotAMemberTooltip]}")" />
-            }
             @if (myLevel != null)
             {
                 @* TextSet.Empty renders the English defaults: this component has not been migrated onto
                    the text catalogue yet, and is listed as pending in TextCoverage. *@
                 <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(myLevel)))"
-                             Variant="Variant.Flat"
+                             Variant="@(Enum.Parse<Variant>(AccessLevelBadge.Variant(isMember)))"
                              Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
-                             title="@_text[TeamComponentText.YourAccessTooltip]" />
+                             title="@_text[isMember ? TeamComponentText.YourAccessTooltip : TeamComponentText.YourConsentAccessTooltip]" />
             }
             else
             {
+                @if (AccessLevelBadge.ShowNotAMember(_canSeeAllTeams, isMember, myLevel))
+                {
+                    <RadzenIcon Icon="person_off" Style="font-size: 1.15em; opacity: 0.7; cursor: help;"
+                                title="@($"{_text[TeamComponentText.NotAMember]}. {_text[TeamComponentText.NotAMemberTooltip]}")" />
+                }
                 <span class="rz-text-disabled">—</span>
             }
         </RadzenStack>

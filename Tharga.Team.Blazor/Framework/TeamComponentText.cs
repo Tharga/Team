@@ -19,6 +19,7 @@ public static class TeamComponentText
     public static readonly TextKey ColumnTeam = new("team.component.columnTeam", "Team");
     public static readonly TextKey ColumnYourAccess = new("team.component.columnYourAccess", "Your access");
     public static readonly TextKey YourAccessTooltip = new("team.component.yourAccessTooltip", "Your access level on this team.");
+    public static readonly TextKey YourConsentAccessTooltip = new("team.component.yourConsentAccessTooltip", "Your access level on this team, through consent rather than membership.");
     public static readonly TextKey ColumnConsent = new("team.component.columnConsent", "Consent");
     public static readonly TextKey ColumnMembers = new("team.component.columnMembers", "Members");
 
@@ -145,7 +146,7 @@ public static class TeamComponentText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        PagingSummary, ColumnTeam, ColumnYourAccess, YourAccessTooltip, ColumnConsent, ColumnMembers,
+        PagingSummary, ColumnTeam, ColumnYourAccess, YourAccessTooltip, YourConsentAccessTooltip, ColumnConsent, ColumnMembers,
         NoTeamsCanCreate, NoTeams, CreateTeam, RenameTitle, IconTitle, InviteUserTitle, InvitationSent,
         EmailSentTo, EmailFailed, CouldNotSendEmail, InviteLinkCopied, ConfirmRemoveMember, ConfirmLeaveTeam, MemberNotFound,
         MemberNotFoundDetail, NoEligibleMembers, NoEligibleMembersDetail, TransferOwnershipTitle, Transfer,
