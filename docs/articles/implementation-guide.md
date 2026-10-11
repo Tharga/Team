@@ -1438,7 +1438,7 @@ A component, controller or MCP provider should inject one of these — **never `
 | Inject | For | Checked by |
 |---|---|---|
 | `ITeamManagementService` | One team: its details, roster, members, and every mutation | `team:read` on reads, `team:manage` / `member:manage` on mutations |
-| `ITeamDirectoryService` | The caller's **own** teams, and leaving one | Recomputed per team from that membership — teams not granting `team:read` are omitted. `LeaveTeamAsync` carries no scope at all; see [Leaving a team](#leaving-a-team) |
+| `ITeamDirectoryService` | The caller's **own** teams, leaving one, and their own access to a team | Recomputed per team from that membership — teams not granting `team:read` are omitted. `LeaveTeamAsync` carries no scope at all; see [Leaving a team](#leaving-a-team). `GetMyAccessAsync(teamKey)` returns the caller's own `CallerTeamAccess` (level, and whether it is membership or consent), or null — ungated, like `IsSuspendedAsync`, because it concerns only the caller |
 | `ITeamOversightService` | **Every** team, regardless of membership | `teams:read` system scope. Discovery only |
 | `ITeamInvitationService` | Resolving an invite code | **The code itself.** An invitee holds no scope for the team they are joining |
 | `ITeamLifecycleService` | Creating a team | Authenticated caller plus `AllowTeamCreation` |
@@ -2198,12 +2198,23 @@ or paged, and a page of stacked accordions is not a list.
 | `TeamPageSize` | 10 | Teams per page |
 | `TeamPageSizeOptionsValues` | 10 / 25 / 50 | Page sizes offered |
 
-The grid shows **Team** (sortable, filterable, the default sort), **Your access** — your own level, or an
-em-dash where you are not a member — **Consent**, **Members** as `3 (+2)` where two are still invited, and
-the team actions. The selected team's row is marked and opens on load.
+The grid shows **Team** (sortable, filterable, the default sort), **Your access**, **Consent**, **Members**
+as `3 (+2)` where two are still invited, and the team actions. The selected team's row is marked and opens
+on load.
+
+**Your access** states the level you actually hold — the same answer selecting the team gives:
+
+| Tag | Means |
+|---|---|
+| Filled level (e.g. *Owner*) | You hold it as a member |
+| Outlined level (e.g. *Administrator*) | You are not a member; the team consented to a role you hold |
+| *No access* | Neither — or you are a suspended member |
+
+When the list contains a team you have no access to, a **Hide teams I have no access to** switch appears
+above it. It only hides rows, is remembered per browser, and does not change the layout.
 
 **Only the team name sorts and filters.** Every other column is derived — your level comes from your
-membership row, the badges from consent — and a sort control that silently does nothing is worse than no
+membership or the team's consent — and a sort control that silently does nothing is worse than no
 control.
 
 > **Paging is a rendering fix, not a loading one.** The team list still fetches every team with its
@@ -2522,7 +2533,11 @@ o.Blazor.Consent.AccessLevel = AccessLevel.Viewer; // default level when the con
 
 The team admin picks the access level when consenting (Viewer/User/Administrator); a consented user gains that team's scopes at that level. The granted level is `team.ConsentAccessLevel ?? Consent.AccessLevel`.
 
-When `ShowToggle` is on, the picker is shown to every member of the team but is **disabled** for anyone below `AccessLevel.Administrator` — so an ordinary member can see what the team has consented to without being able to change it.
+When `ShowToggle` is on, an administrator of the **selected** team can change the consent from its card,
+under the label *Consent access for Developer* (naming the configured roles). Callers consent concerns — a
+holder of a consent role, or of `teams:read` — see the same label with a **read-only** picker on every
+other team, once the card is opened. Everyone else sees no consent information: it does not affect them,
+and a bare "No access" on a team's header read as their own access rather than as a setting.
 
 **Changing consent requires `team:manage` held as a member (3.23).** Previously the scope was accepted
 however it arrived, including through consent itself — so a caller consented in at Administrator could
@@ -2558,6 +2573,11 @@ grants exactly that — **discovery, and nothing else**:
 - **Access stays per-team and consent-governed.** Selecting a team they are not a member of grants only
   the scopes that team has consented to. A team that consented to nothing yields no access — the team is
   visible, its data is not.
+- **The selector says which is which.** For a caller holding `teams:read` or a consent role, the open list
+  tags each team reached through consent with its level (short and outlined, e.g. *Admin*) and each team
+  they cannot reach with *No access*; teams they belong to carry no tag. Beside the selected team, the
+  access-level badge appears only when that access is not membership. The list is as wide as its widest
+  team name.
 
 Grant it either explicitly, or with the opt-in convenience flag:
 
