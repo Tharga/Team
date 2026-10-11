@@ -119,7 +119,7 @@ else
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnConsent]" Width="230px" Filterable="false" Sortable="false"
-                                              Visible="@(_canSeeAllTeams || _showConsentToggle)">
+                                              Visible="@(_canSeeConsent || _showConsentToggle)">
                             <Template Context="team">
                                 @* No label: the column header already says Consent, and repeating it in
                                    every cell is the same word printed once per row. *@
@@ -150,12 +150,11 @@ else
                 @foreach (var team in _teams)
                 {
                     <ExpandableCard Text="@team.Name" Icon="groups" ImageUrl="@TeamIconUrl(team)" Selected="@(_selectedTeam?.Key == team.Key)">
-                        @* On the title, so what a team grants is readable without opening it -- the same
-                           thing the grid's Consent column does for a row. Badges only: TopMenu sits
-                           inside the header's click handler, so a control here would toggle the card as
-                           well as itself. *@
+                        @* Membership only. Consent stays out of the title: a bare "No access" there read as
+                           the caller's own access rather than as a setting, so it lives under its label in
+                           the card body. Badges only: TopMenu sits inside the header's click handler. *@
                         <TopMenu>
-                            @ConsentBadges(team)
+                            @MembershipBadge(team)
                         </TopMenu>
                         <ChildContent>
                             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" AlignItems="AlignItems.End" Gap="0.75rem">
@@ -309,6 +308,7 @@ else
     private bool _allowTeamCreation;
     private string _createTeamPath;
     private bool _showConsentToggle;
+    private bool _canSeeConsent;
     private string[] _consentRoles;
     private string[] _callerRoles = [];
     private IReadOnlyList<TeamAccessRequestItem> _myAccessRequests = [];
@@ -381,6 +381,7 @@ else
         _createTeamPath = BlazorOptions.Value.CreateTeamPath;
         _showConsentToggle = BlazorOptions.Value.Consent.ShowToggle;
         _consentRoles = BlazorOptions.Value.Consent.Roles ?? [];
+        _canSeeConsent = TeamVisibility.CanSeeConsent(_canSeeAllTeams, _callerRoles, _consentRoles);
         _consentDefaultLevel = BlazorOptions.Value.Consent.AccessLevel;
         _memberAccessLevels = AccessLevelVisibility.Apply(AccessLevelVisibility.Member, BlazorOptions.Value.HiddenAccessLevels);
         _consentLevels = AccessLevelVisibility.Apply(AccessLevelVisibility.Consent, BlazorOptions.Value.HiddenAccessLevels);
@@ -922,8 +923,8 @@ else
     </text>;
 
     /// <summary>
-    /// What this team grants, and the control to change it. Rendered in the grid's Consent column and in
-    /// a card's header.
+    /// What this team grants, and the control to change it. Rendered in the grid's Consent column; a
+    /// card shows it as a labelled read-only selector instead (<see cref="ConsentControl"/>).
     /// </summary>
     /// <remarks>
     /// <b>Only where it can be changed.</b> Consent is editable on the selected team alone, so in a list
@@ -961,12 +962,8 @@ else
     private RenderFragment ConsentBadges(ITeam<TMember> team) =>
     @<text>
         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.35rem" Wrap="FlexWrap.Wrap">
-            @if (_canSeeAllTeams && !IsMemberOf(team))
-            {
-                <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat" Text="@_text[TeamComponentText.NotAMember]"
-                             title="@_text[TeamComponentText.NotAMemberTooltip]" />
-            }
-            @if (_canSeeAllTeams || _showConsentToggle)
+            @MembershipBadge(team)
+            @if (_canSeeConsent)
             {
                 <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(TeamVisibility.BadgeStyle(ConsentOf(team))))"
                              Variant="Variant.Flat"
@@ -976,9 +973,24 @@ else
         </RadzenStack>
     </text>;
 
+    /// <summary>"Not a member", for an oversight caller looking at a team they do not belong to.</summary>
+    private RenderFragment MembershipBadge(ITeam<TMember> team) =>
+    @<text>
+        @if (_canSeeAllTeams && !IsMemberOf(team))
+        {
+            <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat" Text="@_text[TeamComponentText.NotAMember]"
+                         title="@_text[TeamComponentText.NotAMemberTooltip]" />
+        }
+    </text>;
+
     /// <summary>
-    /// The consent selector, where consent can actually be changed. Renders nothing where it cannot.
+    /// The consent selector: editable where consent can be changed, read-only for a caller consent
+    /// concerns, and absent for everyone else.
     /// </summary>
+    /// <remarks>
+    /// Read-only rather than a badge so the level sits under the same label in both cases — "Consent
+    /// access for Developer: No access" says what is being set; a bare "No access" did not.
+    /// </remarks>
     private RenderFragment ConsentControl(ITeam<TMember> team, bool showLabel) =>
     @<text>
         @if (_showConsentToggle && CanEditConsent(team))
@@ -994,6 +1006,21 @@ else
                                 AllowClear="true"
                                 Placeholder="@_text[TeamComponentText.NoAccess]"
                                 Change="@(async args => await SetConsent(team, (AccessLevel?)args))"
+                                Style="width: 100%;" />
+            </RadzenStack>
+        }
+        else if (_canSeeConsent)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.15rem" AlignItems="AlignItems.Start">
+                @if (showLabel)
+                {
+                    <RadzenLabel Text="@ConsentLabel" Style="font-size: 0.85em; opacity: 0.75;" />
+                }
+                <RadzenDropDown TValue="AccessLevel?"
+                                Value="@ConsentOf(team)"
+                                Data="@_consentLevels"
+                                ReadOnly="true"
+                                Placeholder="@_text[TeamComponentText.NoAccess]"
                                 Style="width: 100%;" />
             </RadzenStack>
         }

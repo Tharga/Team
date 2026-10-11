@@ -30,6 +30,30 @@ public class TeamVisibilityTests
     }
 
     [Fact]
+    public void CanSeeConsent_OversightCaller_IsTrue()
+    {
+        Assert.True(TeamVisibility.CanSeeConsent(true, [], ["Developer"]));
+    }
+
+    [Fact]
+    public void CanSeeConsent_CallerHoldingAConsentRole_IsTrue()
+    {
+        Assert.True(TeamVisibility.CanSeeConsent(false, ["User", "Developer"], ["Developer"]));
+    }
+
+    [Fact]
+    public void CanSeeConsent_RegularUser_IsFalse()
+    {
+        Assert.False(TeamVisibility.CanSeeConsent(false, ["User"], ["Developer"]));
+    }
+
+    [Fact]
+    public void CanSeeConsent_NoConsentRolesConfigured_IsFalse()
+    {
+        Assert.False(TeamVisibility.CanSeeConsent(false, ["Developer"], null));
+    }
+
+    [Fact]
     public void CanSeeAllTeams_NullPrincipal_IsFalse()
     {
         Assert.False(TeamVisibility.CanSeeAllTeams(null));

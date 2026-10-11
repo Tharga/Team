@@ -7,8 +7,8 @@ namespace Tharga.Team.Blazor.Tests;
 /// </summary>
 /// <remarks>
 /// A source scan, for the same reason <see cref="DialogButtonOrderTests"/> is one: badge order lives in
-/// markup and nothing in the compiled component records it. Both the card header and the grid's Consent
-/// column render the one fragment, so pinning it here covers every place a team badge appears.
+/// markup and nothing in the compiled component records it. The grid's Consent column is the one place
+/// both badges appear together; the card header carries the membership badge alone.
 /// <para>
 /// Order carries meaning. Membership first reads as "not a member, but full access" — the qualifier
 /// arriving before the level it qualifies. Reversed, the level lands as a plain statement of the caller's
@@ -17,10 +17,10 @@ namespace Tharga.Team.Blazor.Tests;
 /// </remarks>
 public class ConsentBadgeOrderTests
 {
-    // Matches the catalogue key rather than the English literal: the badge text moved into
-    // TeamComponentText for #204, so scanning for "Not a member" would silently find nothing and the
+    // Matches the fragment call rather than the English literal: the badge moved into its own
+    // MembershipBadge fragment, shared with the card header, so scanning for its text here would find nothing and the
     // order would stop being checked at all.
-    private const string MembershipBadge = "TeamComponentText.NotAMember";
+    private const string MembershipBadge = "@MembershipBadge(team)";
     private const string LevelBadge = "TeamVisibility.Label(";
     private const string ComponentPath = "Tharga.Team.Blazor/Features/Team/TeamComponent.razor";
 
@@ -88,7 +88,7 @@ public class ConsentBadgeOrderTests
             @<text>
                 <RadzenStack Orientation="Orientation.Horizontal">
                     <RadzenBadge Text="@TeamVisibility.Label(ConsentOf(team))" />
-                    <RadzenBadge Text="@_text[TeamComponentText.NotAMember]" />
+                    @MembershipBadge(team)
                 </RadzenStack>
             </text>;
             """;
