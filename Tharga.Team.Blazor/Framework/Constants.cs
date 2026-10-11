@@ -13,4 +13,7 @@ internal static class Constants
     /// </summary>
     public const string TeamInviteCode = "TeamInviteCode";
     public const string SelectedTeamLocalStorageKey = "SelectedTeam";
+
+    /// <summary>The team page's "hide teams I have no access to" switch, remembered per browser.</summary>
+    public const string HideNoAccessTeamsLocalStorageKey = "HideNoAccessTeams";
 }

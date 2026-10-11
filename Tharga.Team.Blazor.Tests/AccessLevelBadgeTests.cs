@@ -38,6 +38,20 @@ public class AccessLevelBadgeTests
     }
 
     [Fact]
+    public void ShouldShow_OversightCallerWhoIsAMemberOfTheSelectedTeam_IsHidden()
+    {
+        var principal = Principal(Oversight(), Level(AccessLevel.Owner), new Claim(TeamClaimTypes.MemberKey, "member-1"));
+
+        Assert.False(AccessLevelBadge.ShouldShow(principal, hasSelectedTeam: true));
+    }
+
+    [Fact]
+    public void ShouldShow_OversightCallerReachingTheTeamThroughConsent_IsShown()
+    {
+        Assert.True(AccessLevelBadge.ShouldShow(Principal(Oversight(), Level(AccessLevel.Viewer)), hasSelectedTeam: true));
+    }
+
+    [Fact]
     public void ShouldShow_Anonymous_IsHidden()
     {
         Assert.False(AccessLevelBadge.ShouldShow(null, hasSelectedTeam: true));
@@ -93,5 +107,13 @@ public class AccessLevelBadgeTests
     public void Style_NoAccess_IsDanger()
     {
         Assert.Equal("Danger", AccessLevelBadge.Style(null));
+    }
+
+    [Theory]
+    [InlineData(true, "Flat")]
+    [InlineData(false, "Outlined")]
+    public void Variant_IsOutlinedForConsentAccess(bool isMember, string expected)
+    {
+        Assert.Equal(expected, AccessLevelBadge.Variant(isMember));
     }
 }

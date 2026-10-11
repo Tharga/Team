@@ -24,6 +24,22 @@ internal static class TeamVisibility
     }
 
     /// <summary>
+    /// Whether the caller is shown what a team has consented to grant: an oversight caller, or one holding
+    /// a role that consent reaches. Anyone else is unaffected by consent, so the setting is noise to them.
+    /// </summary>
+    /// <remarks>
+    /// Presentation only. Changing consent stays gated by <c>TeamActionGate.CanEditConsent</c>, which this
+    /// neither widens nor narrows.
+    /// </remarks>
+    public static bool CanSeeConsent(bool canSeeAllTeams, IEnumerable<string> callerRoles, IEnumerable<string> consentRoles)
+    {
+        if (canSeeAllTeams) return true;
+
+        var offered = new HashSet<string>(consentRoles ?? [], StringComparer.Ordinal);
+        return (callerRoles ?? []).Any(offered.Contains);
+    }
+
+    /// <summary>
     /// The access level a team has actually consented to grant, or null when it has consented to no
     /// roles — visible, but no access — regardless of any level stored alongside.
     /// </summary>

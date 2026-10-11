@@ -91,16 +91,32 @@ internal sealed class TeamGrantResolver
 
         if (consented == null) return null;
 
-        // Through TeamConsent, so a temporary consent stops counting when it runs out — and checked again here
-        // rather than trusted from the lookup, because a host implementing ITeamService directly may return a team
-        // on its stored roles alone.
-        var inForce = TeamConsent.Resolve(consented, DateTime.UtcNow);
-        if (!inForce.Covers(roles)) return null;
+        // Checked again rather than trusted from the lookup, because a host implementing ITeamService directly
+        // may return a team on its stored roles alone.
+        if (ConsentLevel(consented, roles, defaultConsentLevel, DateTime.UtcNow) is not { } level) return null;
 
-        var level = inForce.AccessLevel ?? defaultConsentLevel;
         var consentScopes = _scopeRegistry?.GetEffectiveScopes(level, [], []) ?? [];
 
         return new TeamGrant(level, [.. consentScopes], MemberKey: null, IsMember: false);
+    }
+
+    /// <summary>
+    /// The level <paramref name="team"/>'s consent grants a non-member holding <paramref name="roles"/> at
+    /// <paramref name="utcNow"/>, or null when the consent in force covers none of them.
+    /// </summary>
+    /// <remarks>
+    /// The consent half of <see cref="ResolveAsync"/>, exposed so a UI stating the caller's access reads the
+    /// same rule instead of restating it. Through <see cref="TeamConsent.Resolve"/>, so a temporary consent
+    /// stops counting when it runs out.
+    /// </remarks>
+    public static AccessLevel? ConsentLevel(ITeam team, IEnumerable<string> roles, AccessLevel defaultConsentLevel, DateTime utcNow)
+    {
+        if (team == null) return null;
+
+        var inForce = TeamConsent.Resolve(team, utcNow);
+        if (!inForce.Covers(roles)) return null;
+
+        return inForce.AccessLevel ?? defaultConsentLevel;
     }
 
     /// <summary>

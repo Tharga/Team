@@ -7,6 +7,16 @@
 @inject IThargaTextProvider TextProvider
 @inject IOptions<ThargaBlazorOptions> BlazorOptions
 
+<style>
+    /* The open list as wide as its widest team, so a name never wraps onto a second line. Radzen pins the
+       popup to the input's width with an inline style, which only !important outranks; it already moves a
+       popup left when it would run off the right edge, and max-width keeps it on a narrow screen. */
+    .tharga-team-selector .rz-dropdown-panel {
+        width: max-content !important;
+        max-width: calc(100vw - 2rem);
+    }
+</style>
+
 <AuthorizeView>
     <Authorized>
         @if (_teams == null)
@@ -42,7 +52,7 @@
         else if (TeamSelectorGate.ShowPicker(_teams.Length, SelectedTeam != null))
         {
             <RadzenDropDown @bind-Value=@SelectedTeam Data="@(_teams.OrderBy(f => f.Name))" TextProperty="Name"
-                            Placeholder="@_selectTeamText"
+                            Placeholder="@_selectTeamText" class="tharga-team-selector"
                             AllowFiltering="@TeamSelectorGate.ShowFilter(_teams.Length, FilterThreshold, AllowFiltering)"
                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                             FilterOperator="StringFilterOperator.Contains">
@@ -61,6 +71,10 @@
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.4rem">
                         <TeamAvatar Team="@((ITeam)team)" Size="20px" />
                         <span>@(((ITeam)team).Name)</span>
+                        @if (_showAccess)
+                        {
+                            @ListAccess((ITeam)team)
+                        }
                         @if (IsSuspended((ITeam)team))
                         {
                             <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[TeamSelectorText.Suspended]"
@@ -140,7 +154,39 @@
     private bool IsSuspended(ITeam team) => team != null && _suspendedTeamKeys.Contains(team.Key);
 
     private bool _canSeeAllTeams;
+    private bool _showAccess;
+    private Dictionary<string, CallerTeamAccess> _accessByTeam = new();
     private ITeam _selectedTeam;
+
+    /// <summary>
+    /// A tag on a team in the open list that the caller does not hold through membership: a short, outlined
+    /// level where they reach it through consent, or "No access" where they cannot reach it at all. Teams
+    /// they belong to carry no tag.
+    /// </summary>
+    /// <remarks>
+    /// The exceptions are what is worth marking: a member's own level is what they expect, while access
+    /// through consent is borrowed and can be withdrawn, and a team with none is one selecting will not open.
+    /// Matches the team page's "Your access" column. Only for a caller consent can concern — oversight or a
+    /// consent role.
+    /// </remarks>
+    private RenderFragment ListAccess(ITeam team) =>
+    @<text>
+        @{
+            var access = _accessByTeam.GetValueOrDefault(team.Key);
+        }
+        @if (access is { IsMember: false })
+        {
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(access.AccessLevel)))"
+                         Variant="@(Enum.Parse<Variant>(AccessLevelBadge.Variant(isMember: false)))"
+                         Text="@_text[AccessLevelText.ShortFor(access.AccessLevel)]"
+                         title="@($"{_text[TeamSelectorText.ConsentAccessTooltip]}: {_text[AccessLevelText.For(access.AccessLevel)]}")" />
+        }
+        else if (access == null)
+        {
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(null)))" Variant="Variant.Flat"
+                         Text="@_text[AccessLevelText.None]" />
+        }
+    </text>;
     // One pass over every key this component renders, rather than an await and a field per label.
     private TextSet _text = TextSet.Empty;
     private string _loadingText => _text[TeamMenuText.Loading];
@@ -201,6 +247,10 @@
         // them, and would make one lookup per team in the system.
         _suspendedTeamKeys = _canSeeAllTeams ? [] : await ResolveSuspendedAsync(_teams);
 
+        var callerRoles = current.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value);
+        _showAccess = TeamVisibility.CanSeeConsent(_canSeeAllTeams, callerRoles, BlazorOptions.Value.Consent.Roles);
+        _accessByTeam = _showAccess ? await ResolveAccessAsync(_teams) : new();
+
         var selectedTeam = await TeamStateService.GetSelectedTeamAsync();
         SelectedTeam ??= selectedTeam;
         StateHasChanged();
@@ -214,6 +264,20 @@
             if (await TeamDirectoryService.IsSuspendedAsync(team.Key)) suspended.Add(team.Key);
         }
         return suspended;
+    }
+
+    /// <summary>
+    /// One lookup per listed team. Accepted for the audience that sees the tags: the alternative is a list
+    /// read carrying every roster, which the selector deliberately does not take.
+    /// </summary>
+    private async Task<Dictionary<string, CallerTeamAccess>> ResolveAccessAsync(ITeam[] teams)
+    {
+        var access = new Dictionary<string, CallerTeamAccess>(StringComparer.OrdinalIgnoreCase);
+        foreach (var team in teams ?? [])
+        {
+            access[team.Key] = await TeamDirectoryService.GetMyAccessAsync(team.Key);
+        }
+        return access;
     }
 
     private async Task InvokeCreateTeamRequested()

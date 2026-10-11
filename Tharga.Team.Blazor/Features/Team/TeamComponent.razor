@@ -15,6 +15,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IUserService UserService
 @inject IJSRuntime Js
+@inject ILocalStorageService LocalStorage
 @inject DialogService DialogService
 @inject NavigationManager NavigationManager
 @inject NotificationService NotificationService
@@ -57,6 +58,13 @@ else
 {
     <RadzenStack Gap="1rem">
         <TeamInviteView TMember="TMember" />
+        @if (TeamAccessFilter.ShowToggle(_teams, MyAccessLevel))
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenSwitch Value="@_hideNoAccess" ValueChanged="@((bool hide) => SetHideNoAccessAsync(hide))" Name="hideNoAccessTeams" />
+                <RadzenLabel Text="@_text[TeamComponentText.HideNoAccessTeams]" Component="hideNoAccessTeams" />
+            </RadzenStack>
+        }
         @if (_teams.Any())
         {
             @* Two shapes for two situations, chosen by the same threshold the selector uses.
@@ -73,7 +81,7 @@ else
                its members. A paged, member-less read is a service-contract change and is out of scope. *@
             @if (TeamListPresentation.ShowAsGrid(_teams.Length, TeamFilterThreshold, TeamLayout))
             {
-                <RadzenDataGrid @ref="_teamGrid" Data="@_teams" TItem="ITeam<TMember>"
+                <RadzenDataGrid @ref="_teamGrid" Data="@_shownTeams" TItem="ITeam<TMember>"
                                 AllowSorting="@AllowTeamSorting"
                                 AllowFiltering="@TeamSelectorGate.ShowFilter(_teams.Length, TeamFilterThreshold, AllowTeamFiltering)"
                                 AllowPaging="@TeamSelectorGate.ShowFilter(_teams.Length, TeamPageSize + 1, AllowTeamPaging)"
@@ -97,29 +105,13 @@ else
                                 </RadzenStack>
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnYourAccess]" Width="140px" Filterable="false" Sortable="false">
+                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnYourAccess]" Width="170px" Filterable="false" Sortable="false">
                             <Template Context="team">
-                                @{
-                                    var myLevel = MyAccessLevel(team);
-                                }
-                                @if (myLevel != null)
-                                {
-                                    @* TextSet.Empty renders the English defaults: this component has not been
-                                       migrated onto the text catalogue yet, and is listed as pending in
-                                       TextCoverage. *@
-                                    <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(myLevel)))"
-                                                 Variant="Variant.Flat"
-                                                 Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
-                                                 title="@_text[TeamComponentText.YourAccessTooltip]" />
-                                }
-                                else
-                                {
-                                    <span class="rz-text-disabled">—</span>
-                                }
+                                @YourAccessCell(team)
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnConsent]" Width="230px" Filterable="false" Sortable="false"
-                                              Visible="@(_canSeeAllTeams || _showConsentToggle)">
+                                              Visible="@(_canSeeConsent || _showConsentToggle)">
                             <Template Context="team">
                                 @* No label: the column header already says Consent, and repeating it in
                                    every cell is the same word printed once per row. *@
@@ -147,15 +139,14 @@ else
             }
             else
             {
-                @foreach (var team in _teams)
+                @foreach (var team in _shownTeams)
                 {
                     <ExpandableCard Text="@team.Name" Icon="groups" ImageUrl="@TeamIconUrl(team)" Selected="@(_selectedTeam?.Key == team.Key)">
-                        @* On the title, so what a team grants is readable without opening it -- the same
-                           thing the grid's Consent column does for a row. Badges only: TopMenu sits
-                           inside the header's click handler, so a control here would toggle the card as
-                           well as itself. *@
+                        @* Membership only. Consent stays out of the title: a bare "No access" there read as
+                           the caller's own access rather than as a setting, so it lives under its label in
+                           the card body. Badges only: TopMenu sits inside the header's click handler. *@
                         <TopMenu>
-                            @ConsentBadges(team)
+                            @MembershipBadge(team)
                         </TopMenu>
                         <ChildContent>
                             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" AlignItems="AlignItems.End" Gap="0.75rem">
@@ -289,6 +280,8 @@ else
     private string _editingMemberName;
 
     private ITeam<TMember>[] _teams;
+    private ITeam<TMember>[] _shownTeams = [];
+    private bool _hideNoAccess;
     /// <summary>
     /// Show a per-member action opening the audit log for that member, scoped to this team. Off by
     /// default — the log is only queryable when audit storage is configured, and the action is hidden
@@ -309,6 +302,7 @@ else
     private bool _allowTeamCreation;
     private string _createTeamPath;
     private bool _showConsentToggle;
+    private bool _canSeeConsent;
     private string[] _consentRoles;
     private string[] _callerRoles = [];
     private IReadOnlyList<TeamAccessRequestItem> _myAccessRequests = [];
@@ -346,9 +340,11 @@ else
     {
         await base.OnAfterRenderAsync(firstRender);
 
+        if (firstRender) await RestoreHideNoAccessAsync();
+
         if (_selectedRowExpanded || _teamGrid == null || _teams == null || _selectedTeam == null) return;
 
-        var row = _teams.FirstOrDefault(x => x.Key == _selectedTeam.Key);
+        var row = _shownTeams.FirstOrDefault(x => x.Key == _selectedTeam.Key);
         if (row == null) return;
 
         _selectedRowExpanded = true;
@@ -381,6 +377,7 @@ else
         _createTeamPath = BlazorOptions.Value.CreateTeamPath;
         _showConsentToggle = BlazorOptions.Value.Consent.ShowToggle;
         _consentRoles = BlazorOptions.Value.Consent.Roles ?? [];
+        _canSeeConsent = TeamVisibility.CanSeeConsent(_canSeeAllTeams, _callerRoles, _consentRoles);
         _consentDefaultLevel = BlazorOptions.Value.Consent.AccessLevel;
         _memberAccessLevels = AccessLevelVisibility.Apply(AccessLevelVisibility.Member, BlazorOptions.Value.HiddenAccessLevels);
         _consentLevels = AccessLevelVisibility.Apply(AccessLevelVisibility.Consent, BlazorOptions.Value.HiddenAccessLevels);
@@ -871,7 +868,10 @@ else
                             </Template>
                         </RadzenDataGridColumn>
                         @MemberColumns
-                        <RadzenDataGridColumn>
+                        @* Sized for the widest built-in action, "Copy invitation link" with its menu
+                           arrow, and matched to the team grid's actions column. Unsized, it took an equal
+                           share of the row and clipped that split button. *@
+                        <RadzenDataGridColumn Width="240px">
                             <Template>
                                 @{
                                     var memberActions = MemberActions(team, context);
@@ -922,63 +922,73 @@ else
     </text>;
 
     /// <summary>
-    /// What this team grants, and the control to change it. Rendered in the grid's Consent column and in
-    /// a card's header.
+    /// What this team grants, stated: the grid's Consent cell on rows where consent cannot be changed.
     /// </summary>
     /// <remarks>
-    /// <b>Only where it can be changed.</b> Consent is editable on the selected team alone, so in a list
-    /// most rows cannot be edited — and a column of disabled drop-downs is a row of controls that do
-    /// nothing. Those rows state the level instead.
-    /// <para>
-    /// The label is the caller's to ask for: a grid column header already says "Consent", so repeating it
-    /// in every cell prints the same word once per row. A card has no header, so there it carries.
-    /// </para>
-    /// The label sits <b>above</b> the drop-down rather than beside it. Side by side, the label ran
-    /// straight into the selected level and the two read as one sentence — "Consent access for Developer,
-    /// Administrator" — which states something nobody wrote: that Administrator is a consenting role
-    /// rather than the level being granted. Stacking separates the question from the answer.
-    /// <para>
-    /// The roles are listed in full rather than abbreviated. Naming fewer than actually hold consent
-    /// would be a comfortable label that misstates who can reach the team.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Whether the caller belongs to this team and what it grants, side by side.
-    /// </summary>
-    /// <remarks>
-    /// Horizontal, because the two are one thought — "not a member, but full access" is the sentence an
-    /// oversight caller is reading. Stacked, they looked like two unrelated properties.
-    /// <para>
-    /// Membership comes first because it qualifies the level that follows: the caller reads why they can
-    /// see the team before reading how much of it they get. Read the other way, the level lands as a plain
-    /// statement of their standing and the qualifier arrives too late to change it.
-    /// </para>
-    /// <para>
-    /// Read-only by design, which is what lets it sit in a card's <c>TopMenu</c>: that slot lives inside
-    /// the header's click handler, so anything interactive there would toggle the card as well as itself.
-    /// </para>
+    /// The value only. Whether the caller belongs to the team is said in the "Your access" column
+    /// (<see cref="YourAccessCell"/>), next to the level it qualifies, rather than here beside a setting.
+    /// No label: the column header already says Consent.
     /// </remarks>
     private RenderFragment ConsentBadges(ITeam<TMember> team) =>
     @<text>
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.35rem" Wrap="FlexWrap.Wrap">
-            @if (_canSeeAllTeams && !IsMemberOf(team))
-            {
-                <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat" Text="@_text[TeamComponentText.NotAMember]"
-                             title="@_text[TeamComponentText.NotAMemberTooltip]" />
-            }
-            @if (_canSeeAllTeams || _showConsentToggle)
-            {
-                <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(TeamVisibility.BadgeStyle(ConsentOf(team))))"
-                             Variant="Variant.Flat"
-                             Text="@TeamVisibility.Label(ConsentOf(team))"
-                             title="@_text[TeamComponentText.ConsentTooltip]" />
-            }
-        </RadzenStack>
+        @if (_canSeeConsent)
+        {
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(TeamVisibility.BadgeStyle(ConsentOf(team))))"
+                         Variant="Variant.Flat"
+                         Text="@TeamVisibility.Label(ConsentOf(team))"
+                         title="@_text[TeamComponentText.ConsentTooltip]" />
+        }
     </text>;
 
     /// <summary>
-    /// The consent selector, where consent can actually be changed. Renders nothing where it cannot.
+    /// The grid's "Your access" cell: the level the caller holds, filled when it comes from membership and
+    /// outlined when it comes through consent, or "No access" when they hold nothing.
     /// </summary>
+    /// <remarks>
+    /// No separate not-a-member marker: a non-member either reaches the team through consent, which the
+    /// outline already says, or holds nothing, which "No access" already says.
+    /// </remarks>
+    private RenderFragment YourAccessCell(ITeam<TMember> team) =>
+    @<text>
+        @{
+            var myLevel = MyAccessLevel(team);
+            var isMember = IsMemberOf(team);
+        }
+        @if (myLevel != null)
+        {
+            @* TextSet.Empty renders the English defaults: this component has not been migrated onto
+               the text catalogue yet, and is listed as pending in TextCoverage. *@
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(myLevel)))"
+                         Variant="@(Enum.Parse<Variant>(AccessLevelBadge.Variant(isMember)))"
+                         Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
+                         title="@_text[isMember ? TeamComponentText.YourAccessTooltip : TeamComponentText.YourConsentAccessTooltip]" />
+        }
+        else
+        {
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(null)))" Variant="Variant.Flat"
+                         Text="@AccessLevelBadge.Text(null, TextSet.Empty)"
+                         title="@_text[TeamComponentText.YourAccessTooltip]" />
+        }
+    </text>;
+
+    /// <summary>"Not a member", for an oversight caller looking at a team they do not belong to.</summary>
+    private RenderFragment MembershipBadge(ITeam<TMember> team) =>
+    @<text>
+        @if (_canSeeAllTeams && !IsMemberOf(team))
+        {
+            <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat" Text="@_text[TeamComponentText.NotAMember]"
+                         title="@_text[TeamComponentText.NotAMemberTooltip]" />
+        }
+    </text>;
+
+    /// <summary>
+    /// The consent selector: editable where consent can be changed, read-only for a caller consent
+    /// concerns, and absent for everyone else.
+    /// </summary>
+    /// <remarks>
+    /// Read-only rather than a badge so the level sits under the same label in both cases — "Consent
+    /// access for Developer: No access" says what is being set; a bare "No access" did not.
+    /// </remarks>
     private RenderFragment ConsentControl(ITeam<TMember> team, bool showLabel) =>
     @<text>
         @if (_showConsentToggle && CanEditConsent(team))
@@ -994,6 +1004,21 @@ else
                                 AllowClear="true"
                                 Placeholder="@_text[TeamComponentText.NoAccess]"
                                 Change="@(async args => await SetConsent(team, (AccessLevel?)args))"
+                                Style="width: 100%;" />
+            </RadzenStack>
+        }
+        else if (_canSeeConsent)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.15rem" AlignItems="AlignItems.Start">
+                @if (showLabel)
+                {
+                    <RadzenLabel Text="@ConsentLabel" Style="font-size: 0.85em; opacity: 0.75;" />
+                }
+                <RadzenDropDown TValue="AccessLevel?"
+                                Value="@ConsentOf(team)"
+                                Data="@_consentLevels"
+                                ReadOnly="true"
+                                Placeholder="@_text[TeamComponentText.NoAccess]"
                                 Style="width: 100%;" />
             </RadzenStack>
         }
@@ -1118,10 +1143,21 @@ else
     /// reaching a team by consent has access without membership, and showing them a level here would
     /// claim a membership they do not have. The Consent column says what they actually get.
     /// </remarks>
+    /// <summary>
+    /// The level the caller actually holds on <paramref name="team"/>: their membership, or the team's
+    /// consent when they are not a member, or null for neither — the same answer the selected team's
+    /// claims carry, so this column and the top bar cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// A suspended member holds nothing and does not fall through to consent, matching
+    /// <c>TeamGrantResolver</c>.
+    /// </remarks>
     private AccessLevel? MyAccessLevel(ITeam<TMember> team)
     {
         var member = team.Members?.FirstOrDefault(x => x.Key == _user?.Key && x.State == MembershipState.Member);
-        return member?.AccessLevel;
+        if (member != null) return member.SuspendedAt == null ? member.AccessLevel : null;
+
+        return TeamGrantResolver.ConsentLevel(team, _callerRoles, _consentDefaultLevel, DateTime.UtcNow);
     }
 
     private bool IsMemberOf(ITeam<TMember> team)
@@ -1371,6 +1407,42 @@ else
         return TeamActionGate.CanTransferOwnership(HasAccessLevel(team, AccessLevel.Owner), team.Members.Length > 1, _selectedTeam?.Key, team.Key);
     }
 
+    /// <summary>
+    /// Reads the remembered switch. After the first render, because browser storage is unreachable while
+    /// prerendering; an unreadable store leaves every team showing, the safe default.
+    /// </summary>
+    private async Task RestoreHideNoAccessAsync()
+    {
+        try
+        {
+            if (!await LocalStorage.GetItemAsync<bool>(Constants.HideNoAccessTeamsLocalStorageKey)) return;
+        }
+        catch (Exception e) when (e is JSException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return;
+        }
+
+        await SetHideNoAccessAsync(true, remember: false);
+    }
+
+    private async Task SetHideNoAccessAsync(bool hide, bool remember = true)
+    {
+        _hideNoAccess = hide;
+        _shownTeams = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
+        _selectedRowExpanded = false;
+        StateHasChanged();
+
+        if (!remember) return;
+        try
+        {
+            await LocalStorage.SetItemAsync(Constants.HideNoAccessTeamsLocalStorageKey, hide);
+        }
+        catch (JSException)
+        {
+            // Not remembered; the switch still applies for this visit.
+        }
+    }
+
     private bool CanEditConsent(ITeam<TMember> team)
     {
         return TeamActionGate.CanEditConsent(_canManage, _selectedTeam?.Key, team.Key, HasAccessLevel(team, AccessLevel.Administrator));
@@ -1388,6 +1460,7 @@ else
             ? await TeamOversightService.GetAllTeamsAsync<TMember>().ToArrayAsync()
             : await TeamDirectoryService.GetTeamsAsync<TMember>().ToArrayAsync();
         _teams = teams.OrderBy(x => x.Name).ToArray();
+        _shownTeams = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
         await BuildVisibleRolesAsync();
 
         // Only a caller who can request somewhere has requests to find, and finding them reads every team.

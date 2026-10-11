@@ -20,8 +20,16 @@ namespace Tharga.Team.Blazor.Features.Team;
 internal static class AccessLevelBadge
 {
     /// <summary>Whether to render the badge at all.</summary>
+    /// <remarks>
+    /// Hidden while the caller is a member of the selected team, recognised by the
+    /// <see cref="TeamClaimTypes.MemberKey"/> claim that only membership issues. A member's level is the
+    /// one they see in the member list; the badge earns its place only when access arrives some other way
+    /// — through consent, or not at all.
+    /// </remarks>
     public static bool ShouldShow(ClaimsPrincipal principal, bool hasSelectedTeam)
-        => hasSelectedTeam && TeamVisibility.CanSeeAllTeams(principal);
+        => hasSelectedTeam
+           && TeamVisibility.CanSeeAllTeams(principal)
+           && string.IsNullOrEmpty(principal.FindFirst(TeamClaimTypes.MemberKey)?.Value);
 
     /// <summary>
     /// The caller's access level on the selected team, or null when the claim is absent — which reads
@@ -41,6 +49,12 @@ internal static class AccessLevelBadge
     /// </remarks>
     public static string Text(AccessLevel? accessLevel, TextSet text)
         => (text ?? TextSet.Empty)[AccessLevelText.For(accessLevel)];
+
+    /// <summary>
+    /// Radzen <c>Variant</c> name for a level tag: outlined when the access comes through consent, filled when
+    /// it comes from membership — so the two read apart at a glance, with the same colour for the same level.
+    /// </summary>
+    public static string Variant(bool isMember) => isMember ? "Flat" : "Outlined";
 
     /// <summary>
     /// Radzen <c>BadgeStyle</c> name for the level. Returned as a string so this stays free of a

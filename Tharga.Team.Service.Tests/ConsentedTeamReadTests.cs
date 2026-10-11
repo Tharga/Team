@@ -123,6 +123,38 @@ public class ConsentedTeamReadTests
         Assert.NotNull(team);
     }
 
+    [Fact]
+    public async Task GetMyAccess_Member_IsTheirLevelAsAMember()
+    {
+        var sut = Build(member: new FakeMember("me", AccessLevel.Owner));
+
+        Assert.Equal(new CallerTeamAccess(AccessLevel.Owner, IsMember: true), await sut.GetMyAccessAsync(TeamKey));
+    }
+
+    [Fact]
+    public async Task GetMyAccess_ConsentedNonMember_IsTheConsentedLevel()
+    {
+        var sut = Build(member: null, consentedRoles: [ConsentedRole], consentAccessLevel: AccessLevel.Administrator, callerRoles: [ConsentedRole]);
+
+        Assert.Equal(new CallerTeamAccess(AccessLevel.Administrator, IsMember: false), await sut.GetMyAccessAsync(TeamKey));
+    }
+
+    [Fact]
+    public async Task GetMyAccess_NeitherMemberNorConsented_IsNull()
+    {
+        var sut = Build(member: null, consentedRoles: [ConsentedRole], callerRoles: ["Other"]);
+
+        Assert.Null(await sut.GetMyAccessAsync(TeamKey));
+    }
+
+    [Fact]
+    public async Task GetMyAccess_SuspendedMember_IsNull()
+    {
+        var sut = Build(member: new FakeMember("me", AccessLevel.Administrator, SuspendedAt: DateTime.UtcNow));
+
+        Assert.Null(await sut.GetMyAccessAsync(TeamKey));
+    }
+
     /// <summary>Every gated read, not just the one the reporter's stack trace happened to name.</summary>
     [Theory]
     [InlineData("team")]
