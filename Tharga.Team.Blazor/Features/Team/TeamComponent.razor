@@ -97,25 +97,9 @@ else
                                 </RadzenStack>
                             </Template>
                         </RadzenDataGridColumn>
-                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnYourAccess]" Width="140px" Filterable="false" Sortable="false">
+                        <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnYourAccess]" Width="170px" Filterable="false" Sortable="false">
                             <Template Context="team">
-                                @{
-                                    var myLevel = MyAccessLevel(team);
-                                }
-                                @if (myLevel != null)
-                                {
-                                    @* TextSet.Empty renders the English defaults: this component has not been
-                                       migrated onto the text catalogue yet, and is listed as pending in
-                                       TextCoverage. *@
-                                    <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(myLevel)))"
-                                                 Variant="Variant.Flat"
-                                                 Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
-                                                 title="@_text[TeamComponentText.YourAccessTooltip]" />
-                                }
-                                else
-                                {
-                                    <span class="rz-text-disabled">—</span>
-                                }
+                                @YourAccessCell(team)
                             </Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn TItem="ITeam<TMember>" Title="@_text[TeamComponentText.ColumnConsent]" Width="230px" Filterable="false" Sortable="false"
@@ -926,52 +910,55 @@ else
     </text>;
 
     /// <summary>
-    /// What this team grants, and the control to change it. Rendered in the grid's Consent column; a
-    /// card shows it as a labelled read-only selector instead (<see cref="ConsentControl"/>).
+    /// What this team grants, stated: the grid's Consent cell on rows where consent cannot be changed.
     /// </summary>
     /// <remarks>
-    /// <b>Only where it can be changed.</b> Consent is editable on the selected team alone, so in a list
-    /// most rows cannot be edited — and a column of disabled drop-downs is a row of controls that do
-    /// nothing. Those rows state the level instead.
-    /// <para>
-    /// The label is the caller's to ask for: a grid column header already says "Consent", so repeating it
-    /// in every cell prints the same word once per row. A card has no header, so there it carries.
-    /// </para>
-    /// The label sits <b>above</b> the drop-down rather than beside it. Side by side, the label ran
-    /// straight into the selected level and the two read as one sentence — "Consent access for Developer,
-    /// Administrator" — which states something nobody wrote: that Administrator is a consenting role
-    /// rather than the level being granted. Stacking separates the question from the answer.
-    /// <para>
-    /// The roles are listed in full rather than abbreviated. Naming fewer than actually hold consent
-    /// would be a comfortable label that misstates who can reach the team.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Whether the caller belongs to this team and what it grants, side by side.
-    /// </summary>
-    /// <remarks>
-    /// Horizontal, because the two are one thought — "not a member, but full access" is the sentence an
-    /// oversight caller is reading. Stacked, they looked like two unrelated properties.
-    /// <para>
-    /// Membership comes first because it qualifies the level that follows: the caller reads why they can
-    /// see the team before reading how much of it they get. Read the other way, the level lands as a plain
-    /// statement of their standing and the qualifier arrives too late to change it.
-    /// </para>
-    /// <para>
-    /// Read-only by design, which is what lets it sit in a card's <c>TopMenu</c>: that slot lives inside
-    /// the header's click handler, so anything interactive there would toggle the card as well as itself.
-    /// </para>
+    /// The value only. Whether the caller belongs to the team is said in the "Your access" column
+    /// (<see cref="YourAccessCell"/>), next to the level it qualifies, rather than here beside a setting.
+    /// No label: the column header already says Consent.
     /// </remarks>
     private RenderFragment ConsentBadges(ITeam<TMember> team) =>
     @<text>
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.35rem" Wrap="FlexWrap.Wrap">
-            @MembershipBadge(team)
-            @if (_canSeeConsent)
+        @if (_canSeeConsent)
+        {
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(TeamVisibility.BadgeStyle(ConsentOf(team))))"
+                         Variant="Variant.Flat"
+                         Text="@TeamVisibility.Label(ConsentOf(team))"
+                         title="@_text[TeamComponentText.ConsentTooltip]" />
+        }
+    </text>;
+
+    /// <summary>
+    /// The grid's "Your access" cell: whether the caller belongs to the team, then the level they hold.
+    /// </summary>
+    /// <remarks>
+    /// Membership is an icon here rather than the header's text badge, so both fit a narrow column; the
+    /// tooltip carries the words. It comes first because it qualifies the level that follows — "not a
+    /// member, but Administrator" is the sentence an oversight caller is reading.
+    /// </remarks>
+    private RenderFragment YourAccessCell(ITeam<TMember> team) =>
+    @<text>
+        @{
+            var myLevel = MyAccessLevel(team);
+        }
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.35rem">
+            @if (_canSeeAllTeams && !IsMemberOf(team))
             {
-                <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(TeamVisibility.BadgeStyle(ConsentOf(team))))"
+                <RadzenIcon Icon="person_off" Style="font-size: 1.15em; opacity: 0.7; cursor: help;"
+                            title="@($"{_text[TeamComponentText.NotAMember]}. {_text[TeamComponentText.NotAMemberTooltip]}")" />
+            }
+            @if (myLevel != null)
+            {
+                @* TextSet.Empty renders the English defaults: this component has not been migrated onto
+                   the text catalogue yet, and is listed as pending in TextCoverage. *@
+                <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(myLevel)))"
                              Variant="Variant.Flat"
-                             Text="@TeamVisibility.Label(ConsentOf(team))"
-                             title="@_text[TeamComponentText.ConsentTooltip]" />
+                             Text="@AccessLevelBadge.Text(myLevel, TextSet.Empty)"
+                             title="@_text[TeamComponentText.YourAccessTooltip]" />
+            }
+            else
+            {
+                <span class="rz-text-disabled">—</span>
             }
         </RadzenStack>
     </text>;
@@ -1148,10 +1135,21 @@ else
     /// reaching a team by consent has access without membership, and showing them a level here would
     /// claim a membership they do not have. The Consent column says what they actually get.
     /// </remarks>
+    /// <summary>
+    /// The level the caller actually holds on <paramref name="team"/>: their membership, or the team's
+    /// consent when they are not a member, or null for neither — the same answer the selected team's
+    /// claims carry, so this column and the top bar cannot disagree.
+    /// </summary>
+    /// <remarks>
+    /// A suspended member holds nothing and does not fall through to consent, matching
+    /// <c>TeamGrantResolver</c>.
+    /// </remarks>
     private AccessLevel? MyAccessLevel(ITeam<TMember> team)
     {
         var member = team.Members?.FirstOrDefault(x => x.Key == _user?.Key && x.State == MembershipState.Member);
-        return member?.AccessLevel;
+        if (member != null) return member.SuspendedAt == null ? member.AccessLevel : null;
+
+        return TeamGrantResolver.ConsentLevel(team, _callerRoles, _consentDefaultLevel, DateTime.UtcNow);
     }
 
     private bool IsMemberOf(ITeam<TMember> team)

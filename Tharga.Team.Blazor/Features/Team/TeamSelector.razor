@@ -7,6 +7,16 @@
 @inject IThargaTextProvider TextProvider
 @inject IOptions<ThargaBlazorOptions> BlazorOptions
 
+<style>
+    /* The open list as wide as its widest team, so a name never wraps onto a second line. Radzen pins the
+       popup to the input's width with an inline style, which only !important outranks; it already moves a
+       popup left when it would run off the right edge, and max-width keeps it on a narrow screen. */
+    .tharga-team-selector .rz-dropdown-panel {
+        width: max-content !important;
+        max-width: calc(100vw - 2rem);
+    }
+</style>
+
 <AuthorizeView>
     <Authorized>
         @if (_teams == null)
@@ -42,7 +52,7 @@
         else if (TeamSelectorGate.ShowPicker(_teams.Length, SelectedTeam != null))
         {
             <RadzenDropDown @bind-Value=@SelectedTeam Data="@(_teams.OrderBy(f => f.Name))" TextProperty="Name"
-                            Placeholder="@_selectTeamText"
+                            Placeholder="@_selectTeamText" class="tharga-team-selector"
                             AllowFiltering="@TeamSelectorGate.ShowFilter(_teams.Length, FilterThreshold, AllowFiltering)"
                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                             FilterOperator="StringFilterOperator.Contains">
