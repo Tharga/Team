@@ -116,28 +116,4 @@ public class AccessLevelBadgeTests
     {
         Assert.Equal(expected, AccessLevelBadge.Variant(isMember));
     }
-
-    [Fact]
-    public void ShowNotAMember_OversightCallerWithNoAccess_IsShown()
-    {
-        Assert.True(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: true, isMember: false, accessLevel: null));
-    }
-
-    [Fact]
-    public void ShowNotAMember_AccessThroughConsent_IsHidden()
-    {
-        Assert.False(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: true, isMember: false, accessLevel: AccessLevel.Administrator));
-    }
-
-    [Fact]
-    public void ShowNotAMember_Member_IsHidden()
-    {
-        Assert.False(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: true, isMember: true, accessLevel: AccessLevel.Owner));
-    }
-
-    [Fact]
-    public void ShowNotAMember_CallerWhoCannotSeeAllTeams_IsHidden()
-    {
-        Assert.False(AccessLevelBadge.ShowNotAMember(canSeeAllTeams: false, isMember: false, accessLevel: null));
-    }
 }

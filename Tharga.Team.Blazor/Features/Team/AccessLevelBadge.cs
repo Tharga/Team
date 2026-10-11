@@ -57,14 +57,6 @@ internal static class AccessLevelBadge
     public static string Variant(bool isMember) => isMember ? "Flat" : "Outlined";
 
     /// <summary>
-    /// Whether the "Your access" cell marks the caller as not a member: only when they hold nothing there at
-    /// all. Access through consent already says "not a member" by its outlined tag, and a second marker for
-    /// the same fact is noise.
-    /// </summary>
-    public static bool ShowNotAMember(bool canSeeAllTeams, bool isMember, AccessLevel? accessLevel)
-        => canSeeAllTeams && !isMember && accessLevel == null;
-
-    /// <summary>
     /// Radzen <c>BadgeStyle</c> name for the level. Returned as a string so this stays free of a
     /// component-library dependency and remains unit-testable. Theme-aware by construction — hard-coded
     /// colours would not survive dark theme.
