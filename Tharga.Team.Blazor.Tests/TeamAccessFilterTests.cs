@@ -52,7 +52,7 @@ public class TeamAccessFilterTests
     [InlineData(AccessLevel.Administrator, "Admin")]
     [InlineData(AccessLevel.Owner, "Owner")]
     [InlineData(AccessLevel.Viewer, "Viewer")]
-    [InlineData(null, "None")]
+    [InlineData(null, "No access")]
     public void ShortTag_ShortensOnlyWhatIsTooLong(AccessLevel? level, string expected)
     {
         Assert.Equal(expected, TextSet.Empty[AccessLevelText.ShortFor(level)]);

@@ -942,7 +942,7 @@ else
 
     /// <summary>
     /// The grid's "Your access" cell: the level the caller holds, filled when it comes from membership and
-    /// outlined when it comes through consent; or, holding nothing, a not-a-member marker.
+    /// outlined when it comes through consent; or, holding nothing, "No access" after a not-a-member marker.
     /// </summary>
     /// <remarks>
     /// The marker is an icon rather than the header's text badge so it fits a narrow column; the tooltip
@@ -971,7 +971,9 @@ else
                     <RadzenIcon Icon="person_off" Style="font-size: 1.15em; opacity: 0.7; cursor: help;"
                                 title="@($"{_text[TeamComponentText.NotAMember]}. {_text[TeamComponentText.NotAMemberTooltip]}")" />
                 }
-                <span class="rz-text-disabled">—</span>
+                <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(null)))" Variant="Variant.Flat"
+                             Text="@AccessLevelBadge.Text(null, TextSet.Empty)"
+                             title="@_text[TeamComponentText.YourAccessTooltip]" />
             }
         </RadzenStack>
     </text>;

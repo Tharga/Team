@@ -159,22 +159,32 @@
     private ITeam _selectedTeam;
 
     /// <summary>
-    /// A short, outlined level tag on a team in the open list that the caller reaches through consent, with
-    /// the full level in the tooltip. Teams they belong to, and teams they cannot reach, carry no tag.
+    /// A tag on a team in the open list that the caller does not hold through membership: a short, outlined
+    /// level where they reach it through consent, or "No access" where they cannot reach it at all. Teams
+    /// they belong to carry no tag.
     /// </summary>
     /// <remarks>
-    /// Consent is the exception worth marking: a member's own level is what they expect, while access
-    /// through consent is borrowed and can be withdrawn. Outlined, matching the team page's "Your access"
-    /// column. Only for a caller consent can concern — oversight or a consent role.
+    /// The exceptions are what is worth marking: a member's own level is what they expect, while access
+    /// through consent is borrowed and can be withdrawn, and a team with none is one selecting will not open.
+    /// Matches the team page's "Your access" column. Only for a caller consent can concern — oversight or a
+    /// consent role.
     /// </remarks>
     private RenderFragment ListAccess(ITeam team) =>
     @<text>
-        @if (_accessByTeam.GetValueOrDefault(team.Key) is { IsMember: false } access)
+        @{
+            var access = _accessByTeam.GetValueOrDefault(team.Key);
+        }
+        @if (access is { IsMember: false })
         {
             <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(access.AccessLevel)))"
                          Variant="@(Enum.Parse<Variant>(AccessLevelBadge.Variant(isMember: false)))"
                          Text="@_text[AccessLevelText.ShortFor(access.AccessLevel)]"
                          title="@($"{_text[TeamSelectorText.ConsentAccessTooltip]}: {_text[AccessLevelText.For(access.AccessLevel)]}")" />
+        }
+        else if (access == null)
+        {
+            <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(AccessLevelBadge.Style(null)))" Variant="Variant.Flat"
+                         Text="@_text[AccessLevelText.None]" />
         }
     </text>;
     // One pass over every key this component renders, rather than an await and a field per label.

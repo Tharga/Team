@@ -46,9 +46,6 @@ public static class AccessLevelText
     /// <summary>"Admin" — the one level whose name is too long for a tag beside a team name.</summary>
     public static readonly TextKey AdministratorShort = new("team.accesslevel.administrator.short", "Admin");
 
-    /// <summary>"None" — having no access, as a tag beside a team name.</summary>
-    public static readonly TextKey NoneShort = new("team.accesslevel.none.short", "None");
-
     /// <summary>The key naming <paramref name="accessLevel"/>, or <see cref="None"/> when there is no level.</summary>
     /// <remarks>
     /// An unrecognised level also maps to <see cref="None"/>, matching the existing badge behaviour: an
@@ -71,10 +68,9 @@ public static class AccessLevelText
     public static TextKey ShortFor(AccessLevel? accessLevel) => accessLevel switch
     {
         AccessLevel.Administrator => AdministratorShort,
-        null => NoneShort,
         _ => For(accessLevel)
     };
 
     /// <summary>Every key here, for a component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Owner, Administrator, User, Viewer, Custom, None, AdministratorShort, NoneShort];
+    public static readonly TextKey[] All = [Owner, Administrator, User, Viewer, Custom, None, AdministratorShort];
 }
