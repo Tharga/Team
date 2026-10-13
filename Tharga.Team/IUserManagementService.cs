@@ -92,6 +92,39 @@ public interface IUserManagementService
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SetUserEmailAsync)}.");
 
     /// <summary>
+    /// Replace the user's local name with the display name the directory holds for them, and return it.
+    /// </summary>
+    /// <remarks>
+    /// The directory is read here rather than the name being passed in, so the operation can only ever take
+    /// what the directory actually says. Refused when the directory name is a placeholder
+    /// (<see cref="DirectoryNames.IsPlaceholder"/>): taking "unknown" would overwrite a real name with none.
+    /// Local only — the name came from the directory, so nothing is written back.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The user is not found in the directory, or the directory holds only a placeholder name.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The host's user management service does not implement it.</exception>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task<string> UseDirectoryNameAsync(string userKey, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(UseDirectoryNameAsync)}.");
+
+    /// <summary>
+    /// Write the user's local name to the directory, replacing the display name held there.
+    /// </summary>
+    /// <remarks>
+    /// Refused unless <c>o.Blazor.WriteNameToDirectory</c> is enabled: that option is the host's statement
+    /// that this application may write names to the directory, and an explicit push is still a write.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Writing names to the directory is not enabled, the user is not linked to a directory account, or the
+    /// user has no local name to write.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The host's user management service does not implement it.</exception>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task WriteNameToDirectoryAsync(string userKey, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(WriteNameToDirectoryAsync)}.");
+
+    /// <summary>
     /// The teams this user owns — the teams that deleting them would leave with no owner.
     /// </summary>
     /// <remarks>

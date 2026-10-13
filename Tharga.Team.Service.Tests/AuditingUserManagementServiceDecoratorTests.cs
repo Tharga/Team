@@ -152,4 +152,42 @@ public class AuditingUserManagementServiceDecoratorTests
 
         Assert.Empty(_backend.Entries);
     }
+
+    [Fact]
+    public async Task UseDirectoryName_LogsTheNameTaken()
+    {
+        _inner.UseDirectoryNameAsync("u-1", Arg.Any<CancellationToken>()).Returns("Daniel Bohlin");
+
+        await _sut.UseDirectoryNameAsync("u-1");
+
+        var entry = Assert.Single(_backend.Entries);
+        Assert.Equal("use-directory-name", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal("u-1", entry.Metadata[AuditMetadataKeys.UserKey]);
+        Assert.Equal("Daniel Bohlin", entry.Metadata[AuditMetadataKeys.UserNameNew]);
+    }
+
+    [Fact]
+    public async Task WriteNameToDirectory_LogsSuccess()
+    {
+        await _sut.WriteNameToDirectoryAsync("u-1");
+
+        var entry = Assert.Single(_backend.Entries);
+        Assert.Equal("write-name-to-directory", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal("u-1", entry.Metadata[AuditMetadataKeys.UserKey]);
+    }
+
+    [Fact]
+    public async Task WriteNameToDirectory_InnerThrows_LogsFailureAndRethrows()
+    {
+        _inner.WriteNameToDirectoryAsync("u-1", Arg.Any<CancellationToken>())
+            .Returns<Task>(_ => throw new InvalidOperationException("Graph is unavailable"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.WriteNameToDirectoryAsync("u-1"));
+
+        var entry = Assert.Single(_backend.Entries);
+        Assert.False(entry.Success);
+        Assert.Equal("Graph is unavailable", entry.ErrorMessage);
+    }
 }

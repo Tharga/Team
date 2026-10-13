@@ -9,4 +9,8 @@ namespace Tharga.Team;
 /// (e.g. resolved via email fallback for a user created before directory ids were captured) — callers
 /// should persist it so the user is linked for subsequent operations.
 /// </param>
-public sealed record DirectoryVerificationResult(DirectoryUserStatus Status, string DirectoryId = null);
+/// <param name="DirectoryName">
+/// The display name the directory holds for the user, when found. Compared with the local name to offer
+/// moving a name in either direction; see <see cref="DirectoryNames"/>.
+/// </param>
+public sealed record DirectoryVerificationResult(DirectoryUserStatus Status, string DirectoryId = null, string DirectoryName = null);

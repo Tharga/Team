@@ -116,6 +116,39 @@ public class UserManagementService : IUserManagementService
         return trimmed;
     }
 
+    public async Task<string> UseDirectoryNameAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        var directory = RequireDirectoryService();
+        var user = await RequireUserAsync(userKey);
+
+        var result = await directory.VerifyUserAsync(user, cancellationToken);
+        await RelinkAsync(user, result);
+
+        if (result.Status is not (DirectoryUserStatus.Found or DirectoryUserStatus.Disabled))
+            throw new InvalidOperationException($"User '{userKey}' was not found in the directory.");
+        if (DirectoryNames.IsPlaceholder(result.DirectoryName))
+            throw new InvalidOperationException($"The directory holds no real name for user '{userKey}'.");
+
+        var name = result.DirectoryName.Trim();
+        await _userService.SetUserNameAsync(user.Key, name);
+        return name;
+    }
+
+    public async Task WriteNameToDirectoryAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        var directory = RequireDirectoryService();
+        if (!_writeNameToDirectory)
+            throw new InvalidOperationException("Writing names to the directory is not enabled. Set o.Blazor.WriteNameToDirectory to allow it.");
+
+        var user = await RequireUserAsync(userKey);
+        if (string.IsNullOrEmpty(user.DirectoryId))
+            throw new InvalidOperationException($"User '{userKey}' is not linked to a directory account. Verify the user first.");
+        if (DirectoryNames.IsPlaceholder(user.Name))
+            throw new InvalidOperationException($"User '{userKey}' has no name to write to the directory.");
+
+        await directory.SetUserNameAsync(user.DirectoryId, user.Name.Trim(), cancellationToken);
+    }
+
     public async Task<DirectoryVerificationResult> VerifyUserAsync(string userKey, CancellationToken cancellationToken = default)
     {
         var directory = RequireDirectoryService();

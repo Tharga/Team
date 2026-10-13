@@ -179,6 +179,46 @@ public class AuditingUserManagementServiceDecorator : IUserManagementService
         }
     }
 
+    public async Task<string> UseDirectoryNameAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var name = await _inner.UseDirectoryNameAsync(userKey, cancellationToken);
+            sw.Stop();
+            Log("use-directory-name", nameof(UseDirectoryNameAsync), sw.ElapsedMilliseconds, true, metadata: Meta(
+                (AuditMetadataKeys.UserKey, userKey),
+                (AuditMetadataKeys.UserNameNew, name)));
+            return name;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("use-directory-name", nameof(UseDirectoryNameAsync), sw.ElapsedMilliseconds, false, ex.Message,
+                metadata: Meta((AuditMetadataKeys.UserKey, userKey)));
+            throw;
+        }
+    }
+
+    public async Task WriteNameToDirectoryAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await _inner.WriteNameToDirectoryAsync(userKey, cancellationToken);
+            sw.Stop();
+            Log("write-name-to-directory", nameof(WriteNameToDirectoryAsync), sw.ElapsedMilliseconds, true,
+                metadata: Meta((AuditMetadataKeys.UserKey, userKey)));
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("write-name-to-directory", nameof(WriteNameToDirectoryAsync), sw.ElapsedMilliseconds, false, ex.Message,
+                metadata: Meta((AuditMetadataKeys.UserKey, userKey)));
+            throw;
+        }
+    }
+
     public IAsyncEnumerable<DirectoryUser> GetDirectoryOnlyUsersAsync(CancellationToken cancellationToken = default)
         => _inner.GetDirectoryOnlyUsersAsync(cancellationToken);
 

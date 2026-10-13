@@ -14,6 +14,7 @@
 @inject NotificationService NotificationService
 @inject IJSRuntime Js
 @inject IThargaTextProvider TextProvider
+@inject Microsoft.Extensions.Options.IOptions<ThargaBlazorOptions> BlazorOptions
 
 @* Current-user row highlight. Applied to the cells (not the <tr>) so Radzen's own cell backgrounds
    don't paint over it — the same mechanism TeamComponent uses for its member grid. *@
@@ -155,6 +156,11 @@ else if (_loaded)
                             <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(DirectoryStatusBadge.Style(context.DirectoryStatus.Value)))"
                                          Variant="Variant.Flat" Text="@DirectoryStatusBadge.Text(context.DirectoryStatus.Value)" />
                         }
+                        @if (_showDirectory && context.NameDiffersFromDirectory)
+                        {
+                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[UsersListViewText.BadgeNameDiffers]"
+                                         title="@NameDiffersTooltip(context)" />
+                        }
                         <RadzenSplitButton Text="@_text[UsersListViewText.ActionView]" Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                                            Click="@(item => OnUserActionAsync(item, context))">
                             <ChildContent>
@@ -164,6 +170,14 @@ else if (_loaded)
                                 }
                                 <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionRename]" Value="@RenameAction" Icon="edit" />
                                 <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionChangeEmail]" Value="@ChangeEmailAction" Icon="alternate_email" />
+                                @if (_showDirectory && context.CanUseDirectoryName)
+                                {
+                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionUseDirectoryName]" Value="@UseDirectoryNameAction" Icon="download" />
+                                }
+                                @if (_showDirectory && _writeNameToDirectory && context.CanWriteNameToDirectory)
+                                {
+                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionWriteNameToDirectory]" Value="@WriteNameToDirectoryAction" Icon="upload" />
+                                }
                                 @if (_showAdminUpload)
                                 {
                                     <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionSetIcon]" Value="@SetIconAction" Icon="image" />
@@ -307,6 +321,8 @@ else
     private const string AuditAction = "audit";
     private const string DisableAction = "disable";
     private const string EnableAction = "enable";
+    private const string UseDirectoryNameAction = "use-directory-name";
+    private const string WriteNameToDirectoryAction = "write-name-to-directory";
 
     private string _currentUserKey;
     private bool _directoryIdStored;
@@ -330,6 +346,7 @@ else
     private int _signInReadTotal;
     private CancellationTokenSource _signInReadCancellation;
     private RadzenDataGrid<UserViewModel> _grid;
+    private bool _writeNameToDirectory;
     private IUser[] _users;
     private ITeam<TMember>[] _teams;
     private bool _canSeeAllTeams;
@@ -356,6 +373,7 @@ else
         _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(authState.User);
         _canAdminister = UserAdminGate.CanAdministerUsers(hasUsersManage);
         _showDirectory = UserAdminGate.ShowDirectoryFeatures(hasUsersManage, directoryRegistered);
+        _writeNameToDirectory = BlazorOptions.Value.WriteNameToDirectory;
         _showAdminUpload = hasUsersManage && IconSettings.AllowAdminUpload && ServiceProvider.GetService<IIconStore>() != null;
 
         // Asked of the container rather than resolved: the column only needs to know a directory can read
@@ -547,6 +565,9 @@ else
 
         _directoryIdStored = _users.Length > 0 && DirectoryLink.IsStored(_users[0].GetType());
 
+        // Carried across the rebuild, so a rename or delete does not wipe the results of a Verify all.
+        var verified = _allUsers.Where(x => x.DirectoryStatus != null).ToDictionary(x => x.Key);
+
         _allUsers = _users.Select(u => new UserViewModel
         {
             Key = u.Key,
@@ -568,7 +589,9 @@ else
                 TeamName = x.Team.Name,
                 AccessLevel = x.Member.AccessLevel,
                 State = x.Member.State
-            }).ToArray()
+            }).ToArray(),
+            DirectoryStatus = verified.GetValueOrDefault(u.Key)?.DirectoryStatus,
+            DirectoryName = verified.GetValueOrDefault(u.Key)?.DirectoryName
         }).OrderBy(u => u.Name).ToList();
 
         RefreshSignInFilter();
@@ -604,6 +627,12 @@ else
                 break;
             case AuditAction:
                 await OpenAuditLogAsync(user);
+                break;
+            case UseDirectoryNameAction:
+                await UseDirectoryNameAsync(user);
+                break;
+            case WriteNameToDirectoryAction:
+                await WriteNameToDirectoryAsync(user);
                 break;
             default:
                 await ActionInvoked.InvokeAsync(new UserRowAction(item.Value, user));
@@ -717,7 +746,7 @@ else
         try
         {
             var result = await UserManagementService.VerifyUserAsync(user.Key);
-            user.DirectoryStatus = result.Status;
+            ApplyVerification(user, result);
         }
         catch (Exception ex)
         {
@@ -733,7 +762,7 @@ else
             await foreach (var item in UserManagementService.VerifyAllAsync())
             {
                 var row = _allUsers.FirstOrDefault(x => x.Key == item.UserKey);
-                if (row != null) row.DirectoryStatus = item.Result.Status;
+                if (row != null) ApplyVerification(row, item.Result);
                 StateHasChanged();
             }
         }
@@ -744,6 +773,47 @@ else
         finally
         {
             _verifying = false;
+        }
+    }
+
+    private static void ApplyVerification(UserViewModel row, DirectoryVerificationResult result)
+    {
+        row.DirectoryStatus = result.Status;
+        row.DirectoryName = result.DirectoryName;
+        if (!string.IsNullOrEmpty(result.DirectoryId)) row.DirectoryId = result.DirectoryId;
+    }
+
+    private string NameDiffersTooltip(UserViewModel user)
+        => DirectoryNames.IsPlaceholder(user.DirectoryName)
+            ? _text[UsersListViewText.NameDiffersPlaceholderTooltip]
+            : _text.Format(UsersListViewText.NameDiffersTooltip, user.DirectoryName);
+
+    private async Task UseDirectoryNameAsync(UserViewModel user)
+    {
+        try
+        {
+            var name = await UserManagementService.UseDirectoryNameAsync(user.Key);
+            user.DirectoryName = name;
+            await LoadDataAsync();
+            NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.NameTakenFromDirectory], name);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.NameSyncFailed], ex.Message);
+        }
+    }
+
+    private async Task WriteNameToDirectoryAsync(UserViewModel user)
+    {
+        try
+        {
+            await UserManagementService.WriteNameToDirectoryAsync(user.Key);
+            user.DirectoryName = user.StoredName?.Trim();
+            NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.NameWrittenToDirectory], user.DirectoryName);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.NameSyncFailed], ex.Message);
         }
     }
 

@@ -144,4 +144,36 @@ public class AuthorizationUserManagementServiceDecoratorTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.GetSignInIdentitiesAsync(["u-1"]));
         await inner.DidNotReceiveWithAnyArgs().GetSignInIdentitiesAsync(default, default);
     }
+
+    [Fact]
+    public async Task UseDirectoryName_WithScope_Delegates()
+    {
+        var (sut, inner) = Build(WithScopes(SystemUserScopes.Manage));
+        await sut.UseDirectoryNameAsync("u-1");
+        await inner.Received(1).UseDirectoryNameAsync("u-1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UseDirectoryName_WithoutScope_Throws()
+    {
+        var (sut, inner) = Build(WithScopes(TeamScopes.Manage));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.UseDirectoryNameAsync("u-1"));
+        await inner.DidNotReceiveWithAnyArgs().UseDirectoryNameAsync(default, default);
+    }
+
+    [Fact]
+    public async Task WriteNameToDirectory_WithScope_Delegates()
+    {
+        var (sut, inner) = Build(WithScopes(SystemUserScopes.Manage));
+        await sut.WriteNameToDirectoryAsync("u-1");
+        await inner.Received(1).WriteNameToDirectoryAsync("u-1", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task WriteNameToDirectory_WithoutScope_Throws()
+    {
+        var (sut, inner) = Build(Anonymous());
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.WriteNameToDirectoryAsync("u-1"));
+        await inner.DidNotReceiveWithAnyArgs().WriteNameToDirectoryAsync(default, default);
+    }
 }

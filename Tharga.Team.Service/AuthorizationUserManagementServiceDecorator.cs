@@ -31,6 +31,18 @@ public sealed class AuthorizationUserManagementServiceDecorator : IUserManagemen
         return await _inner.SetUserEmailAsync(userKey, email, cancellationToken);
     }
 
+    public async Task<string> UseDirectoryNameAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        await RequireUsersManageAsync(nameof(UseDirectoryNameAsync));
+        return await _inner.UseDirectoryNameAsync(userKey, cancellationToken);
+    }
+
+    public async Task WriteNameToDirectoryAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        await RequireUsersManageAsync(nameof(WriteNameToDirectoryAsync));
+        await _inner.WriteNameToDirectoryAsync(userKey, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<ITeam>> GetOwnedTeamsAsync(string userKey, CancellationToken cancellationToken = default)
     {
         await RequireUsersManageAsync(nameof(GetOwnedTeamsAsync));

@@ -45,13 +45,13 @@ public class EntraUserDirectoryService : IUserDirectoryService, IUserIdentityDir
         {
             var byId = await GetUserByIdAsync(user.DirectoryId, cancellationToken);
             if (byId == null) return new DirectoryVerificationResult(DirectoryUserStatus.NotFound);
-            return new DirectoryVerificationResult(ToStatus(byId), byId.Id);
+            return new DirectoryVerificationResult(ToStatus(byId), byId.Id, byId.DisplayName);
         }
 
         if (!string.IsNullOrEmpty(user.EMail))
         {
             var byEmail = await FindUserByEmailAsync(user.EMail, cancellationToken);
-            if (byEmail != null) return new DirectoryVerificationResult(ToStatus(byEmail), byEmail.Id);
+            if (byEmail != null) return new DirectoryVerificationResult(ToStatus(byEmail), byEmail.Id, byEmail.DisplayName);
         }
 
         return new DirectoryVerificationResult(DirectoryUserStatus.NotLinked);

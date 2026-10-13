@@ -32,7 +32,7 @@ public record UserViewModel
     /// entity does not declare <see cref="IUser.DirectoryId"/> (nothing is ever stored), or it does and
     /// this user has not been resolved against the directory yet.
     /// </summary>
-    public string DirectoryId { get; init; }
+    public string DirectoryId { get; set; }
 
     public string Icon { get; init; }
     public int TeamCount { get; init; }
@@ -41,6 +41,21 @@ public record UserViewModel
 
     /// <summary>Set when the row has been verified against the external directory; mutable so a verify updates the badge in place.</summary>
     public DirectoryUserStatus? DirectoryStatus { get; set; }
+
+    /// <summary>The display name the directory holds, set by the same verification as <see cref="DirectoryStatus"/>.</summary>
+    public string DirectoryName { get; set; }
+
+    /// <summary>Verified, present in the directory, and named differently there (see <see cref="DirectoryNames.Differ"/>).</summary>
+    public bool NameDiffersFromDirectory
+        => DirectoryStatus is DirectoryUserStatus.Found or DirectoryUserStatus.Disabled
+           && DirectoryNames.Differ(StoredName, DirectoryName);
+
+    /// <summary>The directory's name can be taken here — never a placeholder.</summary>
+    public bool CanUseDirectoryName => NameDiffersFromDirectory && !DirectoryNames.IsPlaceholder(DirectoryName);
+
+    /// <summary>This application's name can be written to the directory — linked, with a real name to write.</summary>
+    public bool CanWriteNameToDirectory
+        => NameDiffersFromDirectory && !DirectoryNames.IsPlaceholder(StoredName) && !string.IsNullOrEmpty(DirectoryId);
 
     /// <summary>
     /// When this user was disabled <i>in this application</i>, or null. Distinct from

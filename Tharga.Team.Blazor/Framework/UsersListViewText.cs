@@ -35,6 +35,23 @@ public static class UsersListViewText
     public static readonly TextKey ActionEnable = new("team.usersList.actionEnable", "Enable");
     public static readonly TextKey ActionDisable = new("team.usersList.actionDisable", "Disable");
     public static readonly TextKey ActionDelete = new("team.usersList.actionDelete", "Delete");
+    public static readonly TextKey ActionUseDirectoryName = new("team.usersList.actionUseDirectoryName", "Use name from directory");
+    public static readonly TextKey ActionWriteNameToDirectory = new("team.usersList.actionWriteNameToDirectory", "Write name to directory");
+
+    /// <summary>Badge on a verified row whose name differs from the directory's display name.</summary>
+    public static readonly TextKey BadgeNameDiffers = new("team.usersList.badgeNameDiffers", "Name differs");
+
+    /// <summary>Tooltip on <see cref="BadgeNameDiffers"/>. <c>{0}</c> is the directory's display name.</summary>
+    public static readonly TextKey NameDiffersTooltip = new("team.usersList.nameDiffersTooltip",
+        "The directory name is '{0}'.");
+
+    /// <summary>Tooltip on <see cref="BadgeNameDiffers"/> when the directory holds only a placeholder.</summary>
+    public static readonly TextKey NameDiffersPlaceholderTooltip = new("team.usersList.nameDiffersPlaceholderTooltip",
+        "The directory has no real name for this user.");
+
+    public static readonly TextKey NameTakenFromDirectory = new("team.usersList.nameTakenFromDirectory", "Name taken from the directory");
+    public static readonly TextKey NameWrittenToDirectory = new("team.usersList.nameWrittenToDirectory", "Name written to the directory");
+    public static readonly TextKey NameSyncFailed = new("team.usersList.nameSyncFailed", "Could not update the name");
 
     /// <summary>Labels on the caller's own row, where the action is disabled.</summary>
     /// <remarks>
@@ -177,6 +194,8 @@ public static class UsersListViewText
         UserEnabled, CouldNotDisable, CouldNotEnable, DisabledTooltip, DisabledByTooltip,
         CannotDeleteSelfTitle, CannotDeleteSelfDetail, DeleteUserTitle, DeletedLocallyTitle,
         DirectoryDeleteIncomplete, UserDeleted, DeleteFailed, RemovedFromOneTeam, RemovedFromManyTeams,
-        RemovedFromOneTeamAndDirectory, RemovedFromManyTeamsAndDirectory, PagingSummary
+        RemovedFromOneTeamAndDirectory, RemovedFromManyTeamsAndDirectory, PagingSummary, ActionUseDirectoryName,
+        ActionWriteNameToDirectory, BadgeNameDiffers, NameDiffersTooltip, NameDiffersPlaceholderTooltip,
+        NameTakenFromDirectory, NameWrittenToDirectory, NameSyncFailed
     ];
 }
