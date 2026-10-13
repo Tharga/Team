@@ -1,4 +1,4 @@
-using Blazored.LocalStorage;
+﻿using Blazored.LocalStorage;
 using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.AspNetCore.Components;
@@ -125,6 +125,26 @@ public class InviteViewOutcomeTests : BunitContext
     }
 
     /// <summary>
+    /// While the code is still being looked up the view shows a spinner. It used to start out as "no code", so a
+    /// visitor who followed a link read "You have no pending invitations" until the invitation arrived.
+    /// </summary>
+    [Fact]
+    public void WhileTheCodeIsBeingLookedUp_ShowsASpinner_NotTheEmptyMessage()
+    {
+        var lookup = new TaskCompletionSource<TeamInvitation>();
+        var view = Render(InviteCode, resolved: null, showEmptyMessage: true, lookup: lookup.Task);
+
+        Assert.NotEmpty(view.FindComponents<Tharga.Blazor.Loading>());
+        Assert.DoesNotContain(Default(TeamInviteViewText.NoInvitations), Text(view));
+        Assert.Empty(view.FindAll("button"));
+
+        lookup.SetResult(Invitation());
+
+        view.WaitForAssertion(() => Assert.Empty(view.FindComponents<Tharga.Blazor.Loading>()));
+        Assert.Contains(string.Format(Default(TeamInviteViewText.Invitation), TeamName), Text(view));
+    }
+
+    /// <summary>
     /// None of the three can be answered, so the stored code is dropped; keeping it would replay the same message
     /// on every visit. An open invitation keeps it, so the invitee can sign in and come back.
     /// </summary>
@@ -145,10 +165,10 @@ public class InviteViewOutcomeTests : BunitContext
 
     private static string Text(IRenderedComponent<TeamInviteView<TestMember>> view) => System.Net.WebUtility.HtmlDecode(view.Markup);
 
-    private IRenderedComponent<TeamInviteView<TestMember>> Render(string code, TeamInvitation resolved, bool showEmptyMessage, bool signedIn = true)
+    private IRenderedComponent<TeamInviteView<TestMember>> Render(string code, TeamInvitation resolved, bool showEmptyMessage, bool signedIn = true, Task<TeamInvitation> lookup = null)
     {
         var invitations = new Mock<ITeamInvitationService>();
-        invitations.Setup(x => x.GetInvitationAsync(It.IsAny<string>())).ReturnsAsync(resolved);
+        invitations.Setup(x => x.GetInvitationAsync(It.IsAny<string>())).Returns(lookup ?? Task.FromResult(resolved));
 
         var user = new Mock<IUser>();
         user.SetupGet(x => x.Key).Returns("alice-key");

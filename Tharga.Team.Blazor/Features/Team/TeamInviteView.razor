@@ -12,6 +12,11 @@
 @inject IOptions<ThargaBlazorOptions> BlazorOptions
 @inject IThargaTextProvider TextProvider
 
+@if (_outcome == InviteOutcome.Loading)
+{
+    <Loading />
+}
+
 <RadzenStack Visible="@(_outcome == InviteOutcome.Open)">
     <CascadingAuthenticationState>
         <AuthorizeView>
@@ -39,9 +44,11 @@
 
 @code
 {
-    private enum InviteOutcome { NoCode, Invalid, AlreadyMember, Expired, Open }
+    private enum InviteOutcome { Loading, NoCode, Invalid, AlreadyMember, Expired, Open }
 
-    private InviteOutcome _outcome = InviteOutcome.NoCode;
+    // Starts as Loading, not NoCode: the view renders at the first await below, and a visitor who followed a
+    // link would otherwise read "no pending invitations" until the lookup lands.
+    private InviteOutcome _outcome = InviteOutcome.Loading;
     private TeamInvitation _invitation;
     private IUser _user;
     private TextSet _text = TextSet.Empty;
@@ -68,7 +75,11 @@
         _text = await TextProvider.ResolveAsync(TeamInviteViewText.All);
 
         var inviteCode = await GetInviteCode();
-        if (string.IsNullOrEmpty(inviteCode)) return;
+        if (string.IsNullOrEmpty(inviteCode))
+        {
+            _outcome = InviteOutcome.NoCode;
+            return;
+        }
 
         // Resolved by the code, not by reading the team. The invitee holds no scope for the team they
         // are joining, so the gated read would refuse them — and the read this replaces returned the whole
