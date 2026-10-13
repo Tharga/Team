@@ -14,11 +14,12 @@
   - Show/offer rules live on `UserViewModel` (`NameDiffersFromDirectory`, `CanUseDirectoryName`, `CanWriteNameToDirectory`) and are unit tested (`UserRowDirectoryNameTests`); no test project renders the full list.
   - Verification results now survive the list reload after a rename/delete/pull.
 - [x] 6. Full test suite, commit. 3282 passed.
-- [~] 7. Docs (README / docs) for the Users page directory features.
+- [x] 7. Docs: new "Names that differ from the directory" section in `docs/articles/user-management.md`; paragraph in `Tharga.Team.Entra/README.md`.
+- [ ] 8. User tests in the sample app; then close-out (re-check NuGet, archive plan, remove `plan/`, PR).
 
 ## Decisions
 - "Write name to directory" only when `o.Blazor.WriteNameToDirectory` is on — the service refuses otherwise, the UI hides it. Pull is always available.
 - Differences are shown as a row badge (tooltip = directory name) with the two actions in the row's menu, not a review dialog.
 
 ## Last session
-2026-10-13: steps 1-6 done and committed. Next: docs (README / docs) describing the name comparison on Verify, then hand over for testing in the sample app.
+2026-10-13: steps 1-6 done and committed. Docs done. Next: user tests on the pushed branch.

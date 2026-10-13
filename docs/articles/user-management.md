@@ -528,6 +528,33 @@ Each refresh is audited under feature `auth` as `user-profile-refreshed` — see
 Verification by a stored directory id deliberately does **not** fall back to email: a broken link is a
 finding, not a lookup miss.
 
+### Names that differ from the directory
+
+Verification also returns the directory's display name (`DirectoryVerificationResult.DirectoryName`). When
+a found user's name here differs from it, the row shows a **Name differs** badge — its tooltip gives the
+directory's name — and the row's menu offers to reconcile it:
+
+| Action | Does | Offered when |
+|---|---|---|
+| **Use name from directory** | Sets the name here to the directory's name | The directory holds a real name |
+| **Write name to directory** | Writes the name here to the directory | `o.Blazor.WriteNameToDirectory` is on, the user is linked, and has a name here |
+
+The same operations are on `IUserManagementService`, both requiring `users:manage` and both audited:
+
+```csharp
+var name = await userManagementService.UseDirectoryNameAsync(userKey);
+await userManagementService.WriteNameToDirectoryAsync(userKey);
+```
+
+**`unknown` is never taken.** Entra External ID names an account `unknown` when its sign-up flow collects
+no display name, so a directory holding that (in any case) or nothing is treated as having no name:
+`UseDirectoryNameAsync` refuses it, and a row whose two names are both placeholders is not flagged.
+`DirectoryNames.IsPlaceholder` and `DirectoryNames.Differ` hold the rule.
+
+Both operations read the directory or the stored name themselves rather than taking a name from the
+caller. `WriteNameToDirectoryAsync` throws when the option is off: an explicit push is still a write to the
+directory, and the option is the host's statement that this application may make one.
+
 ## Directory-only users
 
 The **Users in directory only** tab on `<UsersView />` lists users that exist in the directory but have no local

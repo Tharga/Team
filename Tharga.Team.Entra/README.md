@@ -71,6 +71,10 @@ The driver: an application that collects no attributes at sign-up holds the real
 holds a placeholder such as `"unknown"`, so the good name exists and cannot reach anyone administering the
 tenant. A host federating from a corporate directory wants the opposite, which is why this is opt-in.
 
+Verification returns the user's `displayName` too, so the Users page can flag a name that differs from the
+directory and offer **Use name from directory** or, with the option on, **Write name to directory**. A
+`displayName` of `unknown` is treated as no name and is never taken into the application.
+
 ## Reading sign-in identities
 
 `AddThargaEntraUserDirectory` also registers `IUserIdentityDirectory`, which reads a user's Graph
