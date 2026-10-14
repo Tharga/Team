@@ -20,7 +20,8 @@ internal sealed class SupportCaseService(
     ISupportCaseNotifier notifier = null,
     ISupportResponder responder = null,
     SupportCaseVisibilityMode visibilityMode = SupportCaseVisibilityMode.TeamWide,
-    ITeamDirectoryService teamDirectory = null) : ISupportCaseService, ISupportCaseTeamQueries
+    ITeamDirectoryService teamDirectory = null,
+    IUserService userService = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -36,7 +37,7 @@ internal sealed class SupportCaseService(
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
-        var authorName = await authorizer.GetDisplayNameAsync();
+        var authorName = await DisplayNameAsync();
 
         var supportCase = new SupportCase
         {
@@ -178,7 +179,7 @@ internal sealed class SupportCaseService(
             Sequence = 0,
             Kind = SupportMessageKind.User,
             AuthorIdentity = await authorizer.GetSubjectAsync(),
-            AuthorName = await authorizer.GetDisplayNameAsync(),
+            AuthorName = await DisplayNameAsync(),
             Body = body,
             SentAt = now,
             AsSupport = asSupport
@@ -293,7 +294,7 @@ internal sealed class SupportCaseService(
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
-        var authorName = await authorizer.GetDisplayNameAsync();
+        var authorName = await DisplayNameAsync();
 
         // The closure goes into the transcript rather than only onto the header, so reading the conversation
         // shows how it ended. A closure with no trace of who closed it reads as a gap.
@@ -321,7 +322,7 @@ internal sealed class SupportCaseService(
         if (supportCase == null || supportCase.Status != SupportCaseStatus.Closed) return;
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var authorName = await authorizer.GetDisplayNameAsync();
+        var authorName = await DisplayNameAsync();
 
         var reopen = new SupportMessage
         {
@@ -343,7 +344,7 @@ internal sealed class SupportCaseService(
         if (string.IsNullOrWhiteSpace(teamKey)) throw new ArgumentException("A case must be assigned to a team.", nameof(teamKey));
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var actor = await authorizer.GetDisplayNameAsync();
+        var actor = await DisplayNameAsync();
 
         // In the transcript, because which tenant a case belongs to is part of its history: a case that
         // changed hands and says nothing about it reads as having always been there.
@@ -476,6 +477,28 @@ internal sealed class SupportCaseService(
         => string.IsNullOrEmpty(identity)
             ? Task.CompletedTask
             : store.MarkReadAsync(teamKey, caseId, identity, sequence, cancellationToken);
+
+    /// <summary>
+    /// The writer's name as the product knows them — their user record — rather than what the sign-in token
+    /// calls them, which is often an e-mail address. The token's name when there is no record to read.
+    /// </summary>
+    private async Task<string> DisplayNameAsync()
+    {
+        if (userService != null)
+        {
+            try
+            {
+                var name = (await userService.GetCurrentUserAsync())?.Name;
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // A name is wording, never a reason to refuse the write; the token's name stands in.
+            }
+        }
+
+        return await authorizer.GetDisplayNameAsync();
+    }
 
     private static void RequireWithinLength(string body)
     {
