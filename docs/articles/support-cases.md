@@ -153,6 +153,44 @@ being an Owner.
 
 The author of a case still reaches their own without holding anything, whatever you set here.
 
+## Letting each case decide
+
+`TeamScopeAccessLevel` decides *who* holds the team's support scopes. `Visibility` decides *which cases*
+those scopes reach:
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Visibility = SupportCaseVisibilityMode.PerCase;   // default: TeamWide
+});
+```
+
+| Mode | A team's `support:read` / `support:manage` holder reaches |
+|---|---|
+| `TeamWide` (default) | every case in the team — the behaviour before this option existed |
+| `PerCase` | only cases their author has shared with the team, plus their own |
+
+Under `PerCase` a new case starts `Private`, and its author shares it — or takes it back — while it is
+open:
+
+```csharp
+await supportCases.SetCaseVisibilityAsync(teamKey, caseId, SupportCaseVisibility.Team);
+```
+
+- **Only the author decides.** A team manager cannot share somebody else's case, and neither can your own
+  support staff: a grant to answer every case is not a grant to widen who else reads one.
+- **Only while the case is open.** A closed case keeps the visibility it closed with; reopening it makes it
+  changeable again.
+- **Your support staff are unaffected.** `support:all:*` reaches a case whatever it says, and so does the
+  author.
+- **Listings and counts follow it.** `GetCasesAsync` and `GetAwaitingSupportCountAsync` return only what the
+  caller may read, so a team reader is never shown a case they would be refused.
+- **A case stored before this option existed has no visibility, and reads as `Private` under `PerCase`** —
+  nobody ever chose to share it. Under `TeamWide` it reads exactly as before.
+- Changing visibility is audited (action `visibility`) and raises `SupportCaseChange.VisibilityChanged`.
+
+`SetCaseVisibilityAsync` is refused under `TeamWide`, where there is nothing to decide.
+
 ## The subject is optional
 
 A subject is a small tax on somebody who has already typed the problem into the box below it, and what it
@@ -211,44 +249,6 @@ dismissal. It is derived from `ClosedBy`, which the sweep records as `SupportCas
 > **Existing cases are not swept until they are next written to.** The sweep needs the last-activity
 > timestamp, which older documents do not carry. That is deliberate: applying new behaviour retroactively
 > would close an untouched backlog in bulk on the first sweep after upgrading.
-
-## Letting each case decide
-
-`TeamScopeAccessLevel` decides *who* holds the team's support scopes. `Visibility` decides *which cases*
-those scopes reach:
-
-```csharp
-builder.Services.AddThargaSupportCases(o =>
-{
-    o.Visibility = SupportCaseVisibilityMode.PerCase;   // default: TeamWide
-});
-```
-
-| Mode | A team's `support:read` / `support:manage` holder reaches |
-|---|---|
-| `TeamWide` (default) | every case in the team — the behaviour before this option existed |
-| `PerCase` | only cases their author has shared with the team, plus their own |
-
-Under `PerCase` a new case starts `Private`, and its author shares it — or takes it back — while it is
-open:
-
-```csharp
-await supportCases.SetCaseVisibilityAsync(teamKey, caseId, SupportCaseVisibility.Team);
-```
-
-- **Only the author decides.** A team manager cannot share somebody else's case, and neither can your own
-  support staff: a grant to answer every case is not a grant to widen who else reads one.
-- **Only while the case is open.** A closed case keeps the visibility it closed with; reopening it makes it
-  changeable again.
-- **Your support staff are unaffected.** `support:all:*` reaches a case whatever it says, and so does the
-  author.
-- **Listings and counts follow it.** `GetCasesAsync` and `GetAwaitingSupportCountAsync` return only what the
-  caller may read, so a team reader is never shown a case they would be refused.
-- **A case stored before this option existed has no visibility, and reads as `Private` under `PerCase`** —
-  nobody ever chose to share it. Under `TeamWide` it reads exactly as before.
-- Changing visibility is audited (action `visibility`) and raises `SupportCaseChange.VisibilityChanged`.
-
-`SetCaseVisibilityAsync` is refused under `TeamWide`, where there is nothing to decide.
 
 ## Components
 
