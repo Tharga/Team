@@ -111,6 +111,17 @@ else
 
     public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
 
+    /// <summary>
+    /// Re-reads the queue and the open case. For a host that hears of a change the in-process notifier cannot
+    /// carry — one made on another instance.
+    /// </summary>
+    public Task RefreshAsync() => InvokeAsync(async () =>
+    {
+        await ReloadAsync();
+        if (_selected != null) await SelectAsync(_selected);
+        StateHasChanged();
+    });
+
     /// <remarks>
     /// Any case that has a team belongs to this queue, so any such change refreshes it. Marshalled because the
     /// notifier is raised from whichever scope handled the change.

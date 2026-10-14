@@ -94,6 +94,20 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         cases.Verify(x => x.ReplyToCaseAsync("acme", "case-acme", "We are looking at it.", default), Times.Once);
     }
 
+    /// <summary>A change made on another instance reaches no in-process notifier, so the host asks for the re-read.</summary>
+    [Fact]
+    public async Task RefreshingReReadsTheQueue()
+    {
+        var view = RenderView(out var cases);
+
+        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 20, default))
+            .ReturnsAsync(new SupportCasePage { Items = [FromAcme, FromGlobex, FromAcme with { Id = "case-new", Subject = "Arrived elsewhere" }] });
+
+        await view.Instance.RefreshAsync();
+
+        Assert.Contains("Arrived elsewhere", view.Markup);
+    }
+
     [Fact]
     public void WithoutTheCrossTeamGrant_ItRendersANoteRatherThanThrowing()
     {
