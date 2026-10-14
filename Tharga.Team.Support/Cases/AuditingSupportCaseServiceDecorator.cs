@@ -142,6 +142,25 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>Audited because it changes who may read the conversation.</remarks>
+    public async Task SetCaseVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.SetCaseVisibilityAsync(teamKey, caseId, visibility, cancellationToken);
+
+            Log("visibility", nameof(SetCaseVisibilityAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.CaseVisibility, visibility.ToString())));
+        }
+        catch (Exception ex)
+        {
+            Log("visibility", nameof(SetCaseVisibilityAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.CaseVisibility, visibility.ToString())));
+            throw;
+        }
+    }
+
     public async Task ReopenCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();

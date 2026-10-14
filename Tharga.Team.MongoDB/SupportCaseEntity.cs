@@ -100,6 +100,10 @@ public record SupportCaseEntity : EntityBase
 
     public SupportChannelBindingEntity[] Bindings { get; init; }
 
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.String)]
+    public SupportCaseVisibility? Visibility { get; init; }
+
     /// <summary>How far each participant has read. Absent until somebody opens the case.</summary>
     [BsonIgnoreIfNull]
     public SupportCaseReadEntity[] Reads { get; init; }

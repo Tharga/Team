@@ -75,6 +75,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Subject = supportCase.Subject,
             Status = SupportCaseStatus.Open,
             AssistantState = supportCase.AssistantState,
+            Visibility = supportCase.Visibility,
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
 
@@ -402,6 +403,34 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     public async Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
         => (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, false)));
 
+    public async Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Case(teamKey, caseId),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open));
+
+        var result = await collection.UpdateOneAsync(filter, Builders<SupportCaseEntity>.Update.Set(x => x.Visibility, visibility));
+
+        return result?.Before != null;
+    }
+
+    public Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string identity, string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => PageAsync(VisibleToTeam(teamKey, identity), cursor, pageSize);
+
+    public async Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(AwaitingSupport(VisibleToTeam(teamKey, identity)));
+
+    private static FilterDefinition<SupportCaseEntity> VisibleToTeam(string teamKey, string identity)
+    {
+        var shared = Builders<SupportCaseEntity>.Filter.Eq(x => x.Visibility, SupportCaseVisibility.Team);
+
+        return Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            string.IsNullOrEmpty(identity)
+                ? shared
+                : Builders<SupportCaseEntity>.Filter.Or(shared, Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity)));
+    }
+
     private static FilterDefinition<SupportCaseEntity> AwaitingSupport(FilterDefinition<SupportCaseEntity> population)
         => Builders<SupportCaseEntity>.Filter.And(
             population,
@@ -549,6 +578,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ClosedBy = entity.ClosedBy,
         MessageCount = entity.Messages.Length,
         AssistantState = entity.AssistantState,
+        Visibility = entity.Visibility,
         Bindings = entity.Bindings == null
             ? []
             : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })]

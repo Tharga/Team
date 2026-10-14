@@ -31,7 +31,10 @@ namespace Tharga.Team.Support.Cases;
 /// unassigned queue, which has its own pair.
 /// </para>
 /// </remarks>
-internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseService inner, TeamAuthorizer authorizer) : ISupportCaseService
+internal sealed class AuthorizationSupportCaseServiceDecorator(
+    ISupportCaseService inner,
+    TeamAuthorizer authorizer,
+    SupportCaseVisibilityMode visibility = SupportCaseVisibilityMode.TeamWide) : ISupportCaseService
 {
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
     {
@@ -119,7 +122,10 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
 
     public async Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
     {
-        await RequireTeamCaseReadAsync(teamKey);
+        if (await ReadsOnlySharedCasesAsync(teamKey))
+            return inner is ISupportCaseTeamQueries queries
+                ? await queries.GetCasesVisibleToTeamAsync(teamKey, cursor, pageSize, cancellationToken)
+                : new SupportCasePage { Items = [] };
 
         return await inner.GetCasesAsync(teamKey, cursor, pageSize, cancellationToken);
     }
@@ -163,9 +169,31 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
     /// </remarks>
     public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
-        await RequireTeamCaseReadAsync(teamKey);
+        if (await ReadsOnlySharedCasesAsync(teamKey))
+            return inner is ISupportCaseTeamQueries queries
+                ? await queries.GetAwaitingSupportCountVisibleToTeamAsync(teamKey, cancellationToken)
+                : 0;
 
         return await inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
+    }
+
+    /// <remarks>
+    /// <b>The author alone, and that excludes support staff on purpose.</b> Who may read a conversation is
+    /// the decision of the person who wrote it; a grant that lets staff answer every case does not let them
+    /// widen who else reads one.
+    /// </remarks>
+    public async Task SetCaseVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+
+        var supportCase = await inner.GetCaseAsync(teamKey, caseId, cancellationToken);
+        var subject = await authorizer.GetSubjectAsync();
+
+        if (supportCase == null || string.IsNullOrEmpty(subject) || supportCase.AuthorIdentity != subject)
+            throw new UnauthorizedAccessException(
+                $"Only the member who raised support case '{caseId}' may change who in team '{teamKey}' can read it.");
+
+        await inner.SetCaseVisibilityAsync(teamKey, caseId, visibility, cancellationToken);
     }
 
     /// <remarks>Exactly as privileged as the listing it counts, so it takes the same grant.</remarks>
@@ -257,9 +285,10 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
 
         await RequireMembershipAsync(teamKey);
 
-        if (await HasTeamCaseAccessAsync(kind, teamKey)) return;
-
         var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+
+        if (IsSharedWithTeam(supportCase) && await HasTeamCaseAccessAsync(kind, teamKey)) return;
+
         var subject = await authorizer.GetSubjectAsync();
 
         if (supportCase != null && !string.IsNullOrEmpty(subject) && supportCase.AuthorIdentity == subject) return;
@@ -328,6 +357,31 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
 
         await RequireMembershipAsync(teamKey);
         await RequireScopeAsync(SupportScopes.Read, teamKey);
+    }
+
+    /// <summary>
+    /// Whether a team support reader's grant reaches this case. Always under team-wide visibility; under
+    /// per-case visibility only when its author shared it.
+    /// </summary>
+    /// <remarks>
+    /// A missing case passes under team-wide visibility, exactly as it did before visibility existed: the
+    /// read that follows finds nothing. Under per-case visibility it falls through to the author check and
+    /// is refused, which reports a missing case and an inaccessible one the same way.
+    /// </remarks>
+    private bool IsSharedWithTeam(SupportCase supportCase)
+        => visibility == SupportCaseVisibilityMode.TeamWide || supportCase?.Visibility == SupportCaseVisibility.Team;
+
+    /// <summary>
+    /// Authorizes a team-wide read and says whether the caller reaches only the cases shared with the team.
+    /// </summary>
+    private async Task<bool> ReadsOnlySharedCasesAsync(string teamKey)
+    {
+        if (await HasCrossTeamAccessAsync(CaseAccessKind.Read)) return false;
+
+        await RequireMembershipAsync(teamKey);
+        await RequireScopeAsync(SupportScopes.Read, teamKey);
+
+        return visibility == SupportCaseVisibilityMode.PerCase;
     }
 
     private static string UnassignedScopeFor(CaseAccessKind kind)

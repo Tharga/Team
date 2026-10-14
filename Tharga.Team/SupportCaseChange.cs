@@ -16,5 +16,7 @@ public enum SupportCaseChange
     Reopened,
 
     /// <summary>A case that belonged to no team was given one.</summary>
-    Assigned
+    Assigned,
+
+    VisibilityChanged
 }

@@ -222,6 +222,27 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
         => Task.FromResult(CountAwaiting(x => string.IsNullOrEmpty(x.TeamKey)));
 
+    public Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        var index = _cases.FindIndex(x => x.Case.TeamKey == teamKey && x.Case.Id == caseId);
+        if (index < 0 || _cases[index].Case.Status != SupportCaseStatus.Open) return Task.FromResult(false);
+
+        _cases[index] = (_cases[index].Case with { Visibility = visibility }, _cases[index].Messages);
+
+        return Task.FromResult(true);
+    }
+
+    public Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string identity, string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(Page(_cases.Select(x => x.Case).Where(x => IsVisibleToTeam(x, teamKey, identity))));
+
+    public Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(CountAwaiting(x => IsVisibleToTeam(x, teamKey, identity)));
+
+    private static bool IsVisibleToTeam(SupportCase supportCase, string teamKey, string identity)
+        => supportCase.TeamKey == teamKey
+           && (supportCase.Visibility == SupportCaseVisibility.Team
+               || (!string.IsNullOrEmpty(identity) && supportCase.AuthorIdentity == identity));
+
     private int CountAwaiting(Func<SupportCase, bool> population)
         => _cases
             .Where(x => population(x.Case) && x.Case.Status == SupportCaseStatus.Open)

@@ -98,4 +98,14 @@ public record SupportCase
     /// assistants existed deserializes as — so nothing already stored changes meaning.
     /// </remarks>
     public SupportAssistantState AssistantState { get; init; } = SupportAssistantState.None;
+
+    /// <summary>
+    /// Whether the team's support readers may read this case, when the host lets each case decide.
+    /// </summary>
+    /// <remarks>
+    /// <c>null</c> when nobody chose — every case under team-wide visibility, and any case written before
+    /// visibility existed. Under per-case visibility a <c>null</c> reads as <see cref="SupportCaseVisibility.Private"/>,
+    /// because nobody ever shared it.
+    /// </remarks>
+    public SupportCaseVisibility? Visibility { get; init; }
 }

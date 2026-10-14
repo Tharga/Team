@@ -18,7 +18,8 @@ internal sealed class SupportCaseService(
     TimeProvider timeProvider,
     IEnumerable<ISupportChannel> channels = null,
     ISupportCaseNotifier notifier = null,
-    ISupportResponder responder = null) : ISupportCaseService
+    ISupportResponder responder = null,
+    SupportCaseVisibilityMode visibilityMode = SupportCaseVisibilityMode.TeamWide) : ISupportCaseService, ISupportCaseTeamQueries
 {
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -48,7 +49,8 @@ internal sealed class SupportCaseService(
             MessageCount = 1,
             AssistantState = assistance == SupportAssistance.Assistant && responder != null
                 ? SupportAssistantState.Active
-                : SupportAssistantState.None
+                : SupportAssistantState.None,
+            Visibility = visibilityMode == SupportCaseVisibilityMode.PerCase ? SupportCaseVisibility.Private : null
         };
 
         var firstMessage = new SupportMessage
@@ -366,6 +368,23 @@ internal sealed class SupportCaseService(
 
     public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
         => store.GetAwaitingUnassignedCountAsync(cancellationToken);
+
+    public async Task SetCaseVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        if (visibilityMode != SupportCaseVisibilityMode.PerCase)
+            throw new InvalidOperationException("Support cases are visible team-wide here; a case's visibility cannot be set.");
+
+        if (!await store.TrySetVisibilityAsync(teamKey, caseId, visibility, cancellationToken))
+            throw new InvalidOperationException($"Support case {caseId} is not open, so its visibility cannot change.");
+
+        Notify(teamKey, caseId, SupportCaseChange.VisibilityChanged);
+    }
+
+    public async Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string cursor, int pageSize, CancellationToken cancellationToken)
+        => await store.GetCasesVisibleToTeamAsync(teamKey, await authorizer.GetSubjectAsync(), cursor, pageSize, cancellationToken);
+
+    public async Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, CancellationToken cancellationToken)
+        => await store.GetAwaitingSupportCountVisibleToTeamAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
 
     /// <remarks>
     /// <b>Enforced here rather than in the adapter, because the limit is a contract fact.</b>

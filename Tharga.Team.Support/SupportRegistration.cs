@@ -109,6 +109,7 @@ public static class SupportRegistration
             o.AutoCloseSweepInterval = caseOptions.AutoCloseSweepInterval;
             o.AutoCloseBatchSize = caseOptions.AutoCloseBatchSize;
             o.TeamScopeAccessLevel = caseOptions.TeamScopeAccessLevel;
+            o.Visibility = caseOptions.Visibility;
         });
 
         // Projected onto its own options type for the same reason the Slack section is: the mail transport
@@ -236,8 +237,10 @@ public static class SupportRegistration
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetServices<ISupportChannel>(),
                     sp.GetRequiredService<ISupportCaseNotifier>(),
-                    sp.GetService<ISupportResponder>()),
-                sp.GetRequiredService<TeamAuthorizer>()),
+                    sp.GetService<ISupportResponder>(),
+                    caseOptions.Visibility),
+                sp.GetRequiredService<TeamAuthorizer>(),
+                caseOptions.Visibility),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
 

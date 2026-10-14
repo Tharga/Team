@@ -209,6 +209,34 @@ public interface ISupportCaseStore
         => Task.FromResult(0);
 
     /// <summary>
+    /// Sets a case's visibility, returning whether it did — <c>false</c> when the case is missing or closed.
+    /// </summary>
+    /// <remarks>
+    /// Conditional on the case being open in the write itself, so a case closed a moment ago is not changed.
+    /// <para><b>Defaults to <c>false</c></b>, so a store written before visibility existed keeps compiling and refuses the change.</para>
+    /// </remarks>
+    Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+        => Task.FromResult(false);
+
+    /// <summary>
+    /// A team's cases that its support readers may see under per-case visibility — those shared with the team,
+    /// plus <paramref name="identity"/>'s own — newest first.
+    /// </summary>
+    /// <remarks>
+    /// A case with no visibility recorded is not shared. <b>Defaults to nothing</b>, so a store written before
+    /// visibility existed shows a team reader nothing rather than everything.
+    /// </remarks>
+    Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string identity, string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(new SupportCasePage { Items = [] });
+
+    /// <summary>
+    /// How many of the cases <see cref="GetCasesVisibleToTeamAsync"/> returns are waiting on support.
+    /// </summary>
+    /// <remarks><b>Defaults to zero</b>, for the same reason the listing defaults to nothing.</remarks>
+    Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
     /// Gives an unassigned case to a team, returning whether this call did it.
     /// </summary>
     /// <remarks>

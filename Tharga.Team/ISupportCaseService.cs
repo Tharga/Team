@@ -177,6 +177,16 @@ public interface ISupportCaseService
     /// </remarks>
     Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Shares a case with the team's support readers, or takes it back.
+    /// </summary>
+    /// <remarks>
+    /// Only the case's author, only while it is open, and only when the host enables per-case visibility —
+    /// otherwise an <see cref="InvalidOperationException"/>. Nobody else may decide who reads somebody's
+    /// conversation, the product's own support staff included.
+    /// </remarks>
+    Task SetCaseVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default);
+
     /// <summary>A case's transcript, oldest first.</summary>
     Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default);
 }

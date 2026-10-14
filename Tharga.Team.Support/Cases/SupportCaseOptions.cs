@@ -117,6 +117,18 @@ public class SupportCaseOptions
     public AccessLevel? TeamScopeAccessLevel { get; set; } = AccessLevel.Administrator;
 
     /// <summary>
+    /// Whether the team's support readers reach every case, or only the ones each author shares.
+    /// Default <see cref="SupportCaseVisibilityMode.TeamWide"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TeamScopeAccessLevel"/> decides <i>who</i> holds the team's support scopes;
+    /// this decides <i>which cases</i> those scopes reach. Under <see cref="SupportCaseVisibilityMode.PerCase"/>
+    /// a case starts private and its author may share it while it is open, so a conversation that concerns
+    /// the team can be shared without every personal one being readable by an administrator.
+    /// </remarks>
+    public SupportCaseVisibilityMode Visibility { get; set; } = SupportCaseVisibilityMode.TeamWide;
+
+    /// <summary>
     /// Reading and sending mail, and which recipients this instance answers for. Leave the hosts unset to
     /// keep email off.
     /// </summary>
