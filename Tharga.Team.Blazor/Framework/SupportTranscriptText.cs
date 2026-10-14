@@ -19,6 +19,9 @@ public static class SupportTranscriptText
     /// </remarks>
     public static readonly TextKey Assistant = new("team.support.transcript.assistant", "Assistant");
 
+    /// <summary>Names the icon on an answer from a person on the support side rather than the one who raised the case.</summary>
+    public static readonly TextKey Support = new("team.support.transcript.support", "Support");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Assistant];
+    public static readonly TextKey[] All = [Assistant, Support];
 }

@@ -141,6 +141,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         Services.AddSingleton(cases.Object);
         Services.AddSingleton(Mock.Of<ISupportCaseNotifier>());
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddSingleton(Mock.Of<IIconResolver>());
         Services.AddSingleton(Oversight());
         Services.AddRadzenComponents();
 

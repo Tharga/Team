@@ -51,7 +51,7 @@ else
                     @if (_selected?.Id == item.Id)
                     {
                         <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
-                            <SupportTranscript Messages="_messages" />
+                            <SupportTranscript Messages="_messages" CaseAuthorIdentity="@_selected.AuthorIdentity" />
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {

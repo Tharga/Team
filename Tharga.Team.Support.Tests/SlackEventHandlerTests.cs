@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Options;
+using NSubstitute;
+using Tharga.Team.Support.Slack;
 using Tharga.Team.Support.Cases;
 
 namespace Tharga.Team.Support.Tests;
@@ -159,6 +161,33 @@ public class SlackEventHandlerTests
         Assert.Equal(200, (await Handle(handler, body)).StatusCode);
     }
 
+    [Fact]
+    public async Task AReplyFromSlack_IsSignedWithTheSendersSlackName()
+    {
+        var slack = Substitute.For<ISlackClient>();
+        slack.GetUserNameAsync("U1", Arg.Any<CancellationToken>()).Returns("Sam Support");
+        var (handler, store, supportCase) = await BuildAsync(slack);
+
+        await Handle(handler, MessageEvent(ThreadId, "On it."));
+
+        var messages = await store.GetMessagesAsync(TeamKey, supportCase.Id, null, 50);
+        Assert.Equal("Sam Support", messages.Items[^1].AuthorName);
+        Assert.Equal("U1", messages.Items[^1].AuthorIdentity);
+    }
+
+    [Fact]
+    public async Task WhenSlackWillNotNameTheSender_TheReplyKeepsTheirId()
+    {
+        var slack = Substitute.For<ISlackClient>();
+        slack.GetUserNameAsync(default, default).ReturnsForAnyArgs((string)null);
+        var (handler, store, supportCase) = await BuildAsync(slack);
+
+        await Handle(handler, MessageEvent(ThreadId, "On it."));
+
+        var messages = await store.GetMessagesAsync(TeamKey, supportCase.Id, null, 50);
+        Assert.Equal("U1", messages.Items[^1].AuthorName);
+    }
+
     private static string MessageEvent(string threadId, string text, string user = "U1", string eventId = "Ev1") =>
         $$$"""
         {"type":"event_callback","event_id":"{{{eventId}}}","event":{"type":"message","thread_ts":"{{{threadId}}}","text":"{{{text}}}","user":"{{{user}}}"}}
@@ -167,7 +196,7 @@ public class SlackEventHandlerTests
     private static Task<SlackEventOutcome> Handle(SlackEventHandler handler, string body)
         => handler.HandleAsync(body, Unix(Now), Sign(body));
 
-    private static async Task<(SlackEventHandler Handler, InMemorySupportCaseStore Store, SupportCase Case)> BuildAsync()
+    private static async Task<(SlackEventHandler Handler, InMemorySupportCaseStore Store, SupportCase Case)> BuildAsync(ISlackClient slack = null)
     {
         var store = new InMemorySupportCaseStore();
 
@@ -201,7 +230,7 @@ public class SlackEventHandlerTests
 
         var options = Options.Create(new SupportCaseOptions { SigningSecret = Secret, SlackChannel = "#support" });
 
-        var handler = new SlackEventHandler(store, new InMemoryEventLedger(), options, new FixedTimeProvider(Now));
+        var handler = new SlackEventHandler(store, new InMemoryEventLedger(), options, new FixedTimeProvider(Now), slackClient: slack);
 
         return (handler, store, supportCase);
     }

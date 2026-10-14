@@ -49,6 +49,13 @@ public interface ISlackClient
     /// </para>
     /// </remarks>
     Task<bool?> IsActiveAsync(string userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A Slack user's display name, or <c>null</c> when Slack will not say. Needs the <c>users:read</c> scope.
+    /// </summary>
+    /// <remarks>Defaults to <c>null</c>, so an implementation written before this existed keeps compiling.</remarks>
+    Task<string> GetUserNameAsync(string userId, CancellationToken cancellationToken = default)
+        => Task.FromResult<string>(null);
 }
 
 /// <summary>

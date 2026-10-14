@@ -143,6 +143,7 @@ public class SupportCasesViewRenderTests : BunitContext
         Services.AddSingleton(Mock.Of<ISupportCaseNotifier>());
         Services.AddSingleton(teamState.Object);
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddSingleton(Mock.Of<IIconResolver>());
         Services.AddRadzenComponents();
 
         JSInterop.Mode = JSRuntimeMode.Loose;

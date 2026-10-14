@@ -44,7 +44,8 @@ internal sealed class SlackEventHandler(
     IOptions<SupportCaseOptions> options,
     TimeProvider timeProvider,
     ISupportCaseNotifier notifier = null,
-    ILogger<SlackEventHandler> logger = null)
+    ILogger<SlackEventHandler> logger = null,
+    ISlackClient slackClient = null)
 {
     private const string Source = "slack";
 
@@ -100,7 +101,7 @@ internal sealed class SlackEventHandler(
             Sequence = 0,
             Kind = SupportMessageKind.User,
             AuthorIdentity = Text(slackEvent, "user"),
-            AuthorName = Text(slackEvent, "user"),
+            AuthorName = await NameOfAsync(Text(slackEvent, "user"), cancellationToken),
             Body = body,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
 
@@ -124,6 +125,14 @@ internal sealed class SlackEventHandler(
         });
 
         return SlackEventOutcome.Ok();
+    }
+
+    /// <summary>The Slack user's name, so the case reads who answered rather than an id; the id when Slack will not say.</summary>
+    private async Task<string> NameOfAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (slackClient == null || string.IsNullOrEmpty(userId)) return userId;
+
+        return await slackClient.GetUserNameAsync(userId, cancellationToken) ?? userId;
     }
 
     private static string Text(JsonElement element, string property) =>
