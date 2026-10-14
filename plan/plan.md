@@ -7,8 +7,8 @@
 - [x] 4. `SetCaseVisibilityAsync` — author only (staff excluded), open only (conditional write), PerCase only; audited as `visibility`; `SupportCaseChange.VisibilityChanged`.
 - [x] 5. Enforcement in `AuthorizationSupportCaseServiceDecorator`: team scopes reach a case only when shared; team listing and count go through internal `ISupportCaseTeamQueries` (shared + caller's own). Store members default to nothing/zero/false. Tests: `SupportCaseVisibilityTests` (13), `SupportCaseVisibilityQueryTests` (3).
 - [x] 6. `SupportAcrossTeamsView` (Blazor): cases across teams with the team named (via `ITeamOversightService` when available, else the key), awaiting count, answer/close/reopen in the case's own team, live refresh; `SupportAcrossTeamsViewText`. Tests: `SupportAcrossTeamsViewRenderTests` (5).
-- [~] 7. Visibility control in the case view for its author; texts; tests.
-- [ ] 8. Docs: `support-cases.md`, Support README.
+- [x] 7. `SupportCasesView`: a switch for the author on an open case that carries a visibility (i.e. under PerCase); `SupportCasesViewText.ShareWithTeam`. Tests: 2 render tests.
+- [~] 8. Docs: `support-cases.md`, Support README.
 - [ ] 9. Close-out: re-check NuGet, archive plan, remove `plan/`, PR.
 
 ## Notes

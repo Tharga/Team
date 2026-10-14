@@ -95,12 +95,41 @@ public class SupportCasesViewRenderTests : BunitContext
         Assert.DoesNotContain("We are looking into the export.", view.Markup);
     }
 
-    private IRenderedComponent<SupportCasesView> RenderView()
+    [Fact]
+    public void WithNoVisibilityOnTheCase_ThereIsNothingToShare()
     {
-        var cases = new Mock<ISupportCaseService>();
+        var view = RenderView();
+
+        view.FindAll("button").First(b => b.TextContent.Contains("Export is empty")).Click();
+
+        Assert.DoesNotContain("administrators read this case", view.Markup);
+    }
+
+    [Fact]
+    public async Task TheAuthorSharesAPrivateCaseWithTheirTeam()
+    {
+        var view = RenderView(out var cases, SupportCaseVisibility.Private);
+
+        view.FindAll("button").First(b => b.TextContent.Contains("Export is empty")).Click();
+
+        Assert.Contains("administrators read this case", view.Markup);
+
+        var share = view.FindComponent<Radzen.Blazor.RadzenSwitch>();
+        await view.InvokeAsync(() => share.Instance.ValueChanged.InvokeAsync(true));
+
+        cases.Verify(x => x.SetCaseVisibilityAsync(TeamKey, Case.Id, SupportCaseVisibility.Team, default), Times.Once);
+    }
+
+    private IRenderedComponent<SupportCasesView> RenderView() => RenderView(out _);
+
+    private IRenderedComponent<SupportCasesView> RenderView(out Mock<ISupportCaseService> cases, SupportCaseVisibility? visibility = null)
+    {
+        var shown = Case with { Visibility = visibility };
+
+        cases = new Mock<ISupportCaseService>();
         cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 20, default))
-            .ReturnsAsync(new SupportCasePage { Items = [Case] });
-        cases.Setup(x => x.GetCaseAsync(TeamKey, Case.Id, default)).ReturnsAsync(Case);
+            .ReturnsAsync(new SupportCasePage { Items = [shown] });
+        cases.Setup(x => x.GetCaseAsync(TeamKey, Case.Id, default)).ReturnsAsync(shown);
         cases.Setup(x => x.GetMessagesAsync(TeamKey, Case.Id, null, 50, default))
             .ReturnsAsync(new SupportMessagePage { Items = [Reply] });
 

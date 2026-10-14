@@ -143,6 +143,17 @@ else
                                             </RadzenText>
                                         }
                                     </RadzenStack>
+
+                                    @* Offered only when the host lets each case decide, which is when a case carries a visibility. *@
+                                    @if (_selected.Visibility != null)
+                                    {
+                                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                                            <RadzenSwitch Value="@(_selected.Visibility == SupportCaseVisibility.Team)"
+                                                          ValueChanged="@((bool shared) => SetVisibilityAsync(shared))"
+                                                          Name="shareWithTeam" Disabled="_busy" />
+                                            <RadzenLabel Text="@_text[SupportCasesViewText.ShareWithTeam]" Component="shareWithTeam" />
+                                        </RadzenStack>
+                                    }
                                 }
                                 else
                                 {
@@ -393,6 +404,24 @@ else
 
             await ReloadAsync();
             await SelectAsync(caseId);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SetVisibilityAsync(bool shared)
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.SetCaseVisibilityAsync(_teamKey, _selected.Id,
+                shared ? SupportCaseVisibility.Team : SupportCaseVisibility.Private);
+
+            await SelectAsync(_selected.Id);
         }
         finally
         {

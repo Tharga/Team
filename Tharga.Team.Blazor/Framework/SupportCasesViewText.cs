@@ -85,11 +85,15 @@ public static class SupportCasesViewText
     /// <summary>The hand-over action, offered only while an assistant is answering.</summary>
     public static readonly TextKey TalkToAPerson = new("team.support.cases.assistant.handover", "Talk to a person");
 
+    /// <summary>The author's choice to let the team's support readers see the case, offered while it is open.</summary>
+    public static readonly TextKey ShareWithTeam = new("team.support.cases.visibility.share",
+        "Let your team's administrators read this case");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         Title, NewCase, SubjectLabel, MessageLabel, Send, MyCases, NoCases, ReplyLabel, Reopen,
         Open, Closed, ClosedForInactivity, Unread, SelectTeam, SupportOnline, SupportAway,
-        AskTheAssistant, AssistantThinking, TalkToAPerson
+        AskTheAssistant, AssistantThinking, TalkToAPerson, ShareWithTeam
     ];
 }
