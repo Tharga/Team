@@ -54,7 +54,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
     public Task AddCaseAsync(SupportCase supportCase, SupportMessage firstMessage, CancellationToken cancellationToken = default)
     {
-        _cases.Add((supportCase, [firstMessage]));
+        _cases.Add((Derive(supportCase, [firstMessage]), [firstMessage]));
 
         return Task.CompletedTask;
     }
@@ -333,7 +333,21 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     {
         var index = _cases.FindIndex(x => x.Case.TeamKey == updated.TeamKey && x.Case.Id == updated.Id);
 
-        _cases[index] = (updated, messages);
+        _cases[index] = (Derive(updated, messages), messages);
+    }
+
+    /// <summary>The fields the Mongo store keeps alongside the transcript, worked out from it here.</summary>
+    private static SupportCase Derive(SupportCase supportCase, List<SupportMessage> messages)
+    {
+        var last = messages.OrderBy(x => x.Sequence).LastOrDefault();
+
+        return supportCase with
+        {
+            LastMessageAt = last?.SentAt ?? supportCase.CreatedAt,
+            AwaitingSupport = supportCase.Status == SupportCaseStatus.Open
+                              && last is { Kind: SupportMessageKind.User, AsSupport: false }
+                              && last.AuthorIdentity == supportCase.AuthorIdentity
+        };
     }
 
     private static SupportCasePage Page(IEnumerable<SupportCase> cases)

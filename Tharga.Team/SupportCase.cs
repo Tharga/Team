@@ -93,6 +93,12 @@ public record SupportCase
     /// <summary>Number of entries in the transcript, so a list can be rendered without reading it.</summary>
     public required int MessageCount { get; init; }
 
+    /// <summary>When the newest entry was written, so a list can put the liveliest conversation first.</summary>
+    public DateTime? LastMessageAt { get; init; }
+
+    /// <summary>Whether the case is open and its newest entry is from the one who raised it — waiting on support.</summary>
+    public bool AwaitingSupport { get; init; }
+
     /// <summary>External projections. Empty until the channel work lands.</summary>
     public SupportChannelBinding[] Bindings { get; init; } = [];
 

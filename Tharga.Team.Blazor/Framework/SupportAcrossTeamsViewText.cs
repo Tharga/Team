@@ -33,6 +33,18 @@ public static class SupportAcrossTeamsViewText
     public static readonly TextKey ClosedForInactivity = new("team.support.acrossTeams.status.inactivity",
         "Closed automatically after inactivity");
 
+    /// <summary>Marks a case whose newest entry is from the one who raised it, so staff see what to answer.</summary>
+    public static readonly TextKey NeedsAnswer = new("team.support.acrossTeams.needsAnswer", "Needs an answer");
+
+    /// <summary>A conversation with a person on support, as a filter and as the mark on a case.</summary>
+    public static readonly TextKey Support = new("team.support.acrossTeams.kind.support", "Support");
+
+    /// <summary>A conversation the assistant is answering, as a filter and as the mark on a case.</summary>
+    public static readonly TextKey Assistant = new("team.support.acrossTeams.kind.assistant", "Assistant");
+
+    /// <summary>Shows closed cases too; off by default, so the queue is what is still going on.</summary>
+    public static readonly TextKey ShowClosed = new("team.support.acrossTeams.filter.closed", "Show closed");
+
     /// <summary>Shown when the caller holds neither cross-team grant.</summary>
     public static readonly TextKey NotPermitted = new("team.support.acrossTeams.notPermitted",
         "You do not have access to support cases across every team.");
@@ -41,6 +53,6 @@ public static class SupportAcrossTeamsViewText
     public static readonly TextKey[] All =
     [
         Title, Awaiting, NoCases, RaisedBy, InTeam, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
-        NotPermitted
+        NotPermitted, NeedsAnswer, Support, Assistant, ShowClosed
     ];
 }

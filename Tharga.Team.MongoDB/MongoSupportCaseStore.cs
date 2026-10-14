@@ -602,6 +602,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ClosedAt = entity.ClosedAt,
         ClosedBy = entity.ClosedBy,
         MessageCount = entity.Messages.Length,
+        LastMessageAt = entity.LastMessageAt ?? entity.CreatedAt,
+        AwaitingSupport = entity.Status == SupportCaseStatus.Open && entity.LastMessageFromAuthor,
         AssistantState = entity.AssistantState,
         Visibility = entity.Visibility,
         Bindings = entity.Bindings == null

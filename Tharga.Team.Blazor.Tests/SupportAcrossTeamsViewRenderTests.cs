@@ -74,7 +74,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
 
         Assert.DoesNotContain("The export file has no rows.", view.Markup);
 
-        Subject(view, "Export is empty").Click();
+        Open(view, "Export is empty");
 
         Assert.Contains("The export file has no rows.", view.Markup);
     }
@@ -87,7 +87,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
     {
         var view = RenderView(out var cases);
 
-        Subject(view, "Export is empty").Click();
+        Open(view, "Export is empty");
         view.Find("textarea").Input("We are looking at it.");
         view.FindAll("button").First(b => b.TextContent.Trim() == "Answer").Click();
 
@@ -120,8 +120,11 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         Assert.Contains("do not have access", view.Markup);
     }
 
-    private static AngleSharp.Dom.IElement Subject(IRenderedComponent<SupportAcrossTeamsView> view, string subject)
-        => view.FindAll("button").First(b => b.TextContent.Contains(subject));
+    private static void Open(IRenderedComponent<SupportAcrossTeamsView> view, string subject)
+    {
+        var panel = view.FindComponents<Radzen.Blazor.RadzenPanel>().First(x => x.Markup.Contains(subject));
+        view.InvokeAsync(() => panel.Instance.Expand.InvokeAsync()).GetAwaiter().GetResult();
+    }
 
     private IRenderedComponent<SupportAcrossTeamsView> RenderView(out Mock<ISupportCaseService> cases)
     {

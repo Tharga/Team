@@ -9,7 +9,7 @@
         {
             <div style="align-self: center; max-width: 85%; text-align: center;" data-sender="system">
                 <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-style: italic; color: var(--rz-text-secondary-color);">
-                    @message.Body — @message.SentAt.ToLocalTime().ToString("g")
+                    @message.Body — @Time(message.SentAt)
                 </RadzenText>
             </div>
             continue;
@@ -45,7 +45,7 @@
                         <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-weight: 600;">@message.AuthorName</RadzenText>
                     }
                     <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
-                        @message.SentAt.ToLocalTime().ToString("g")
+                        @Time(message.SentAt)
                     </RadzenText>
                     @* Which door it came through: a name from a channel was matched, not signed in, and carries different weight. *@
                     @if (message.Source != null)
@@ -72,6 +72,12 @@
 
     /// <summary>Whether the person who raised the case sits on the right — true when they are the one reading it.</summary>
     [Parameter] public bool AuthorOnRight { get; set; }
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 

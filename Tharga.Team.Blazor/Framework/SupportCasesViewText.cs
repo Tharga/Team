@@ -12,7 +12,8 @@ public static class SupportCasesViewText
 {
     public static readonly TextKey Title = new("team.support.cases.title", "Support");
 
-    public static readonly TextKey NewCase = new("team.support.cases.newCase", "Ask for help");
+    /// <summary>Heads the new-case form, followed by the choice of who answers.</summary>
+    public static readonly TextKey NewCase = new("team.support.cases.newCase", "Talk to");
 
     public static readonly TextKey SubjectLabel = new("team.support.cases.subject", "Subject");
 
@@ -20,7 +21,7 @@ public static class SupportCasesViewText
 
     public static readonly TextKey Send = new("team.support.cases.send", "Send");
 
-    public static readonly TextKey MyCases = new("team.support.cases.mine", "My cases");
+    public static readonly TextKey MyCases = new("team.support.cases.mine", "Your cases");
 
     /// <summary>Shown instead of the list when this person has never raised a case.</summary>
     /// <remarks>
@@ -33,6 +34,9 @@ public static class SupportCasesViewText
     public static readonly TextKey ReplyLabel = new("team.support.cases.reply", "Reply");
 
     public static readonly TextKey Reopen = new("team.support.cases.reopen", "Reopen");
+
+    /// <summary>Lets the person who raised a case close it once it is solved.</summary>
+    public static readonly TextKey Close = new("team.support.cases.close", "Close case");
 
     public static readonly TextKey Open = new("team.support.cases.status.open", "Open");
 
@@ -47,8 +51,6 @@ public static class SupportCasesViewText
     /// </remarks>
     public static readonly TextKey ClosedForInactivity = new("team.support.cases.status.inactivity",
         "Closed automatically — reopen it if the problem is still there.");
-
-    public static readonly TextKey Unread = new("team.support.cases.unread", "New reply");
 
     public static readonly TextKey SelectTeam = new("team.support.cases.selectTeam", "Select a team to use support.");
 
@@ -67,16 +69,14 @@ public static class SupportCasesViewText
     /// </remarks>
     public static readonly TextKey SupportAway = new("team.support.cases.presence.away", "Support will reply later");
 
-    /// <summary>
-    /// The offer on the new-case form, shown only when the host has an assistant to offer.
-    /// </summary>
-    /// <remarks>
-    /// Worded as a choice the customer makes, not as a feature being switched on, and never preselected. It
-    /// also says a person is still available, because the common fear about a support bot is that it is a
-    /// wall rather than a first answer.
-    /// </remarks>
-    public static readonly TextKey AskTheAssistant = new("team.support.cases.assistant.ask",
-        "Ask the assistant first — you can still reach a person.");
+    /// <summary>The assistant, as a choice of who answers and as a kind of conversation in the list.</summary>
+    public static readonly TextKey AnsweredByAssistant = new("team.support.cases.answeredBy.assistant", "Assistant");
+
+    /// <summary>A person on support, as a choice of who answers and as a kind of conversation in the list.</summary>
+    public static readonly TextKey AnsweredByHuman = new("team.support.cases.answeredBy.human", "Support");
+
+    /// <summary>Shows closed cases too; off by default, so the list is what is still going on.</summary>
+    public static readonly TextKey ShowClosed = new("team.support.cases.filter.closed", "Show closed");
 
     /// <summary>Shown while the assistant is working, so a slow model does not read as a broken page.</summary>
     public static readonly TextKey AssistantThinking = new("team.support.cases.assistant.thinking",
@@ -85,15 +85,19 @@ public static class SupportCasesViewText
     /// <summary>The hand-over action, offered only while an assistant is answering.</summary>
     public static readonly TextKey TalkToAPerson = new("team.support.cases.assistant.handover", "Talk to a person");
 
-    /// <summary>The author's choice to let the team's support readers see the case, offered while it is open.</summary>
-    public static readonly TextKey ShareWithTeam = new("team.support.cases.visibility.share",
-        "Let your team's administrators read this case");
+    /// <summary>Introduces the choice of who in the team may read the case, offered while it is open.</summary>
+    public static readonly TextKey VisibilityLabel = new("team.support.cases.visibility.label", "Who can read this case");
+
+    public static readonly TextKey VisibilityTeam = new("team.support.cases.visibility.team", "Everyone in your team");
+
+    public static readonly TextKey VisibilityPrivate = new("team.support.cases.visibility.private", "Only you");
 
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, NewCase, SubjectLabel, MessageLabel, Send, MyCases, NoCases, ReplyLabel, Reopen,
-        Open, Closed, ClosedForInactivity, Unread, SelectTeam, SupportOnline, SupportAway,
-        AskTheAssistant, AssistantThinking, TalkToAPerson, ShareWithTeam
+        Title, NewCase, SubjectLabel, MessageLabel, Send, MyCases, NoCases, ReplyLabel, Reopen, Close,
+        Open, Closed, ClosedForInactivity, SelectTeam, SupportOnline, SupportAway,
+        AnsweredByAssistant, AnsweredByHuman, ShowClosed, AssistantThinking, TalkToAPerson,
+        VisibilityLabel, VisibilityTeam, VisibilityPrivate
     ];
 }

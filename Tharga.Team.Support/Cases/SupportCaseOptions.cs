@@ -129,6 +129,12 @@ public class SupportCaseOptions
     public SupportCaseVisibilityMode Visibility { get; set; } = SupportCaseVisibilityMode.TeamWide;
 
     /// <summary>
+    /// What a new case starts as under <see cref="SupportCaseVisibilityMode.PerCase"/>. Default
+    /// <see cref="SupportCaseVisibility.Private"/>; the author may change it either way while the case is open.
+    /// </summary>
+    public SupportCaseVisibility DefaultVisibility { get; set; } = SupportCaseVisibility.Private;
+
+    /// <summary>
     /// Reading and sending mail, and which recipients this instance answers for. Leave the hosts unset to
     /// keep email off.
     /// </summary>

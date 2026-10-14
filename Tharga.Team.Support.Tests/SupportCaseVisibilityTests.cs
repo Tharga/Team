@@ -56,6 +56,21 @@ public class SupportCaseVisibilityTests
     }
 
     [Fact]
+    public async Task PerCase_AHostCanStartEveryCaseSharedWithTheTeam()
+    {
+        var store = new InMemorySupportCaseStore();
+        var claims = new List<Claim> { new(ClaimTypes.NameIdentifier, Alice), new(ClaimTypes.Name, Alice), new(TeamClaimTypes.TeamKey, TeamA) };
+        var authorizer = new TeamAuthorizer(new FixedPrincipalAccessor(new ClaimsPrincipal(new ClaimsIdentity(claims, "test"))));
+        var service = new SupportCaseService(store, authorizer, TimeProvider.System,
+            visibilityMode: SupportCaseVisibilityMode.PerCase, defaultVisibility: SupportCaseVisibility.Team);
+
+        var raised = await service.RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        Assert.Equal(SupportCaseVisibility.Team, raised.Visibility);
+        Assert.Equal(raised.Id, (await TeamReader(store).GetCaseAsync(TeamA, raised.Id)).Id);
+    }
+
+    [Fact]
     public async Task PerCase_ATeamReaderCannotReadListOrCountAPrivateCase()
     {
         var store = new InMemorySupportCaseStore();

@@ -21,7 +21,8 @@ internal sealed class SupportCaseService(
     ISupportResponder responder = null,
     SupportCaseVisibilityMode visibilityMode = SupportCaseVisibilityMode.TeamWide,
     ITeamDirectoryService teamDirectory = null,
-    IUserService userService = null) : ISupportCaseService, ISupportCaseTeamQueries
+    IUserService userService = null,
+    SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private) : ISupportCaseService, ISupportCaseTeamQueries
 {
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -53,7 +54,7 @@ internal sealed class SupportCaseService(
             AssistantState = assistance == SupportAssistance.Assistant && responder != null
                 ? SupportAssistantState.Active
                 : SupportAssistantState.None,
-            Visibility = visibilityMode == SupportCaseVisibilityMode.PerCase ? SupportCaseVisibility.Private : null
+            Visibility = visibilityMode == SupportCaseVisibilityMode.PerCase ? defaultVisibility : null
         };
 
         var firstMessage = new SupportMessage

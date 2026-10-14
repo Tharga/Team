@@ -75,7 +75,7 @@ public class SupportCasesViewRenderTests : BunitContext
     {
         var view = RenderView();
 
-        view.FindAll("button").First(b => b.TextContent.Contains("Export is empty")).Click();
+        Open(view, "Export is empty");
 
         Assert.Contains("We are looking into the export.", view.Markup);
     }
@@ -86,12 +86,11 @@ public class SupportCasesViewRenderTests : BunitContext
     {
         var view = RenderView();
 
-        var subject = () => view.FindAll("button").First(b => b.TextContent.Contains("Export is empty"));
-
-        subject().Click();
+        Open(view, "Export is empty");
         Assert.Contains("We are looking into the export.", view.Markup);
 
-        subject().Click();
+        var panel = view.FindComponents<Radzen.Blazor.RadzenPanel>().First(x => x.Markup.Contains("Export is empty"));
+        view.InvokeAsync(() => panel.Instance.Collapse.InvokeAsync()).GetAwaiter().GetResult();
         Assert.DoesNotContain("We are looking into the export.", view.Markup);
     }
 
@@ -100,9 +99,9 @@ public class SupportCasesViewRenderTests : BunitContext
     {
         var view = RenderView();
 
-        view.FindAll("button").First(b => b.TextContent.Contains("Export is empty")).Click();
+        Open(view, "Export is empty");
 
-        Assert.DoesNotContain("administrators read this case", view.Markup);
+        Assert.DoesNotContain("Who can read this case", view.Markup);
     }
 
     [Fact]
@@ -110,17 +109,23 @@ public class SupportCasesViewRenderTests : BunitContext
     {
         var view = RenderView(out var cases, SupportCaseVisibility.Private);
 
-        view.FindAll("button").First(b => b.TextContent.Contains("Export is empty")).Click();
+        Open(view, "Export is empty");
 
-        Assert.Contains("administrators read this case", view.Markup);
+        Assert.Contains("Who can read this case", view.Markup);
 
-        var share = view.FindComponent<Radzen.Blazor.RadzenSwitch>();
-        await view.InvokeAsync(() => share.Instance.ValueChanged.InvokeAsync(true));
+        var share = view.FindComponents<Radzen.Blazor.RadzenSelectBar<SupportCaseVisibility>>().Single();
+        await view.InvokeAsync(() => share.Instance.Change.InvokeAsync(SupportCaseVisibility.Team));
 
         cases.Verify(x => x.SetCaseVisibilityAsync(TeamKey, Case.Id, SupportCaseVisibility.Team, default), Times.Once);
     }
 
     private IRenderedComponent<SupportCasesView> RenderView() => RenderView(out _);
+
+    private static void Open(IRenderedComponent<SupportCasesView> view, string subject)
+    {
+        var panel = view.FindComponents<Radzen.Blazor.RadzenPanel>().First(x => x.Markup.Contains(subject));
+        view.InvokeAsync(() => panel.Instance.Expand.InvokeAsync()).GetAwaiter().GetResult();
+    }
 
     private IRenderedComponent<SupportCasesView> RenderView(out Mock<ISupportCaseService> cases, SupportCaseVisibility? visibility = null)
     {
