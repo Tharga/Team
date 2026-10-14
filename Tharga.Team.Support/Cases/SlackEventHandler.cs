@@ -96,6 +96,18 @@ internal sealed class SlackEventHandler(
 
         if (supportCase == null) return SlackEventOutcome.Ok();
 
+        // An answer in the thread of a closed case means it is not over, so it opens again first.
+        if (supportCase.Status == SupportCaseStatus.Closed)
+        {
+            await store.ReopenCaseAsync(supportCase.TeamKey, supportCase.Id, new SupportMessage
+            {
+                Sequence = 0,
+                Kind = SupportMessageKind.System,
+                Body = "Case reopened by a reply in Slack.",
+                SentAt = timeProvider.GetUtcNow().UtcDateTime
+            }, cancellationToken);
+        }
+
         var message = new SupportMessage
         {
             Sequence = 0,

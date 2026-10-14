@@ -34,7 +34,9 @@ namespace Tharga.Team.Support.Cases;
 internal sealed class AuthorizationSupportCaseServiceDecorator(
     ISupportCaseService inner,
     TeamAuthorizer authorizer,
-    SupportCaseVisibilityMode visibility = SupportCaseVisibilityMode.TeamWide) : ISupportCaseService
+    SupportCaseVisibilityMode visibility = SupportCaseVisibilityMode.TeamWide,
+    TimeSpan? staffCloseAfter = null,
+    TimeProvider timeProvider = null) : ISupportCaseService
 {
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
     {
@@ -84,6 +86,40 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.GetMyUnreadByCaseAsync(teamKey, cancellationToken);
     }
 
+    /// <summary>Whether the caller closes as the author or as the case's own team, whom the staff window does not limit.</summary>
+    private async Task<bool> ClosesAsTheTeamAsync(string teamKey, string caseId)
+    {
+        if (!await authorizer.IsMemberOfAsync(teamKey)) return false;
+
+        var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+        var subject = await authorizer.GetSubjectAsync();
+
+        if (supportCase != null && !string.IsNullOrEmpty(subject) && supportCase.AuthorIdentity == subject) return true;
+
+        return IsSharedWithTeam(supportCase) && await HasTeamCaseAccessAsync(CaseAccessKind.Write, teamKey);
+    }
+
+    /// <remarks>
+    /// Support must have answered last, and the customer stayed silent for the whole window — otherwise closing
+    /// would end a conversation the customer still has a turn in.
+    /// </remarks>
+    private async Task RequireStaffMayCloseAsync(string teamKey, string caseId, TimeSpan window)
+    {
+        var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+        var messages = (await inner.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
+        var last = messages.Where(x => x.Kind != SupportMessageKind.System).OrderBy(x => x.Sequence).LastOrDefault();
+
+        var supportAnsweredLast = last != null
+                                  && (last.Kind == SupportMessageKind.Assistant || last.AsSupport || last.AuthorIdentity != supportCase?.AuthorIdentity);
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+
+        if (supportAnsweredLast && last.SentAt <= now - window) return;
+
+        throw new UnauthorizedAccessException(
+            $"Support may close case '{caseId}' only when it answered last and {window.TotalDays:0} days have passed since; " +
+            "until then closing is for the one who raised it.");
+    }
+
     private async Task RequireSupportAnswerAsync(string teamKey, string caseId)
     {
         if (string.IsNullOrEmpty(teamKey))
@@ -108,6 +144,9 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "close", CaseAccessKind.Write);
+
+        if (staffCloseAfter != null && !string.IsNullOrEmpty(teamKey) && !await ClosesAsTheTeamAsync(teamKey, caseId))
+            await RequireStaffMayCloseAsync(teamKey, caseId, staffCloseAfter.Value);
 
         await inner.CloseCaseAsync(teamKey, caseId, cancellationToken);
     }

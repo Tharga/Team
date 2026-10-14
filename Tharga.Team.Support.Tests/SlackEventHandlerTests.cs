@@ -188,6 +188,19 @@ public class SlackEventHandlerTests
         Assert.Equal("U1", messages.Items[^1].AuthorName);
     }
 
+    [Fact]
+    public async Task AReplyToAClosedCase_OpensItAgain()
+    {
+        var (handler, store, supportCase) = await BuildAsync();
+        await store.CloseCaseAsync(TeamKey, supportCase.Id, Now.UtcDateTime, "alice",
+            new SupportMessage { Sequence = 0, Kind = SupportMessageKind.System, Body = "Closed.", SentAt = Now.UtcDateTime });
+
+        await Handle(handler, MessageEvent(ThreadId, "One more thing."));
+
+        Assert.Equal(SupportCaseStatus.Open, (await store.GetCaseAsync(TeamKey, supportCase.Id)).Status);
+        Assert.Equal("One more thing.", (await store.GetMessagesAsync(TeamKey, supportCase.Id, null, 50)).Items[^1].Body);
+    }
+
     private static string MessageEvent(string threadId, string text, string user = "U1", string eventId = "Ev1") =>
         $$$"""
         {"type":"event_callback","event_id":"{{{eventId}}}","event":{"type":"message","thread_ts":"{{{threadId}}}","text":"{{{text}}}","user":"{{{user}}}"}}

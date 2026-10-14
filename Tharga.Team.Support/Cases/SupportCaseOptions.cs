@@ -135,6 +135,17 @@ public class SupportCaseOptions
     public SupportCaseVisibility DefaultVisibility { get; set; } = SupportCaseVisibility.Private;
 
     /// <summary>
+    /// How long after support's last answer the product's own staff may close a case themselves; <c>null</c>
+    /// lets them close at any time, which is the default.
+    /// </summary>
+    /// <remarks>
+    /// Closing is the customer's word that the problem is solved. A host that wants it kept that way sets a
+    /// window — staff may close a case only once support answered last and the customer has said nothing for
+    /// that long. The team's own support readers and the author are not limited by it.
+    /// </remarks>
+    public TimeSpan? StaffCloseAfter { get; set; }
+
+    /// <summary>
     /// Reading and sending mail, and which recipients this instance answers for. Leave the hosts unset to
     /// keep email off.
     /// </summary>

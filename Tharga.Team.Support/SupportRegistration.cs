@@ -111,6 +111,7 @@ public static class SupportRegistration
             o.TeamScopeAccessLevel = caseOptions.TeamScopeAccessLevel;
             o.Visibility = caseOptions.Visibility;
             o.DefaultVisibility = caseOptions.DefaultVisibility;
+            o.StaffCloseAfter = caseOptions.StaffCloseAfter;
         });
 
         // Projected onto its own options type for the same reason the Slack section is: the mail transport
@@ -244,7 +245,9 @@ public static class SupportRegistration
                     sp.GetService<IUserService>(),
                     caseOptions.DefaultVisibility),
                 sp.GetRequiredService<TeamAuthorizer>(),
-                caseOptions.Visibility),
+                caseOptions.Visibility,
+                caseOptions.StaffCloseAfter,
+                sp.GetRequiredService<TimeProvider>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
 

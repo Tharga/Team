@@ -173,6 +173,13 @@ internal sealed class SupportCaseService(
                 $"Support case '{caseId}' already holds {existing.MessageCount} messages, which is the limit of " +
                 $"{SupportCaseLimits.MaxMessagesPerCase}. Raise a new case rather than extending this one.");
 
+        // Writing to a closed case means it is not over: it opens again rather than refusing what was written.
+        if (existing?.Status == SupportCaseStatus.Closed)
+        {
+            await ReopenCaseAsync(teamKey, caseId, cancellationToken);
+            existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        }
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
         var message = new SupportMessage
