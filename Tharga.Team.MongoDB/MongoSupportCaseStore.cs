@@ -396,6 +396,18 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return (int)await collection.CountAsync(filter);
     }
 
+    public async Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, true)));
+
+    public async Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, false)));
+
+    private static FilterDefinition<SupportCaseEntity> AwaitingSupport(FilterDefinition<SupportCaseEntity> population)
+        => Builders<SupportCaseEntity>.Filter.And(
+            population,
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true));
+
     public async Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
     {
         await RequireCaseAsync(teamKey, caseId);

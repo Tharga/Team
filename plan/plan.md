@@ -1,9 +1,9 @@
 # Plan: support across teams and per-case visibility
 
 - [x] 0. NuGet update — Microsoft.* 10.0.12 → 10.0.13 patch updates; all 3234 tests pass. `e05a959`.
-- [~] 1. Confirm the plan.
-- [ ] 2. Counts: `GetAwaitingSupportCountAcrossTeamsAsync`, `GetAwaitingUnassignedCountAsync` — contract, service, store, decorators; tests first.
-- [ ] 3. `SupportCaseVisibility` on `SupportCase` (stored by name, BSON representation test) and `SupportCaseOptions.Visibility`.
+- [x] 1. Confirm the plan. Confirmed 2026-10-14: new cases start Private under PerCase; only the author changes visibility.
+- [x] 2. Counts: `GetAwaitingSupportCountAcrossTeamsAsync` (all:read/manage), `GetAwaitingUnassignedCountAsync` (unassigned read/manage). Store members default to 0 so older stores compile. Tests: `SupportStaffCountTests` (7), `SupportStaffCountQueryTests` (2).
+- [~] 3. `SupportCaseVisibility` on `SupportCase` (stored by name, BSON representation test) and `SupportCaseOptions.Visibility`.
 - [ ] 4. `SetCaseVisibilityAsync` — author only, open cases only; decorators; tests.
 - [ ] 5. `PerCase` enforcement in the authorization decorator, team listing and team count filtered; tests for every path in the acceptance criteria.
 - [ ] 6. Cross-team queue view in Tharga.Team.Blazor; texts; tests.

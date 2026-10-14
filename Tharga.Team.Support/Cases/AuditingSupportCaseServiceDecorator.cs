@@ -208,6 +208,12 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
 
+    public Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => inner.GetAwaitingSupportCountAcrossTeamsAsync(cancellationToken);
+
+    public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => inner.GetAwaitingUnassignedCountAsync(cancellationToken);
+
     public Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => inner.GetCasesAsync(teamKey, cursor, pageSize, cancellationToken);
 

@@ -214,11 +214,20 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
             .Count(x => (_reads.TryGetValue((x.Case.Id, identity), out var read) ? read : 0) < x.Messages.Count));
 
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
-        => Task.FromResult(_cases
-            .Where(x => x.Case.TeamKey == teamKey && x.Case.Status == SupportCaseStatus.Open)
+        => Task.FromResult(CountAwaiting(x => x.TeamKey == teamKey));
+
+    public Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(CountAwaiting(x => !string.IsNullOrEmpty(x.TeamKey)));
+
+    public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(CountAwaiting(x => string.IsNullOrEmpty(x.TeamKey)));
+
+    private int CountAwaiting(Func<SupportCase, bool> population)
+        => _cases
+            .Where(x => population(x.Case) && x.Case.Status == SupportCaseStatus.Open)
             .Count(x => x.Messages.Count > 0
                         && x.Messages[^1].Kind == SupportMessageKind.User
-                        && x.Messages[^1].AuthorIdentity == x.Case.AuthorIdentity));
+                        && x.Messages[^1].AuthorIdentity == x.Case.AuthorIdentity);
 
     public Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases

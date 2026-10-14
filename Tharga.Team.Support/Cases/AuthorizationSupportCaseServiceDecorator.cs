@@ -168,6 +168,28 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(ISupportCaseServi
         return await inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
     }
 
+    /// <remarks>Exactly as privileged as the listing it counts, so it takes the same grant.</remarks>
+    public async Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await HasCrossTeamAccessAsync(CaseAccessKind.Read))
+            throw new UnauthorizedAccessException(
+                $"Only a caller holding {CrossTeamScopesFor(CaseAccessKind.Read)} may count support cases across every team.");
+
+        return await inner.GetAwaitingSupportCountAcrossTeamsAsync(cancellationToken);
+    }
+
+    /// <remarks>
+    /// <see cref="SystemSupportScopes.Manage"/> satisfies it as well, because whoever may answer the
+    /// unassigned queue may see how much is in it.
+    /// </remarks>
+    public async Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await authorizer.HasSystemScopeAsync(SystemSupportScopes.Manage))
+            await RequireSystemScopeAsync(SystemSupportScopes.Read, "count");
+
+        return await inner.GetAwaitingUnassignedCountAsync(cancellationToken);
+    }
+
     private async Task RequireMembershipAsync(string teamKey)
     {
         if (!await authorizer.IsMemberOfAsync(teamKey))

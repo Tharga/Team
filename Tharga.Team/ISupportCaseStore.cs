@@ -186,6 +186,29 @@ public interface ISupportCaseStore
         => Task.FromResult(new SupportCasePage { Items = [] });
 
     /// <summary>
+    /// How many open cases that belong to a team, across every team, are waiting on support.
+    /// </summary>
+    /// <remarks>
+    /// The count of what <see cref="GetCasesAcrossTeamsAsync"/> lists, by the rule
+    /// <see cref="GetAwaitingSupportCountAsync"/> uses per team. Reached only from a caller already checked
+    /// against <see cref="SystemSupportScopes.AllRead"/>.
+    /// <para><b>Defaults to zero</b>, so a store written before this existed keeps compiling.</para>
+    /// </remarks>
+    Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
+    /// How many open cases that belong to no team are waiting on support.
+    /// </summary>
+    /// <remarks>
+    /// The count of what <see cref="GetUnassignedCasesAsync"/> lists. Reached only from a caller already
+    /// checked against <see cref="SystemSupportScopes.Read"/>.
+    /// <para><b>Defaults to zero</b>, so a store written before this existed keeps compiling.</para>
+    /// </remarks>
+    Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
     /// Gives an unassigned case to a team, returning whether this call did it.
     /// </summary>
     /// <remarks>

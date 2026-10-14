@@ -158,6 +158,25 @@ public interface ISupportCaseService
     /// </remarks>
     Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// How many open cases, in every team, are waiting on an answer. What a support-staff indicator shows.
+    /// </summary>
+    /// <remarks>
+    /// Authorized by <see cref="SystemSupportScopes.AllRead"/> or <see cref="SystemSupportScopes.AllManage"/>,
+    /// the grant that lists the same cases. Leaves out the unassigned queue, which
+    /// <see cref="GetAwaitingUnassignedCountAsync"/> counts under its own grant.
+    /// </remarks>
+    Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many open cases that belong to no team are waiting on an answer.
+    /// </summary>
+    /// <remarks>
+    /// Authorized by <see cref="SystemSupportScopes.Read"/> or <see cref="SystemSupportScopes.Manage"/>; the
+    /// cross-team grant confers nothing here, as it confers nothing over the unassigned queue itself.
+    /// </remarks>
+    Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default);
+
     /// <summary>A case's transcript, oldest first.</summary>
     Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default);
 }

@@ -361,6 +361,12 @@ internal sealed class SupportCaseService(
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => store.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
 
+    public Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => store.GetAwaitingSupportCountAcrossTeamsAsync(cancellationToken);
+
+    public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => store.GetAwaitingUnassignedCountAsync(cancellationToken);
+
     /// <remarks>
     /// <b>Enforced here rather than in the adapter, because the limit is a contract fact.</b>
     /// <see cref="SupportCaseLimits"/> lives beside the contracts and is documented for callers, so a second
