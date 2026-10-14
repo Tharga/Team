@@ -95,7 +95,12 @@ those cases — which is what `support:all:read` and `support:all:manage` are fo
 ```csharp
 // Every team's cases, for whoever runs support
 var page = await supportCases.GetCasesAcrossTeamsAsync();
+
+// How many of them are waiting on an answer
+var waiting = await supportCases.GetAwaitingSupportCountAcrossTeamsAsync();
 ```
+
+`SupportAcrossTeamsView` renders that queue — see [Components](#components).
 
 Grant them through a system role, as you would any system scope:
 
@@ -207,9 +212,47 @@ dismissal. It is derived from `ClosedBy`, which the sweep records as `SupportCas
 > timestamp, which older documents do not carry. That is deliberate: applying new behaviour retroactively
 > would close an untouched backlog in bulk on the first sweep after upgrading.
 
+## Letting each case decide
+
+`TeamScopeAccessLevel` decides *who* holds the team's support scopes. `Visibility` decides *which cases*
+those scopes reach:
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Visibility = SupportCaseVisibilityMode.PerCase;   // default: TeamWide
+});
+```
+
+| Mode | A team's `support:read` / `support:manage` holder reaches |
+|---|---|
+| `TeamWide` (default) | every case in the team — the behaviour before this option existed |
+| `PerCase` | only cases their author has shared with the team, plus their own |
+
+Under `PerCase` a new case starts `Private`, and its author shares it — or takes it back — while it is
+open:
+
+```csharp
+await supportCases.SetCaseVisibilityAsync(teamKey, caseId, SupportCaseVisibility.Team);
+```
+
+- **Only the author decides.** A team manager cannot share somebody else's case, and neither can your own
+  support staff: a grant to answer every case is not a grant to widen who else reads one.
+- **Only while the case is open.** A closed case keeps the visibility it closed with; reopening it makes it
+  changeable again.
+- **Your support staff are unaffected.** `support:all:*` reaches a case whatever it says, and so does the
+  author.
+- **Listings and counts follow it.** `GetCasesAsync` and `GetAwaitingSupportCountAsync` return only what the
+  caller may read, so a team reader is never shown a case they would be refused.
+- **A case stored before this option existed has no visibility, and reads as `Private` under `PerCase`** —
+  nobody ever chose to share it. Under `TeamWide` it reads exactly as before.
+- Changing visibility is audited (action `visibility`) and raises `SupportCaseChange.VisibilityChanged`.
+
+`SetCaseVisibilityAsync` is refused under `TeamWide`, where there is nothing to decide.
+
 ## Components
 
-Three components ship in `Tharga.Team.Blazor`, and **all are optional**:
+Four components ship in `Tharga.Team.Blazor`, and **all are optional**:
 
 ```razor
 @* What a team member sees: raise a case, read the conversation, reply, reopen *@
@@ -220,7 +263,18 @@ Three components ship in `Tharga.Team.Blazor`, and **all are optional**:
 
 @* Cases that belong to no team: answer them, and assign a team when you know which it is *@
 <SupportUnassignedView />
+
+@* Your own support staff: every team's cases, each naming its team, answered in place *@
+<SupportAcrossTeamsView />
 ```
+
+`SupportAcrossTeamsView` needs `support:all:read` (or `:manage` to answer) and, like
+`SupportUnassignedView`, renders a note rather than throwing when the caller holds neither. It names each
+case's team through `ITeamOversightService` when the caller can list teams, and shows the team key when
+they cannot.
+
+Under `PerCase` visibility, `SupportCasesView` offers the author a switch on an open case to share it with
+their team.
 
 `SupportQueueView` needs `support:read`, and the service refuses without it — so gate rendering on the scope
 to spare a member a refusal they can do nothing about.
@@ -724,6 +778,8 @@ privileged:
 |---|---|---|
 | `GetMyUnreadCountAsync(teamKey)` | my own cases holding entries I have not read | membership |
 | `GetAwaitingSupportCountAsync(teamKey)` | open cases whose newest entry came from the person who raised them | `support:read` |
+| `GetAwaitingSupportCountAcrossTeamsAsync()` | the same, in every team | `support:all:read` |
+| `GetAwaitingUnassignedCountAsync()` | the same, in the cases no team owns | `support:unassigned:read` |
 | `MarkReadAsync(teamKey, caseId)` | records that I have read up to the newest entry | the same check as reading that case |
 
 **Not one result carrying both numbers.** That would either show an ordinary member the support-wide figure

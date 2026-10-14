@@ -8,8 +8,9 @@
 - [x] 5. Enforcement in `AuthorizationSupportCaseServiceDecorator`: team scopes reach a case only when shared; team listing and count go through internal `ISupportCaseTeamQueries` (shared + caller's own). Store members default to nothing/zero/false. Tests: `SupportCaseVisibilityTests` (13), `SupportCaseVisibilityQueryTests` (3).
 - [x] 6. `SupportAcrossTeamsView` (Blazor): cases across teams with the team named (via `ITeamOversightService` when available, else the key), awaiting count, answer/close/reopen in the case's own team, live refresh; `SupportAcrossTeamsViewText`. Tests: `SupportAcrossTeamsViewRenderTests` (5).
 - [x] 7. `SupportCasesView`: a switch for the author on an open case that carries a visibility (i.e. under PerCase); `SupportCasesViewText.ShareWithTeam`. Tests: 2 render tests.
-- [~] 8. Docs: `support-cases.md`, Support README.
-- [ ] 9. Close-out: re-check NuGet, archive plan, remove `plan/`, PR.
+- [x] 8. Docs: `support-cases.md` (staff counts, new "Letting each case decide" section, `SupportAcrossTeamsView`, count table) and the Support README.
+- [ ] 9. Verify against the consuming application through the local project link, before release.
+- [ ] 10. Close-out: re-check NuGet, archive plan, remove `plan/`, PR.
 
 ## Notes
 - Developed alongside a consuming application linked to this source locally; nothing here names it.
