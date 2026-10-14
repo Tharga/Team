@@ -383,6 +383,8 @@ internal sealed class SupportCaseService(
         if (existing == null) return;
 
         await store.MarkReadAsync(teamKey, caseId, await authorizer.GetSubjectAsync(), existing.MessageCount, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Read);
     }
 
     public async Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)

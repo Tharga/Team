@@ -18,5 +18,11 @@ public enum SupportCaseChange
     /// <summary>A case that belonged to no team was given one.</summary>
     Assigned,
 
-    VisibilityChanged
+    VisibilityChanged,
+
+    /// <summary>
+    /// Somebody read the case, so their unread count changed. A subscriber that records a read when it
+    /// reacts must ignore this one, or reading would answer itself.
+    /// </summary>
+    Read
 }
