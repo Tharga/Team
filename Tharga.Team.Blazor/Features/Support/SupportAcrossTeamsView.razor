@@ -44,19 +44,22 @@ else
             foreach (var item in Shown())
             {
                 <div @key="item.Id" data-case="@item.Id">
-                    <ExpandableCard Text="@CaseTitle(item)" ImageUrl="@TeamIcon(item.TeamKey)" Icon="@KindIcon(item)" AllowSaveState="false">
+                    <ExpandableCard Text="@CaseTitle(item)" Icon="@KindIcon(item)" AllowSaveState="false">
                         <TopMenu>
-                            @if (TeamIcon(item.TeamKey) != null)
-                            {
-                                <RadzenIcon Icon="@KindIcon(item)" title="@KindText(item)" data-kind="@KindData(item)" />
-                            }
                             <RadzenBadge Text="@StatusText(item)" BadgeStyle="@StatusStyle(item)" data-status="@item.Id" />
                             @if (item.AwaitingSupport)
                             {
                                 <RadzenBadge Text="@_text[SupportAcrossTeamsViewText.NeedsAnswer]" BadgeStyle="BadgeStyle.Danger" data-needs-answer="@item.Id" />
                             }
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-team="@item.TeamKey">
+                                @if (TeamIcon(item.TeamKey) is { } icon)
+                                {
+                                    <img src="@icon" alt="" style="height: 1.25rem; width: auto; border-radius: 0.25rem;" />
+                                }
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@TeamName(item)</RadzenText>
+                            </RadzenStack>
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
-                                @_text[SupportAcrossTeamsViewText.RaisedBy] @item.AuthorName @_text[SupportAcrossTeamsViewText.InTeam] @TeamName(item) · @Time(item.LastMessageAt ?? item.CreatedAt)
+                                @Time(item.LastMessageAt ?? item.CreatedAt)
                             </RadzenText>
                         </TopMenu>
                         <ChildContent>
@@ -139,11 +142,6 @@ else
         => item.AssistantState == SupportAssistantState.Active ? SupportAssistance.Assistant : SupportAssistance.None;
 
     private static string KindIcon(SupportCase item) => KindOf(item) == SupportAssistance.Assistant ? "smart_toy" : "support_agent";
-
-    private static string KindData(SupportCase item) => KindOf(item) == SupportAssistance.Assistant ? "assistant" : "support";
-
-    private string KindText(SupportCase item)
-        => KindOf(item) == SupportAssistance.Assistant ? _text[SupportAcrossTeamsViewText.Assistant] : _text[SupportAcrossTeamsViewText.Support];
 
     private static string CaseTitle(SupportCase item) => string.IsNullOrWhiteSpace(item.Subject) ? item.Id : item.Subject;
 

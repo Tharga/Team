@@ -125,6 +125,16 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
     private static void Open(IRenderedComponent<SupportAcrossTeamsView> view, string subject)
         => view.FindAll("[data-case] [style*='cursor: pointer']").First(x => x.TextContent.Contains(subject)).Click();
 
+    /// <summary>Whose case it is reads from the organisation alone; the author is in the transcript.</summary>
+    [Fact]
+    public void ACaseNamesItsOrganisation_NotWhoRaisedIt()
+    {
+        var view = RenderView(out _);
+
+        Assert.Contains("Acme", view.Find("[data-case='case-acme'] [data-team]").TextContent);
+        Assert.DoesNotContain("raised by", view.Markup);
+    }
+
     [Fact]
     public void TheQueueCarriesNoHeading()
     {

@@ -46,11 +46,21 @@ public class SupportCaseListRenderTests : BunitContext
         Case("newest", 40)
     ];
 
-    /// <remarks>A conversation with the assistant is neither open nor closed, so the status filter lets it through.</remarks>
     [Fact]
-    public void TheCases_HideClosedOnes_AndPutTheLiveliestFirst()
+    public void ByDefault_OpenSupportCasesAreShown_TheLiveliestFirst()
     {
         var view = RenderCases(out _);
+
+        Assert.Equal(["newest", "older"], CaseIds(view));
+    }
+
+    /// <remarks>A conversation with the assistant is neither open nor closed, so the status filter lets it through.</remarks>
+    [Fact]
+    public async Task ChoosingTheAssistantToo_ShowsItsConversations_WhateverTheStatus()
+    {
+        var view = RenderCases(out _);
+
+        await ChooseKindsAsync(view, SupportAssistance.None, SupportAssistance.Assistant);
 
         Assert.Equal(["assistant", "newest", "older"], CaseIds(view));
     }
@@ -73,6 +83,7 @@ public class SupportCaseListRenderTests : BunitContext
 
         var status = view.FindComponent<RadzenSelectBar<IEnumerable<SupportCaseStatus>>>();
         await view.InvokeAsync(() => status.Instance.Change.InvokeAsync(Array.Empty<SupportCaseStatus>()));
+        await ChooseKindsAsync(view);
 
         Assert.Equal(4, CaseIds(view).Length);
     }
@@ -101,9 +112,10 @@ public class SupportCaseListRenderTests : BunitContext
     }
 
     [Fact]
-    public void EachCaseSaysWhatKindOfConversationItIs_BeforeItIsOpened()
+    public async Task EachCaseSaysWhatKindOfConversationItIs_BeforeItIsOpened()
     {
         var view = RenderCases(out _);
+        await ChooseKindsAsync(view, SupportAssistance.None, SupportAssistance.Assistant);
 
         Assert.Equal(["smart_toy", "support_agent", "support_agent"], view.FindComponents<ExpandableCard>().Select(x => x.Instance.Icon).ToArray());
         Assert.Contains("Assistant conversation", view.Find("[data-status='assistant']").TextContent);
@@ -130,9 +142,10 @@ public class SupportCaseListRenderTests : BunitContext
     }
 
     [Fact]
-    public void AConversationWithTheAssistant_HasNothingToClose()
+    public async Task AConversationWithTheAssistant_HasNothingToClose()
     {
         var view = RenderCases(out _);
+        await ChooseKindsAsync(view, SupportAssistance.Assistant);
 
         OpenCase(view, "assistant");
 
@@ -210,6 +223,12 @@ public class SupportCaseListRenderTests : BunitContext
         OpenCase(view, "waiting");
 
         Assert.Single(view.FindAll("[data-close]"));
+    }
+
+    private static Task ChooseKindsAsync(IRenderedComponent<SupportCasesView> view, params SupportAssistance[] kinds)
+    {
+        var kind = view.FindComponent<RadzenSelectBar<IEnumerable<SupportAssistance>>>();
+        return view.InvokeAsync(() => kind.Instance.Change.InvokeAsync(kinds));
     }
 
     private static string[] CaseIds<T>(IRenderedComponent<T> view) where T : Microsoft.AspNetCore.Components.IComponent

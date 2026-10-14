@@ -14,10 +14,6 @@ public static class SupportAcrossTeamsViewText
 
     public static readonly TextKey NoCases = new("team.support.acrossTeams.none", "No team has raised a support case.");
 
-    public static readonly TextKey RaisedBy = new("team.support.acrossTeams.raisedBy", "raised by");
-
-    public static readonly TextKey InTeam = new("team.support.acrossTeams.inTeam", "in");
-
     public static readonly TextKey AnswerLabel = new("team.support.acrossTeams.answer", "Answer");
 
     public static readonly TextKey Close = new("team.support.acrossTeams.close", "Close case");
@@ -51,7 +47,7 @@ public static class SupportAcrossTeamsViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Awaiting, NoCases, NoneMatch, RaisedBy, InTeam, AnswerLabel, Close, Open, Closed, WithAssistant,
+        Awaiting, NoCases, NoneMatch, AnswerLabel, Close, Open, Closed, WithAssistant,
         ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant
     ];
 }

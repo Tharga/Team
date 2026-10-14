@@ -17,7 +17,7 @@ public static class SupportCasesViewText
 
     public static readonly TextKey SubjectLabel = new("team.support.cases.subject", "Subject");
 
-    public static readonly TextKey MessageLabel = new("team.support.cases.message", "What is wrong?");
+    public static readonly TextKey MessageLabel = new("team.support.cases.message.help", "How can we help you?");
 
     public static readonly TextKey Send = new("team.support.cases.send", "Send");
 

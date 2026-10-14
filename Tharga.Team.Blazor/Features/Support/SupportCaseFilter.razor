@@ -32,12 +32,13 @@
     [Parameter] public EventCallback Changed { get; set; }
 
     private static readonly SupportCaseStatus[] DefaultStatuses = [SupportCaseStatus.Open];
+    private static readonly SupportAssistance[] DefaultKinds = [SupportAssistance.None];
 
     /// <summary>The statuses shown; none chosen shows every status. Open by default.</summary>
     public IEnumerable<SupportCaseStatus> Statuses { get; private set; } = DefaultStatuses;
 
-    /// <summary>The kinds of conversation shown; none chosen shows every kind, which is the default.</summary>
-    public IEnumerable<SupportAssistance> Kinds { get; private set; } = [];
+    /// <summary>The kinds of conversation shown; none chosen shows every kind. Support by default.</summary>
+    public IEnumerable<SupportAssistance> Kinds { get; private set; } = DefaultKinds;
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
@@ -83,7 +84,7 @@
     public bool Shows(SupportCase item) => Shows(item, Statuses, Kinds);
 
     /// <summary>Whether a case passes the default choice, for a list rendered before the filter is.</summary>
-    public static bool ShowsByDefault(SupportCase item) => Shows(item, DefaultStatuses, []);
+    public static bool ShowsByDefault(SupportCase item) => Shows(item, DefaultStatuses, DefaultKinds);
 
     /// <remarks>A conversation the assistant is answering is neither open nor closed, so status does not apply to it.</remarks>
     private static bool Shows(SupportCase item, IEnumerable<SupportCaseStatus> statuses, IEnumerable<SupportAssistance> kinds)
