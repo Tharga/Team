@@ -31,6 +31,12 @@ public record SupportMessage
     public required DateTime SentAt { get; init; }
 
     /// <summary>
+    /// Written from the support side — a support page or a support channel — whoever wrote it. Such a message
+    /// answers the case even when its writer is also the one who raised it.
+    /// </summary>
+    public bool AsSupport { get; init; }
+
+    /// <summary>
     /// Whether this entry reached the case's external channel.
     /// </summary>
     /// <remarks>

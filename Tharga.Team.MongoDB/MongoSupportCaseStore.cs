@@ -97,7 +97,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
         var update = Builders<SupportCaseEntity>.Update
             .Push(x => x.Messages, ToEntity(message with { Sequence = NextSequence(entity) }))
-            .Set(x => x.LastMessageFromAuthor, message.AuthorIdentity == entity.AuthorIdentity)
+            .Set(x => x.LastMessageFromAuthor, !message.AsSupport && message.AuthorIdentity == entity.AuthorIdentity)
             .Set(x => x.LastMessageAt, message.SentAt);
 
         await UpdateAsync(teamKey, caseId, update);
@@ -219,7 +219,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             : entity.Messages.OrderBy(x => x.Sequence).Last();
 
         var isAnswer = last is { Kind: SupportMessageKind.Assistant }
-                       || (last is { Kind: SupportMessageKind.User } && last.AuthorIdentity != entity.AuthorIdentity);
+                       || (last is { Kind: SupportMessageKind.User } && (last.AsSupport || last.AuthorIdentity != entity.AuthorIdentity));
         if (!isAnswer) return false;
 
         var read = Array.Find(entity.Reads ?? [], x => x.Identity == entity.AuthorIdentity);
@@ -236,7 +236,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             ? null
             : entity.Messages.OrderBy(x => x.Sequence).Last();
 
-        return last is { Kind: SupportMessageKind.User } && last.AuthorIdentity != entity.AuthorIdentity;
+        return last is { Kind: SupportMessageKind.User } && (last.AsSupport || last.AuthorIdentity != entity.AuthorIdentity);
     }
 
     public async Task<bool> TryCloseForInactivityAsync(string teamKey, string caseId, DateTime closedAt, SupportMessage closureMessage, CancellationToken cancellationToken = default)
@@ -372,6 +372,24 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     /// is small and bounded - unlike the awaiting-support count, which is why that one is denormalized
     /// instead.
     /// </remarks>
+    public async Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+    {
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity));
+
+        var unread = new List<SupportCaseUnread>();
+        await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
+        {
+            var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity)?.LastReadSequence ?? 0;
+            var count = entity.Messages.Count(x => x.Sequence > read);
+
+            if (count > 0) unread.Add(new SupportCaseUnread { CaseId = entity.CaseId, Count = count });
+        }
+
+        return [.. unread];
+    }
+
     public async Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
     {
         var filter = Builders<SupportCaseEntity>.Filter.And(
@@ -600,7 +618,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Body = entity.Body,
         SentAt = entity.SentAt,
         Delivery = entity.Delivery,
-        Source = entity.Source
+        Source = entity.Source,
+        AsSupport = entity.AsSupport
     };
 
     private static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -612,6 +631,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Body = message.Body,
         SentAt = message.SentAt,
         Delivery = message.Delivery,
-        Source = message.Source
+        Source = message.Source,
+        AsSupport = message.AsSupport
     };
 }

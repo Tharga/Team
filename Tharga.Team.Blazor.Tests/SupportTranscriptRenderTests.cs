@@ -81,6 +81,23 @@ public class SupportTranscriptRenderTests : BunitContext
         Assert.Contains("Sam Support", view.Markup);
     }
 
+    [Fact]
+    public void AnAnswerWrittenFromTheSupportSide_SitsWithTheAnswers_WhoeverWroteIt()
+    {
+        Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddSingleton(Mock.Of<IIconResolver>());
+        Services.AddRadzenComponents();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+
+        var view = Render<SupportTranscript>(parameters => parameters
+            .Add(x => x.Messages, [Message(1, SupportMessageKind.User, Author, "Alice", "Help."), Message(2, SupportMessageKind.User, Author, "Alice", "Answered as support.") with { AsSupport = true }])
+            .Add(x => x.CaseAuthorIdentity, Author)
+            .Add(x => x.AuthorOnRight, true));
+
+        Assert.Equal(["right", "left"], view.FindAll("[data-side]").Select(x => x.GetAttribute("data-side")).ToArray());
+        Assert.Equal(["author", "support"], view.FindAll("[data-sender]").Select(x => x.GetAttribute("data-sender")).ToArray());
+    }
+
     private IRenderedComponent<SupportTranscript> Render(bool authorOnRight)
     {
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();

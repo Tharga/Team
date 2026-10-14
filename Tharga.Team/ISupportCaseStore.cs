@@ -322,6 +322,13 @@ public interface ISupportCaseStore
     Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// This person's own cases holding entries they have not read, with how many each.
+    /// </summary>
+    /// <remarks><b>Defaults to nothing</b>, so a store written before this existed keeps compiling.</remarks>
+    Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCaseUnread[]>([]);
+
+    /// <summary>
     /// How many cases in the team are waiting on support — their newest entry came from the person who
     /// raised them.
     /// </summary>

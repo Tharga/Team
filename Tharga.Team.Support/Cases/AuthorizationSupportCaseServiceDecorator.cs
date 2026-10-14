@@ -66,6 +66,45 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.ReplyToCaseAsync(teamKey, caseId, body, cancellationToken);
     }
 
+    /// <remarks>
+    /// A support grant and nothing else: authorship lets a member reply to their own case, never answer it as
+    /// support, or anybody could clear their own case from the queue by answering it.
+    /// </remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        await inner.AnswerCaseAsync(teamKey, caseId, body, cancellationToken);
+    }
+
+    public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+
+        return await inner.GetMyUnreadByCaseAsync(teamKey, cancellationToken);
+    }
+
+    private async Task RequireSupportAnswerAsync(string teamKey, string caseId)
+    {
+        if (string.IsNullOrEmpty(teamKey))
+        {
+            await RequireSystemScopeAsync(SystemSupportScopes.Manage, "answer");
+            return;
+        }
+
+        if (await HasCrossTeamAccessAsync(CaseAccessKind.Write)) return;
+
+        await RequireMembershipAsync(teamKey);
+
+        var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+
+        if (IsSharedWithTeam(supportCase) && await HasTeamCaseAccessAsync(CaseAccessKind.Write, teamKey)) return;
+
+        throw new UnauthorizedAccessException(
+            $"Answering support case '{caseId}' as support requires {TeamScopesFor(CaseAccessKind.Write)} on team '{teamKey}', " +
+            $"or {CrossTeamScopesFor(CaseAccessKind.Write)}.");
+    }
+
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "close", CaseAccessKind.Write);

@@ -162,6 +162,9 @@ public record SupportMessageEntity
     [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.String)]
     public SupportChannelType? Source { get; init; }
+
+    [BsonIgnoreIfDefault]
+    public bool AsSupport { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system.</summary>

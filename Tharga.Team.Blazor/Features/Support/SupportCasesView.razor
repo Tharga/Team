@@ -99,6 +99,10 @@ else
                                           Click="@(() => ToggleAsync(item.Id))" />
                             <RadzenBadge Text="@StatusText(item)"
                                          BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
+                            @if (UnreadIn(item.Id) is > 0 and var unread)
+                            {
+                                <RadzenBadge Text="@unread.ToString()" BadgeStyle="BadgeStyle.Danger" data-unread="@item.Id" />
+                            }
                         </RadzenStack>
 
                         @if (_selected?.Id == item.Id)
@@ -230,6 +234,7 @@ else
     private SupportCase[] _cases = [];
     private SupportCase _selected;
     private SupportMessage[] _messages = [];
+    private Dictionary<string, int> _unreadByCase = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -471,5 +476,20 @@ else
     {
         _cases = (await SupportCases.GetMyCasesAsync(_teamKey)).Items;
         _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
+        _unreadByCase = (await SupportCases.GetMyUnreadByCaseAsync(_teamKey) ?? []).ToDictionary(x => x.CaseId, x => x.Count);
     }
+
+    private int UnreadIn(string caseId) => _unreadByCase.TryGetValue(caseId, out var count) ? count : 0;
+
+    /// <summary>
+    /// Re-reads the cases and the open one. For a host that hears of a change the in-process notifier cannot
+    /// carry — one made on another instance.
+    /// </summary>
+    public Task RefreshAsync() => InvokeAsync(async () =>
+    {
+        if (_teamKey == null) return;
+
+        await ReloadAsync();
+        StateHasChanged();
+    });
 }

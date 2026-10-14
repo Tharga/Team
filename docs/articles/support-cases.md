@@ -123,6 +123,21 @@ cases and leaves out the ones no team owns, which is `GetUnassignedCasesAsync` a
 `support:all:manage` **does not grant assignment.** Assigning decides which tenant an unassigned case and
 its whole transcript become part of, so it stays with `support:unassigned:manage`.
 
+### Answering as support
+
+`ReplyToCaseAsync` adds to a case; `AnswerCaseAsync` answers it **from the support side**. The difference is
+who the message counts as, not who wrote it: an answer takes the case out of the waiting count and is unread
+for whoever raised it, even when they wrote the answer themselves, from a support page. Every support view
+uses it, and so does a reply typed in a case's Slack thread. Each message carries `AsSupport` so a
+transcript can show it on support's side.
+
+`AnswerCaseAsync` needs a support grant — `support:all:manage`, `support:manage` on the case's team, or for a
+case with no team `support:unassigned:manage`. Having raised the case confers nothing, or anybody could clear
+their own case from the queue by answering it.
+
+`GetMyUnreadByCaseAsync(teamKey)` returns each of the caller's cases that holds unread entries, with how many,
+so a list can mark where to look.
+
 ## Taking support off the access level
 
 By default `support:read` and `support:manage` are granted to every Owner and Administrator of every team,

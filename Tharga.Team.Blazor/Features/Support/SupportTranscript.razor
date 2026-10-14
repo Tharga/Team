@@ -15,7 +15,7 @@
             continue;
         }
 
-        var fromAuthor = message.Kind == SupportMessageKind.User && message.AuthorIdentity == CaseAuthorIdentity;
+        var fromAuthor = message.Kind == SupportMessageKind.User && !message.AsSupport && message.AuthorIdentity == CaseAuthorIdentity;
         var onRight = fromAuthor == AuthorOnRight;
 
         <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")">

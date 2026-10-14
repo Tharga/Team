@@ -91,7 +91,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         view.Find("textarea").Input("We are looking at it.");
         view.FindAll("button").First(b => b.TextContent.Trim() == "Answer").Click();
 
-        cases.Verify(x => x.ReplyToCaseAsync("acme", "case-acme", "We are looking at it.", default), Times.Once);
+        cases.Verify(x => x.AnswerCaseAsync("acme", "case-acme", "We are looking at it.", default), Times.Once);
     }
 
     /// <summary>A change made on another instance reaches no in-process notifier, so the host asks for the re-read.</summary>

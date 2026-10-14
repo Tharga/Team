@@ -44,6 +44,17 @@ public interface ISupportCaseService
     Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Answers a case from the support side. The answer counts as support's whoever writes it, so it takes the
+    /// case out of the waiting count and is unread for the person who raised it until they open it.
+    /// </summary>
+    /// <remarks>
+    /// Needs a grant to answer on behalf of support — <see cref="SystemSupportScopes.AllManage"/>,
+    /// <c>support:manage</c> on the case's team, or for a case with no team
+    /// <see cref="SystemSupportScopes.Manage"/>. Having raised the case confers nothing here.
+    /// </remarks>
+    Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Has the assistant answer the newest message on a case, and appends what it says.
     /// </summary>
     /// <remarks>
@@ -147,6 +158,12 @@ public interface ISupportCaseService
     /// How many of the caller's own cases hold entries they have not read. What a per-user indicator shows.
     /// </summary>
     Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// The caller's own cases that hold entries they have not read, each with how many — so a list can mark
+    /// where to look rather than only that something is waiting.
+    /// </summary>
+    Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// How many open cases in the team are waiting on an answer — their newest entry came from the person

@@ -145,7 +145,20 @@ internal sealed class SupportCaseService(
             .Select(x => $"{x.AuthorName}: {x.Body}"));
     }
 
-    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+    public Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, asSupport: false, cancellationToken);
+
+    public Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, asSupport: true, cancellationToken);
+
+    public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        var subject = await authorizer.GetSubjectAsync();
+
+        return string.IsNullOrEmpty(subject) ? [] : await store.GetUnreadByCaseAsync(teamKey, subject, cancellationToken);
+    }
+
+    private async Task WriteAsync(string teamKey, string caseId, string body, bool asSupport, CancellationToken cancellationToken)
     {
         RequireWithinLength(body);
 
@@ -167,16 +180,19 @@ internal sealed class SupportCaseService(
             AuthorIdentity = await authorizer.GetSubjectAsync(),
             AuthorName = await authorizer.GetDisplayNameAsync(),
             Body = body,
-            SentAt = now
+            SentAt = now,
+            AsSupport = asSupport
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
         var sequence = (existing?.MessageCount ?? 0) + 1;
-        await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, sequence, cancellationToken);
+
+        // An answer is unread for whoever raised the case, even when the one answering raised it too.
+        if (!asSupport) await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, sequence, cancellationToken);
 
         // The first message to a person opens the channels, carrying the conversation with the assistant before it;
         // asking for a person without writing anything has nothing yet for support to answer.
-        if (existing != null && existing.AssistantState != SupportAssistantState.Active && existing.Bindings is not { Length: > 0 })
+        if (!asSupport && existing != null && existing.AssistantState != SupportAssistantState.Active && existing.Bindings is not { Length: > 0 })
         {
             await ProjectAsync(existing, await ConversationSoFarAsync(teamKey, caseId, cancellationToken), sequence, cancellationToken);
         }

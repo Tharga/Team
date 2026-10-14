@@ -196,7 +196,7 @@ else
         _busy = true;
         try
         {
-            await SupportCases.ReplyToCaseAsync(_selected.TeamKey, _selected.Id, _answer);
+            await SupportCases.AnswerCaseAsync(_selected.TeamKey, _selected.Id, _answer);
             _answer = null;
 
             await ReloadAsync();

@@ -86,7 +86,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
             if (last == null) continue;
             if (last.Kind != SupportMessageKind.User) continue;
-            if (last.AuthorIdentity == supportCase.AuthorIdentity) continue;
+            if (!last.AsSupport && last.AuthorIdentity == supportCase.AuthorIdentity) continue;
             if (last.SentAt >= lastActivityBefore) continue;
 
             due.Add(supportCase);
@@ -208,6 +208,16 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCaseUnread[]>([.. _cases
+            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity)
+            .Select(x => new SupportCaseUnread
+            {
+                CaseId = x.Case.Id,
+                Count = x.Messages.Count - (_reads.TryGetValue((x.Case.Id, identity), out var read) ? read : 0)
+            })
+            .Where(x => x.Count > 0)]);
+
     public Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases
             .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity)
@@ -248,6 +258,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
             .Where(x => population(x.Case) && x.Case.Status == SupportCaseStatus.Open)
             .Count(x => x.Messages.Count > 0
                         && x.Messages[^1].Kind == SupportMessageKind.User
+                        && !x.Messages[^1].AsSupport
                         && x.Messages[^1].AuthorIdentity == x.Case.AuthorIdentity);
 
     public Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)

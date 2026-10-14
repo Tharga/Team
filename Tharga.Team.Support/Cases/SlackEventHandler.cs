@@ -109,7 +109,9 @@ internal sealed class SlackEventHandler(
             // thread it arrived from.
             Delivery = SupportMessageDelivery.Sent,
 
-            Source = SupportChannelType.Slack
+            Source = SupportChannelType.Slack,
+            // The support channel is support's side of the conversation, whoever in it answers.
+            AsSupport = true
         };
 
         await store.AppendMessageAsync(supportCase.TeamKey, supportCase.Id, message, cancellationToken);

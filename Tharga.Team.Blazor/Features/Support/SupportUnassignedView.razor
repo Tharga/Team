@@ -240,7 +240,7 @@ else
         _busy = true;
         try
         {
-            await SupportCases.ReplyToCaseAsync(null, _selected.Id, _answer);
+            await SupportCases.AnswerCaseAsync(null, _selected.Id, _answer);
             _answer = null;
 
             await ReloadAsync();
