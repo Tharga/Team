@@ -71,7 +71,12 @@ internal sealed class SupportCaseService(
         // The case is written first and is authoritative. Projecting it onto a channel comes after, so a
         // channel that is slow, misconfigured or down cannot stop somebody reporting a problem -- they get a
         // case either way, and an undelivered entry stays visible as Pending rather than being lost.
-        await ProjectAsync(supportCase, body, firstMessage.Sequence, cancellationToken);
+        // A conversation the assistant is answering is the product talking to itself; channels hear of it
+        // when somebody asks for a person, in RequestHumanAsync.
+        if (supportCase.AssistantState != SupportAssistantState.Active)
+        {
+            await ProjectAsync(supportCase, body, firstMessage.Sequence, cancellationToken);
+        }
 
         Notify(teamKey, supportCase.Id, SupportCaseChange.Raised);
 
@@ -124,7 +129,26 @@ internal sealed class SupportCaseService(
 
         await store.SetAssistantStateAsync(teamKey, caseId, SupportAssistantState.HandedOff, cancellationToken);
 
+        if (supportCase.Bindings is not { Length: > 0 })
+        {
+            await ProjectAsync(supportCase with { AssistantState = SupportAssistantState.HandedOff },
+                await ConversationSoFarAsync(teamKey, caseId, cancellationToken), supportCase.MessageCount, cancellationToken);
+        }
+
         Notify(teamKey, caseId, SupportCaseChange.Replied);
+    }
+
+    /// <summary>
+    /// What the member and the assistant said before a person was asked for, so whoever picks it up in a
+    /// channel starts from the conversation rather than from its first line.
+    /// </summary>
+    private async Task<string> ConversationSoFarAsync(string teamKey, string caseId, CancellationToken cancellationToken)
+    {
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+
+        return string.Join("\n", messages
+            .Where(x => x.Kind != SupportMessageKind.System)
+            .Select(x => $"{x.AuthorName}: {x.Body}"));
     }
 
     public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)

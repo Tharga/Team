@@ -696,6 +696,11 @@ including the ones handled perfectly, which is how people learn to ignore a queu
 a customer replying *that did not help* would sit unseen. Replying re-raises it, so a dissatisfied customer is
 always back in front of a person.
 
+**A conversation the assistant is answering reaches no channel.** No Slack thread and no mail to support
+are opened for it. When the customer asks for a person, the channel opens then, carrying the conversation so
+far, so whoever picks it up starts from what was already said. A customer who asks for a person from the
+start gets the channel at once.
+
 ### It answers; it does not act
 
 The built-in tools are reads: the caller's own cases, and one case's transcript. Closing, assigning and
