@@ -1,0 +1,253 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@implements IDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+@inject IServiceProvider Services
+
+@* Every action passes the case's own team, so the service checks it exactly as in that team's queue. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[SupportAcrossTeamsViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportAcrossTeamsViewText.Title]</RadzenText>
+            @if (_awaiting > 0)
+            {
+                <RadzenBadge Text="@($"{_awaiting} {_text[SupportAcrossTeamsViewText.Awaiting]}")" BadgeStyle="BadgeStyle.Danger" />
+            }
+        </RadzenStack>
+
+        @if (_cases.Length == 0)
+        {
+            <RadzenText TextStyle="TextStyle.Body2">@_text[SupportAcrossTeamsViewText.NoCases]</RadzenText>
+        }
+        else
+        {
+            foreach (var item in _cases)
+            {
+                <RadzenCard Variant="Variant.Outlined">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+                        <RadzenButton Text="@item.Subject" Variant="Variant.Text" Size="ButtonSize.Small"
+                                      Click="@(() => ToggleAsync(item))" />
+                        <RadzenBadge Text="@StatusText(item)"
+                                     BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                            @_text[SupportAcrossTeamsViewText.RaisedBy] @item.AuthorName @_text[SupportAcrossTeamsViewText.InTeam] @TeamName(item.TeamKey)
+                        </RadzenText>
+                    </RadzenStack>
+
+                    @if (_selected?.Id == item.Id)
+                    {
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
+                            <SupportTranscript Messages="_messages" />
+
+                            @if (_selected.Status == SupportCaseStatus.Open)
+                            {
+                                <RadzenTextArea Value="@_answer" ValueChanged="@(v => _answer = v)"
+                                                @oninput="@(e => _answer = e.Value?.ToString())"
+                                                Placeholder="@_text[SupportAcrossTeamsViewText.AnswerLabel]"
+                                                Rows="3" Style="width: 100%;" aria-label="@_text[SupportAcrossTeamsViewText.AnswerLabel]" />
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Text="@_text[SupportAcrossTeamsViewText.AnswerLabel]" Click="AnswerAsync"
+                                                  Disabled="@(string.IsNullOrWhiteSpace(_answer) || _busy)" />
+                                    <RadzenButton Text="@_text[SupportAcrossTeamsViewText.Close]" ButtonStyle="ButtonStyle.Light"
+                                                  Click="CloseAsync" Disabled="_busy" />
+                                </RadzenStack>
+                            }
+                            else
+                            {
+                                <div>
+                                    <RadzenButton Text="@_text[SupportAcrossTeamsViewText.Reopen]" Icon="refresh"
+                                                  ButtonStyle="ButtonStyle.Light" Click="ReopenAsync" Disabled="_busy" />
+                                </div>
+                            }
+                        </RadzenStack>
+                    }
+                </RadzenCard>
+            }
+        }
+    </RadzenStack>
+}
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _busy;
+    private bool _permitted = true;
+
+    private string _answer;
+    private int _awaiting;
+
+    private SupportCase[] _cases = [];
+    private SupportCase _selected;
+    private SupportMessage[] _messages = [];
+    private Dictionary<string, string> _teamNames = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportAcrossTeamsViewText.All);
+
+        Notifier.CaseUpdated += OnCaseUpdated;
+
+        await ReloadAsync();
+        if (_permitted) await LoadTeamNamesAsync();
+
+        _ready = true;
+    }
+
+    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <remarks>
+    /// Any case that has a team belongs to this queue, so any such change refreshes it. Marshalled because the
+    /// notifier is raised from whichever scope handled the change.
+    /// </remarks>
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
+    {
+        if (e.TeamKey == null) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            if (_selected != null) await SelectAsync(_selected);
+            StateHasChanged();
+        });
+    }
+
+    private string StatusText(SupportCase item)
+        => item.Status == SupportCaseStatus.Open
+            ? _text[SupportAcrossTeamsViewText.Open]
+            : item.ClosedReason == SupportCaseClosureReason.Inactivity
+                ? _text[SupportAcrossTeamsViewText.ClosedForInactivity]
+                : _text[SupportAcrossTeamsViewText.Closed];
+
+    private string TeamName(string teamKey)
+        => teamKey != null && _teamNames.TryGetValue(teamKey, out var name) ? name : teamKey;
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            _cases = (await SupportCases.GetCasesAcrossTeamsAsync()).Items;
+            _awaiting = await SupportCases.GetAwaitingSupportCountAcrossTeamsAsync();
+            _permitted = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _cases = [];
+            _awaiting = 0;
+            _permitted = false;
+        }
+    }
+
+    /// <remarks>
+    /// Team names are a convenience: listing teams is its own system grant, and without it the queue shows each
+    /// case's team key instead — still telling the reader whose case it is.
+    /// </remarks>
+    private async Task LoadTeamNamesAsync()
+    {
+        if (Services.GetService(typeof(ITeamOversightService)) is not ITeamOversightService oversight) return;
+
+        try
+        {
+            var names = new Dictionary<string, string>();
+
+            await foreach (var team in oversight.GetAllTeamsAsync())
+            {
+                names[team.Key] = string.IsNullOrWhiteSpace(team.Name) ? team.Key : team.Name;
+            }
+
+            _teamNames = names;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _teamNames = new();
+        }
+    }
+
+    private async Task AnswerAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_answer) || _selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReplyToCaseAsync(_selected.TeamKey, _selected.Id, _answer);
+            _answer = null;
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CloseAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.CloseCaseAsync(_selected.TeamKey, _selected.Id);
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReopenAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        try
+        {
+            await SupportCases.ReopenCaseAsync(_selected.TeamKey, _selected.Id);
+
+            await ReloadAsync();
+            await SelectAsync(_selected);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ToggleAsync(SupportCase item)
+    {
+        if (_selected?.Id == item.Id)
+        {
+            _selected = null;
+            _messages = [];
+            return;
+        }
+
+        await SelectAsync(item);
+    }
+
+    private async Task SelectAsync(SupportCase item)
+    {
+        _selected = await SupportCases.GetCaseAsync(item.TeamKey, item.Id);
+        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(item.TeamKey, item.Id)).Items;
+    }
+}
