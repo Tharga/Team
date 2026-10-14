@@ -70,6 +70,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         {
             CaseId = supportCase.Id,
             TeamKey = supportCase.TeamKey,
+            TeamName = supportCase.TeamName,
             AuthorIdentity = supportCase.AuthorIdentity,
             AuthorName = supportCase.AuthorName,
             Subject = supportCase.Subject,
@@ -569,6 +570,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     {
         Id = entity.CaseId,
         TeamKey = entity.TeamKey,
+        TeamName = entity.TeamName,
         AuthorIdentity = entity.AuthorIdentity,
         AuthorName = entity.AuthorName,
         Subject = entity.Subject,

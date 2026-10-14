@@ -9,6 +9,7 @@
 - [x] 6. `SupportAcrossTeamsView` (Blazor): cases across teams with the team named (via `ITeamOversightService` when available, else the key), awaiting count, answer/close/reopen in the case's own team, live refresh; `SupportAcrossTeamsViewText`. Tests: `SupportAcrossTeamsViewRenderTests` (5).
 - [x] 7. `SupportCasesView`: a switch for the author on an open case that carries a visibility (i.e. under PerCase); `SupportCasesViewText.ShareWithTeam`. Tests: 2 render tests.
 - [x] 8. Docs: `support-cases.md` (staff counts, new "Letting each case decide" section, `SupportAcrossTeamsView`, count table) and the Support README.
+- [x] 8b. `SupportCaseView.RefreshAsync` for hosts with a backplane. `SupportCase.TeamName` (read through the author's `ITeamDirectoryService` when raised, stored, best effort) — in the raise audit metadata (`team.name`) and the Slack thread opening. `SlackText.Escape` applied to every substituted notification value and every value the Slack channel posts. Manifest gains `channels:history` / `groups:history`, without which `message.*` events cannot be subscribed. Tests: `SupportCaseTeamNameTests` (5).
 - [ ] 9. Verify against the consuming application through the local project link, before release.
 - [ ] 10. Close-out: re-check NuGet, archive plan, remove `plan/`, PR.
 

@@ -401,7 +401,7 @@ At this point notifications and case threads work. Replies typed in Slack do not
 > strictly: an unknown key is rejected outright, and a placeholder URL is rejected because it is *verified*
 > rather than merely stored. The guidance that belongs with a human lives here instead of in the file.
 
-The manifest asks for exactly four scopes, each required by code:
+The manifest asks for exactly six scopes, each required by code or by Slack:
 
 | Scope | Used by | For |
 |---|---|---|
@@ -409,6 +409,11 @@ The manifest asks for exactly four scopes, each required by code:
 | `users:read` | `users.getPresence` | whether anybody on support is active |
 | `channels:read` | `conversations.members` | who is on a public support channel |
 | `groups:read` | `conversations.members` | the same, for a private channel |
+| `channels:history` | the `message.channels` event | receiving replies typed in a public support channel's threads |
+| `groups:history` | the `message.groups` event | the same, for a private channel |
+
+**Without the history scope Slack will not let you subscribe to the message event**, so replies typed in
+Slack never arrive. An app created from an older manifest needs the scope added and the app reinstalled.
 
 **Remove a scope and the feature that needs it stops working quietly**, not loudly — the client reports
 failures rather than throwing, by design, so a missing scope looks like nothing happening.

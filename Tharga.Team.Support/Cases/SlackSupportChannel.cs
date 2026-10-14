@@ -29,7 +29,10 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
         // rather than a failure. The case is raised either way.
         if (string.IsNullOrWhiteSpace(channel)) return null;
 
-        var text = $"*{supportCase.Subject}*\n{openingMessage}\n_raised by {supportCase.AuthorName}_";
+        var raisedBy = string.IsNullOrWhiteSpace(supportCase.TeamName)
+            ? $"_raised by {SlackText.Escape(supportCase.AuthorName)}_"
+            : $"_raised by {SlackText.Escape(supportCase.AuthorName)} in {SlackText.Escape(supportCase.TeamName)}_";
+        var text = $"*{SlackText.Escape(supportCase.Subject)}*\n{SlackText.Escape(openingMessage)}\n{raisedBy}";
 
         var result = await slackClient.PostAsync(channel, text, cancellationToken: cancellationToken);
 
@@ -49,8 +52,8 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
         if (string.IsNullOrWhiteSpace(channel) || binding?.ExternalId == null) return false;
 
         var text = message.Kind == SupportMessageKind.System
-            ? $"_{message.Body}_"
-            : $"*{message.AuthorName}*: {message.Body}";
+            ? $"_{SlackText.Escape(message.Body)}_"
+            : $"*{SlackText.Escape(message.AuthorName)}*: {SlackText.Escape(message.Body)}";
 
         var result = await slackClient.PostAsync(channel, text, binding.ExternalId, cancellationToken);
 

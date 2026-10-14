@@ -19,7 +19,8 @@ internal sealed class SupportCaseService(
     IEnumerable<ISupportChannel> channels = null,
     ISupportCaseNotifier notifier = null,
     ISupportResponder responder = null,
-    SupportCaseVisibilityMode visibilityMode = SupportCaseVisibilityMode.TeamWide) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportCaseVisibilityMode visibilityMode = SupportCaseVisibilityMode.TeamWide,
+    ITeamDirectoryService teamDirectory = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -41,6 +42,7 @@ internal sealed class SupportCaseService(
         {
             Id = Guid.NewGuid().ToString(),
             TeamKey = teamKey,
+            TeamName = await TeamNameAsync(teamKey),
             AuthorIdentity = subjectIdentity,
             AuthorName = authorName,
             Subject = string.IsNullOrWhiteSpace(subject) ? SubjectFromMessage.Derive(body) : subject.Trim(),
@@ -392,6 +394,33 @@ internal sealed class SupportCaseService(
     /// storage adapter must inherit the rule rather than be trusted to reimplement it. The MongoDB adapter
     /// keeps its own check as a last-resort backstop for a caller that reaches the port directly.
     /// </remarks>
+    /// <summary>
+    /// The team's name, read through the author's own team list — the caller raising a case is a member, so
+    /// this needs no grant of its own.
+    /// </summary>
+    /// <remarks>
+    /// Best effort: a case is raised whether or not a name can be read, so a host without a directory, or one
+    /// that fails, simply gets a case worded with the key.
+    /// </remarks>
+    private async Task<string> TeamNameAsync(string teamKey)
+    {
+        if (teamDirectory == null || string.IsNullOrEmpty(teamKey)) return null;
+
+        try
+        {
+            await foreach (var team in teamDirectory.GetTeamsAsync())
+            {
+                if (team.Key == teamKey) return string.IsNullOrWhiteSpace(team.Name) ? null : team.Name;
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
     private static void RequireWithinLength(string body)
     {
         if (body != null && body.Length > SupportCaseLimits.MaxMessageLength)

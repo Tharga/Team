@@ -40,6 +40,12 @@ public record SupportCase
     public string TeamKey { get; init; }
 
     /// <summary>
+    /// The team's name as it was when the case was raised, for wording a message about it; <c>null</c> when it
+    /// could not be read, and for a case that arrived with no team.
+    /// </summary>
+    public string TeamName { get; init; }
+
+    /// <summary>
     /// The stable authentication subject of whoever raised the case. May no longer resolve to a user or a
     /// member, which is expected rather than exceptional.
     /// </summary>

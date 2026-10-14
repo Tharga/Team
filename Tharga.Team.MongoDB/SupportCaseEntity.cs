@@ -39,6 +39,9 @@ public record SupportCaseEntity : EntityBase
     [BsonIgnoreIfNull]
     public string TeamKey { get; init; }
 
+    [BsonIgnoreIfNull]
+    public string TeamName { get; init; }
+
     public required string AuthorIdentity { get; init; }
 
     public required string AuthorName { get; init; }
