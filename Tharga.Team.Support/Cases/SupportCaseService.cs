@@ -129,12 +129,6 @@ internal sealed class SupportCaseService(
 
         await store.SetAssistantStateAsync(teamKey, caseId, SupportAssistantState.HandedOff, cancellationToken);
 
-        if (supportCase.Bindings is not { Length: > 0 })
-        {
-            await ProjectAsync(supportCase with { AssistantState = SupportAssistantState.HandedOff },
-                await ConversationSoFarAsync(teamKey, caseId, cancellationToken), supportCase.MessageCount, cancellationToken);
-        }
-
         Notify(teamKey, caseId, SupportCaseChange.Replied);
     }
 
@@ -177,9 +171,19 @@ internal sealed class SupportCaseService(
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
-        await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, (existing?.MessageCount ?? 0) + 1, cancellationToken);
+        var sequence = (existing?.MessageCount ?? 0) + 1;
+        await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, sequence, cancellationToken);
 
-        await DeliverAsync(teamKey, caseId, existing, message with { Sequence = (existing?.MessageCount ?? 0) + 1 }, cancellationToken);
+        // The first message to a person opens the channels, carrying the conversation with the assistant before it;
+        // asking for a person without writing anything has nothing yet for support to answer.
+        if (existing != null && existing.AssistantState != SupportAssistantState.Active && existing.Bindings is not { Length: > 0 })
+        {
+            await ProjectAsync(existing, await ConversationSoFarAsync(teamKey, caseId, cancellationToken), sequence, cancellationToken);
+        }
+        else
+        {
+            await DeliverAsync(teamKey, caseId, existing, message with { Sequence = sequence }, cancellationToken);
+        }
 
         Notify(teamKey, caseId, SupportCaseChange.Replied);
     }

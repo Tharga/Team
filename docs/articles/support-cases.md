@@ -697,8 +697,8 @@ a customer replying *that did not help* would sit unseen. Replying re-raises it,
 always back in front of a person.
 
 **A conversation the assistant is answering reaches no channel.** No Slack thread and no mail to support
-are opened for it. When the customer asks for a person, the channel opens then, carrying the conversation so
-far, so whoever picks it up starts from what was already said. A customer who asks for a person from the
+are opened for it. Asking for a person opens nothing by itself; the customer's first message to a person
+opens the channel, carrying the conversation so far, so whoever picks it up starts from what was already said. A customer who asks for a person from the
 start gets the channel at once.
 
 ### It answers; it does not act
