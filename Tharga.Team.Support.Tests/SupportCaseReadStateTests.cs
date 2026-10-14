@@ -18,16 +18,14 @@ public class SupportCaseReadStateTests
     private const string Alice = "alice";
     private const string Bob = "bob";
 
+    /// <summary>The author wrote the opening message, so a new case has nothing in it they have not read.</summary>
     [Fact]
-    public async Task ANewCase_IsUnreadToItsAuthorUntilTheyOpenIt()
+    public async Task ANewCase_HasNothingUnreadForItsAuthor()
     {
         var store = new InMemorySupportCaseStore();
         var alice = Build(TeamA, Alice, store);
 
-        var raised = await alice.RaiseCaseAsync(TeamA, "Subject", "Body");
-        Assert.Equal(1, await alice.GetMyUnreadCountAsync(TeamA));
-
-        await alice.MarkReadAsync(TeamA, raised.Id);
+        await alice.RaiseCaseAsync(TeamA, "Subject", "Body");
 
         Assert.Equal(0, await alice.GetMyUnreadCountAsync(TeamA));
     }
@@ -93,9 +91,10 @@ public class SupportCaseReadStateTests
     {
         var store = new InMemorySupportCaseStore();
         var alice = Build(TeamA, Alice, store);
-        var bob = Build(TeamA, Bob, store, [SupportScopes.Read]);
+        var bob = Build(TeamA, Bob, store, [SupportScopes.Read, SupportScopes.Manage]);
 
         var raised = await alice.RaiseCaseAsync(TeamA, "Subject", "Body");
+        await bob.ReplyToCaseAsync(TeamA, raised.Id, "Looking into it.");
 
         await bob.MarkReadAsync(TeamA, raised.Id);
 

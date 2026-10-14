@@ -79,6 +79,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Visibility = supportCase.Visibility,
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
+            Bindings = [],
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
@@ -440,15 +441,19 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
     public async Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAsync(teamKey, caseId);
+        var entity = await RequireCaseAsync(teamKey, caseId);
 
-        var update = Builders<SupportCaseEntity>.Update
-            .Push(x => x.Bindings, new SupportChannelBindingEntity
-            {
-                ChannelType = binding.ChannelType,
-                ExternalId = binding.ExternalId,
-                Address = binding.Address
-            });
+        var added = new SupportChannelBindingEntity
+        {
+            ChannelType = binding.ChannelType,
+            ExternalId = binding.ExternalId,
+            Address = binding.Address
+        };
+
+        // Cases written before this always started with an empty list store it as null, which $push refuses.
+        var update = entity.Bindings == null
+            ? Builders<SupportCaseEntity>.Update.Set(x => x.Bindings, [added])
+            : Builders<SupportCaseEntity>.Update.Push(x => x.Bindings, added);
 
         await UpdateAsync(teamKey, caseId, update);
     }

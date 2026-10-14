@@ -66,6 +66,7 @@ internal sealed class SupportCaseService(
         };
 
         await store.AddCaseAsync(supportCase, firstMessage, cancellationToken);
+        await MarkOwnMessageReadAsync(teamKey, supportCase.Id, subjectIdentity, firstMessage.Sequence, cancellationToken);
 
         // The case is written first and is authoritative. Projecting it onto a channel comes after, so a
         // channel that is slow, misconfigured or down cannot stop somebody reporting a problem -- they get a
@@ -152,6 +153,7 @@ internal sealed class SupportCaseService(
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+        await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, (existing?.MessageCount ?? 0) + 1, cancellationToken);
 
         await DeliverAsync(teamKey, caseId, existing, message with { Sequence = (existing?.MessageCount ?? 0) + 1 }, cancellationToken);
 
@@ -420,6 +422,14 @@ internal sealed class SupportCaseService(
 
         return null;
     }
+
+    /// <summary>
+    /// Whoever wrote a message has read it, so it never counts as unread for them — only somebody else's answer does.
+    /// </summary>
+    private Task MarkOwnMessageReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken)
+        => string.IsNullOrEmpty(identity)
+            ? Task.CompletedTask
+            : store.MarkReadAsync(teamKey, caseId, identity, sequence, cancellationToken);
 
     private static void RequireWithinLength(string body)
     {
