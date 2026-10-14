@@ -22,7 +22,7 @@ else if (_teamKey == null)
 }
 else
 {
-    <RadzenTabs @bind-SelectedIndex="_tab" RenderMode="TabRenderMode.Client">
+    <RadzenTabs SelectedIndex="_tab" SelectedIndexChanged="OnTabSelectedAsync" RenderMode="TabRenderMode.Client">
         <Tabs>
             <RadzenTabsItem Text="@_text[SupportCasesViewText.CasesTab]" data-tab="cases">
                 <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
@@ -139,6 +139,21 @@ else
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 
+    /// <summary>
+    /// The tab to show by name — <see cref="CasesTab"/> or <see cref="NewCaseTab"/> — so a host can link straight to one.
+    /// Null or unknown picks for the reader: the cases, or where help is asked for when there are none yet.
+    /// </summary>
+    [Parameter] public string Tab { get; set; }
+
+    /// <summary>Raised with the tab's name whenever the shown tab changes, so a host can keep its address in step.</summary>
+    [Parameter] public EventCallback<string> TabChanged { get; set; }
+
+    /// <summary>The name of the tab listing every conversation.</summary>
+    public const string CasesTab = "cases";
+
+    /// <summary>The name of the tab where help is asked for.</summary>
+    public const string NewCaseTab = "new";
+
     /// <summary>Where the list filter is remembered in the browser.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Cases.Filter";
 
@@ -150,8 +165,8 @@ else
     /// </remarks>
     [Inject] private IServiceProvider Services { get; set; }
 
-    private const int CasesTab = 0;
-    private const int NewCaseTab = 1;
+    private const int CasesIndex = 0;
+    private const int NewCaseIndex = 1;
 
     private SupportPresenceState _presence = SupportPresenceState.Unknown;
     private SupportAssistance[] _offered = [SupportAssistance.None];
@@ -159,7 +174,8 @@ else
     private TextSet _text = TextSet.Empty;
     private bool _ready;
     private bool _busy;
-    private int _tab = CasesTab;
+    private int _tab = CasesIndex;
+    private string _appliedTab;
 
     private string _teamKey;
     private string _subject;
@@ -193,7 +209,8 @@ else
         if (!string.IsNullOrWhiteSpace(CaseId) && _cases.Any(x => x.Id == CaseId)) _opened = CaseId;
 
         // A first visit has nothing to follow yet, so it starts where help is asked for.
-        if (_teamKey != null && _cases.Length == 0) _tab = NewCaseTab;
+        if (_teamKey != null && _cases.Length == 0) _tab = NewCaseIndex;
+        ApplyTab();
 
         // After _ready: presence is advisory and must never delay the form being usable.
         _ready = true;
@@ -214,6 +231,36 @@ else
         {
             _presence = SupportPresenceState.Unknown;
         }
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_ready) ApplyTab();
+    }
+
+    // Only a changed name moves the tab, so a host re-rendering with the same address leaves the reader's choice alone.
+    private void ApplyTab()
+    {
+        if (Tab == _appliedTab) return;
+
+        _appliedTab = Tab;
+        if (IndexOf(Tab) is { } index) _tab = index;
+    }
+
+    private static int? IndexOf(string tab) => tab switch
+    {
+        CasesTab => CasesIndex,
+        NewCaseTab => NewCaseIndex,
+        _ => null
+    };
+
+    private static string NameOf(int index) => index == NewCaseIndex ? NewCaseTab : CasesTab;
+
+    private async Task OnTabSelectedAsync(int index)
+    {
+        _tab = index;
+        _appliedTab = NameOf(index);
+        await TabChanged.InvokeAsync(_appliedTab);
     }
 
     public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
@@ -277,7 +324,7 @@ else
 
             await ReloadAsync();
             _opened = raised.Id;
-            _tab = CasesTab;
+            await OnTabSelectedAsync(CasesIndex);
             StateHasChanged();
 
             // After the case is on screen: raising stays fast, and the answer lands when the model is done.

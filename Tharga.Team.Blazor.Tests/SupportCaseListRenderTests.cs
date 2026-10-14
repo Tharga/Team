@@ -133,6 +133,27 @@ public class SupportCaseListRenderTests : BunitContext
         Assert.Equal(0, view.FindComponent<RadzenTabs>().Instance.SelectedIndex);
     }
 
+    [Theory]
+    [InlineData(SupportCasesView.NewCaseTab, 1)]
+    [InlineData(SupportCasesView.CasesTab, 0)]
+    public void ANamedTab_IsTheOneShown(string tab, int index)
+    {
+        var view = RenderCases(out _, tab: tab);
+
+        Assert.Equal(index, view.FindComponent<RadzenTabs>().Instance.SelectedIndex);
+    }
+
+    [Fact]
+    public async Task ChangingTab_TellsTheHostItsName()
+    {
+        string told = null;
+        var view = RenderCases(out _, tabChanged: x => told = x);
+
+        await view.InvokeAsync(() => view.FindComponent<RadzenTabs>().Instance.SelectedIndexChanged.InvokeAsync(1));
+
+        Assert.Equal(SupportCasesView.NewCaseTab, told);
+    }
+
     [Fact]
     public void WithNoCaseYet_ItOpensWhereHelpIsAskedFor()
     {
@@ -264,7 +285,7 @@ public class SupportCaseListRenderTests : BunitContext
         return Render<SupportAcrossTeamsView>(p => p.Add(x => x.StaffCloseAfter, window));
     }
 
-    private IRenderedComponent<SupportCasesView> RenderCases(out Mock<ISupportCaseService> cases, SupportCase[] items = null)
+    private IRenderedComponent<SupportCasesView> RenderCases(out Mock<ISupportCaseService> cases, SupportCase[] items = null, string tab = null, Action<string> tabChanged = null)
     {
         items ??= Cases;
         cases = new Mock<ISupportCaseService>();
@@ -290,6 +311,6 @@ public class SupportCaseListRenderTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
-        return Render<SupportCasesView>();
+        return Render<SupportCasesView>(p => p.Add(x => x.Tab, tab).Add(x => x.TabChanged, tabChanged ?? (_ => { })));
     }
 }
