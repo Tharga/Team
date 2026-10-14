@@ -1,11 +1,13 @@
 @using Tharga.Team.Support.Cases
 @using Tharga.Team.Blazor.Framework
+@using Tharga.Blazor
 @implements IDisposable
 @inject ISupportCaseService SupportCases
 @inject ISupportCaseNotifier Notifier
 @inject IServiceProvider Services
 
-@* Every action passes the case's own team, so the service checks it exactly as in that team's queue. *@
+@* Every action passes the case's own team, so the service checks it exactly as in that team's queue. Nothing
+   here reads the selected team: the queue is the same whichever team the reader has chosen. *@
 
 @if (!_ready)
 {
@@ -19,45 +21,36 @@ else if (!_permitted)
 }
 else
 {
-    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
 
         <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportAcrossTeamsViewText.Title]</RadzenText>
+            <SupportCaseFilter @ref="_filter" StorageKey="@StorageKey" Changed="StateHasChanged" />
             @if (_awaiting > 0)
             {
                 <RadzenBadge Text="@($"{_awaiting} {_text[SupportAcrossTeamsViewText.Awaiting]}")" BadgeStyle="BadgeStyle.Danger" data-awaiting="@_awaiting" />
             }
-
-            <RadzenSelectBar @bind-Value="_kinds" TValue="IEnumerable<SupportAssistance>" Multiple="true" Size="ButtonSize.Small" aria-label="@_text[SupportAcrossTeamsViewText.Title]">
-                <Items>
-                    <RadzenSelectBarItem Text="@_text[SupportAcrossTeamsViewText.Support]" Icon="support_agent" Value="SupportAssistance.None" />
-                    <RadzenSelectBarItem Text="@_text[SupportAcrossTeamsViewText.Assistant]" Icon="smart_toy" Value="SupportAssistance.Assistant" />
-                </Items>
-            </RadzenSelectBar>
-
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center">
-                <RadzenCheckBox @bind-Value="_showClosed" Name="showClosedAcrossTeams" />
-                <RadzenLabel Text="@_text[SupportAcrossTeamsViewText.ShowClosed]" Component="showClosedAcrossTeams" />
-            </RadzenStack>
         </RadzenStack>
 
         @if (_cases.Length == 0)
         {
             <RadzenText TextStyle="TextStyle.Body2">@_text[SupportAcrossTeamsViewText.NoCases]</RadzenText>
         }
+        else if (!Shown().Any())
+        {
+            <RadzenText TextStyle="TextStyle.Body2">@_text[SupportAcrossTeamsViewText.NoneMatch]</RadzenText>
+        }
         else
         {
             foreach (var item in Shown())
             {
-                <RadzenPanel @key="item.Id" AllowCollapse="true" Collapsed="@(_selected?.Id != item.Id)"
-                             Expand="@(() => SelectAsync(item))" Collapse="@Deselect" data-case="@item.Id">
-                    <HeaderTemplate>
-                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                            <RadzenIcon Icon="@(KindOf(item) == SupportAssistance.Assistant ? "smart_toy" : "support_agent")"
-                                        title="@(KindOf(item) == SupportAssistance.Assistant ? _text[SupportAcrossTeamsViewText.Assistant] : _text[SupportAcrossTeamsViewText.Support])"
-                                        data-kind="@(KindOf(item) == SupportAssistance.Assistant ? "assistant" : "support")" />
-                            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@item.Subject</RadzenText>
-                            <RadzenBadge Text="@StatusText(item)" BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
+                <div @key="item.Id" data-case="@item.Id">
+                    <ExpandableCard Text="@CaseTitle(item)" ImageUrl="@TeamIcon(item.TeamKey)" Icon="@KindIcon(item)" AllowSaveState="false">
+                        <TopMenu>
+                            @if (TeamIcon(item.TeamKey) != null)
+                            {
+                                <RadzenIcon Icon="@KindIcon(item)" title="@KindText(item)" data-kind="@KindData(item)" />
+                            }
+                            <RadzenBadge Text="@StatusText(item)" BadgeStyle="@StatusStyle(item)" data-status="@item.Id" />
                             @if (item.AwaitingSupport)
                             {
                                 <RadzenBadge Text="@_text[SupportAcrossTeamsViewText.NeedsAnswer]" BadgeStyle="BadgeStyle.Danger" data-needs-answer="@item.Id" />
@@ -65,38 +58,13 @@ else
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
                                 @_text[SupportAcrossTeamsViewText.RaisedBy] @item.AuthorName @_text[SupportAcrossTeamsViewText.InTeam] @TeamName(item) · @Time(item.LastMessageAt ?? item.CreatedAt)
                             </RadzenText>
-                        </RadzenStack>
-                    </HeaderTemplate>
-                    <ChildContent>
-                        @if (_selected?.Id == item.Id)
-                        {
-                            <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-2">
-                                <SupportTranscript Messages="_messages" CaseAuthorIdentity="@_selected.AuthorIdentity" TimeTemplate="TimeTemplate" />
-
-                                @if (_selected.Status == SupportCaseStatus.Open)
-                                {
-                                    <RadzenTextArea Value="@_answer" ValueChanged="@(v => _answer = v)"
-                                                    @oninput="@(e => _answer = e.Value?.ToString())"
-                                                    Placeholder="@_text[SupportAcrossTeamsViewText.AnswerLabel]"
-                                                    Rows="3" Style="width: 100%;" aria-label="@_text[SupportAcrossTeamsViewText.AnswerLabel]" />
-                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
-                                        <RadzenButton Text="@_text[SupportAcrossTeamsViewText.AnswerLabel]" Click="AnswerAsync"
-                                                      Disabled="@(string.IsNullOrWhiteSpace(_answer) || _busy)" />
-                                        <RadzenButton Text="@_text[SupportAcrossTeamsViewText.Close]" ButtonStyle="ButtonStyle.Light"
-                                                      Click="CloseAsync" Disabled="_busy" />
-                                    </RadzenStack>
-                                }
-                                else
-                                {
-                                    <div>
-                                        <RadzenButton Text="@_text[SupportAcrossTeamsViewText.Reopen]" Icon="refresh"
-                                                      ButtonStyle="ButtonStyle.Light" Click="ReopenAsync" Disabled="_busy" />
-                                    </div>
-                                }
-                            </RadzenStack>
-                        }
-                    </ChildContent>
-                </RadzenPanel>
+                        </TopMenu>
+                        <ChildContent>
+                            <SupportCaseConversation Case="item" AsStaff="true" StaffCloseAfter="StaffCloseAfter"
+                                                     TimeTemplate="TimeTemplate" Changed="OnChangedAsync" />
+                        </ChildContent>
+                    </ExpandableCard>
+                </div>
             }
         }
     </RadzenStack>
@@ -106,23 +74,27 @@ else
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 
-    [Inject] private IThargaTextProvider TextProvider { get; set; }
+    /// <summary>
+    /// The host's <c>SupportCaseOptions.StaffCloseAfter</c>, so Close is offered only where the service would
+    /// accept it. A parameter because this component depends on contracts only.
+    /// </summary>
+    [Parameter] public TimeSpan? StaffCloseAfter { get; set; }
 
-    private bool _showClosed;
-    private IEnumerable<SupportAssistance> _kinds = [SupportAssistance.None];
+    /// <summary>Where the list filter is remembered in the browser.</summary>
+    [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.AcrossTeams.Filter";
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
     private bool _ready;
-    private bool _busy;
     private bool _permitted = true;
 
-    private string _answer;
     private int _awaiting;
 
+    private SupportCaseFilter _filter;
     private SupportCase[] _cases = [];
-    private SupportCase _selected;
-    private SupportMessage[] _messages = [];
     private Dictionary<string, string> _teamNames = new();
+    private Dictionary<string, string> _teamIcons = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -131,7 +103,7 @@ else
         Notifier.CaseUpdated += OnCaseUpdated;
 
         await ReloadAsync();
-        if (_permitted) await LoadTeamNamesAsync();
+        if (_permitted) await LoadTeamsAsync();
 
         _ready = true;
     }
@@ -139,13 +111,12 @@ else
     public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
 
     /// <summary>
-    /// Re-reads the queue and the open case. For a host that hears of a change the in-process notifier cannot
-    /// carry — one made on another instance.
+    /// Re-reads the queue, and with it every open conversation. For a host that hears of a change the
+    /// in-process notifier cannot carry — one made on another instance.
     /// </summary>
     public Task RefreshAsync() => InvokeAsync(async () =>
     {
         await ReloadAsync();
-        if (_selected != null) await SelectAsync(_selected);
         StateHasChanged();
     });
 
@@ -155,42 +126,50 @@ else
     /// </remarks>
     private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
     {
-        if (e.TeamKey == null) return;
+        if (e.TeamKey == null || e.Change == SupportCaseChange.Read) return;
 
         _ = InvokeAsync(async () =>
         {
             await ReloadAsync();
-            if (_selected != null) await SelectAsync(_selected);
             StateHasChanged();
         });
     }
 
-    private string StatusText(SupportCase item)
-        => item.Status == SupportCaseStatus.Open
-            ? _text[SupportAcrossTeamsViewText.Open]
-            : item.ClosedReason == SupportCaseClosureReason.Inactivity
-                ? _text[SupportAcrossTeamsViewText.ClosedForInactivity]
-                : _text[SupportAcrossTeamsViewText.Closed];
-
     private static SupportAssistance KindOf(SupportCase item)
         => item.AssistantState == SupportAssistantState.Active ? SupportAssistance.Assistant : SupportAssistance.None;
 
-    /// <summary>The cases the filters let through: waiting ones first, then the liveliest conversation.</summary>
+    private static string KindIcon(SupportCase item) => KindOf(item) == SupportAssistance.Assistant ? "smart_toy" : "support_agent";
+
+    private static string KindData(SupportCase item) => KindOf(item) == SupportAssistance.Assistant ? "assistant" : "support";
+
+    private string KindText(SupportCase item)
+        => KindOf(item) == SupportAssistance.Assistant ? _text[SupportAcrossTeamsViewText.Assistant] : _text[SupportAcrossTeamsViewText.Support];
+
+    private static string CaseTitle(SupportCase item) => string.IsNullOrWhiteSpace(item.Subject) ? item.Id : item.Subject;
+
+    /// <remarks>A conversation with the assistant is neither open nor closed; it says what it is instead.</remarks>
+    private string StatusText(SupportCase item)
+        => KindOf(item) == SupportAssistance.Assistant
+            ? _text[SupportAcrossTeamsViewText.WithAssistant]
+            : item.Status == SupportCaseStatus.Open
+                ? _text[SupportAcrossTeamsViewText.Open]
+                : item.ClosedReason == SupportCaseClosureReason.Inactivity
+                    ? _text[SupportAcrossTeamsViewText.ClosedForInactivity]
+                    : _text[SupportAcrossTeamsViewText.Closed];
+
+    private static BadgeStyle StatusStyle(SupportCase item)
+        => KindOf(item) == SupportAssistance.Assistant ? BadgeStyle.Secondary
+            : item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light;
+
+    /// <summary>The cases the filter lets through: waiting ones first, then the liveliest conversation.</summary>
     private IEnumerable<SupportCase> Shown()
         => _cases
-            .Where(x => _showClosed || x.Status == SupportCaseStatus.Open || x.Id == _selected?.Id)
-            .Where(x => (_kinds ?? []).Contains(KindOf(x)) || x.Id == _selected?.Id)
+            .Where(x => _filter?.Shows(x) ?? SupportCaseFilter.ShowsByDefault(x))
             .OrderByDescending(x => x.AwaitingSupport)
             .ThenByDescending(x => x.LastMessageAt ?? x.CreatedAt);
 
     private RenderFragment Time(DateTime value)
         => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
-
-    private void Deselect()
-    {
-        _selected = null;
-        _messages = [];
-    }
 
     private string TeamName(SupportCase item)
         => !string.IsNullOrWhiteSpace(item.TeamName) ? item.TeamName : TeamName(item.TeamKey);
@@ -198,11 +177,16 @@ else
     private string TeamName(string teamKey)
         => teamKey != null && _teamNames.TryGetValue(teamKey, out var name) ? name : teamKey;
 
+    private string TeamIcon(string teamKey)
+        => teamKey != null && _teamIcons.TryGetValue(teamKey, out var url) ? url : null;
+
+    private Task OnChangedAsync(string caseId) => ReloadAsync();
+
     private async Task ReloadAsync()
     {
         try
         {
-            _cases = (await SupportCases.GetCasesAcrossTeamsAsync()).Items;
+            _cases = await SupportCasePaging.AllAsync(cursor => SupportCases.GetCasesAcrossTeamsAsync(cursor, SupportCasePaging.PageSize));
             _awaiting = await SupportCases.GetAwaitingSupportCountAcrossTeamsAsync();
             _permitted = true;
         }
@@ -215,89 +199,37 @@ else
     }
 
     /// <remarks>
-    /// Team names are a convenience: listing teams is its own system grant, and without it the queue shows each
-    /// case's team key instead — still telling the reader whose case it is.
+    /// Team names and icons are a convenience: listing teams is its own system grant, and without it the queue
+    /// shows each case's team key instead — still telling the reader whose case it is.
     /// </remarks>
-    private async Task LoadTeamNamesAsync()
+    private async Task LoadTeamsAsync()
     {
         if (Services.GetService(typeof(ITeamOversightService)) is not ITeamOversightService oversight) return;
+
+        var resolver = Services.GetService(typeof(IIconResolver)) as IIconResolver;
 
         try
         {
             var names = new Dictionary<string, string>();
+            var icons = new Dictionary<string, string>();
 
             await foreach (var team in oversight.GetAllTeamsAsync())
             {
                 names[team.Key] = string.IsNullOrWhiteSpace(team.Name) ? team.Key : team.Name;
+
+                if (resolver == null || _cases.All(x => x.TeamKey != team.Key)) continue;
+
+                var icon = await resolver.ResolveAsync(new IconSubject { Kind = IconKind.Team, Key = team.Key, Name = team.Name, IconReference = team.Icon });
+                if (!string.IsNullOrWhiteSpace(icon?.Url)) icons[team.Key] = icon.Url;
             }
 
             _teamNames = names;
+            _teamIcons = icons;
         }
         catch (UnauthorizedAccessException)
         {
             _teamNames = new();
+            _teamIcons = new();
         }
-    }
-
-    private async Task AnswerAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_answer) || _selected == null) return;
-
-        _busy = true;
-        try
-        {
-            await SupportCases.AnswerCaseAsync(_selected.TeamKey, _selected.Id, _answer);
-            _answer = null;
-
-            await ReloadAsync();
-            await SelectAsync(_selected);
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task CloseAsync()
-    {
-        if (_selected == null) return;
-
-        _busy = true;
-        try
-        {
-            await SupportCases.CloseCaseAsync(_selected.TeamKey, _selected.Id);
-
-            await ReloadAsync();
-            await SelectAsync(_selected);
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-    private async Task ReopenAsync()
-    {
-        if (_selected == null) return;
-
-        _busy = true;
-        try
-        {
-            await SupportCases.ReopenCaseAsync(_selected.TeamKey, _selected.Id);
-
-            await ReloadAsync();
-            await SelectAsync(_selected);
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
-
-    private async Task SelectAsync(SupportCase item)
-    {
-        _selected = await SupportCases.GetCaseAsync(item.TeamKey, item.Id);
-        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(item.TeamKey, item.Id)).Items;
     }
 }

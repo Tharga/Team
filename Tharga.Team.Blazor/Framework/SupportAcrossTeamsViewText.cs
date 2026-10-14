@@ -10,8 +10,6 @@ namespace Tharga.Team.Blazor.Framework;
 /// </remarks>
 public static class SupportAcrossTeamsViewText
 {
-    public static readonly TextKey Title = new("team.support.acrossTeams.title", "Support cases in every team");
-
     public static readonly TextKey Awaiting = new("team.support.acrossTeams.awaiting", "awaiting an answer");
 
     public static readonly TextKey NoCases = new("team.support.acrossTeams.none", "No team has raised a support case.");
@@ -24,11 +22,15 @@ public static class SupportAcrossTeamsViewText
 
     public static readonly TextKey Close = new("team.support.acrossTeams.close", "Close case");
 
-    public static readonly TextKey Reopen = new("team.support.acrossTeams.reopen", "Reopen");
-
     public static readonly TextKey Open = new("team.support.acrossTeams.status.open", "Open");
 
     public static readonly TextKey Closed = new("team.support.acrossTeams.status.closed", "Closed");
+
+    /// <summary>What a conversation with the assistant says in place of a status: it is neither open nor closed.</summary>
+    public static readonly TextKey WithAssistant = new("team.support.acrossTeams.status.assistant", "Assistant conversation");
+
+    /// <summary>Shown when there are cases but the filter hides every one.</summary>
+    public static readonly TextKey NoneMatch = new("team.support.acrossTeams.noneMatch", "No case matches the filter.");
 
     public static readonly TextKey ClosedForInactivity = new("team.support.acrossTeams.status.inactivity",
         "Closed automatically after inactivity");
@@ -36,14 +38,11 @@ public static class SupportAcrossTeamsViewText
     /// <summary>Marks a case whose newest entry is from the one who raised it, so staff see what to answer.</summary>
     public static readonly TextKey NeedsAnswer = new("team.support.acrossTeams.needsAnswer", "Needs an answer");
 
-    /// <summary>A conversation with a person on support, as a filter and as the mark on a case.</summary>
+    /// <summary>A conversation with a person on support, as the mark on a case.</summary>
     public static readonly TextKey Support = new("team.support.acrossTeams.kind.support", "Support");
 
-    /// <summary>A conversation the assistant is answering, as a filter and as the mark on a case.</summary>
+    /// <summary>A conversation the assistant is answering, as the mark on a case.</summary>
     public static readonly TextKey Assistant = new("team.support.acrossTeams.kind.assistant", "Assistant");
-
-    /// <summary>Shows closed cases too; off by default, so the queue is what is still going on.</summary>
-    public static readonly TextKey ShowClosed = new("team.support.acrossTeams.filter.closed", "Show closed");
 
     /// <summary>Shown when the caller holds neither cross-team grant.</summary>
     public static readonly TextKey NotPermitted = new("team.support.acrossTeams.notPermitted",
@@ -52,7 +51,7 @@ public static class SupportAcrossTeamsViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, Awaiting, NoCases, RaisedBy, InTeam, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
-        NotPermitted, NeedsAnswer, Support, Assistant, ShowClosed
+        Awaiting, NoCases, NoneMatch, RaisedBy, InTeam, AnswerLabel, Close, Open, Closed, WithAssistant,
+        ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant
     ];
 }

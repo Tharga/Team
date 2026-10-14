@@ -1,12 +1,13 @@
 @using Tharga.Team.Support.Cases
 @using Tharga.Team.Blazor.Framework
 @using Tharga.Team.Blazor.Features.Team
+@using Tharga.Blazor
 @implements IDisposable
 @inject ISupportCaseService SupportCases
 @inject ISupportCaseNotifier Notifier
 @inject ITeamStateService TeamState
 
-@* The customer's side of support: talk to the assistant or a person, follow every conversation, close and reopen.
+@* The customer's side of support: follow every conversation, and talk to the assistant or a person.
    Everything goes through ISupportCaseService and nothing else — SupportComponentSurfaceTests enforces it. *@
 
 @if (!_ready)
@@ -21,162 +22,95 @@ else if (_teamKey == null)
 }
 else
 {
-    <RadzenStack Orientation="Orientation.Vertical" Gap="1.5rem">
+    <RadzenTabs @bind-SelectedIndex="_tab" RenderMode="TabRenderMode.Client">
+        <Tabs>
+            <RadzenTabsItem Text="@_text[SupportCasesViewText.CasesTab]" data-tab="cases">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+                    <SupportCaseFilter @ref="_filter" StorageKey="@StorageKey" Changed="StateHasChanged" />
 
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportCasesViewText.NewCase]</RadzenText>
-
-                @if (_offered.Length > 1)
-                {
-                    <RadzenSelectBar @bind-Value="_answeredBy" TValue="SupportAssistance" Size="ButtonSize.Small" aria-label="@_text[SupportCasesViewText.NewCase]">
-                        <Items>
-                            <RadzenSelectBarItem Text="@_text[SupportCasesViewText.AnsweredByAssistant]" Icon="smart_toy" Value="SupportAssistance.Assistant" />
-                            <RadzenSelectBarItem Text="@_text[SupportCasesViewText.AnsweredByHuman]" Icon="support_agent" Value="SupportAssistance.None" />
-                        </Items>
-                    </RadzenSelectBar>
-                }
-                else
-                {
-                    <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@KindText(_answeredBy)</RadzenText>
-                }
-
-                @* Unknown renders nothing: saying "offline" when Slack would not tell us discourages asking for help that is there. *@
-                @if (_answeredBy == SupportAssistance.None && _presence == SupportPresenceState.Online)
-                {
-                    <RadzenBadge Text="@_text[SupportCasesViewText.SupportOnline]" BadgeStyle="BadgeStyle.Success" />
-                }
-                else if (_answeredBy == SupportAssistance.None && _presence == SupportPresenceState.Away)
-                {
-                    <RadzenBadge Text="@_text[SupportCasesViewText.SupportAway]" BadgeStyle="BadgeStyle.Light" />
-                }
-            </RadzenStack>
-
-            @if (ShowSubject)
-            {
-                <RadzenTextBox @bind-Value="_subject" Placeholder="@_text[SupportCasesViewText.SubjectLabel]"
-                               Style="width: 100%;" aria-label="@_text[SupportCasesViewText.SubjectLabel]" />
-            }
-
-            @* oninput as well as the binding: Radzen binds on change, so Send would stay disabled until the box lost focus. *@
-            <RadzenTextArea Value="@_body" ValueChanged="@(v => _body = v)"
-                            @oninput="@(e => _body = e.Value?.ToString())"
-                            Placeholder="@_text[SupportCasesViewText.MessageLabel]" Rows="4"
-                            Style="width: 100%;" aria-label="@_text[SupportCasesViewText.MessageLabel]" />
-
-            <div>
-                <RadzenButton Text="@_text[SupportCasesViewText.Send]" Icon="send" Click="RaiseAsync"
-                              Disabled="@(string.IsNullOrWhiteSpace(_body) || _busy)" />
-            </div>
-        </RadzenStack>
-
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
-            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportCasesViewText.MyCases]</RadzenText>
-
-                <RadzenSelectBar @bind-Value="_kinds" TValue="IEnumerable<SupportAssistance>" Multiple="true" Size="ButtonSize.Small" aria-label="@_text[SupportCasesViewText.MyCases]">
-                    <Items>
-                        <RadzenSelectBarItem Text="@_text[SupportCasesViewText.AnsweredByHuman]" Icon="support_agent" Value="SupportAssistance.None" />
-                        <RadzenSelectBarItem Text="@_text[SupportCasesViewText.AnsweredByAssistant]" Icon="smart_toy" Value="SupportAssistance.Assistant" />
-                    </Items>
-                </RadzenSelectBar>
-
-                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center">
-                    <RadzenCheckBox @bind-Value="_showClosed" Name="showClosed" />
-                    <RadzenLabel Text="@_text[SupportCasesViewText.ShowClosed]" Component="showClosed" />
-                </RadzenStack>
-            </RadzenStack>
-
-            @if (_cases.Length == 0)
-            {
-                <RadzenText TextStyle="TextStyle.Body2">@_text[SupportCasesViewText.NoCases]</RadzenText>
-            }
-            else
-            {
-                foreach (var item in Shown())
-                {
-                    <RadzenPanel @key="item.Id" AllowCollapse="true" Collapsed="@(_selected?.Id != item.Id)"
-                                 Expand="@(() => SelectAsync(item.Id))" Collapse="@Deselect" data-case="@item.Id">
-                        <HeaderTemplate>
-                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                                <RadzenIcon Icon="@(KindOf(item) == SupportAssistance.Assistant ? "smart_toy" : "support_agent")"
-                                            title="@KindText(KindOf(item))" data-kind="@(KindOf(item) == SupportAssistance.Assistant ? "assistant" : "support")" />
-                                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@item.Subject</RadzenText>
-                                <RadzenBadge Text="@StatusText(item)" BadgeStyle="@(item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light)" />
-                                @if (item.Id != _selected?.Id && UnreadIn(item.Id) is > 0 and var unread)
-                                {
-                                    <RadzenBadge Text="@unread.ToString()" BadgeStyle="BadgeStyle.Danger" data-unread="@item.Id" />
-                                }
-                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
-                                    @Time(item.LastMessageAt ?? item.CreatedAt)
-                                </RadzenText>
-                            </RadzenStack>
-                        </HeaderTemplate>
-                        <ChildContent>
-                            @if (_selected?.Id == item.Id)
-                            {
-                                <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-2">
-                                    <SupportTranscript Messages="_messages" CaseAuthorIdentity="@_selected.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate" />
-
-                                    @if (_selected.Status == SupportCaseStatus.Open)
-                                    {
-                                        <RadzenTextArea Value="@_reply" ValueChanged="@(v => _reply = v)"
-                                                        @oninput="@(e => _reply = e.Value?.ToString())"
-                                                        Placeholder="@_text[SupportCasesViewText.ReplyLabel]"
-                                                        Rows="3" Style="width: 100%;" aria-label="@_text[SupportCasesViewText.ReplyLabel]" />
-                                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                                            <RadzenButton Text="@_text[SupportCasesViewText.ReplyLabel]" Click="ReplyAsync"
-                                                          Disabled="@(string.IsNullOrWhiteSpace(_reply) || _busy)" />
-
-                                            @* Only while an assistant is answering; on a case already handed over it would promise what has happened. *@
-                                            @if (_selected.AssistantState == SupportAssistantState.Active)
-                                            {
-                                                <RadzenButton Text="@_text[SupportCasesViewText.TalkToAPerson]" Icon="support_agent"
-                                                              ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
-                                                              Click="RequestHumanAsync" Disabled="_busy" />
-                                            }
-
-                                            <RadzenButton Text="@_text[SupportCasesViewText.Close]" Icon="check"
-                                                          ButtonStyle="ButtonStyle.Light" Click="CloseAsync" Disabled="_busy" />
-
-                                            @if (_thinking)
-                                            {
-                                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportCasesViewText.AssistantThinking]</RadzenText>
-                                            }
-                                        </RadzenStack>
-
-                                        @* Offered only when the host lets each case decide, which is when a case carries a visibility. *@
-                                        @if (_selected.Visibility != null)
+                    @if (_cases.Length == 0)
+                    {
+                        <RadzenText TextStyle="TextStyle.Body2">@_text[SupportCasesViewText.NothingYet]</RadzenText>
+                    }
+                    else if (!Shown().Any())
+                    {
+                        <RadzenText TextStyle="TextStyle.Body2">@_text[SupportCasesViewText.NoneMatch]</RadzenText>
+                    }
+                    else
+                    {
+                        foreach (var item in Shown())
+                        {
+                            <div @key="item.Id" data-case="@item.Id">
+                                <ExpandableCard Text="@CaseTitle(item)" Icon="@KindIcon(item)" AllowSaveState="false" Selected="@(item.Id == _opened)">
+                                    <TopMenu>
+                                        <RadzenBadge Text="@StatusText(item)" BadgeStyle="@StatusStyle(item)" data-status="@item.Id" />
+                                        @if (UnreadIn(item.Id) is > 0 and var unread)
                                         {
-                                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportCasesViewText.VisibilityLabel]</RadzenText>
-                                                <RadzenSelectBar Value="@_selected.Visibility.Value" TValue="SupportCaseVisibility" Size="ButtonSize.Small"
-                                                                 Change="@((SupportCaseVisibility v) => SetVisibilityAsync(v))" Disabled="_busy"
-                                                                 aria-label="@_text[SupportCasesViewText.VisibilityLabel]">
-                                                    <Items>
-                                                        <RadzenSelectBarItem Text="@_text[SupportCasesViewText.VisibilityTeam]" Value="SupportCaseVisibility.Team" />
-                                                        <RadzenSelectBarItem Text="@_text[SupportCasesViewText.VisibilityPrivate]" Value="SupportCaseVisibility.Private" />
-                                                    </Items>
-                                                </RadzenSelectBar>
-                                            </RadzenStack>
+                                            <RadzenBadge Text="@unread.ToString()" BadgeStyle="BadgeStyle.Danger" data-unread="@item.Id" />
                                         }
-                                    }
-                                    else
-                                    {
-                                        @* Offered on every closed case: a problem that came back continues the conversation that explains it. *@
-                                        <div>
-                                            <RadzenButton Text="@_text[SupportCasesViewText.Reopen]" Icon="refresh"
-                                                          ButtonStyle="ButtonStyle.Light" Click="ReopenAsync" Disabled="_busy" />
-                                        </div>
-                                    }
-                                </RadzenStack>
-                            }
-                        </ChildContent>
-                    </RadzenPanel>
-                }
-            }
-        </RadzenStack>
-    </RadzenStack>
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
+                                            @Time(item.LastMessageAt ?? item.CreatedAt)
+                                        </RadzenText>
+                                    </TopMenu>
+                                    <ChildContent>
+                                        <SupportCaseConversation Case="item" Unread="@UnreadIn(item.Id)" Thinking="@(_thinking == item.Id)"
+                                                                 TimeTemplate="TimeTemplate" Changed="OnChangedAsync" Read="OnRead" Written="RunAssistantAsync" />
+                                    </ChildContent>
+                                </ExpandableCard>
+                            </div>
+                        }
+                    }
+                </RadzenStack>
+            </RadzenTabsItem>
+
+            <RadzenTabsItem Text="@_text[SupportCasesViewText.NewCase]" data-tab="new">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+                        @if (_offered.Length > 1)
+                        {
+                            <RadzenSelectBar @bind-Value="_answeredBy" TValue="SupportAssistance" Size="ButtonSize.Small" aria-label="@_text[SupportCasesViewText.NewCase]">
+                                <Items>
+                                    <RadzenSelectBarItem Text="@_text[SupportCasesViewText.AnsweredByAssistant]" Icon="smart_toy" Value="SupportAssistance.Assistant" />
+                                    <RadzenSelectBarItem Text="@_text[SupportCasesViewText.AnsweredByHuman]" Icon="support_agent" Value="SupportAssistance.None" />
+                                </Items>
+                            </RadzenSelectBar>
+                        }
+                        else
+                        {
+                            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0">@KindText(_answeredBy)</RadzenText>
+                        }
+
+                        @* Unknown renders nothing: saying "offline" when Slack would not tell us discourages asking for help that is there. *@
+                        @if (_answeredBy == SupportAssistance.None && _presence == SupportPresenceState.Online)
+                        {
+                            <RadzenBadge Text="@_text[SupportCasesViewText.SupportOnline]" BadgeStyle="BadgeStyle.Success" />
+                        }
+                        else if (_answeredBy == SupportAssistance.None && _presence == SupportPresenceState.Away)
+                        {
+                            <RadzenBadge Text="@_text[SupportCasesViewText.SupportAway]" BadgeStyle="BadgeStyle.Light" />
+                        }
+                    </RadzenStack>
+
+                    @if (ShowSubject)
+                    {
+                        <RadzenTextBox @bind-Value="_subject" Placeholder="@_text[SupportCasesViewText.SubjectLabel]"
+                                       Style="width: 100%;" aria-label="@_text[SupportCasesViewText.SubjectLabel]" />
+                    }
+
+                    @* oninput as well as the binding: Radzen binds on change, so Send would stay disabled until the box lost focus. *@
+                    <RadzenTextArea Value="@_body" ValueChanged="@(v => _body = v)"
+                                    @oninput="@(e => _body = e.Value?.ToString())"
+                                    Placeholder="@_text[SupportCasesViewText.MessageLabel]" Rows="4"
+                                    Style="width: 100%;" aria-label="@_text[SupportCasesViewText.MessageLabel]" />
+
+                    <div>
+                        <RadzenButton Text="@_text[SupportCasesViewText.Send]" Icon="send" Click="RaiseAsync"
+                                      Disabled="@(string.IsNullOrWhiteSpace(_body) || _busy)" />
+                    </div>
+                </RadzenStack>
+            </RadzenTabsItem>
+        </Tabs>
+    </RadzenTabs>
 }
 
 @code {
@@ -205,6 +139,9 @@ else
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 
+    /// <summary>Where the list filter is remembered in the browser.</summary>
+    [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Cases.Filter";
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     /// <remarks>
@@ -213,26 +150,26 @@ else
     /// </remarks>
     [Inject] private IServiceProvider Services { get; set; }
 
+    private const int CasesTab = 0;
+    private const int NewCaseTab = 1;
+
     private SupportPresenceState _presence = SupportPresenceState.Unknown;
     private SupportAssistance[] _offered = [SupportAssistance.None];
 
     private TextSet _text = TextSet.Empty;
     private bool _ready;
     private bool _busy;
+    private int _tab = CasesTab;
 
     private string _teamKey;
     private string _subject;
     private string _body;
-    private string _reply;
     private SupportAssistance _answeredBy = SupportAssistance.None;
-    private bool _thinking;
+    private string _thinking;
+    private string _opened;
 
-    private bool _showClosed;
-    private IEnumerable<SupportAssistance> _kinds = [SupportAssistance.None];
-
+    private SupportCaseFilter _filter;
     private SupportCase[] _cases = [];
-    private SupportCase _selected;
-    private SupportMessage[] _messages = [];
     private Dictionary<string, int> _unreadByCase = new();
 
     protected override async Task OnInitializedAsync()
@@ -253,17 +190,10 @@ else
         if (_teamKey != null) await ReloadAsync();
 
         // A deep link opens its case, and is silently ignored when it names nothing this caller may read.
-        if (_teamKey != null && !string.IsNullOrWhiteSpace(CaseId))
-        {
-            try
-            {
-                await SelectAsync(CaseId);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                _selected = null;
-            }
-        }
+        if (!string.IsNullOrWhiteSpace(CaseId) && _cases.Any(x => x.Id == CaseId)) _opened = CaseId;
+
+        // A first visit has nothing to follow yet, so it starts where help is asked for.
+        if (_teamKey != null && _cases.Length == 0) _tab = NewCaseTab;
 
         // After _ready: presence is advisory and must never delay the form being usable.
         _ready = true;
@@ -303,25 +233,35 @@ else
     private static SupportAssistance KindOf(SupportCase item)
         => item.AssistantState == SupportAssistantState.Active ? SupportAssistance.Assistant : SupportAssistance.None;
 
+    private static string KindIcon(SupportCase item) => KindOf(item) == SupportAssistance.Assistant ? "smart_toy" : "support_agent";
+
     private string KindText(SupportAssistance kind)
         => kind == SupportAssistance.Assistant ? _text[SupportCasesViewText.AnsweredByAssistant] : _text[SupportCasesViewText.AnsweredByHuman];
 
-    /// <summary>The cases the filters let through, the liveliest conversation first.</summary>
+    private static string CaseTitle(SupportCase item) => string.IsNullOrWhiteSpace(item.Subject) ? item.Id : item.Subject;
+
+    /// <summary>The cases the filter lets through, the liveliest conversation first; the opened one stays.</summary>
     private IEnumerable<SupportCase> Shown()
         => _cases
-            .Where(x => _showClosed || x.Status == SupportCaseStatus.Open || x.Id == _selected?.Id)
-            .Where(x => (_kinds ?? []).Contains(KindOf(x)) || x.Id == _selected?.Id)
+            .Where(x => (_filter?.Shows(x) ?? SupportCaseFilter.ShowsByDefault(x)) || x.Id == _opened)
             .OrderByDescending(x => x.LastMessageAt ?? x.CreatedAt);
 
     private RenderFragment Time(DateTime value)
         => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
 
+    /// <remarks>A conversation with the assistant is neither open nor closed; it says what it is instead.</remarks>
     private string StatusText(SupportCase item)
-        => item.Status == SupportCaseStatus.Open
-            ? _text[SupportCasesViewText.Open]
-            : item.ClosedReason == SupportCaseClosureReason.Inactivity
-                ? _text[SupportCasesViewText.ClosedForInactivity]
-                : _text[SupportCasesViewText.Closed];
+        => KindOf(item) == SupportAssistance.Assistant
+            ? _text[SupportCasesViewText.WithAssistant]
+            : item.Status == SupportCaseStatus.Open
+                ? _text[SupportCasesViewText.Open]
+                : item.ClosedReason == SupportCaseClosureReason.Inactivity
+                    ? _text[SupportCasesViewText.ClosedForInactivity]
+                    : _text[SupportCasesViewText.Closed];
+
+    private static BadgeStyle StatusStyle(SupportCase item)
+        => KindOf(item) == SupportAssistance.Assistant ? BadgeStyle.Secondary
+            : item.Status == SupportCaseStatus.Open ? BadgeStyle.Info : BadgeStyle.Light;
 
     private async Task RaiseAsync()
     {
@@ -335,11 +275,10 @@ else
             _subject = null;
             _body = null;
 
-            // A new conversation of a kind the filter hides would vanish the moment it was raised.
-            if (!(_kinds ?? []).Contains(_answeredBy)) _kinds = [.. _kinds ?? [], _answeredBy];
-
             await ReloadAsync();
-            await SelectAsync(raised.Id);
+            _opened = raised.Id;
+            _tab = CasesTab;
+            StateHasChanged();
 
             // After the case is on screen: raising stays fast, and the answer lands when the model is done.
             await RunAssistantAsync(raised.Id);
@@ -350,120 +289,46 @@ else
         }
     }
 
-    private async Task ReplyAsync()
-    {
-        if (string.IsNullOrWhiteSpace(_reply) || _selected == null) return;
-
-        _busy = true;
-        try
-        {
-            var caseId = _selected.Id;
-
-            await SupportCases.ReplyToCaseAsync(_teamKey, caseId, _reply);
-            _reply = null;
-
-            await ReloadAsync();
-            await SelectAsync(caseId);
-
-            await RunAssistantAsync(caseId);
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
-
     /// <remarks>Unconditional: the service answers nothing when the case has no assistant, so this need not decide.</remarks>
     private async Task RunAssistantAsync(string caseId)
     {
-        _thinking = true;
+        _thinking = caseId;
         StateHasChanged();
         try
         {
-            if (await SupportCases.RunAssistantAsync(_teamKey, caseId))
-            {
-                await ReloadAsync();
-                await SelectAsync(caseId);
-            }
+            if (await SupportCases.RunAssistantAsync(_teamKey, caseId)) await ReloadAsync();
         }
         finally
         {
-            _thinking = false;
+            _thinking = null;
         }
     }
 
-    private Task RequestHumanAsync() => ActAsync(caseId => SupportCases.RequestHumanAsync(_teamKey, caseId));
-
-    private Task CloseAsync() => ActAsync(caseId => SupportCases.CloseCaseAsync(_teamKey, caseId));
-
-    private Task ReopenAsync() => ActAsync(caseId => SupportCases.ReopenCaseAsync(_teamKey, caseId));
-
-    private Task SetVisibilityAsync(SupportCaseVisibility visibility)
-        => ActAsync(caseId => SupportCases.SetCaseVisibilityAsync(_teamKey, caseId, visibility));
-
-    private async Task ActAsync(Func<string, Task> act)
+    private async Task OnChangedAsync(string caseId)
     {
-        if (_selected == null) return;
-
-        _busy = true;
-        try
-        {
-            var caseId = _selected.Id;
-
-            await act(caseId);
-
-            await ReloadAsync();
-            await SelectAsync(caseId);
-        }
-        finally
-        {
-            _busy = false;
-        }
+        _opened = caseId;
+        await ReloadAsync();
     }
 
-    private void Deselect()
-    {
-        _selected = null;
-        _messages = [];
-    }
-
-    private async Task SelectAsync(string caseId)
-    {
-        _selected = await SupportCases.GetCaseAsync(_teamKey, caseId);
-        _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, caseId)).Items;
-
-        if (_selected == null) return;
-
-        // Opening a case is what clears its indicator.
-        await SupportCases.MarkReadAsync(_teamKey, _selected.Id);
-        _unreadByCase.Remove(_selected.Id);
-    }
+    private void OnRead(string caseId) => _unreadByCase.Remove(caseId);
 
     private async Task ReloadAsync()
     {
-        _cases = (await SupportCases.GetMyCasesAsync(_teamKey)).Items;
+        _cases = await SupportCasePaging.AllAsync(cursor => SupportCases.GetMyCasesAsync(_teamKey, cursor, SupportCasePaging.PageSize));
         _unreadByCase = (await SupportCases.GetMyUnreadByCaseAsync(_teamKey) ?? []).ToDictionary(x => x.CaseId, x => x.Count);
     }
 
     private int UnreadIn(string caseId) => _unreadByCase.TryGetValue(caseId, out var count) ? count : 0;
 
     /// <summary>
-    /// Re-reads the cases and the open one. For a host that hears of a change the in-process notifier cannot
-    /// carry — one made on another instance.
+    /// Re-reads the cases, and with them every open conversation. For a host that hears of a change the
+    /// in-process notifier cannot carry — one made on another instance.
     /// </summary>
     public Task RefreshAsync() => InvokeAsync(async () =>
     {
         if (_teamKey == null) return;
 
         await ReloadAsync();
-
-        if (_selected != null)
-        {
-            var open = _selected.Id;
-            _selected = await SupportCases.GetCaseAsync(_teamKey, open);
-            _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, open)).Items;
-        }
-
         StateHasChanged();
     });
 }

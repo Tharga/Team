@@ -70,6 +70,9 @@ public class TextCoverageTests
         // recording them here: a component that never had literal strings must not acquire its first one.
         "Features/Support/SupportCasesView.razor",
         "Features/Support/SupportQueueView.razor",
+        "Features/Support/SupportCaseFilter.razor",
+        "Features/Support/SupportCaseConversation.razor",
+        "Features/Support/SupportAcrossTeamsView.razor",
     ];
 
     /// <summary>

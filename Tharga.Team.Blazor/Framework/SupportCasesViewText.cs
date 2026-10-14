@@ -21,19 +21,21 @@ public static class SupportCasesViewText
 
     public static readonly TextKey Send = new("team.support.cases.send", "Send");
 
-    public static readonly TextKey MyCases = new("team.support.cases.mine", "Your cases");
+    /// <summary>Names the tab that lists every conversation, which comes first.</summary>
+    public static readonly TextKey CasesTab = new("team.support.cases.tab.cases", "Cases");
 
     /// <summary>Shown instead of the list when this person has never raised a case.</summary>
     /// <remarks>
     /// Says what to do rather than that there is nothing — an empty list with the word "none" reads as a
     /// feature that is not working.
     /// </remarks>
-    public static readonly TextKey NoCases = new("team.support.cases.none",
-        "You have not asked for help yet. Describe the problem above and support will answer here.");
+    public static readonly TextKey NothingYet = new("team.support.cases.empty",
+        "You have not asked for help yet. Start a conversation under Talk to, and the answer comes here.");
+
+    /// <summary>Shown when there are cases but the filter hides every one.</summary>
+    public static readonly TextKey NoneMatch = new("team.support.cases.noneMatch", "No case matches the filter.");
 
     public static readonly TextKey ReplyLabel = new("team.support.cases.reply", "Reply");
-
-    public static readonly TextKey Reopen = new("team.support.cases.reopen", "Reopen");
 
     /// <summary>Lets the person who raised a case close it once it is solved.</summary>
     public static readonly TextKey Close = new("team.support.cases.close", "Close case");
@@ -41,6 +43,9 @@ public static class SupportCasesViewText
     public static readonly TextKey Open = new("team.support.cases.status.open", "Open");
 
     public static readonly TextKey Closed = new("team.support.cases.status.closed", "Closed");
+
+    /// <summary>What a conversation with the assistant says in place of a status: it is neither open nor closed.</summary>
+    public static readonly TextKey WithAssistant = new("team.support.cases.status.assistant", "Assistant conversation");
 
     /// <summary>
     /// What a case closed by the sweep says, as distinct from one somebody closed.
@@ -75,9 +80,6 @@ public static class SupportCasesViewText
     /// <summary>A person on support, as a choice of who answers and as a kind of conversation in the list.</summary>
     public static readonly TextKey AnsweredByHuman = new("team.support.cases.answeredBy.human", "Support");
 
-    /// <summary>Shows closed cases too; off by default, so the list is what is still going on.</summary>
-    public static readonly TextKey ShowClosed = new("team.support.cases.filter.closed", "Show closed");
-
     /// <summary>Shown while the assistant is working, so a slow model does not read as a broken page.</summary>
     public static readonly TextKey AssistantThinking = new("team.support.cases.assistant.thinking",
         "The assistant is looking into it…");
@@ -95,9 +97,9 @@ public static class SupportCasesViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, NewCase, SubjectLabel, MessageLabel, Send, MyCases, NoCases, ReplyLabel, Reopen, Close,
-        Open, Closed, ClosedForInactivity, SelectTeam, SupportOnline, SupportAway,
-        AnsweredByAssistant, AnsweredByHuman, ShowClosed, AssistantThinking, TalkToAPerson,
+        Title, NewCase, SubjectLabel, MessageLabel, Send, CasesTab, NothingYet, NoneMatch, ReplyLabel, Close,
+        Open, Closed, WithAssistant, ClosedForInactivity, SelectTeam, SupportOnline, SupportAway,
+        AnsweredByAssistant, AnsweredByHuman, AssistantThinking, TalkToAPerson,
         VisibilityLabel, VisibilityTeam, VisibilityPrivate
     ];
 }

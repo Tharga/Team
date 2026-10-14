@@ -1,8 +1,10 @@
+using Blazored.LocalStorage;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Radzen;
 using Radzen.Blazor;
+using Tharga.Blazor;
 using Tharga.Team;
 using Tharga.Team.Blazor.Features.Support;
 using Tharga.Team.Blazor.Features.Team;
@@ -13,7 +15,7 @@ namespace Tharga.Team.Blazor.Tests;
 
 /// <summary>
 /// The case lists show what is going on: each case says what kind of conversation it is and when it last moved,
-/// the liveliest first, with closed cases and assistant conversations out of the way until asked for.
+/// the liveliest first, with closed cases out of the way until asked for — and the choice remembered.
 /// </summary>
 public class SupportCaseListRenderTests : BunitContext
 {
@@ -44,22 +46,58 @@ public class SupportCaseListRenderTests : BunitContext
         Case("newest", 40)
     ];
 
+    /// <remarks>A conversation with the assistant is neither open nor closed, so the status filter lets it through.</remarks>
     [Fact]
-    public void YourCases_HideClosedAndAssistantConversations_AndPutTheLiveliestFirst()
+    public void TheCases_HideClosedOnes_AndPutTheLiveliestFirst()
     {
         var view = RenderCases(out _);
 
-        Assert.Equal(["newest", "older"], view.FindAll("[data-case]").Select(x => x.GetAttribute("data-case")).ToArray());
+        Assert.Equal(["assistant", "newest", "older"], CaseIds(view));
     }
 
     [Fact]
-    public void ShowingClosed_BringsThemBack()
+    public async Task ChoosingClosedToo_BringsThemBack()
     {
         var view = RenderCases(out _);
 
-        view.Find("input[name='showClosed']").Change(true);
+        var status = view.FindComponent<RadzenSelectBar<IEnumerable<SupportCaseStatus>>>();
+        await view.InvokeAsync(() => status.Instance.Change.InvokeAsync(new[] { SupportCaseStatus.Open, SupportCaseStatus.Closed }));
 
-        Assert.Contains(view.FindAll("[data-case]"), x => x.GetAttribute("data-case") == "closed");
+        Assert.Contains("closed", CaseIds(view));
+    }
+
+    [Fact]
+    public async Task ChoosingNoStatus_ShowsEveryCase()
+    {
+        var view = RenderCases(out _);
+
+        var status = view.FindComponent<RadzenSelectBar<IEnumerable<SupportCaseStatus>>>();
+        await view.InvokeAsync(() => status.Instance.Change.InvokeAsync(Array.Empty<SupportCaseStatus>()));
+
+        Assert.Equal(4, CaseIds(view).Length);
+    }
+
+    [Fact]
+    public async Task TheFilterIsRememberedInTheBrowser()
+    {
+        var view = RenderCases(out _);
+
+        var kind = view.FindComponent<RadzenSelectBar<IEnumerable<SupportAssistance>>>();
+        await view.InvokeAsync(() => kind.Instance.Change.InvokeAsync(new[] { SupportAssistance.Assistant }));
+
+        var stored = JSInterop.VerifyInvoke("localStorage.setItem").Arguments;
+        Assert.Contains("Assistant", stored[1]?.ToString());
+        Assert.Equal(["assistant"], CaseIds(view));
+    }
+
+    [Fact]
+    public void ARememberedFilter_IsRestored()
+    {
+        JSInterop.Setup<string>("localStorage.getItem", _ => true).SetResult("{\"Statuses\":[\"Closed\"],\"Kinds\":[\"None\"]}");
+
+        var view = RenderCases(out _);
+
+        view.WaitForAssertion(() => Assert.Equal(["closed"], CaseIds(view)));
     }
 
     [Fact]
@@ -67,8 +105,38 @@ public class SupportCaseListRenderTests : BunitContext
     {
         var view = RenderCases(out _);
 
-        Assert.All(view.FindAll("[data-kind]"), x => Assert.Equal("support", x.GetAttribute("data-kind")));
+        Assert.Equal(["smart_toy", "support_agent", "support_agent"], view.FindComponents<ExpandableCard>().Select(x => x.Instance.Icon).ToArray());
+        Assert.Contains("Assistant conversation", view.Find("[data-status='assistant']").TextContent);
         Assert.DoesNotContain("The opening line.", view.Markup);
+    }
+
+    [Fact]
+    public void TheCasesComeFirst_AndTalkingToSomebodyIsTheSecondTab()
+    {
+        var view = RenderCases(out _);
+
+        var tabs = view.FindComponents<RadzenTabsItem>().Select(x => x.Instance.Text).ToArray();
+
+        Assert.Equal(["Cases", "Talk to"], tabs);
+        Assert.Equal(0, view.FindComponent<RadzenTabs>().Instance.SelectedIndex);
+    }
+
+    [Fact]
+    public void WithNoCaseYet_ItOpensWhereHelpIsAskedFor()
+    {
+        var view = RenderCases(out _, items: []);
+
+        Assert.Equal(1, view.FindComponent<RadzenTabs>().Instance.SelectedIndex);
+    }
+
+    [Fact]
+    public void AConversationWithTheAssistant_HasNothingToClose()
+    {
+        var view = RenderCases(out _);
+
+        OpenCase(view, "assistant");
+
+        Assert.DoesNotContain(view.FindAll("button"), b => b.TextContent.Contains("Close case"));
     }
 
     [Fact]
@@ -94,9 +162,8 @@ public class SupportCaseListRenderTests : BunitContext
     {
         var view = RenderCases(out var cases);
 
-        var panel = view.FindComponents<RadzenPanel>().First(x => x.Markup.Contains("Subject newest"));
-        await view.InvokeAsync(() => panel.Instance.Expand.InvokeAsync());
-        view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click();
+        OpenCase(view, "newest");
+        await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click());
 
         cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", default), Times.Once);
     }
@@ -104,31 +171,89 @@ public class SupportCaseListRenderTests : BunitContext
     [Fact]
     public void TheStaffQueue_MarksWhatNeedsAnAnswer_AndListsItFirst()
     {
-        var cases = new Mock<ISupportCaseService>();
-        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 20, default))
-            .ReturnsAsync(new SupportCasePage { Items = [Case("answered", 90), Case("waiting", 5, awaiting: true)] });
-
-        Services.AddSingleton(cases.Object);
-        Services.AddSingleton(Mock.Of<ISupportCaseNotifier>());
-        Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
-        Services.AddSingleton(Mock.Of<IIconResolver>());
-        Services.AddRadzenComponents();
-        JSInterop.Mode = JSRuntimeMode.Loose;
-
-        var view = Render<SupportAcrossTeamsView>();
+        var view = RenderStaff(out _, [Case("answered", 90), Case("waiting", 5, awaiting: true)]);
 
         Assert.Equal(["waiting", "answered"], view.FindAll("[data-case]").Select(x => x.GetAttribute("data-case")).ToArray());
         Assert.Single(view.FindAll("[data-needs-answer]"));
     }
 
-    private IRenderedComponent<SupportCasesView> RenderCases(out Mock<ISupportCaseService> cases)
+    /// <summary>A queue that stopped at its first page told staff about waiting cases it never listed.</summary>
+    [Fact]
+    public void TheStaffQueue_ReadsEveryPage()
+    {
+        var cases = new Mock<ISupportCaseService>();
+        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 100, default))
+            .ReturnsAsync(new SupportCasePage { Items = [Case("first", 10)], NextCursor = "next" });
+        cases.Setup(x => x.GetCasesAcrossTeamsAsync("next", 100, default))
+            .ReturnsAsync(new SupportCasePage { Items = [Case("second", 5, awaiting: true)] });
+
+        var view = RenderStaff(cases);
+
+        Assert.Equal(["second", "first"], view.FindAll("[data-case]").Select(x => x.GetAttribute("data-case")).ToArray());
+    }
+
+    [Fact]
+    public void Staff_AreNotOfferedClose_BeforeTheWindowHasPassed()
+    {
+        var view = RenderStaff(out _, [Case("waiting", 5)], window: TimeSpan.FromDays(14));
+
+        OpenCase(view, "waiting");
+
+        Assert.Empty(view.FindAll("[data-close]"));
+    }
+
+    [Fact]
+    public void Staff_AreOfferedClose_WithoutAWindow()
+    {
+        var view = RenderStaff(out _, [Case("waiting", 5)]);
+
+        OpenCase(view, "waiting");
+
+        Assert.Single(view.FindAll("[data-close]"));
+    }
+
+    private static string[] CaseIds<T>(IRenderedComponent<T> view) where T : Microsoft.AspNetCore.Components.IComponent
+        => view.FindAll("[data-case]").Select(x => x.GetAttribute("data-case")).ToArray();
+
+    private static void OpenCase<T>(IRenderedComponent<T> view, string caseId) where T : Microsoft.AspNetCore.Components.IComponent
+        => view.Find($"[data-case='{caseId}'] [style*='cursor: pointer']").Click();
+
+    private IRenderedComponent<SupportAcrossTeamsView> RenderStaff(out Mock<ISupportCaseService> cases, SupportCase[] items, TimeSpan? window = null)
     {
         cases = new Mock<ISupportCaseService>();
-        cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 20, default)).ReturnsAsync(new SupportCasePage { Items = Cases });
-        foreach (var item in Cases)
+        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 100, default)).ReturnsAsync(new SupportCasePage { Items = items });
+        foreach (var item in items)
+        {
+            cases.Setup(x => x.GetMessagesAsync(TeamKey, item.Id, null, SupportCaseLimits.MaxMessagesPerCase, default))
+                .ReturnsAsync(new SupportMessagePage { Items = [new SupportMessage { Sequence = 1, Kind = SupportMessageKind.User, AuthorIdentity = "alice", Body = "Help", SentAt = DateTime.UtcNow }] });
+        }
+
+        return RenderStaff(cases, window);
+    }
+
+    private IRenderedComponent<SupportAcrossTeamsView> RenderStaff(Mock<ISupportCaseService> cases, TimeSpan? window = null)
+    {
+        Services.AddSingleton(cases.Object);
+        Services.AddSingleton(Mock.Of<ISupportCaseNotifier>());
+        Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddSingleton(Mock.Of<IIconResolver>());
+        Services.AddSingleton(Mock.Of<ILocalStorageService>());
+        Services.AddRadzenComponents();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
+
+        return Render<SupportAcrossTeamsView>(p => p.Add(x => x.StaffCloseAfter, window));
+    }
+
+    private IRenderedComponent<SupportCasesView> RenderCases(out Mock<ISupportCaseService> cases, SupportCase[] items = null)
+    {
+        items ??= Cases;
+        cases = new Mock<ISupportCaseService>();
+        cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = items });
+        foreach (var item in items)
         {
             cases.Setup(x => x.GetCaseAsync(TeamKey, item.Id, default)).ReturnsAsync(item);
-            cases.Setup(x => x.GetMessagesAsync(TeamKey, item.Id, null, 50, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
+            cases.Setup(x => x.GetMessagesAsync(TeamKey, item.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         }
 
         var team = new Mock<ITeam>();
@@ -141,8 +266,10 @@ public class SupportCaseListRenderTests : BunitContext
         Services.AddSingleton(teamState.Object);
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         Services.AddSingleton(Mock.Of<IIconResolver>());
+        Services.AddSingleton(Mock.Of<ILocalStorageService>());
         Services.AddRadzenComponents();
         JSInterop.Mode = JSRuntimeMode.Loose;
+        SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
         return Render<SupportCasesView>();
     }

@@ -1,3 +1,4 @@
+using Blazored.LocalStorage;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
@@ -89,8 +90,7 @@ public class SupportCasesViewRenderTests : BunitContext
         Open(view, "Export is empty");
         Assert.Contains("We are looking into the export.", view.Markup);
 
-        var panel = view.FindComponents<Radzen.Blazor.RadzenPanel>().First(x => x.Markup.Contains("Export is empty"));
-        view.InvokeAsync(() => panel.Instance.Collapse.InvokeAsync()).GetAwaiter().GetResult();
+        Open(view, "Export is empty");
         Assert.DoesNotContain("We are looking into the export.", view.Markup);
     }
 
@@ -122,21 +122,43 @@ public class SupportCasesViewRenderTests : BunitContext
     private IRenderedComponent<SupportCasesView> RenderView() => RenderView(out _);
 
     private static void Open(IRenderedComponent<SupportCasesView> view, string subject)
+        => view.FindAll("[data-case] [style*='cursor: pointer']").First(x => x.TextContent.Contains(subject)).Click();
+
+    /// <summary>A case the reader has unread messages in is marked read as it opens, and not before.</summary>
+    [Fact]
+    public void OpeningACaseWithUnreadMessages_MarksItRead()
     {
-        var panel = view.FindComponents<Radzen.Blazor.RadzenPanel>().First(x => x.Markup.Contains(subject));
-        view.InvokeAsync(() => panel.Instance.Expand.InvokeAsync()).GetAwaiter().GetResult();
+        var view = RenderView(out var cases, unread: 1);
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Never);
+        Assert.Single(view.FindAll("[data-unread]"));
+
+        Open(view, "Export is empty");
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Once);
+        Assert.Empty(view.FindAll("[data-unread]"));
     }
 
-    private IRenderedComponent<SupportCasesView> RenderView(out Mock<ISupportCaseService> cases, SupportCaseVisibility? visibility = null)
+    [Fact]
+    public void ADeepLink_OpensItsCase()
+    {
+        var view = RenderView(out _, caseId: Case.Id);
+
+        Assert.Contains("We are looking into the export.", view.Markup);
+    }
+
+    private IRenderedComponent<SupportCasesView> RenderView(out Mock<ISupportCaseService> cases, SupportCaseVisibility? visibility = null, int unread = 0, string caseId = null)
     {
         var shown = Case with { Visibility = visibility };
 
         cases = new Mock<ISupportCaseService>();
-        cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 20, default))
+        cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default))
             .ReturnsAsync(new SupportCasePage { Items = [shown] });
         cases.Setup(x => x.GetCaseAsync(TeamKey, Case.Id, default)).ReturnsAsync(shown);
-        cases.Setup(x => x.GetMessagesAsync(TeamKey, Case.Id, null, 50, default))
+        cases.Setup(x => x.GetMessagesAsync(TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase, default))
             .ReturnsAsync(new SupportMessagePage { Items = [Reply] });
+        if (unread > 0)
+            cases.Setup(x => x.GetMyUnreadByCaseAsync(TeamKey, default)).ReturnsAsync([new SupportCaseUnread { CaseId = Case.Id, Count = unread }]);
 
         var team = new Mock<ITeam>();
         team.SetupGet(x => x.Key).Returns(TeamKey);
@@ -149,10 +171,12 @@ public class SupportCasesViewRenderTests : BunitContext
         Services.AddSingleton(teamState.Object);
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         Services.AddSingleton(Mock.Of<IIconResolver>());
+        Services.AddSingleton(Mock.Of<ILocalStorageService>());
         Services.AddRadzenComponents();
 
         JSInterop.Mode = JSRuntimeMode.Loose;
+        SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
-        return Render<SupportCasesView>();
+        return Render<SupportCasesView>(p => p.Add(x => x.CaseId, caseId));
     }
 }

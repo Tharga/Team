@@ -1,5 +1,7 @@
+using Blazored.LocalStorage;
 using Bunit;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Moq;
 using Radzen;
 using Tharga.Team;
@@ -89,7 +91,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
 
         Open(view, "Export is empty");
         view.Find("textarea").Input("We are looking at it.");
-        view.FindAll("button").First(b => b.TextContent.Trim() == "Answer").Click();
+        view.FindAll("button").First(b => b.TextContent.Contains("Answer")).Click();
 
         cases.Verify(x => x.AnswerCaseAsync("acme", "case-acme", "We are looking at it.", default), Times.Once);
     }
@@ -100,7 +102,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
     {
         var view = RenderView(out var cases);
 
-        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 20, default))
+        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 100, default))
             .ReturnsAsync(new SupportCasePage { Items = [FromAcme, FromGlobex, FromAcme with { Id = "case-new", Subject = "Arrived elsewhere" }] });
 
         await view.Instance.RefreshAsync();
@@ -112,7 +114,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
     public void WithoutTheCrossTeamGrant_ItRendersANoteRatherThanThrowing()
     {
         var cases = new Mock<ISupportCaseService>();
-        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 20, default))
+        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 100, default))
             .ThrowsAsync(new UnauthorizedAccessException("no grant"));
 
         var view = Render(cases);
@@ -121,19 +123,36 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
     }
 
     private static void Open(IRenderedComponent<SupportAcrossTeamsView> view, string subject)
+        => view.FindAll("[data-case] [style*='cursor: pointer']").First(x => x.TextContent.Contains(subject)).Click();
+
+    [Fact]
+    public void TheQueueCarriesNoHeading()
     {
-        var panel = view.FindComponents<Radzen.Blazor.RadzenPanel>().First(x => x.Markup.Contains(subject));
-        view.InvokeAsync(() => panel.Instance.Expand.InvokeAsync()).GetAwaiter().GetResult();
+        var view = RenderView(out _);
+
+        Assert.DoesNotContain("Support cases in every team", view.Markup);
+    }
+
+    [Fact]
+    public void ACaseShowsItsTeamsIcon()
+    {
+        var resolver = new Mock<IIconResolver>();
+        resolver.Setup(x => x.ResolveAsync(It.Is<IconSubject>(s => s.Key == "acme"), default)).ReturnsAsync(new IconImage("https://icons/acme.png"));
+        Services.AddSingleton(resolver.Object);
+
+        var view = RenderView(out _);
+
+        Assert.Contains("https://icons/acme.png", view.Find("[data-case='case-acme'] img").GetAttribute("src"));
     }
 
     private IRenderedComponent<SupportAcrossTeamsView> RenderView(out Mock<ISupportCaseService> cases)
     {
         cases = new Mock<ISupportCaseService>();
-        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 20, default))
+        cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 100, default))
             .ReturnsAsync(new SupportCasePage { Items = [FromAcme, FromGlobex] });
         cases.Setup(x => x.GetAwaitingSupportCountAcrossTeamsAsync(default)).ReturnsAsync(2);
         cases.Setup(x => x.GetCaseAsync("acme", FromAcme.Id, default)).ReturnsAsync(FromAcme);
-        cases.Setup(x => x.GetMessagesAsync("acme", FromAcme.Id, null, 50, default))
+        cases.Setup(x => x.GetMessagesAsync("acme", FromAcme.Id, null, SupportCaseLimits.MaxMessagesPerCase, default))
             .ReturnsAsync(new SupportMessagePage { Items = [Asked] });
 
         return Render(cases);
@@ -144,11 +163,13 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         Services.AddSingleton(cases.Object);
         Services.AddSingleton(Mock.Of<ISupportCaseNotifier>());
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
-        Services.AddSingleton(Mock.Of<IIconResolver>());
+        Services.TryAddSingleton(Mock.Of<IIconResolver>());
+        Services.AddSingleton(Mock.Of<ILocalStorageService>());
         Services.AddSingleton(Oversight());
         Services.AddRadzenComponents();
 
         JSInterop.Mode = JSRuntimeMode.Loose;
+        SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
         return Render<SupportAcrossTeamsView>();
     }
