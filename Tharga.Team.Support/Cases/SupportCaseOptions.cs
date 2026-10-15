@@ -135,6 +135,12 @@ public class SupportCaseOptions
     public SupportCaseVisibility DefaultVisibility { get; set; } = SupportCaseVisibility.Private;
 
     /// <summary>
+    /// What a conversation with the assistant starts as, when it differs from <see cref="DefaultVisibility"/>;
+    /// <c>null</c> uses that. A conversation handed to a person takes <see cref="DefaultVisibility"/> then.
+    /// </summary>
+    public SupportCaseVisibility? AssistantDefaultVisibility { get; set; }
+
+    /// <summary>
     /// How long after support's last answer the product's own staff may close a case themselves; <c>null</c>
     /// lets them close at any time, which is the default.
     /// </summary>

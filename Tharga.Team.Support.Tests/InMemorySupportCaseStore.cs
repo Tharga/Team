@@ -228,6 +228,17 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     private static bool IsAnAnswerTo(SupportMessage message, string identity)
         => message.Kind != SupportMessageKind.System && (message.AsSupport || message.AuthorIdentity != identity);
 
+    public Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases.Count(x => x.Case.TeamKey == teamKey
+                                             && x.Case.AuthorIdentity == identity
+                                             && x.Case.Status == SupportCaseStatus.Open
+                                             && x.Case.AssistantState != SupportAssistantState.Active
+                                             && x.Messages.Count > 1
+                                             && !IsTheAuthors(x.Messages[^1], identity)));
+
+    private static bool IsTheAuthors(SupportMessage message, string identity)
+        => message.Kind == SupportMessageKind.User && !message.AsSupport && message.AuthorIdentity == identity;
+
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => Task.FromResult(CountAwaiting(x => x.TeamKey == teamKey));
 
@@ -240,7 +251,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     public Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
     {
         var index = _cases.FindIndex(x => x.Case.TeamKey == teamKey && x.Case.Id == caseId);
-        if (index < 0 || _cases[index].Case.Status != SupportCaseStatus.Open) return Task.FromResult(false);
+        if (index < 0) return Task.FromResult(false);
 
         _cases[index] = (_cases[index].Case with { Visibility = visibility }, _cases[index].Messages);
 

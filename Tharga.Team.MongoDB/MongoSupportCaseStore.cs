@@ -411,6 +411,14 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
             Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active));
 
+    public async Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, false),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active)));
+
     public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         return (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey)));
@@ -424,11 +432,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
     public async Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
     {
-        var filter = Builders<SupportCaseEntity>.Filter.And(
-            Case(teamKey, caseId),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open));
-
-        var result = await collection.UpdateOneAsync(filter, Builders<SupportCaseEntity>.Update.Set(x => x.Visibility, visibility));
+        var result = await collection.UpdateOneAsync(Case(teamKey, caseId), Builders<SupportCaseEntity>.Update.Set(x => x.Visibility, visibility));
 
         return result?.Before != null;
     }

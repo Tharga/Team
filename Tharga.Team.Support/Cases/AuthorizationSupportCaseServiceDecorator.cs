@@ -234,6 +234,13 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.MarkReadAsync(teamKey, caseId, cancellationToken);
     }
 
+    public async Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+
+        return await inner.GetMyAnsweredCountAsync(teamKey, cancellationToken);
+    }
+
     public async Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         await RequireMembershipAsync(teamKey);

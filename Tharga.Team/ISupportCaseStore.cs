@@ -212,11 +212,18 @@ public interface ISupportCaseStore
     /// Sets a case's visibility, returning whether it did — <c>false</c> when the case is missing or closed.
     /// </summary>
     /// <remarks>
-    /// Conditional on the case being open in the write itself, so a case closed a moment ago is not changed.
+    /// Open or closed alike: who may read a case's history matters as much once it is over.
     /// <para><b>Defaults to <c>false</c></b>, so a store written before visibility existed keeps compiling and refuses the change.</para>
     /// </remarks>
     Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
         => Task.FromResult(false);
+
+    /// <summary>
+    /// How many of this person's own open cases end with an entry that is not theirs, the assistant's
+    /// conversations aside. Defaults to none, so a store written before this keeps compiling.
+    /// </summary>
+    Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
 
     /// <summary>
     /// A team's cases that its support readers may see under per-case visibility — those shared with the team,

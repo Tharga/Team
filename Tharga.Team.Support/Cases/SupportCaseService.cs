@@ -22,7 +22,8 @@ internal sealed class SupportCaseService(
     SupportCaseVisibilityMode visibilityMode = SupportCaseVisibilityMode.TeamWide,
     ITeamDirectoryService teamDirectory = null,
     IUserService userService = null,
-    SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private,
+    SupportCaseVisibility? assistantDefaultVisibility = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -40,6 +41,8 @@ internal sealed class SupportCaseService(
         var subjectIdentity = await authorizer.GetSubjectAsync();
         var authorName = await DisplayNameAsync();
 
+        var withAssistant = assistance == SupportAssistance.Assistant && responder != null;
+
         var supportCase = new SupportCase
         {
             Id = Guid.NewGuid().ToString(),
@@ -51,10 +54,10 @@ internal sealed class SupportCaseService(
             Status = SupportCaseStatus.Open,
             CreatedAt = now,
             MessageCount = 1,
-            AssistantState = assistance == SupportAssistance.Assistant && responder != null
-                ? SupportAssistantState.Active
-                : SupportAssistantState.None,
-            Visibility = visibilityMode == SupportCaseVisibilityMode.PerCase ? defaultVisibility : null
+            AssistantState = withAssistant ? SupportAssistantState.Active : SupportAssistantState.None,
+            Visibility = visibilityMode == SupportCaseVisibilityMode.PerCase
+                ? withAssistant ? assistantDefaultVisibility ?? defaultVisibility : defaultVisibility
+                : null
         };
 
         var firstMessage = new SupportMessage
@@ -130,6 +133,14 @@ internal sealed class SupportCaseService(
         if (supportCase.AssistantState != SupportAssistantState.Active) return;
 
         await store.SetAssistantStateAsync(teamKey, caseId, SupportAssistantState.HandedOff, cancellationToken);
+
+        // A conversation that started with the assistant becomes a support case, and reads as one from now on.
+        if (visibilityMode == SupportCaseVisibilityMode.PerCase
+            && supportCase.Visibility == (assistantDefaultVisibility ?? defaultVisibility)
+            && supportCase.Visibility != defaultVisibility)
+        {
+            await store.TrySetVisibilityAsync(teamKey, caseId, defaultVisibility, cancellationToken);
+        }
 
         Notify(teamKey, caseId, SupportCaseChange.Replied);
     }
@@ -416,6 +427,9 @@ internal sealed class SupportCaseService(
         Notify(teamKey, caseId, SupportCaseChange.Read);
     }
 
+    public async Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => await store.GetAnsweredCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
+
     public async Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => await store.GetUnreadCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
 
@@ -433,8 +447,17 @@ internal sealed class SupportCaseService(
         if (visibilityMode != SupportCaseVisibilityMode.PerCase)
             throw new InvalidOperationException("Support cases are visible team-wide here; a case's visibility cannot be set.");
 
+        if (visibility == SupportCaseVisibility.Private)
+        {
+            var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+            var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+
+            if (!SupportCaseVisibilityRules.MayBePrivate(supportCase, messages))
+                throw new InvalidOperationException($"Others in team '{teamKey}' have written in support case {caseId}, so it cannot be made private.");
+        }
+
         if (!await store.TrySetVisibilityAsync(teamKey, caseId, visibility, cancellationToken))
-            throw new InvalidOperationException($"Support case {caseId} is not open, so its visibility cannot change.");
+            throw new InvalidOperationException($"Support case {caseId} was not found, so its visibility cannot change.");
 
         Notify(teamKey, caseId, SupportCaseChange.VisibilityChanged);
     }

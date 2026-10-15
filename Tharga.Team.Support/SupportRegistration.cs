@@ -111,6 +111,7 @@ public static class SupportRegistration
             o.TeamScopeAccessLevel = caseOptions.TeamScopeAccessLevel;
             o.Visibility = caseOptions.Visibility;
             o.DefaultVisibility = caseOptions.DefaultVisibility;
+            o.AssistantDefaultVisibility = caseOptions.AssistantDefaultVisibility;
             o.StaffCloseAfter = caseOptions.StaffCloseAfter;
         });
 
@@ -243,7 +244,8 @@ public static class SupportRegistration
                     caseOptions.Visibility,
                     sp.GetService<ITeamDirectoryService>(),
                     sp.GetService<IUserService>(),
-                    caseOptions.DefaultVisibility),
+                    caseOptions.DefaultVisibility,
+                    caseOptions.AssistantDefaultVisibility),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,

@@ -161,16 +161,44 @@ public class SupportCaseVisibilityTests
         Assert.Equal(SupportCaseVisibility.Private, (await Alice_(store).GetCaseAsync(TeamA, raised.Id)).Visibility);
     }
 
+    /// <summary>Who may read a case's history matters as much once it is over, so it can still be chosen.</summary>
     [Fact]
-    public async Task PerCase_AClosedCasesVisibilityCannotChange()
+    public async Task PerCase_AClosedCasesVisibilityCanStillChange()
     {
         var store = new InMemorySupportCaseStore();
         var alice = Alice_(store);
         var raised = await alice.RaiseCaseAsync(TeamA, "Subject", "Body");
         await alice.CloseCaseAsync(TeamA, raised.Id);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => alice.SetCaseVisibilityAsync(TeamA, raised.Id, SupportCaseVisibility.Team));
+        await alice.SetCaseVisibilityAsync(TeamA, raised.Id, SupportCaseVisibility.Team);
+
+        Assert.Equal(SupportCaseVisibility.Team, (await alice.GetCaseAsync(TeamA, raised.Id)).Visibility);
+    }
+
+    /// <summary>Somebody else in the team has written in it, so it is no longer only the author's to hide.</summary>
+    [Fact]
+    public async Task PerCase_ACaseOthersInTheTeamWroteIn_CannotBeMadePrivate()
+    {
+        var store = new InMemorySupportCaseStore();
+        var alice = Alice_(store);
+        var raised = await alice.RaiseCaseAsync(TeamA, "Subject", "Body");
+        await alice.SetCaseVisibilityAsync(TeamA, raised.Id, SupportCaseVisibility.Team);
+        await store.AppendMessageAsync(TeamA, raised.Id, new SupportMessage { Sequence = 2, Kind = SupportMessageKind.User, AuthorIdentity = "bob-subject", AuthorName = "Bob", Body = "Same here.", SentAt = DateTime.UtcNow });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => alice.SetCaseVisibilityAsync(TeamA, raised.Id, SupportCaseVisibility.Private));
+    }
+
+    /// <summary>Support answering is not the team writing, so the author may still keep it to themselves.</summary>
+    [Fact]
+    public async Task PerCase_ACaseOnlySupportAnswered_CanBeMadePrivate()
+    {
+        var store = new InMemorySupportCaseStore();
+        var alice = Alice_(store);
+        var raised = await alice.RaiseCaseAsync(TeamA, "Subject", "Body");
+        await alice.SetCaseVisibilityAsync(TeamA, raised.Id, SupportCaseVisibility.Team);
+        await store.AppendMessageAsync(TeamA, raised.Id, new SupportMessage { Sequence = 2, Kind = SupportMessageKind.User, AuthorIdentity = "staff", AuthorName = "Sam", Body = "Fixed.", SentAt = DateTime.UtcNow, AsSupport = true });
+
+        await alice.SetCaseVisibilityAsync(TeamA, raised.Id, SupportCaseVisibility.Private);
 
         Assert.Equal(SupportCaseVisibility.Private, (await alice.GetCaseAsync(TeamA, raised.Id)).Visibility);
     }

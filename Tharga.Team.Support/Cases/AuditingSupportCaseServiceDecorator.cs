@@ -242,6 +242,9 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.MarkReadAsync(teamKey, caseId, cancellationToken);
 
+    public Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetMyAnsweredCountAsync(teamKey, cancellationToken);
+
     public Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetMyUnreadCountAsync(teamKey, cancellationToken);
 

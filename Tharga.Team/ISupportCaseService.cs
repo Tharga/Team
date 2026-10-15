@@ -166,6 +166,12 @@ public interface ISupportCaseService
     Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// How many of the caller's own open cases support answered last — read or not, they wait for the caller
+    /// to reply or to close them.
+    /// </summary>
+    Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// How many open cases in the team are waiting on an answer — their newest entry came from the person
     /// who raised them. What a support-side indicator shows.
     /// </summary>
