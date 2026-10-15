@@ -59,7 +59,10 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         }
     }
 
-    public async Task<MailFetchResult> FetchAsync(MailFetchPosition position, CancellationToken cancellationToken = default)
+    public Task<MailFetchResult> FetchAsync(MailFetchPosition position, CancellationToken cancellationToken = default) => FetchAsync(position, false, cancellationToken);
+
+    /// <summary>Fetches as <see cref="FetchAsync(MailFetchPosition, CancellationToken)"/> does, and with <paramref name="includeRaw"/> keeps each message as it arrived.</summary>
+    internal async Task<MailFetchResult> FetchAsync(MailFetchPosition position, bool includeRaw, CancellationToken cancellationToken)
     {
         if (!CanRead) return MailFetchResult.Empty(position);
 
@@ -88,7 +91,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
             {
                 var message = await folder.GetMessageAsync(uid, cancellationToken);
 
-                mails.Add(InboundMailReader.Read(message));
+                mails.Add(InboundMailReader.Read(message, uid.Id, includeRaw ? await RawAsync(message, cancellationToken) : null));
                 highest = uid.Id;
             }
 
@@ -98,7 +101,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         }
         catch (Exception e)
         {
-            logger?.LogError(e, "The support mailbox could not be read.");
+            logger?.LogError(e, "The mailbox could not be read.");
 
             return MailFetchResult.Empty(position);
         }
@@ -116,5 +119,12 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         {
             await client.AuthenticateAsync(server.UserName, server.Password, cancellationToken);
         }
+    }
+
+    private static async Task<byte[]> RawAsync(MimeMessage message, CancellationToken cancellationToken)
+    {
+        using var stream = new MemoryStream();
+        await message.WriteToAsync(stream, cancellationToken);
+        return stream.ToArray();
     }
 }

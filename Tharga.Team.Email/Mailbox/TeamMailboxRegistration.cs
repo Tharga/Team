@@ -16,8 +16,10 @@ public static class TeamMailboxRegistration
     private const string PostmasterManageDescription = "Route a mail the postmaster holds to a team, which delivers it there marked as rerouted.";
 
     /// <summary>
-    /// Registers <see cref="ITeamMailboxService"/> and its scopes. A persistence adapter supplies
-    /// <see cref="ITeamMailKeyStore"/>; <c>Tharga.Team.MongoDB</c> registers one.
+    /// Registers <see cref="ITeamMailboxService"/> and its scopes, and reads the catch-all mailbox when
+    /// <see cref="TeamMailboxOptions.Mail"/> has IMAP settings. A persistence adapter supplies
+    /// <see cref="ITeamMailKeyStore"/> and <see cref="ITeamMailStore"/> — <c>Tharga.Team.MongoDB</c> registers both — and the
+    /// host supplies <see cref="IInboundMailContentStore"/> to keep what arrives.
     /// </summary>
     /// <exception cref="InvalidOperationException">No <see cref="TeamMailboxOptions.Domain"/> is configured.</exception>
     public static IServiceCollection AddThargaTeamMailbox(this IServiceCollection services, Action<TeamMailboxOptions> configure)
@@ -36,11 +38,19 @@ public static class TeamMailboxRegistration
             x.ReadAccessLevel = options.ReadAccessLevel;
             x.HandleAccessLevel = options.HandleAccessLevel;
             x.ManageAccessLevel = options.ManageAccessLevel;
+            x.Mail = options.Mail ?? new MailOptions();
         });
 
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<ITeamMailNotifier, TeamMailNotifier>();
         services.AddTeamService<ITeamMailboxService, TeamMailboxService>();
+
+        if (options.Mail?.Imap?.IsConfigured == true)
+        {
+            services.TryAddScoped<IMailboxSource, MailClientMailboxSource>();
+            services.TryAddScoped<TeamMailReceiver>();
+            services.AddHostedService<TeamMailboxPoller>();
+        }
 
         services.AddThargaScopes(scopes =>
         {

@@ -11,14 +11,14 @@ public class MailRouteTests
     private static readonly TeamMailKeyRecord Retiring = new() { TeamKey = "team-a", Key = "secondary001", Role = MailKeyRole.Secondary, CreatedAt = Now.AddDays(-100), RetiresAt = Now.AddDays(30) };
     private static readonly TeamMailKeyRecord Retired = new() { TeamKey = "team-a", Key = "retiredkey01", Role = MailKeyRole.Secondary, CreatedAt = Now.AddDays(-200), RetiresAt = Now.AddDays(-1) };
 
-    private static TeamMailKeyRecord Lookup(string key) => new[] { Primary, Retiring, Retired }.FirstOrDefault(x => x.Key == key);
+    private static Task<TeamMailKeyRecord> Lookup(string key) => Task.FromResult(new[] { Primary, Retiring, Retired }.FirstOrDefault(x => x.Key == key));
 
-    private static MailRouteDecision Route(params string[] deliveredTo) => MailRoute.Decide(deliveredTo, Options, Lookup, Now);
+    private static Task<MailRouteDecision> Route(params string[] deliveredTo) => MailRoute.DecideAsync(deliveredTo, Options, Lookup, Now);
 
     [Fact]
-    public void MailToThePrimaryKey_GoesToItsTeam()
+    public async Task MailToThePrimaryKey_GoesToItsTeam()
     {
-        var decision = Route("primarykey01-case@fortdocs.app");
+        var decision = await Route("primarykey01-case@fortdocs.app");
 
         Assert.Equal("team-a", decision.TeamKey);
         Assert.Equal(MailRouteReason.PrimaryKey, decision.Reason);
@@ -26,9 +26,9 @@ public class MailRouteTests
     }
 
     [Fact]
-    public void MailToARetiringKey_StillGoesToItsTeam_MarkedWithTheRetirementDate()
+    public async Task MailToARetiringKey_StillGoesToItsTeam_MarkedWithTheRetirementDate()
     {
-        var decision = Route("secondary001-case@fortdocs.app");
+        var decision = await Route("secondary001-case@fortdocs.app");
 
         Assert.Equal("team-a", decision.TeamKey);
         Assert.Equal(MailRouteReason.RetiringKey, decision.Reason);
@@ -36,27 +36,27 @@ public class MailRouteTests
     }
 
     [Fact]
-    public void MailToARetiredKey_GoesToThePostmaster_NeverToTheFormerTeam()
+    public async Task MailToARetiredKey_GoesToThePostmaster_NeverToTheFormerTeam()
     {
-        var decision = Route("retiredkey01-case@fortdocs.app");
+        var decision = await Route("retiredkey01-case@fortdocs.app");
 
         Assert.Null(decision.TeamKey);
         Assert.Equal(MailRouteReason.RetiredKey, decision.Reason);
     }
 
     [Fact]
-    public void MailToAKeyNobodyHolds_GoesToThePostmaster()
+    public async Task MailToAKeyNobodyHolds_GoesToThePostmaster()
     {
-        var decision = Route("nosuchkey000-case@fortdocs.app");
+        var decision = await Route("nosuchkey000-case@fortdocs.app");
 
         Assert.Null(decision.TeamKey);
         Assert.Equal(MailRouteReason.UnknownAddress, decision.Reason);
     }
 
     [Fact]
-    public void MailWithNoAddressOfOurs_GoesToThePostmaster_WithTheFirstRecipientRecorded()
+    public async Task MailWithNoAddressOfOurs_GoesToThePostmaster_WithTheFirstRecipientRecorded()
     {
-        var decision = Route("someone@elsewhere.se");
+        var decision = await Route("someone@elsewhere.se");
 
         Assert.Null(decision.TeamKey);
         Assert.Equal(MailRouteReason.UnknownAddress, decision.Reason);
@@ -64,9 +64,9 @@ public class MailRouteTests
     }
 
     [Fact]
-    public void TheFirstDeliveryAddressThatIsOurs_Decides()
+    public async Task TheFirstDeliveryAddressThatIsOurs_Decides()
     {
-        var decision = Route("forwarder@elsewhere.se", "primarykey01-case+item42@fortdocs.app", "secondary001-case@fortdocs.app");
+        var decision = await Route("forwarder@elsewhere.se", "primarykey01-case+item42@fortdocs.app", "secondary001-case@fortdocs.app");
 
         Assert.Equal(MailRouteReason.PrimaryKey, decision.Reason);
         Assert.Equal("item42", decision.ItemKey);
@@ -74,23 +74,23 @@ public class MailRouteTests
     }
 
     [Fact]
-    public void AnItemAddress_CarriesTheItemToTheTeam()
+    public async Task AnItemAddress_CarriesTheItemToTheTeam()
     {
-        Assert.Equal("0f8d4e2a91c7", Route("primarykey01-case+0f8d4e2a91c7@fortdocs.app").ItemKey);
+        Assert.Equal("0f8d4e2a91c7", (await Route("primarykey01-case+0f8d4e2a91c7@fortdocs.app")).ItemKey);
     }
 
     [Fact]
-    public void ARetiringKeyOnItsLastMoment_IsAlreadyRetired()
+    public async Task ARetiringKeyOnItsLastMoment_IsAlreadyRetired()
     {
-        var decision = MailRoute.Decide(["secondary001-case@fortdocs.app"], Options, Lookup, Now.AddDays(30));
+        var decision = await MailRoute.DecideAsync(["secondary001-case@fortdocs.app"], Options, Lookup, Now.AddDays(30));
 
         Assert.Equal(MailRouteReason.RetiredKey, decision.Reason);
     }
 
     [Fact]
-    public void NoRecipientAtAll_GoesToThePostmaster()
+    public async Task NoRecipientAtAll_GoesToThePostmaster()
     {
-        var decision = Route();
+        var decision = await Route();
 
         Assert.Null(decision.TeamKey);
         Assert.Equal(MailRouteReason.UnknownAddress, decision.Reason);

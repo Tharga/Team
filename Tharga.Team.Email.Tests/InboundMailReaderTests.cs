@@ -59,6 +59,27 @@ public class InboundMailReaderTests
     }
 
     [Fact]
+    public void TheSendersName_AndEveryRecipient_AreRead()
+    {
+        var mail = InboundMailReader.Read(Message(customize: m => m.Cc.Add(new MailboxAddress("Board", "Board@Example.com"))));
+
+        Assert.Equal("A User", mail.FromName);
+        Assert.Equal(["support@fortdocs.se"], mail.To);
+        Assert.Equal(["board@example.com"], mail.Cc);
+    }
+
+    [Fact]
+    public void TheUidAndTheRawMessage_AreCarriedWhenTheFetchHasThem()
+    {
+        var withContent = InboundMailReader.Read(Message(), 17, [1, 2, 3]);
+        var without = InboundMailReader.Read(Message());
+
+        Assert.Equal(17u, withContent.Uid);
+        Assert.Equal([1, 2, 3], withContent.Raw);
+        Assert.Null(without.Raw);
+    }
+
+    [Fact]
     public void TheThreadHeaders_AreCarried()
     {
         var mail = InboundMailReader.Read(Message(customize: m =>

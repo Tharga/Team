@@ -110,6 +110,11 @@ public readonly record struct MailFetchResult(
 /// True when attachments were present. They are not carried: storing them needs somewhere to put them, and
 /// silently dropping them without saying so would leave a transcript that misrepresents the conversation.
 /// </param>
+/// <param name="Uid">The message's IMAP UID in its folder; 0 when it was not read from a mailbox.</param>
+/// <param name="Raw">The message exactly as it arrived, when the fetch was asked to keep it; otherwise null.</param>
+/// <param name="FromName">The sender's display name, or null.</param>
+/// <param name="To">The <c>To</c> addresses, lower-cased.</param>
+/// <param name="Cc">The <c>Cc</c> addresses, lower-cased.</param>
 public readonly record struct InboundMail(
     string MessageId,
     string From,
@@ -120,4 +125,9 @@ public readonly record struct InboundMail(
     string InReplyTo = null,
     IReadOnlyList<string> References = null,
     bool IsAutomated = false,
-    bool HadAttachments = false);
+    bool HadAttachments = false,
+    uint Uid = 0,
+    byte[] Raw = null,
+    string FromName = null,
+    IReadOnlyList<string> To = null,
+    IReadOnlyList<string> Cc = null);

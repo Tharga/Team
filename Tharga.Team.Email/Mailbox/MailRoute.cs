@@ -15,14 +15,14 @@ namespace Tharga.Team.Email.Mailbox;
 /// </remarks>
 internal static class MailRoute
 {
-    public static MailRouteDecision Decide(IReadOnlyList<string> deliveredTo, TeamMailboxOptions options, Func<string, TeamMailKeyRecord> findKey, DateTime now)
+    public static async Task<MailRouteDecision> DecideAsync(IReadOnlyList<string> deliveredTo, TeamMailboxOptions options, Func<string, Task<TeamMailKeyRecord>> findKey, DateTime now)
     {
         foreach (var address in deliveredTo)
         {
             var parsed = TeamMailAddress.Parse(address, options);
             if (parsed == null) continue;
 
-            var key = findKey(parsed.Key);
+            var key = await findKey(parsed.Key);
             if (key == null) return Postmaster(parsed.ItemKey, address, MailRouteReason.UnknownAddress);
             if (key.HasRetired(now)) return Postmaster(parsed.ItemKey, address, MailRouteReason.RetiredKey);
 

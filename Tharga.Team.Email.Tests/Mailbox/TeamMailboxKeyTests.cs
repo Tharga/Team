@@ -11,7 +11,7 @@ public class TeamMailboxKeyTests
     private readonly SteppingTimeProvider _time = new(new DateTime(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc));
     private readonly TeamMailboxOptions _options = new() { Domain = "fortdocs.app", Suffix = "-case" };
 
-    private TeamMailboxService Service(Func<int, string> generate = null) => new(_store, Options.Create(_options), _time, generate);
+    private TeamMailboxService Service(Func<int, string> generate = null) => new(_store, new InMemoryTeamMailStore(), new TeamMailNotifier(), Substitute.For<Tharga.Team.Service.ITeamPrincipalAccessor>(), Options.Create(_options), _time, null, generate);
 
     private DateTime Now => _time.GetUtcNow().UtcDateTime;
 

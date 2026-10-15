@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Tharga.Team.Service;
 
 namespace Tharga.Team.Email.Mailbox;
 
@@ -11,18 +12,26 @@ internal sealed class TeamMailboxService : ITeamMailboxService
     private const int UniqueKeyAttempts = 5;
 
     private readonly ITeamMailKeyStore _keys;
+    private readonly ITeamMailStore _mail;
+    private readonly IInboundMailContentStore _content;
+    private readonly ITeamMailNotifier _notifier;
+    private readonly ITeamPrincipalAccessor _principal;
     private readonly TeamMailboxOptions _options;
     private readonly TimeProvider _time;
     private readonly Func<int, string> _generate;
 
-    public TeamMailboxService(ITeamMailKeyStore keys, IOptions<TeamMailboxOptions> options, TimeProvider time)
-        : this(keys, options, time, null)
+    public TeamMailboxService(ITeamMailKeyStore keys, ITeamMailStore mail, ITeamMailNotifier notifier, ITeamPrincipalAccessor principal, IOptions<TeamMailboxOptions> options, TimeProvider time, IInboundMailContentStore content = null)
+        : this(keys, mail, notifier, principal, options, time, content, null)
     {
     }
 
-    internal TeamMailboxService(ITeamMailKeyStore keys, IOptions<TeamMailboxOptions> options, TimeProvider time, Func<int, string> generate)
+    internal TeamMailboxService(ITeamMailKeyStore keys, ITeamMailStore mail, ITeamMailNotifier notifier, ITeamPrincipalAccessor principal, IOptions<TeamMailboxOptions> options, TimeProvider time, IInboundMailContentStore content, Func<int, string> generate)
     {
         _keys = keys;
+        _mail = mail;
+        _notifier = notifier;
+        _principal = principal;
+        _content = content;
         _options = options.Value;
         _time = time;
         _generate = generate ?? MailKeyGenerator.New;
@@ -70,17 +79,39 @@ internal sealed class TeamMailboxService : ITeamMailboxService
         return await GetAddressesAsync(teamKey, cancellationToken);
     }
 
-    public Task<InboundMailPage> ListMailAsync(string teamKey, InboundMailFilter filter = InboundMailFilter.Unhandled, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default) => throw MailNotYetKept();
+    public Task<InboundMailPage> ListMailAsync(string teamKey, InboundMailFilter filter = InboundMailFilter.Unhandled, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default) =>
+        _mail.ListAsync(teamKey, filter, cursor, pageSize, cancellationToken);
 
-    public Task<int> GetUnhandledCountAsync(string teamKey, CancellationToken cancellationToken = default) => throw MailNotYetKept();
+    public Task<int> GetUnhandledCountAsync(string teamKey, CancellationToken cancellationToken = default) =>
+        _mail.CountUnhandledAsync(teamKey, cancellationToken);
 
-    public Task<InboundMailItem> GetMailAsync(string teamKey, string mailId, CancellationToken cancellationToken = default) => throw MailNotYetKept();
+    public Task<InboundMailItem> GetMailAsync(string teamKey, string mailId, CancellationToken cancellationToken = default) =>
+        _mail.GetAsync(teamKey, mailId, cancellationToken);
 
-    public Task<MailContent> GetContentAsync(string teamKey, string mailId, CancellationToken cancellationToken = default) => throw MailNotYetKept();
+    public async Task<MailContent> GetContentAsync(string teamKey, string mailId, CancellationToken cancellationToken = default)
+    {
+        if (await _mail.GetAsync(teamKey, mailId, cancellationToken) == null) return null;
 
-    public Task<InboundMailItem> SetOutcomeAsync(string teamKey, string mailId, string outcome, MailThreadOwner owner = null, CancellationToken cancellationToken = default) => throw MailNotYetKept();
+        return await ContentOfAsync(_content, mailId, cancellationToken);
+    }
 
-    private static NotSupportedException MailNotYetKept() => new("Received mail is not kept yet; the mail store arrives with receiving.");
+    public async Task<InboundMailItem> SetOutcomeAsync(string teamKey, string mailId, string outcome, MailThreadOwner owner = null, CancellationToken cancellationToken = default)
+    {
+        var handledBy = await new TeamAuthorizer(_principal).GetSubjectAsync();
+        var item = await _mail.SetOutcomeAsync(teamKey, mailId, outcome, owner, handledBy, Now, cancellationToken);
+
+        if (item != null) _notifier.Notify(new TeamMailUpdatedEventArgs { TeamKey = teamKey, MailId = mailId, Change = TeamMailChange.Handled });
+
+        return item;
+    }
+
+    internal static async Task<MailContent> ContentOfAsync(IInboundMailContentStore content, string mailId, CancellationToken cancellationToken)
+    {
+        if (content == null) throw new InvalidOperationException($"No {nameof(IInboundMailContentStore)} is registered, so the content of received mail is not kept.");
+
+        var raw = await content.GetAsync(mailId, cancellationToken);
+        return raw == null ? null : new MailContent { MailId = mailId, Raw = raw };
+    }
 
     private async Task<TeamMailKeyRecord> NewKeyAsync(string teamKey, MailKeyRole role, CancellationToken cancellationToken)
     {

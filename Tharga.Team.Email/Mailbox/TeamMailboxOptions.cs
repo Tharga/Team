@@ -14,6 +14,12 @@ public class TeamMailboxOptions
     /// <summary>How many characters a key has. Twelve lowercase letters and digits is about 62 bits.</summary>
     public int KeyLength { get; set; } = 12;
 
+    /// <summary>
+    /// The catch-all mailbox every team address lands in. Mail is read only when <see cref="MailOptions.Imap"/>
+    /// is configured; the mailbox is only ever read, never changed.
+    /// </summary>
+    public MailOptions Mail { get; set; } = new();
+
     /// <summary>How long a replaced key is still accepted after a rotation.</summary>
     public TimeSpan RetirementPeriod { get; set; } = TimeSpan.FromDays(90);
 

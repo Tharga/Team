@@ -34,7 +34,7 @@ internal static class InboundMailReader
 
     private static readonly string[] AutomatedPrecedence = ["bulk", "junk", "list", "auto_reply"];
 
-    public static InboundMail Read(MimeMessage message)
+    public static InboundMail Read(MimeMessage message, uint uid = 0, byte[] raw = null)
     {
         ArgumentNullException.ThrowIfNull(message);
 
@@ -48,7 +48,12 @@ internal static class InboundMailReader
             InReplyTo: message.InReplyTo,
             References: [.. message.References],
             IsAutomated: IsAutomated(message),
-            HadAttachments: message.Attachments.Any());
+            HadAttachments: message.Attachments.Any(),
+            Uid: uid,
+            Raw: raw,
+            FromName: message.From.Mailboxes.FirstOrDefault()?.Name,
+            To: [.. message.To.Mailboxes.Select(x => Normalize(x.Address)).Where(x => x.Length > 0)],
+            Cc: [.. message.Cc.Mailboxes.Select(x => Normalize(x.Address)).Where(x => x.Length > 0)]);
     }
 
     private static string Sender(MimeMessage message)

@@ -13,6 +13,7 @@ public class TeamMailboxRegistrationTests
         services.AddLogging();
         services.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
         services.AddSingleton<ITeamMailKeyStore>(new InMemoryTeamMailKeyStore());
+        services.AddSingleton<ITeamMailStore>(new InMemoryTeamMailStore());
         services.AddThargaTeamMailbox(configure);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
     }
@@ -120,5 +121,27 @@ public class TeamMailboxRegistrationTests
             Fortdocs(o);
             o.KeyLength = 4;
         }));
+    }
+
+    [Fact]
+    public void WithoutIMAPSettings_NothingReadsTheMailbox()
+    {
+        using var provider = Build(Fortdocs);
+
+        Assert.DoesNotContain(provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), x => x is TeamMailboxPoller);
+    }
+
+    [Fact]
+    public void WithIMAPSettings_TheMailboxIsRead()
+    {
+        var services = new ServiceCollection();
+        services.AddThargaTeamMailbox(o =>
+        {
+            Fortdocs(o);
+            o.Mail.Imap.Host = "imap.example.org";
+        });
+
+        Assert.Contains(services, x => x.ImplementationType == typeof(TeamMailboxPoller));
+        Assert.Contains(services, x => x.ServiceType == typeof(IMailboxSource));
     }
 }
