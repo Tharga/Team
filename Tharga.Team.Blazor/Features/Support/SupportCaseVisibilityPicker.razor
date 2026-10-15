@@ -1,0 +1,32 @@
+@using Tharga.Team.Blazor.Framework
+
+@* Who in the team may read a case. Only you is offered only while nobody else in the team has written in it. *@
+
+<RadzenSelectBar Value="@Value" TValue="SupportCaseVisibility" Size="ButtonSize.Small" Disabled="@Disabled"
+                 Change="@((SupportCaseVisibility v) => ValueChanged.InvokeAsync(v))"
+                 aria-label="@_text[SupportCasesViewText.VisibilityLabel]">
+    <Items>
+        <RadzenSelectBarItem Text="@_text[SupportCasesViewText.VisibilityTeam]" Value="SupportCaseVisibility.Team" />
+        <RadzenSelectBarItem Text="@_text[SupportCasesViewText.VisibilityPrivate]" Value="SupportCaseVisibility.Private" Disabled="@(!MayBePrivate)" />
+    </Items>
+</RadzenSelectBar>
+
+@code {
+    [Parameter] public SupportCaseVisibility Value { get; set; }
+
+    [Parameter] public EventCallback<SupportCaseVisibility> ValueChanged { get; set; }
+
+    /// <summary>Whether only the author may read it; false once somebody else in the team has written in it.</summary>
+    [Parameter] public bool MayBePrivate { get; set; }
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportCasesViewText.All);
+    }
+}

@@ -15,4 +15,6 @@ public static class SupportAuditMetadataKeys
     public const string CaseId = "support.case.id";
 
     public const string CaseSubject = "support.case.subject";
+
+    public const string CaseVisibility = "support.case.visibility";
 }

@@ -47,7 +47,7 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             // derives one, so recording the argument records nothing -- and a notification worded around
             // {support.case.subject} then names the case with an empty string.
             Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject)));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject), (AuditMetadataKeys.TeamName, raised.TeamName)));
 
             return raised;
         }
@@ -124,6 +124,27 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.AnswerCaseAsync(teamKey, caseId, body, cancellationToken);
+
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+        }
+        catch (Exception ex)
+        {
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
+    public Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetMyUnreadByCaseAsync(teamKey, cancellationToken);
+
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
@@ -138,6 +159,25 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         {
             Log("close", nameof(CloseCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
                 Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
+    /// <remarks>Audited because it changes who may read the conversation.</remarks>
+    public async Task SetCaseVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.SetCaseVisibilityAsync(teamKey, caseId, visibility, cancellationToken);
+
+            Log("visibility", nameof(SetCaseVisibilityAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.CaseVisibility, visibility.ToString())));
+        }
+        catch (Exception ex)
+        {
+            Log("visibility", nameof(SetCaseVisibilityAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.CaseVisibility, visibility.ToString())));
             throw;
         }
     }
@@ -202,11 +242,26 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.MarkReadAsync(teamKey, caseId, cancellationToken);
 
+    public Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => inner.GetVisibilityChoiceAsync(teamKey, caseId, cancellationToken);
+
+    public Task<int> GetMyOpenCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetMyOpenCountAsync(teamKey, cancellationToken);
+
+    public Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetMyAnsweredCountAsync(teamKey, cancellationToken);
+
     public Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetMyUnreadCountAsync(teamKey, cancellationToken);
 
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
+
+    public Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => inner.GetAwaitingSupportCountAcrossTeamsAsync(cancellationToken);
+
+    public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => inner.GetAwaitingUnassignedCountAsync(cancellationToken);
 
     public Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => inner.GetCasesAsync(teamKey, cursor, pageSize, cancellationToken);

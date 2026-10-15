@@ -70,13 +70,16 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         {
             CaseId = supportCase.Id,
             TeamKey = supportCase.TeamKey,
+            TeamName = supportCase.TeamName,
             AuthorIdentity = supportCase.AuthorIdentity,
             AuthorName = supportCase.AuthorName,
             Subject = supportCase.Subject,
             Status = SupportCaseStatus.Open,
             AssistantState = supportCase.AssistantState,
+            Visibility = supportCase.Visibility,
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
+            Bindings = [],
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
@@ -94,7 +97,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
         var update = Builders<SupportCaseEntity>.Update
             .Push(x => x.Messages, ToEntity(message with { Sequence = NextSequence(entity) }))
-            .Set(x => x.LastMessageFromAuthor, message.AuthorIdentity == entity.AuthorIdentity)
+            .Set(x => x.LastMessageFromAuthor, !message.AsSupport && message.AuthorIdentity == entity.AuthorIdentity)
             .Set(x => x.LastMessageAt, message.SentAt);
 
         await UpdateAsync(teamKey, caseId, update);
@@ -166,8 +169,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     public Task<SupportCase[]> GetCasesAwaitingSupportSinceAsync(DateTime waitingSince, int limit, CancellationToken cancellationToken = default)
     {
         var filter = Builders<SupportCaseEntity>.Filter.And(
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true),
+            AwaitingSupport(Builders<SupportCaseEntity>.Filter.Empty),
             Builders<SupportCaseEntity>.Filter.Lt(x => x.LastMessageAt, waitingSince));
 
         return NewestFirstAsync(filter, _ => true, limit, cancellationToken);
@@ -216,7 +218,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             : entity.Messages.OrderBy(x => x.Sequence).Last();
 
         var isAnswer = last is { Kind: SupportMessageKind.Assistant }
-                       || (last is { Kind: SupportMessageKind.User } && last.AuthorIdentity != entity.AuthorIdentity);
+                       || (last is { Kind: SupportMessageKind.User } && (last.AsSupport || last.AuthorIdentity != entity.AuthorIdentity));
         if (!isAnswer) return false;
 
         var read = Array.Find(entity.Reads ?? [], x => x.Identity == entity.AuthorIdentity);
@@ -233,7 +235,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             ? null
             : entity.Messages.OrderBy(x => x.Sequence).Last();
 
-        return last is { Kind: SupportMessageKind.User } && last.AuthorIdentity != entity.AuthorIdentity;
+        return last is { Kind: SupportMessageKind.User } && (last.AsSupport || last.AuthorIdentity != entity.AuthorIdentity);
     }
 
     public async Task<bool> TryCloseForInactivityAsync(string teamKey, string caseId, DateTime closedAt, SupportMessage closureMessage, CancellationToken cancellationToken = default)
@@ -369,44 +371,119 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     /// is small and bounded - unlike the awaiting-support count, which is why that one is denormalized
     /// instead.
     /// </remarks>
-    public async Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+    public async Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
     {
-        var filter = Builders<SupportCaseEntity>.Filter.And(
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity));
+        var filter = UnreadPopulation(teamKey, identity);
 
-        var unread = 0;
+        var unread = new List<SupportCaseUnread>();
         await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
         {
-            var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity);
+            var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity)?.LastReadSequence ?? 0;
+            var count = entity.Messages.Count(x => x.Sequence > read && IsAnAnswerTo(x, identity));
 
-            if ((read?.LastReadSequence ?? 0) < entity.Messages.Length) unread++;
+            if (count > 0) unread.Add(new SupportCaseUnread { CaseId = entity.CaseId, Count = count });
+        }
+
+        return [.. unread];
+    }
+
+    public async Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+    {
+        var unread = 0;
+        await foreach (var entity in collection.GetAsync(UnreadPopulation(teamKey, identity)).WithCancellation(cancellationToken))
+        {
+            var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity)?.LastReadSequence ?? 0;
+
+            if (entity.Messages.Any(x => x.Sequence > read && IsAnAnswerTo(x, identity))) unread++;
         }
 
         return unread;
     }
 
+    // Only an answer waits to be read: a note that the case closed or reopened, or the reader's own words, never does.
+    private static bool IsAnAnswerTo(SupportMessageEntity message, string identity)
+        => message.Kind != SupportMessageKind.System && (message.AsSupport || message.AuthorIdentity != identity);
+
+    // A conversation with the assistant is read as it happens, so its answers are never left waiting to be read.
+    private static FilterDefinition<SupportCaseEntity> UnreadPopulation(string teamKey, string identity)
+        => Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active));
+
+    public async Task<int> GetOpenCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active)));
+
+    public async Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, false),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active)));
+
     public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
-        var filter = Builders<SupportCaseEntity>.Filter.And(
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true));
-
-        return (int)await collection.CountAsync(filter);
+        return (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey)));
     }
+
+    public async Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, true)));
+
+    public async Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Exists(x => x.TeamKey, false)));
+
+    public async Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        var result = await collection.UpdateOneAsync(Case(teamKey, caseId), Builders<SupportCaseEntity>.Update.Set(x => x.Visibility, visibility));
+
+        return result?.Before != null;
+    }
+
+    public Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string identity, string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => PageAsync(VisibleToTeam(teamKey, identity), cursor, pageSize);
+
+    public async Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(AwaitingSupport(VisibleToTeam(teamKey, identity)));
+
+    private static FilterDefinition<SupportCaseEntity> VisibleToTeam(string teamKey, string identity)
+    {
+        var shared = Builders<SupportCaseEntity>.Filter.Eq(x => x.Visibility, SupportCaseVisibility.Team);
+
+        return Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            string.IsNullOrEmpty(identity)
+                ? shared
+                : Builders<SupportCaseEntity>.Filter.Or(shared, Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity)));
+    }
+
+    // A conversation the assistant is still answering waits for the assistant, not for support.
+    private static FilterDefinition<SupportCaseEntity> AwaitingSupport(FilterDefinition<SupportCaseEntity> population)
+        => Builders<SupportCaseEntity>.Filter.And(
+            population,
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active));
 
     public async Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
     {
-        await RequireCaseAsync(teamKey, caseId);
+        var entity = await RequireCaseAsync(teamKey, caseId);
 
-        var update = Builders<SupportCaseEntity>.Update
-            .Push(x => x.Bindings, new SupportChannelBindingEntity
-            {
-                ChannelType = binding.ChannelType,
-                ExternalId = binding.ExternalId,
-                Address = binding.Address
-            });
+        var added = new SupportChannelBindingEntity
+        {
+            ChannelType = binding.ChannelType,
+            ExternalId = binding.ExternalId,
+            Address = binding.Address
+        };
+
+        // Cases written before this always started with an empty list store it as null, which $push refuses.
+        var update = entity.Bindings == null
+            ? Builders<SupportCaseEntity>.Update.Set(x => x.Bindings, [added])
+            : Builders<SupportCaseEntity>.Update.Push(x => x.Bindings, added);
 
         await UpdateAsync(teamKey, caseId, update);
     }
@@ -528,6 +605,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     {
         Id = entity.CaseId,
         TeamKey = entity.TeamKey,
+        TeamName = entity.TeamName,
         AuthorIdentity = entity.AuthorIdentity,
         AuthorName = entity.AuthorName,
         Subject = entity.Subject,
@@ -536,7 +614,10 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ClosedAt = entity.ClosedAt,
         ClosedBy = entity.ClosedBy,
         MessageCount = entity.Messages.Length,
+        LastMessageAt = entity.LastMessageAt ?? entity.CreatedAt,
+        AwaitingSupport = entity.Status == SupportCaseStatus.Open && entity.LastMessageFromAuthor && entity.AssistantState != SupportAssistantState.Active,
         AssistantState = entity.AssistantState,
+        Visibility = entity.Visibility,
         Bindings = entity.Bindings == null
             ? []
             : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })]
@@ -551,7 +632,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Body = entity.Body,
         SentAt = entity.SentAt,
         Delivery = entity.Delivery,
-        Source = entity.Source
+        Source = entity.Source,
+        AsSupport = entity.AsSupport
     };
 
     private static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -563,6 +645,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Body = message.Body,
         SentAt = message.SentAt,
         Delivery = message.Delivery,
-        Source = message.Source
+        Source = message.Source,
+        AsSupport = message.AsSupport
     };
 }

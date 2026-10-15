@@ -169,6 +169,7 @@ public class SupportUnassignedViewRenderTests : BunitContext
         Services.AddSingleton(cases.Object);
         Services.AddSingleton(Mock.Of<ISupportCaseNotifier>());
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddSingleton(Mock.Of<IIconResolver>());
         Services.AddRadzenComponents();
 
         if (withOversight) Services.AddSingleton(Oversight());

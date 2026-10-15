@@ -40,6 +40,12 @@ public record SupportCase
     public string TeamKey { get; init; }
 
     /// <summary>
+    /// The team's name as it was when the case was raised, for wording a message about it; <c>null</c> when it
+    /// could not be read, and for a case that arrived with no team.
+    /// </summary>
+    public string TeamName { get; init; }
+
+    /// <summary>
     /// The stable authentication subject of whoever raised the case. May no longer resolve to a user or a
     /// member, which is expected rather than exceptional.
     /// </summary>
@@ -87,6 +93,12 @@ public record SupportCase
     /// <summary>Number of entries in the transcript, so a list can be rendered without reading it.</summary>
     public required int MessageCount { get; init; }
 
+    /// <summary>When the newest entry was written, so a list can put the liveliest conversation first.</summary>
+    public DateTime? LastMessageAt { get; init; }
+
+    /// <summary>Whether the case is open and its newest entry is from the one who raised it — waiting on support.</summary>
+    public bool AwaitingSupport { get; init; }
+
     /// <summary>External projections. Empty until the channel work lands.</summary>
     public SupportChannelBinding[] Bindings { get; init; } = [];
 
@@ -98,4 +110,14 @@ public record SupportCase
     /// assistants existed deserializes as — so nothing already stored changes meaning.
     /// </remarks>
     public SupportAssistantState AssistantState { get; init; } = SupportAssistantState.None;
+
+    /// <summary>
+    /// Whether the team's support readers may read this case, when the host lets each case decide.
+    /// </summary>
+    /// <remarks>
+    /// <c>null</c> when nobody chose — every case under team-wide visibility, and any case written before
+    /// visibility existed. Under per-case visibility a <c>null</c> reads as <see cref="SupportCaseVisibility.Private"/>,
+    /// because nobody ever shared it.
+    /// </remarks>
+    public SupportCaseVisibility? Visibility { get; init; }
 }

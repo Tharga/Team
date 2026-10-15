@@ -18,7 +18,12 @@ internal sealed class SupportCaseService(
     TimeProvider timeProvider,
     IEnumerable<ISupportChannel> channels = null,
     ISupportCaseNotifier notifier = null,
-    ISupportResponder responder = null) : ISupportCaseService
+    ISupportResponder responder = null,
+    SupportCaseVisibilityMode visibilityMode = SupportCaseVisibilityMode.TeamWide,
+    ITeamDirectoryService teamDirectory = null,
+    IUserService userService = null,
+    SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private,
+    SupportCaseVisibility? assistantDefaultVisibility = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -34,21 +39,25 @@ internal sealed class SupportCaseService(
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
-        var authorName = await authorizer.GetDisplayNameAsync();
+        var authorName = await DisplayNameAsync();
+
+        var withAssistant = assistance == SupportAssistance.Assistant && responder != null;
 
         var supportCase = new SupportCase
         {
             Id = Guid.NewGuid().ToString(),
             TeamKey = teamKey,
+            TeamName = await TeamNameAsync(teamKey),
             AuthorIdentity = subjectIdentity,
             AuthorName = authorName,
             Subject = string.IsNullOrWhiteSpace(subject) ? SubjectFromMessage.Derive(body) : subject.Trim(),
             Status = SupportCaseStatus.Open,
             CreatedAt = now,
             MessageCount = 1,
-            AssistantState = assistance == SupportAssistance.Assistant && responder != null
-                ? SupportAssistantState.Active
-                : SupportAssistantState.None
+            AssistantState = withAssistant ? SupportAssistantState.Active : SupportAssistantState.None,
+            Visibility = visibilityMode == SupportCaseVisibilityMode.PerCase
+                ? withAssistant ? assistantDefaultVisibility ?? defaultVisibility : defaultVisibility
+                : null
         };
 
         var firstMessage = new SupportMessage
@@ -62,11 +71,17 @@ internal sealed class SupportCaseService(
         };
 
         await store.AddCaseAsync(supportCase, firstMessage, cancellationToken);
+        await MarkOwnMessageReadAsync(teamKey, supportCase.Id, subjectIdentity, firstMessage.Sequence, cancellationToken);
 
         // The case is written first and is authoritative. Projecting it onto a channel comes after, so a
         // channel that is slow, misconfigured or down cannot stop somebody reporting a problem -- they get a
         // case either way, and an undelivered entry stays visible as Pending rather than being lost.
-        await ProjectAsync(supportCase, body, firstMessage.Sequence, cancellationToken);
+        // A conversation the assistant is answering is the product talking to itself; channels hear of it
+        // when somebody asks for a person, in RequestHumanAsync.
+        if (supportCase.AssistantState != SupportAssistantState.Active)
+        {
+            await ProjectAsync(supportCase, body, firstMessage.Sequence, cancellationToken);
+        }
 
         Notify(teamKey, supportCase.Id, SupportCaseChange.Raised);
 
@@ -119,10 +134,44 @@ internal sealed class SupportCaseService(
 
         await store.SetAssistantStateAsync(teamKey, caseId, SupportAssistantState.HandedOff, cancellationToken);
 
+        // A conversation that started with the assistant becomes a support case, and reads as one from now on.
+        if (visibilityMode == SupportCaseVisibilityMode.PerCase
+            && supportCase.Visibility == (assistantDefaultVisibility ?? defaultVisibility)
+            && supportCase.Visibility != defaultVisibility)
+        {
+            await store.TrySetVisibilityAsync(teamKey, caseId, defaultVisibility, cancellationToken);
+        }
+
         Notify(teamKey, caseId, SupportCaseChange.Replied);
     }
 
-    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// What the member and the assistant said before a person was asked for, so whoever picks it up in a
+    /// channel starts from the conversation rather than from its first line.
+    /// </summary>
+    private async Task<string> ConversationSoFarAsync(string teamKey, string caseId, CancellationToken cancellationToken)
+    {
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+
+        return string.Join("\n", messages
+            .Where(x => x.Kind != SupportMessageKind.System)
+            .Select(x => $"{x.AuthorName}: {x.Body}"));
+    }
+
+    public Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, asSupport: false, cancellationToken);
+
+    public Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, asSupport: true, cancellationToken);
+
+    public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        var subject = await authorizer.GetSubjectAsync();
+
+        return string.IsNullOrEmpty(subject) ? [] : await store.GetUnreadByCaseAsync(teamKey, subject, cancellationToken);
+    }
+
+    private async Task WriteAsync(string teamKey, string caseId, string body, bool asSupport, CancellationToken cancellationToken)
     {
         RequireWithinLength(body);
 
@@ -135,6 +184,13 @@ internal sealed class SupportCaseService(
                 $"Support case '{caseId}' already holds {existing.MessageCount} messages, which is the limit of " +
                 $"{SupportCaseLimits.MaxMessagesPerCase}. Raise a new case rather than extending this one.");
 
+        // Writing to a closed case means it is not over: it opens again rather than refusing what was written.
+        if (existing?.Status == SupportCaseStatus.Closed)
+        {
+            await ReopenCaseAsync(teamKey, caseId, cancellationToken);
+            existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        }
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
 
         var message = new SupportMessage
@@ -142,14 +198,28 @@ internal sealed class SupportCaseService(
             Sequence = 0,
             Kind = SupportMessageKind.User,
             AuthorIdentity = await authorizer.GetSubjectAsync(),
-            AuthorName = await authorizer.GetDisplayNameAsync(),
+            AuthorName = await DisplayNameAsync(),
             Body = body,
-            SentAt = now
+            SentAt = now,
+            AsSupport = asSupport
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+        var sequence = (existing?.MessageCount ?? 0) + 1;
 
-        await DeliverAsync(teamKey, caseId, existing, message with { Sequence = (existing?.MessageCount ?? 0) + 1 }, cancellationToken);
+        // An answer is unread for whoever raised the case, even when the one answering raised it too.
+        if (!asSupport) await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, sequence, cancellationToken);
+
+        // The first message to a person opens the channels, carrying the conversation with the assistant before it;
+        // asking for a person without writing anything has nothing yet for support to answer.
+        if (!asSupport && existing != null && existing.AssistantState != SupportAssistantState.Active && existing.Bindings is not { Length: > 0 })
+        {
+            await ProjectAsync(existing, await ConversationSoFarAsync(teamKey, caseId, cancellationToken), sequence, cancellationToken);
+        }
+        else
+        {
+            await DeliverAsync(teamKey, caseId, existing, message with { Sequence = sequence }, cancellationToken);
+        }
 
         Notify(teamKey, caseId, SupportCaseChange.Replied);
     }
@@ -243,7 +313,7 @@ internal sealed class SupportCaseService(
     {
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
-        var authorName = await authorizer.GetDisplayNameAsync();
+        var authorName = await DisplayNameAsync();
 
         // The closure goes into the transcript rather than only onto the header, so reading the conversation
         // shows how it ended. A closure with no trace of who closed it reads as a gap.
@@ -271,7 +341,7 @@ internal sealed class SupportCaseService(
         if (supportCase == null || supportCase.Status != SupportCaseStatus.Closed) return;
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var authorName = await authorizer.GetDisplayNameAsync();
+        var authorName = await DisplayNameAsync();
 
         var reopen = new SupportMessage
         {
@@ -293,7 +363,7 @@ internal sealed class SupportCaseService(
         if (string.IsNullOrWhiteSpace(teamKey)) throw new ArgumentException("A case must be assigned to a team.", nameof(teamKey));
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var actor = await authorizer.GetDisplayNameAsync();
+        var actor = await DisplayNameAsync();
 
         // In the transcript, because which tenant a case belongs to is part of its history: a case that
         // changed hands and says nothing about it reads as having always been there.
@@ -353,7 +423,28 @@ internal sealed class SupportCaseService(
         if (existing == null) return;
 
         await store.MarkReadAsync(teamKey, caseId, await authorizer.GetSubjectAsync(), existing.MessageCount, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Read);
     }
+
+    public async Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        if (visibilityMode != SupportCaseVisibilityMode.PerCase) return SupportCaseVisibilityChoice.None;
+
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        var subject = await authorizer.GetSubjectAsync();
+        if (supportCase == null || string.IsNullOrEmpty(subject) || supportCase.AuthorIdentity != subject) return SupportCaseVisibilityChoice.None;
+
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+
+        return new SupportCaseVisibilityChoice(true, SupportCaseVisibilityRules.MayBePrivate(supportCase, messages));
+    }
+
+    public async Task<int> GetMyOpenCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => await store.GetOpenCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
+
+    public async Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => await store.GetAnsweredCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
 
     public async Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => await store.GetUnreadCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
@@ -361,12 +452,101 @@ internal sealed class SupportCaseService(
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => store.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
 
+    public Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => store.GetAwaitingSupportCountAcrossTeamsAsync(cancellationToken);
+
+    public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => store.GetAwaitingUnassignedCountAsync(cancellationToken);
+
+    public async Task SetCaseVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        if (visibilityMode != SupportCaseVisibilityMode.PerCase)
+            throw new InvalidOperationException("Support cases are visible team-wide here; a case's visibility cannot be set.");
+
+        if (visibility == SupportCaseVisibility.Private)
+        {
+            var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+            var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+
+            if (!SupportCaseVisibilityRules.MayBePrivate(supportCase, messages))
+                throw new InvalidOperationException($"Others in team '{teamKey}' have written in support case {caseId}, so it cannot be made private.");
+        }
+
+        if (!await store.TrySetVisibilityAsync(teamKey, caseId, visibility, cancellationToken))
+            throw new InvalidOperationException($"Support case {caseId} was not found, so its visibility cannot change.");
+
+        Notify(teamKey, caseId, SupportCaseChange.VisibilityChanged);
+    }
+
+    public async Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string cursor, int pageSize, CancellationToken cancellationToken)
+        => await store.GetCasesVisibleToTeamAsync(teamKey, await authorizer.GetSubjectAsync(), cursor, pageSize, cancellationToken);
+
+    public async Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, CancellationToken cancellationToken)
+        => await store.GetAwaitingSupportCountVisibleToTeamAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
+
     /// <remarks>
     /// <b>Enforced here rather than in the adapter, because the limit is a contract fact.</b>
     /// <see cref="SupportCaseLimits"/> lives beside the contracts and is documented for callers, so a second
     /// storage adapter must inherit the rule rather than be trusted to reimplement it. The MongoDB adapter
     /// keeps its own check as a last-resort backstop for a caller that reaches the port directly.
     /// </remarks>
+    /// <summary>
+    /// The team's name, read through the author's own team list — the caller raising a case is a member, so
+    /// this needs no grant of its own.
+    /// </summary>
+    /// <remarks>
+    /// Best effort: a case is raised whether or not a name can be read, so a host without a directory, or one
+    /// that fails, simply gets a case worded with the key.
+    /// </remarks>
+    private async Task<string> TeamNameAsync(string teamKey)
+    {
+        if (teamDirectory == null || string.IsNullOrEmpty(teamKey)) return null;
+
+        try
+        {
+            await foreach (var team in teamDirectory.GetTeamsAsync())
+            {
+                if (team.Key == teamKey) return string.IsNullOrWhiteSpace(team.Name) ? null : team.Name;
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Whoever wrote a message has read it, so it never counts as unread for them — only somebody else's answer does.
+    /// </summary>
+    private Task MarkOwnMessageReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken)
+        => string.IsNullOrEmpty(identity)
+            ? Task.CompletedTask
+            : store.MarkReadAsync(teamKey, caseId, identity, sequence, cancellationToken);
+
+    /// <summary>
+    /// The writer's name as the product knows them — their user record — rather than what the sign-in token
+    /// calls them, which is often an e-mail address. The token's name when there is no record to read.
+    /// </summary>
+    private async Task<string> DisplayNameAsync()
+    {
+        if (userService != null)
+        {
+            try
+            {
+                var name = (await userService.GetCurrentUserAsync())?.Name;
+                if (!string.IsNullOrWhiteSpace(name)) return name;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                // A name is wording, never a reason to refuse the write; the token's name stands in.
+            }
+        }
+
+        return await authorizer.GetDisplayNameAsync();
+    }
+
     private static void RequireWithinLength(string body)
     {
         if (body != null && body.Length > SupportCaseLimits.MaxMessageLength)

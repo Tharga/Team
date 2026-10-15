@@ -29,7 +29,11 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
         // rather than a failure. The case is raised either way.
         if (string.IsNullOrWhiteSpace(channel)) return null;
 
-        var text = $"*{supportCase.Subject}*\n{openingMessage}\n_raised by {supportCase.AuthorName}_";
+        var raisedBy = string.IsNullOrWhiteSpace(supportCase.TeamName)
+            ? $"_raised by {SlackText.Escape(supportCase.AuthorName)}_"
+            : $"_raised by {SlackText.Escape(supportCase.AuthorName)} in {SlackText.Escape(supportCase.TeamName)}_";
+        var heading = RepeatsTheMessage(supportCase.Subject, openingMessage) ? "" : $"*{SlackText.Escape(supportCase.Subject)}*\n";
+        var text = $"{heading}{SlackText.Escape(openingMessage)}\n{raisedBy}";
 
         var result = await slackClient.PostAsync(channel, text, cancellationToken: cancellationToken);
 
@@ -42,6 +46,18 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
         };
     }
 
+    /// <summary>Whether the subject only repeats the message's opening words, as a subject derived from it does.</summary>
+    internal static bool RepeatsTheMessage(string subject, string message)
+    {
+        if (string.IsNullOrWhiteSpace(subject)) return true;
+
+        var opening = Collapse(subject).TrimEnd('…').TrimEnd();
+        return Collapse(message).StartsWith(opening, StringComparison.Ordinal);
+    }
+
+    private static string Collapse(string text)
+        => string.Join(' ', (text ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+
     public async Task<bool> PostAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
         var channel = options.Value.SlackChannel;
@@ -49,8 +65,8 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
         if (string.IsNullOrWhiteSpace(channel) || binding?.ExternalId == null) return false;
 
         var text = message.Kind == SupportMessageKind.System
-            ? $"_{message.Body}_"
-            : $"*{message.AuthorName}*: {message.Body}";
+            ? $"_{SlackText.Escape(message.Body)}_"
+            : $"*{SlackText.Escape(message.AuthorName)}*: {SlackText.Escape(message.Body)}";
 
         var result = await slackClient.PostAsync(channel, text, binding.ExternalId, cancellationToken);
 

@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Options;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Support.Slack;
 
 namespace Tharga.Team.Support.Notifications;
 
@@ -89,7 +90,7 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
     {
         if (string.IsNullOrWhiteSpace(template)) return DefaultText(entry, key);
 
-        return PlaceholderPattern.Replace(template, match => Resolve(match.Groups[1].Value, entry, key, caseUrlTemplate) ?? string.Empty);
+        return PlaceholderPattern.Replace(template, match => SlackText.Escape(Resolve(match.Groups[1].Value, entry, key, caseUrlTemplate)) ?? string.Empty);
     }
 
     /// <remarks>
@@ -99,9 +100,9 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
     /// </remarks>
     private static string DefaultText(AuditEntry entry, string key)
     {
-        var text = $"{key ?? "event"} by {Actor(entry)}";
-        if (!string.IsNullOrWhiteSpace(entry.TeamKey)) text += $" on team {entry.TeamKey}";
-        if (!entry.Success) text += $" — failed: {entry.ErrorMessage ?? "no reason given"}";
+        var text = $"{SlackText.Escape(key ?? "event")} by {SlackText.Escape(Actor(entry))}";
+        if (!string.IsNullOrWhiteSpace(entry.TeamKey)) text += $" on team {SlackText.Escape(entry.TeamKey)}";
+        if (!entry.Success) text += $" — failed: {SlackText.Escape(entry.ErrorMessage ?? "no reason given")}";
         return text;
     }
 

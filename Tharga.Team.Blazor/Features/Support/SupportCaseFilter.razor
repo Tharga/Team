@@ -1,0 +1,124 @@
+@using System.Text.Json
+@using Microsoft.JSInterop
+@using Tharga.Team.Blazor.Framework
+@inject IJSRuntime JsRuntime
+
+@* Which cases a list shows: by status and by kind of conversation. Nothing chosen means everything, and the
+   choice is remembered in the browser under the host's key. *@
+
+<RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+    <RadzenSelectBar Value="@Statuses" TValue="IEnumerable<SupportCaseStatus>" Multiple="true" Size="ButtonSize.Small"
+                     Change="@((IEnumerable<SupportCaseStatus> v) => SetAsync(v, Kinds))" aria-label="@_text[SupportCaseFilterText.StatusLabel]">
+        <Items>
+            <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Open]" Value="SupportCaseStatus.Open" />
+            <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Closed]" Value="SupportCaseStatus.Closed" />
+        </Items>
+    </RadzenSelectBar>
+
+    <RadzenSelectBar Value="@Kinds" TValue="IEnumerable<SupportAssistance>" Multiple="true" Size="ButtonSize.Small"
+                     Change="@((IEnumerable<SupportAssistance> v) => SetAsync(Statuses, v))" aria-label="@_text[SupportCaseFilterText.KindLabel]">
+        <Items>
+            <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Support]" Icon="support_agent" Value="SupportAssistance.None" />
+            <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Assistant]" Icon="smart_toy" Value="SupportAssistance.Assistant" />
+        </Items>
+    </RadzenSelectBar>
+</RadzenStack>
+
+@code {
+    /// <summary>Where the choice is remembered in the browser; nothing is remembered when unset.</summary>
+    [Parameter] public string StorageKey { get; set; }
+
+    /// <summary>Raised whenever the choice changes, including when a remembered one is restored.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private static readonly SupportCaseStatus[] DefaultStatuses = [SupportCaseStatus.Open];
+    private static readonly SupportAssistance[] DefaultKinds = [SupportAssistance.None];
+
+    /// <summary>The statuses shown; none chosen shows every status. Open by default.</summary>
+    public IEnumerable<SupportCaseStatus> Statuses { get; private set; } = DefaultStatuses;
+
+    /// <summary>The kinds of conversation shown; none chosen shows every kind. Support by default.</summary>
+    public IEnumerable<SupportAssistance> Kinds { get; private set; } = DefaultKinds;
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportCaseFilterText.All);
+    }
+
+    /// <remarks>Raises <see cref="Changed"/> either way, because the host list filtered by the default until now.</remarks>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        if (!string.IsNullOrWhiteSpace(StorageKey) && await RestoreAsync()) StateHasChanged();
+
+        await Changed.InvokeAsync();
+    }
+
+    private async Task<bool> RestoreAsync()
+    {
+        try
+        {
+            var stored = await JsRuntime.InvokeAsync<string>("localStorage.getItem", StorageKey);
+            if (string.IsNullOrWhiteSpace(stored)) return false;
+
+            var choice = JsonSerializer.Deserialize<Choice>(stored, Json);
+            if (choice == null) return false;
+
+            Statuses = choice.Statuses ?? [];
+            Kinds = choice.Kinds ?? [];
+            return true;
+        }
+        catch (Exception exception) when (exception is JSException or JsonException or InvalidOperationException)
+        {
+            // A browser with no storage, or a remembered choice in an old shape, simply starts from the defaults.
+            return false;
+        }
+    }
+
+    /// <summary>Whether a case passes the choice.</summary>
+    public bool Shows(SupportCase item) => Shows(item, Statuses, Kinds);
+
+    /// <summary>Whether a case passes the default choice, for a list rendered before the filter is.</summary>
+    public static bool ShowsByDefault(SupportCase item) => Shows(item, DefaultStatuses, DefaultKinds);
+
+    /// <remarks>A conversation the assistant is answering is neither open nor closed, so status does not apply to it.</remarks>
+    private static bool Shows(SupportCase item, IEnumerable<SupportCaseStatus> statuses, IEnumerable<SupportAssistance> kinds)
+    {
+        var kind = item.AssistantState == SupportAssistantState.Active ? SupportAssistance.Assistant : SupportAssistance.None;
+
+        var statusPasses = kind == SupportAssistance.Assistant || !statuses.Any() || statuses.Contains(item.Status);
+        var kindPasses = !kinds.Any() || kinds.Contains(kind);
+
+        return statusPasses && kindPasses;
+    }
+
+    private async Task SetAsync(IEnumerable<SupportCaseStatus> statuses, IEnumerable<SupportAssistance> kinds)
+    {
+        Statuses = [.. statuses ?? []];
+        Kinds = [.. kinds ?? []];
+
+        if (!string.IsNullOrWhiteSpace(StorageKey))
+        {
+            try
+            {
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(new Choice(Statuses.ToArray(), Kinds.ToArray()), Json));
+            }
+            catch (JSException)
+            {
+                // Remembering is a convenience; the choice still applies to this page.
+            }
+        }
+
+        await Changed.InvokeAsync();
+    }
+
+    // By name, so a remembered choice survives the enums being reordered.
+    private static readonly JsonSerializerOptions Json = new() { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
+
+    private sealed record Choice(SupportCaseStatus[] Statuses, SupportAssistance[] Kinds);
+}

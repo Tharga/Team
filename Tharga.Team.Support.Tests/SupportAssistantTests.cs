@@ -77,27 +77,33 @@ public class SupportAssistantTests
         Assert.Null(last.AuthorIdentity);
     }
 
+    /// <summary>
+    /// A conversation the assistant is answering waits for the assistant, so the support queue never sees it —
+    /// otherwise the staff counter flicks up and back down on every message to the bot.
+    /// </summary>
     [Fact]
-    public async Task AnAssistantAnswer_TakesTheCaseOutOfTheSupportQueue()
+    public async Task AConversationWithTheAssistant_IsNeverInTheSupportQueue()
     {
         var (service, store) = Build();
         var raised = await service.RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
 
-        Assert.Equal(1, await store.GetAwaitingSupportCountAsync(TeamA));
+        Assert.Equal(0, await store.GetAwaitingSupportCountAsync(TeamA));
 
         await service.RunAssistantAsync(TeamA, raised.Id);
+        await service.ReplyToCaseAsync(TeamA, raised.Id, "That did not help.");
 
         Assert.Equal(0, await store.GetAwaitingSupportCountAsync(TeamA));
     }
 
-    /// <summary>The half that makes the other half safe.</summary>
+    /// <summary>The half that makes the other half safe: once a person is asked, the case waits for support.</summary>
     [Fact]
-    public async Task ACustomerReplyAfterAnAnswer_PutsTheCaseBackInTheQueue()
+    public async Task AskingForAPerson_PutsTheCaseInTheSupportQueue_OnceTheCustomerWrites()
     {
         var (service, store) = Build();
         var raised = await service.RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
         await service.RunAssistantAsync(TeamA, raised.Id);
 
+        await service.RequestHumanAsync(TeamA, raised.Id);
         await service.ReplyToCaseAsync(TeamA, raised.Id, "That did not help.");
 
         Assert.Equal(1, await store.GetAwaitingSupportCountAsync(TeamA));
@@ -128,14 +134,14 @@ public class SupportAssistantTests
     }
 
     [Fact]
-    public async Task ADecliningAssistant_AppendsNothingAndLeavesTheCaseWaiting()
+    public async Task ADecliningAssistant_AppendsNothingAndLeavesTheConversationWithTheAssistant()
     {
         var (service, store) = Build(new FakeResponder(null));
         var raised = await service.RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
 
         Assert.False(await service.RunAssistantAsync(TeamA, raised.Id));
         Assert.Single((await store.GetMessagesAsync(TeamA, raised.Id, null, 50)).Items);
-        Assert.Equal(1, await store.GetAwaitingSupportCountAsync(TeamA));
+        Assert.Equal(SupportAssistantState.Active, (await store.GetCaseAsync(TeamA, raised.Id)).AssistantState);
     }
 
     /// <summary>

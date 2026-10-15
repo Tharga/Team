@@ -44,7 +44,8 @@ internal sealed class SlackEventHandler(
     IOptions<SupportCaseOptions> options,
     TimeProvider timeProvider,
     ISupportCaseNotifier notifier = null,
-    ILogger<SlackEventHandler> logger = null)
+    ILogger<SlackEventHandler> logger = null,
+    ISlackClient slackClient = null)
 {
     private const string Source = "slack";
 
@@ -95,12 +96,24 @@ internal sealed class SlackEventHandler(
 
         if (supportCase == null) return SlackEventOutcome.Ok();
 
+        // An answer in the thread of a closed case means it is not over, so it opens again first.
+        if (supportCase.Status == SupportCaseStatus.Closed)
+        {
+            await store.ReopenCaseAsync(supportCase.TeamKey, supportCase.Id, new SupportMessage
+            {
+                Sequence = 0,
+                Kind = SupportMessageKind.System,
+                Body = "Case reopened by a reply in Slack.",
+                SentAt = timeProvider.GetUtcNow().UtcDateTime
+            }, cancellationToken);
+        }
+
         var message = new SupportMessage
         {
             Sequence = 0,
             Kind = SupportMessageKind.User,
             AuthorIdentity = Text(slackEvent, "user"),
-            AuthorName = Text(slackEvent, "user"),
+            AuthorName = await NameOfAsync(Text(slackEvent, "user"), cancellationToken),
             Body = body,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
 
@@ -108,7 +121,9 @@ internal sealed class SlackEventHandler(
             // thread it arrived from.
             Delivery = SupportMessageDelivery.Sent,
 
-            Source = SupportChannelType.Slack
+            Source = SupportChannelType.Slack,
+            // The support channel is support's side of the conversation, whoever in it answers.
+            AsSupport = true
         };
 
         await store.AppendMessageAsync(supportCase.TeamKey, supportCase.Id, message, cancellationToken);
@@ -124,6 +139,14 @@ internal sealed class SlackEventHandler(
         });
 
         return SlackEventOutcome.Ok();
+    }
+
+    /// <summary>The Slack user's name, so the case reads who answered rather than an id; the id when Slack will not say.</summary>
+    private async Task<string> NameOfAsync(string userId, CancellationToken cancellationToken)
+    {
+        if (slackClient == null || string.IsNullOrEmpty(userId)) return userId;
+
+        return await slackClient.GetUserNameAsync(userId, cancellationToken) ?? userId;
     }
 
     private static string Text(JsonElement element, string property) =>

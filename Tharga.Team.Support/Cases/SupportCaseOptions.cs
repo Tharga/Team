@@ -117,6 +117,41 @@ public class SupportCaseOptions
     public AccessLevel? TeamScopeAccessLevel { get; set; } = AccessLevel.Administrator;
 
     /// <summary>
+    /// Whether the team's support readers reach every case, or only the ones each author shares.
+    /// Default <see cref="SupportCaseVisibilityMode.TeamWide"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="TeamScopeAccessLevel"/> decides <i>who</i> holds the team's support scopes;
+    /// this decides <i>which cases</i> those scopes reach. Under <see cref="SupportCaseVisibilityMode.PerCase"/>
+    /// a case starts private and its author may share it while it is open, so a conversation that concerns
+    /// the team can be shared without every personal one being readable by an administrator.
+    /// </remarks>
+    public SupportCaseVisibilityMode Visibility { get; set; } = SupportCaseVisibilityMode.TeamWide;
+
+    /// <summary>
+    /// What a new case starts as under <see cref="SupportCaseVisibilityMode.PerCase"/>. Default
+    /// <see cref="SupportCaseVisibility.Private"/>; the author may change it either way while the case is open.
+    /// </summary>
+    public SupportCaseVisibility DefaultVisibility { get; set; } = SupportCaseVisibility.Private;
+
+    /// <summary>
+    /// What a conversation with the assistant starts as, when it differs from <see cref="DefaultVisibility"/>;
+    /// <c>null</c> uses that. A conversation handed to a person takes <see cref="DefaultVisibility"/> then.
+    /// </summary>
+    public SupportCaseVisibility? AssistantDefaultVisibility { get; set; }
+
+    /// <summary>
+    /// How long after support's last answer the product's own staff may close a case themselves; <c>null</c>
+    /// lets them close at any time, which is the default.
+    /// </summary>
+    /// <remarks>
+    /// Closing is the customer's word that the problem is solved. A host that wants it kept that way sets a
+    /// window — staff may close a case only once support answered last and the customer has said nothing for
+    /// that long. The team's own support readers and the author are not limited by it.
+    /// </remarks>
+    public TimeSpan? StaffCloseAfter { get; set; }
+
+    /// <summary>
     /// Reading and sending mail, and which recipients this instance answers for. Leave the hosts unset to
     /// keep email off.
     /// </summary>

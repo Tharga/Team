@@ -44,6 +44,17 @@ public interface ISupportCaseService
     Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Answers a case from the support side. The answer counts as support's whoever writes it, so it takes the
+    /// case out of the waiting count and is unread for the person who raised it until they open it.
+    /// </summary>
+    /// <remarks>
+    /// Needs a grant to answer on behalf of support — <see cref="SystemSupportScopes.AllManage"/>,
+    /// <c>support:manage</c> on the case's team, or for a case with no team
+    /// <see cref="SystemSupportScopes.Manage"/>. Having raised the case confers nothing here.
+    /// </remarks>
+    Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Has the assistant answer the newest message on a case, and appends what it says.
     /// </summary>
     /// <remarks>
@@ -149,6 +160,27 @@ public interface ISupportCaseService
     Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// The caller's own cases that hold entries they have not read, each with how many — so a list can mark
+    /// where to look rather than only that something is waiting.
+    /// </summary>
+    Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many of the caller's own open cases support answered last — read or not, they wait for the caller
+    /// to reply or to close them.
+    /// </summary>
+    Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>How many of the caller's own cases are open, conversations with the assistant aside.</summary>
+    Task<int> GetMyOpenCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// What the caller may choose about who reads the case — so a component offers exactly what
+    /// <see cref="SetCaseVisibilityAsync"/> would accept, without knowing who is asking.
+    /// </summary>
+    Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// How many open cases in the team are waiting on an answer — their newest entry came from the person
     /// who raised them. What a support-side indicator shows.
     /// </summary>
@@ -157,6 +189,35 @@ public interface ISupportCaseService
     /// <c>support:read</c>.
     /// </remarks>
     Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many open cases, in every team, are waiting on an answer. What a support-staff indicator shows.
+    /// </summary>
+    /// <remarks>
+    /// Authorized by <see cref="SystemSupportScopes.AllRead"/> or <see cref="SystemSupportScopes.AllManage"/>,
+    /// the grant that lists the same cases. Leaves out the unassigned queue, which
+    /// <see cref="GetAwaitingUnassignedCountAsync"/> counts under its own grant.
+    /// </remarks>
+    Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How many open cases that belong to no team are waiting on an answer.
+    /// </summary>
+    /// <remarks>
+    /// Authorized by <see cref="SystemSupportScopes.Read"/> or <see cref="SystemSupportScopes.Manage"/>; the
+    /// cross-team grant confers nothing here, as it confers nothing over the unassigned queue itself.
+    /// </remarks>
+    Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Shares a case with the team's support readers, or takes it back.
+    /// </summary>
+    /// <remarks>
+    /// Only the case's author, only while it is open, and only when the host enables per-case visibility —
+    /// otherwise an <see cref="InvalidOperationException"/>. Nobody else may decide who reads somebody's
+    /// conversation, the product's own support staff included.
+    /// </remarks>
+    Task SetCaseVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default);
 
     /// <summary>A case's transcript, oldest first.</summary>
     Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default);

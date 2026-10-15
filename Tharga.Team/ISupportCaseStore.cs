@@ -186,6 +186,68 @@ public interface ISupportCaseStore
         => Task.FromResult(new SupportCasePage { Items = [] });
 
     /// <summary>
+    /// How many open cases that belong to a team, across every team, are waiting on support.
+    /// </summary>
+    /// <remarks>
+    /// The count of what <see cref="GetCasesAcrossTeamsAsync"/> lists, by the rule
+    /// <see cref="GetAwaitingSupportCountAsync"/> uses per team. Reached only from a caller already checked
+    /// against <see cref="SystemSupportScopes.AllRead"/>.
+    /// <para><b>Defaults to zero</b>, so a store written before this existed keeps compiling.</para>
+    /// </remarks>
+    Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
+    /// How many open cases that belong to no team are waiting on support.
+    /// </summary>
+    /// <remarks>
+    /// The count of what <see cref="GetUnassignedCasesAsync"/> lists. Reached only from a caller already
+    /// checked against <see cref="SystemSupportScopes.Read"/>.
+    /// <para><b>Defaults to zero</b>, so a store written before this existed keeps compiling.</para>
+    /// </remarks>
+    Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
+    /// Sets a case's visibility, returning whether it did — <c>false</c> when the case is missing or closed.
+    /// </summary>
+    /// <remarks>
+    /// Open or closed alike: who may read a case's history matters as much once it is over.
+    /// <para><b>Defaults to <c>false</c></b>, so a store written before visibility existed keeps compiling and refuses the change.</para>
+    /// </remarks>
+    Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+        => Task.FromResult(false);
+
+    /// <summary>
+    /// How many of this person's own open cases end with an entry that is not theirs, the assistant's
+    /// conversations aside. Defaults to none, so a store written before this keeps compiling.
+    /// </summary>
+    Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>How many of this person's own cases are open, the assistant's conversations aside. Defaults to none.</summary>
+    Task<int> GetOpenCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
+    /// A team's cases that its support readers may see under per-case visibility — those shared with the team,
+    /// plus <paramref name="identity"/>'s own — newest first.
+    /// </summary>
+    /// <remarks>
+    /// A case with no visibility recorded is not shared. <b>Defaults to nothing</b>, so a store written before
+    /// visibility existed shows a team reader nothing rather than everything.
+    /// </remarks>
+    Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string identity, string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(new SupportCasePage { Items = [] });
+
+    /// <summary>
+    /// How many of the cases <see cref="GetCasesVisibleToTeamAsync"/> returns are waiting on support.
+    /// </summary>
+    /// <remarks><b>Defaults to zero</b>, for the same reason the listing defaults to nothing.</remarks>
+    Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
+    /// <summary>
     /// Gives an unassigned case to a team, returning whether this call did it.
     /// </summary>
     /// <remarks>
@@ -269,6 +331,13 @@ public interface ISupportCaseStore
     /// How many of this person's own cases hold entries they have not read.
     /// </summary>
     Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// This person's own cases holding entries they have not read, with how many each.
+    /// </summary>
+    /// <remarks><b>Defaults to nothing</b>, so a store written before this existed keeps compiling.</remarks>
+    Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCaseUnread[]>([]);
 
     /// <summary>
     /// How many cases in the team are waiting on support — their newest entry came from the person who

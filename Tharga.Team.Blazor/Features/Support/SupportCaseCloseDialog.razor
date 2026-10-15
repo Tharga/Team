@@ -1,0 +1,58 @@
+@using Tharga.Team.Blazor.Framework
+@inject DialogService DialogService
+
+@* Asked before a case closes. The team is offered who may read it from now on; staff are told it is better
+   left to the team. Closes with the chosen visibility, or null when the reader thought better of it. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem" data-close-dialog="@(AsStaff ? "staff" : "team")">
+    @if (AsStaff)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter" AllowClose="false">
+            @_staff[SupportAcrossTeamsViewText.CloseWarning]
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_member[SupportCasesViewText.CloseConfirmBody]</RadzenText>
+
+        @if (Choice?.MayChange == true)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_member[SupportCasesViewText.VisibilityLabel]</RadzenText>
+                <SupportCaseVisibilityPicker Value="_visibility" ValueChanged="@(v => _visibility = v)" MayBePrivate="Choice.MayBePrivate" />
+            </RadzenStack>
+        }
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End">
+        <RadzenButton Text="@(AsStaff ? _staff[SupportAcrossTeamsViewText.CloseAnyway] : _member[SupportCasesViewText.Close])" Icon="check"
+                      ButtonStyle="@(AsStaff ? ButtonStyle.Warning : ButtonStyle.Primary)" Click="Confirm" data-confirm-close="true" />
+        <RadzenButton Text="@_member[SupportCasesViewText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="@(() => DialogService.Close(null))" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    /// <summary>Closing as the product's support staff, who are warned rather than offered a choice.</summary>
+    [Parameter] public bool AsStaff { get; set; }
+
+    /// <summary>Who reads the case now; the choice starts here.</summary>
+    [Parameter] public SupportCaseVisibility? Visibility { get; set; }
+
+    /// <summary>What the reader may choose, from <c>ISupportCaseService.GetVisibilityChoiceAsync</c>.</summary>
+    [Parameter] public SupportCaseVisibilityChoice Choice { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _member = TextSet.Empty;
+    private TextSet _staff = TextSet.Empty;
+    private SupportCaseVisibility _visibility;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _member = await TextProvider.ResolveAsync(SupportCasesViewText.All);
+        _staff = await TextProvider.ResolveAsync(SupportAcrossTeamsViewText.All);
+        _visibility = Visibility ?? SupportCaseVisibility.Team;
+    }
+
+    private void Confirm() => DialogService.Close(new SupportCaseCloseChoice(Choice?.MayChange == true ? _visibility : null));
+}

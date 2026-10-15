@@ -54,7 +54,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
     public Task AddCaseAsync(SupportCase supportCase, SupportMessage firstMessage, CancellationToken cancellationToken = default)
     {
-        _cases.Add((supportCase, [firstMessage]));
+        _cases.Add((Derive(supportCase, [firstMessage]), [firstMessage]));
 
         return Task.CompletedTask;
     }
@@ -86,7 +86,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
             if (last == null) continue;
             if (last.Kind != SupportMessageKind.User) continue;
-            if (last.AuthorIdentity == supportCase.AuthorIdentity) continue;
+            if (!last.AsSupport && last.AuthorIdentity == supportCase.AuthorIdentity) continue;
             if (last.SentAt >= lastActivityBefore) continue;
 
             due.Add(supportCase);
@@ -208,17 +208,80 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCaseUnread[]>([.. _cases
+            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity && x.Case.AssistantState != SupportAssistantState.Active)
+            .Select(x => new SupportCaseUnread
+            {
+                CaseId = x.Case.Id,
+                Count = x.Messages.Count(m => m.Sequence > ReadUpTo(x.Case.Id, identity) && IsAnAnswerTo(m, identity))
+            })
+            .Where(x => x.Count > 0)]);
+
     public Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases
-            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity)
-            .Count(x => (_reads.TryGetValue((x.Case.Id, identity), out var read) ? read : 0) < x.Messages.Count));
+            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity && x.Case.AssistantState != SupportAssistantState.Active)
+            .Count(x => x.Messages.Any(m => m.Sequence > ReadUpTo(x.Case.Id, identity) && IsAnAnswerTo(m, identity))));
+
+    private int ReadUpTo(string caseId, string identity) => _reads.TryGetValue((caseId, identity), out var read) ? read : 0;
+
+    private static bool IsAnAnswerTo(SupportMessage message, string identity)
+        => message.Kind != SupportMessageKind.System && (message.AsSupport || message.AuthorIdentity != identity);
+
+    public Task<int> GetOpenCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases.Count(x => x.Case.TeamKey == teamKey
+                                             && x.Case.AuthorIdentity == identity
+                                             && x.Case.Status == SupportCaseStatus.Open
+                                             && x.Case.AssistantState != SupportAssistantState.Active));
+
+    public Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases.Count(x => x.Case.TeamKey == teamKey
+                                             && x.Case.AuthorIdentity == identity
+                                             && x.Case.Status == SupportCaseStatus.Open
+                                             && x.Case.AssistantState != SupportAssistantState.Active
+                                             && x.Messages.Count > 1
+                                             && !IsTheAuthors(x.Messages[^1], identity)));
+
+    private static bool IsTheAuthors(SupportMessage message, string identity)
+        => message.Kind == SupportMessageKind.User && !message.AsSupport && message.AuthorIdentity == identity;
 
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
-        => Task.FromResult(_cases
-            .Where(x => x.Case.TeamKey == teamKey && x.Case.Status == SupportCaseStatus.Open)
+        => Task.FromResult(CountAwaiting(x => x.TeamKey == teamKey));
+
+    public Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(CountAwaiting(x => !string.IsNullOrEmpty(x.TeamKey)));
+
+    public Task<int> GetAwaitingUnassignedCountAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(CountAwaiting(x => string.IsNullOrEmpty(x.TeamKey)));
+
+    public Task<bool> TrySetVisibilityAsync(string teamKey, string caseId, SupportCaseVisibility visibility, CancellationToken cancellationToken = default)
+    {
+        var index = _cases.FindIndex(x => x.Case.TeamKey == teamKey && x.Case.Id == caseId);
+        if (index < 0) return Task.FromResult(false);
+
+        _cases[index] = (_cases[index].Case with { Visibility = visibility }, _cases[index].Messages);
+
+        return Task.FromResult(true);
+    }
+
+    public Task<SupportCasePage> GetCasesVisibleToTeamAsync(string teamKey, string identity, string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => Task.FromResult(Page(_cases.Select(x => x.Case).Where(x => IsVisibleToTeam(x, teamKey, identity))));
+
+    public Task<int> GetAwaitingSupportCountVisibleToTeamAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(CountAwaiting(x => IsVisibleToTeam(x, teamKey, identity)));
+
+    private static bool IsVisibleToTeam(SupportCase supportCase, string teamKey, string identity)
+        => supportCase.TeamKey == teamKey
+           && (supportCase.Visibility == SupportCaseVisibility.Team
+               || (!string.IsNullOrEmpty(identity) && supportCase.AuthorIdentity == identity));
+
+    private int CountAwaiting(Func<SupportCase, bool> population)
+        => _cases
+            .Where(x => population(x.Case) && x.Case.Status == SupportCaseStatus.Open && x.Case.AssistantState != SupportAssistantState.Active)
             .Count(x => x.Messages.Count > 0
                         && x.Messages[^1].Kind == SupportMessageKind.User
-                        && x.Messages[^1].AuthorIdentity == x.Case.AuthorIdentity));
+                        && !x.Messages[^1].AsSupport
+                        && x.Messages[^1].AuthorIdentity == x.Case.AuthorIdentity);
 
     public Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases
@@ -292,7 +355,22 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     {
         var index = _cases.FindIndex(x => x.Case.TeamKey == updated.TeamKey && x.Case.Id == updated.Id);
 
-        _cases[index] = (updated, messages);
+        _cases[index] = (Derive(updated, messages), messages);
+    }
+
+    /// <summary>The fields the Mongo store keeps alongside the transcript, worked out from it here.</summary>
+    private static SupportCase Derive(SupportCase supportCase, List<SupportMessage> messages)
+    {
+        var last = messages.OrderBy(x => x.Sequence).LastOrDefault();
+
+        return supportCase with
+        {
+            LastMessageAt = last?.SentAt ?? supportCase.CreatedAt,
+            AwaitingSupport = supportCase.Status == SupportCaseStatus.Open
+                              && supportCase.AssistantState != SupportAssistantState.Active
+                              && last is { Kind: SupportMessageKind.User, AsSupport: false }
+                              && last.AuthorIdentity == supportCase.AuthorIdentity
+        };
     }
 
     private static SupportCasePage Page(IEnumerable<SupportCase> cases)

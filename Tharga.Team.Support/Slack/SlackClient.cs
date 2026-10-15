@@ -125,6 +125,32 @@ public sealed class SlackClient : ISlackClient
         }
     }
 
+    public async Task<string> GetUserNameAsync(string userId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(_options.BotToken)) return null;
+
+        try
+        {
+            using var client = Client();
+            using var response = await client.GetAsync($"users.info?user={Uri.EscapeDataString(userId)}", cancellationToken);
+
+            if (!response.IsSuccessStatusCode) return null;
+
+            var body = await response.Content.ReadFromJsonAsync<SlackUserResponse>(SerializerOptions, cancellationToken);
+            if (body?.Ok != true || body.User == null) return null;
+
+            // Display name first, because it is what people chose to be called; the real name when they set none.
+            return FirstNonBlank(body.User.Profile?.DisplayName, body.User.Profile?.RealName, body.User.RealName, body.User.Name);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Reading the Slack name of {UserId} failed.", userId);
+            return null;
+        }
+    }
+
+    private static string FirstNonBlank(params string[] values) => values.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+
     private HttpClient Client()
     {
         var client = _httpClientFactory.CreateClient(HttpClientName);
@@ -153,6 +179,19 @@ public sealed class SlackClient : ISlackClient
         [property: JsonPropertyName("ok")] bool Ok,
         [property: JsonPropertyName("error")] string Error,
         [property: JsonPropertyName("members")] string[] Members);
+
+    private sealed record SlackUserResponse(
+        [property: JsonPropertyName("ok")] bool Ok,
+        [property: JsonPropertyName("user")] SlackUser User);
+
+    private sealed record SlackUser(
+        [property: JsonPropertyName("name")] string Name,
+        [property: JsonPropertyName("real_name")] string RealName,
+        [property: JsonPropertyName("profile")] SlackProfile Profile);
+
+    private sealed record SlackProfile(
+        [property: JsonPropertyName("display_name")] string DisplayName,
+        [property: JsonPropertyName("real_name")] string RealName);
 
     private sealed record SlackPresenceResponse(
         [property: JsonPropertyName("ok")] bool Ok,

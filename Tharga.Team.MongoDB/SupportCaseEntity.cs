@@ -27,7 +27,7 @@ namespace Tharga.Team.MongoDB;
 /// </remarks>
 public record SupportCaseEntity : EntityBase
 {
-    /// <summary>The case id. Distinct from <see cref="EntityBase.Id"/>, which is the document's ObjectId.</summary>
+    /// <summary>The case id. Distinct from the entity's own <c>Id</c>, which is the document's ObjectId.</summary>
     public required string CaseId { get; init; }
 
     /// <summary>The owning team, or absent when the case is unassigned.</summary>
@@ -38,6 +38,9 @@ public record SupportCaseEntity : EntityBase
     /// </remarks>
     [BsonIgnoreIfNull]
     public string TeamKey { get; init; }
+
+    [BsonIgnoreIfNull]
+    public string TeamName { get; init; }
 
     public required string AuthorIdentity { get; init; }
 
@@ -87,7 +90,6 @@ public record SupportCaseEntity : EntityBase
     [BsonIgnoreIfNull]
     public DateTime? LastMessageAt { get; init; }
 
-    [BsonIgnoreIfNull]
     /// <summary>
     /// Whether an assistant is answering this case.
     /// </summary>
@@ -95,10 +97,15 @@ public record SupportCaseEntity : EntityBase
     /// Stored by name, so appending a member never re-grades a stored case. Absent on every case written
     /// before assistants existed, which deserializes as <see cref="SupportAssistantState.None"/>.
     /// </remarks>
+    [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.String)]
     public SupportAssistantState AssistantState { get; init; } = SupportAssistantState.None;
 
     public SupportChannelBindingEntity[] Bindings { get; init; }
+
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.String)]
+    public SupportCaseVisibility? Visibility { get; init; }
 
     /// <summary>How far each participant has read. Absent until somebody opens the case.</summary>
     [BsonIgnoreIfNull]
@@ -155,6 +162,9 @@ public record SupportMessageEntity
     [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.String)]
     public SupportChannelType? Source { get; init; }
+
+    [BsonIgnoreIfDefault]
+    public bool AsSupport { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system.</summary>

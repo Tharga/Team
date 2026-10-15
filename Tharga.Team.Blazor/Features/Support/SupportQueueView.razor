@@ -62,7 +62,7 @@ else
                         <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" class="rz-mt-3">
                             @* Shared with SupportUnassignedView, which renders the same transcript for the
                                same reader. A copy is what gets extended in one place and not the other. *@
-                            <SupportTranscript Messages="_messages" />
+                            <SupportTranscript Messages="_messages" CaseAuthorIdentity="@_selected.AuthorIdentity" />
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {
@@ -153,7 +153,7 @@ else
         _busy = true;
         try
         {
-            await SupportCases.ReplyToCaseAsync(_teamKey, _selected.Id, _answer);
+            await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, _answer);
             _answer = null;
 
             await ReloadAsync();

@@ -95,7 +95,12 @@ those cases — which is what `support:all:read` and `support:all:manage` are fo
 ```csharp
 // Every team's cases, for whoever runs support
 var page = await supportCases.GetCasesAcrossTeamsAsync();
+
+// How many of them are waiting on an answer
+var waiting = await supportCases.GetAwaitingSupportCountAcrossTeamsAsync();
 ```
+
+`SupportAcrossTeamsView` renders that queue — see [Components](#components).
 
 Grant them through a system role, as you would any system scope:
 
@@ -117,6 +122,21 @@ cases and leaves out the ones no team owns, which is `GetUnassignedCasesAsync` a
 
 `support:all:manage` **does not grant assignment.** Assigning decides which tenant an unassigned case and
 its whole transcript become part of, so it stays with `support:unassigned:manage`.
+
+### Answering as support
+
+`ReplyToCaseAsync` adds to a case; `AnswerCaseAsync` answers it **from the support side**. The difference is
+who the message counts as, not who wrote it: an answer takes the case out of the waiting count and is unread
+for whoever raised it, even when they wrote the answer themselves, from a support page. Every support view
+uses it, and so does a reply typed in a case's Slack thread. Each message carries `AsSupport` so a
+transcript can show it on support's side.
+
+`AnswerCaseAsync` needs a support grant — `support:all:manage`, `support:manage` on the case's team, or for a
+case with no team `support:unassigned:manage`. Having raised the case confers nothing, or anybody could clear
+their own case from the queue by answering it.
+
+`GetMyUnreadByCaseAsync(teamKey)` returns each of the caller's cases that holds unread entries, with how many,
+so a list can mark where to look.
 
 ## Taking support off the access level
 
@@ -147,6 +167,58 @@ being an Owner.
 > `AccessLevel.Custom` to mean "nobody" — it grants the scope to *every* level.
 
 The author of a case still reaches their own without holding anything, whatever you set here.
+
+## Letting each case decide
+
+`TeamScopeAccessLevel` decides *who* holds the team's support scopes. `Visibility` decides *which cases*
+those scopes reach:
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Visibility = SupportCaseVisibilityMode.PerCase;   // default: TeamWide
+});
+```
+
+| Mode | A team's `support:read` / `support:manage` holder reaches |
+|---|---|
+| `TeamWide` (default) | every case in the team — the behaviour before this option existed |
+| `PerCase` | only cases their author has shared with the team, plus their own |
+
+Under `PerCase` a new case starts as `DefaultVisibility` (`Private` unless you say otherwise), and its
+author shares it — or takes it back — at any time:
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Visibility = SupportCaseVisibilityMode.PerCase;
+    o.DefaultVisibility = SupportCaseVisibility.Team;               // a support case is the team's
+    o.AssistantDefaultVisibility = SupportCaseVisibility.Private;   // a conversation with the assistant is the asker's own
+});
+
+await supportCases.SetCaseVisibilityAsync(teamKey, caseId, SupportCaseVisibility.Team);
+```
+
+- **A conversation with the assistant starts as `AssistantDefaultVisibility`** (null uses
+  `DefaultVisibility`), and **takes `DefaultVisibility` when it is handed to a person** — from then on it is a
+  support case and reads as one.
+- **Only the author decides.** A team manager cannot share somebody else's case, and neither can your own
+  support staff: a grant to answer every case is not a grant to widen who else reads one.
+- **Open or closed.** Who may read a case's history matters as much once it is over, so a closed case can
+  still change.
+- **Private only while nobody else in the team has written in it.** Once a colleague has joined the
+  conversation it is no longer only the author's to hide; support's answers do not count as the team writing.
+  `GetVisibilityChoiceAsync(teamKey, caseId)` says what the caller may choose — whether they may change it at
+  all, and whether `Private` is on offer — so a component offers exactly what the service would accept.
+- **Your support staff are unaffected.** `support:all:*` reaches a case whatever it says, and so does the
+  author.
+- **Listings and counts follow it.** `GetCasesAsync` and `GetAwaitingSupportCountAsync` return only what the
+  caller may read, so a team reader is never shown a case they would be refused.
+- **A case stored before this option existed has no visibility, and reads as `Private` under `PerCase`** —
+  nobody ever chose to share it. Under `TeamWide` it reads exactly as before.
+- Changing visibility is audited (action `visibility`) and raises `SupportCaseChange.VisibilityChanged`.
+
+`SetCaseVisibilityAsync` is refused under `TeamWide`, where there is nothing to decide.
 
 ## The subject is optional
 
@@ -179,6 +251,24 @@ is the whole reason it exists rather than telling somebody to raise a second cas
 **Reopening an already-open case does nothing and is not an error.** Two people looking at the same closed
 case both press the button; the second sees an open case rather than a complaint.
 
+**Writing to a closed case reopens it.** Whatever is written — on the site, by mail, or as a reply in its
+Slack thread — continues the conversation that explains it rather than being refused, so the case opens
+again first and the entry lands in it.
+
+## Who closes a case
+
+Closing is the customer's word that the problem is solved. The author and the team's own support readers close
+whenever they like. Your own staff (`support:all:manage`) may too, unless you hold them to a window:
+
+```csharp
+builder.Services.AddThargaSupportCases(o => o.StaffCloseAfter = TimeSpan.FromDays(14));   // default: null
+```
+
+With a window set, staff close a case only once support answered last and the customer has said nothing for
+that long; otherwise the service refuses. `SupportAcrossTeamsView` takes the same value as a parameter, so it
+does not offer Close where the service would refuse it. Without a window, the view still asks first, and says
+it is better that the team closes the case themselves.
+
 ## Closing after inactivity
 
 A case support answered and nobody came back to closes itself after seven days.
@@ -209,7 +299,7 @@ dismissal. It is derived from `ClosedBy`, which the sweep records as `SupportCas
 
 ## Components
 
-Three components ship in `Tharga.Team.Blazor`, and **all are optional**:
+Four components ship in `Tharga.Team.Blazor`, and **all are optional**:
 
 ```razor
 @* What a team member sees: raise a case, read the conversation, reply, reopen *@
@@ -220,7 +310,33 @@ Three components ship in `Tharga.Team.Blazor`, and **all are optional**:
 
 @* Cases that belong to no team: answer them, and assign a team when you know which it is *@
 <SupportUnassignedView />
+
+@* Your own support staff: every team's cases, each naming its team, answered in place *@
+<SupportAcrossTeamsView />
 ```
+
+`SupportAcrossTeamsView` needs `support:all:read` (or `:manage` to answer) and, like
+`SupportUnassignedView`, renders a note rather than throwing when the caller holds neither. It names each
+case's team through `ITeamOversightService` when the caller can list teams, and shows the team key when
+they cannot.
+
+**`SupportCasesView`** has two tabs — the cases first, then where help is asked for. `Tab` names the one to
+show (`SupportCasesView.CasesTab` or `NewCaseTab`) and `TabChanged` reports a change, so a page can keep its
+address in step and link straight to either. Cases are expandable cards; each conversation loads when its card
+opens. Both lists share a filter — status and kind of conversation, open support cases by default — remembered
+in the browser under `StorageKey`, and both read every page of the listing rather than the first.
+
+**Closing asks first.** The team's dialog offers who may read the case from now on, under `PerCase`, with
+`Private` offered only where `GetVisibilityChoiceAsync` allows it; the staff dialog says it is better left to the
+team. A conversation with the assistant is neither open nor closed, so it has nothing to close and shows
+what it is instead of a status.
+
+**An answer is marked read only once somebody is looking.** An open conversation on a page in a background
+tab, or in a window without focus, leaves the answer unread — and every count saying so — until the reader
+comes back. `SupportAttention` exposes the same check to a host's own components.
+
+**`SupportAcrossTeamsView`** marks what needs an answer and lists it first, shows each case's team with its
+icon (through `IIconResolver`), and shows who may read a private case.
 
 `SupportQueueView` needs `support:read`, and the service refuses without it — so gate rendering on the scope
 to spare a member a refusal they can do nothing about.
@@ -347,7 +463,7 @@ At this point notifications and case threads work. Replies typed in Slack do not
 > strictly: an unknown key is rejected outright, and a placeholder URL is rejected because it is *verified*
 > rather than merely stored. The guidance that belongs with a human lives here instead of in the file.
 
-The manifest asks for exactly four scopes, each required by code:
+The manifest asks for exactly six scopes, each required by code or by Slack:
 
 | Scope | Used by | For |
 |---|---|---|
@@ -355,6 +471,11 @@ The manifest asks for exactly four scopes, each required by code:
 | `users:read` | `users.getPresence` | whether anybody on support is active |
 | `channels:read` | `conversations.members` | who is on a public support channel |
 | `groups:read` | `conversations.members` | the same, for a private channel |
+| `channels:history` | the `message.channels` event | receiving replies typed in a public support channel's threads |
+| `groups:history` | the `message.groups` event | the same, for a private channel |
+
+**Without the history scope Slack will not let you subscribe to the message event**, so replies typed in
+Slack never arrive. An app created from an older manifest needs the scope added and the app reinstalled.
 
 **Remove a scope and the feature that needs it stops working quietly**, not loudly — the client reports
 failures rather than throwing, by design, so a missing scope looks like nothing happening.
@@ -629,13 +750,17 @@ them. The two carry very different weight.
 
 ### What it does to the queue
 
-**An assistant answer takes the case out of the awaiting-an-answer count, and a customer reply puts it back.**
-This is the same rule read state already uses: a position, not a flag.
+**A conversation the assistant is answering never waits for support.** It waits for the assistant, so it is in
+no awaiting-an-answer count, and its answers are never unread — the customer reads them as they arrive.
+Counting it would flick support's counter up and back down on every message somebody writes to the assistant.
 
-It matters in both directions. If an answered case stayed in the queue, the queue would show every case
-including the ones handled perfectly, which is how people learn to ignore a queue. If it cleared permanently,
-a customer replying *that did not help* would sit unseen. Replying re-raises it, so a dissatisfied customer is
-always back in front of a person.
+**Once it is handed to a person it is an ordinary case**, and the customer's first message to that person puts it
+in front of support like any other.
+
+**A conversation the assistant is answering reaches no channel.** No Slack thread and no mail to support
+are opened for it. Asking for a person opens nothing by itself; the customer's first message to a person
+opens the channel, carrying the conversation so far, so whoever picks it up starts from what was already said. A customer who asks for a person from the
+start gets the channel at once.
 
 ### It answers; it does not act
 
@@ -722,8 +847,13 @@ privileged:
 
 | Method | Answers | Requires |
 |---|---|---|
-| `GetMyUnreadCountAsync(teamKey)` | my own cases holding entries I have not read | membership |
+| `GetMyUnreadCountAsync(teamKey)` | my own cases holding an answer I have not read | membership |
+| `GetMyUnreadByCaseAsync(teamKey)` | the same, per case, with how many | membership |
+| `GetMyOpenCountAsync(teamKey)` | my own open cases | membership |
+| `GetMyAnsweredCountAsync(teamKey)` | my own open cases support answered last, read or not | membership |
 | `GetAwaitingSupportCountAsync(teamKey)` | open cases whose newest entry came from the person who raised them | `support:read` |
+| `GetAwaitingSupportCountAcrossTeamsAsync()` | the same, in every team | `support:all:read` |
+| `GetAwaitingUnassignedCountAsync()` | the same, in the cases no team owns | `support:unassigned:read` |
 | `MarkReadAsync(teamKey, caseId)` | records that I have read up to the newest entry | the same check as reading that case |
 
 **Not one result carrying both numbers.** That would either show an ordinary member the support-wide figure
@@ -742,6 +872,11 @@ the count.
 people on one case have independent state, and the marker never moves backwards — a second tab showing an
 older page cannot relight the indicator. Replying counts as reading, so writing a message does not light your
 own chip.
+
+**Only an answer is unread** — an entry by somebody else, or by support. A note that the case closed or
+reopened is not, so closing a case never leaves a light on for a case the list no longer shows. The open and
+answered counts are what a host shows once nothing is unread: the cases still going on, and those waiting on
+the customer to reply or close them. All of them leave conversations with the assistant aside.
 
 ```csharp
 var unread = await support.GetMyUnreadCountAsync(teamKey);

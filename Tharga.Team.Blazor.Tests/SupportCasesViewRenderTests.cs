@@ -1,4 +1,6 @@
+using Blazored.LocalStorage;
 using Bunit;
+using Microsoft.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Radzen;
@@ -75,7 +77,7 @@ public class SupportCasesViewRenderTests : BunitContext
     {
         var view = RenderView();
 
-        view.FindAll("button").First(b => b.TextContent.Contains("Export is empty")).Click();
+        Open(view, "Export is empty");
 
         Assert.Contains("We are looking into the export.", view.Markup);
     }
@@ -86,23 +88,125 @@ public class SupportCasesViewRenderTests : BunitContext
     {
         var view = RenderView();
 
-        var subject = () => view.FindAll("button").First(b => b.TextContent.Contains("Export is empty"));
-
-        subject().Click();
+        Open(view, "Export is empty");
         Assert.Contains("We are looking into the export.", view.Markup);
 
-        subject().Click();
+        Open(view, "Export is empty");
         Assert.DoesNotContain("We are looking into the export.", view.Markup);
     }
 
-    private IRenderedComponent<SupportCasesView> RenderView()
+    [Fact]
+    public void WithNoVisibilityOnTheCase_ThereIsNothingToShare()
     {
-        var cases = new Mock<ISupportCaseService>();
-        cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 20, default))
-            .ReturnsAsync(new SupportCasePage { Items = [Case] });
-        cases.Setup(x => x.GetCaseAsync(TeamKey, Case.Id, default)).ReturnsAsync(Case);
-        cases.Setup(x => x.GetMessagesAsync(TeamKey, Case.Id, null, 50, default))
+        var view = RenderView();
+
+        Open(view, "Export is empty");
+
+        Assert.DoesNotContain("Who can read this case", view.Markup);
+    }
+
+    [Fact]
+    public async Task TheAuthorSharesAPrivateCaseWithTheirTeam()
+    {
+        var view = RenderView(out var cases, SupportCaseVisibility.Private);
+
+        Open(view, "Export is empty");
+
+        Assert.Contains("Who can read this case", view.Markup);
+
+        var share = view.FindComponent<SupportCaseVisibilityPicker>();
+        await view.InvokeAsync(() => share.Instance.ValueChanged.InvokeAsync(SupportCaseVisibility.Team));
+
+        cases.Verify(x => x.SetCaseVisibilityAsync(TeamKey, Case.Id, SupportCaseVisibility.Team, default), Times.Once);
+    }
+
+    /// <summary>Once somebody else in the team has written in it, only you is not on offer.</summary>
+    [Fact]
+    public void OnlyYou_IsNotOffered_OnceOthersInTheTeamWrote()
+    {
+        var view = RenderView(out _, SupportCaseVisibility.Team, mayBePrivate: false);
+
+        Open(view, "Export is empty");
+
+        Assert.False(view.FindComponent<SupportCaseVisibilityPicker>().Instance.MayBePrivate);
+    }
+
+    [Fact]
+    public void AClosedCase_StillOffersWhoReadsIt()
+    {
+        var view = RenderView(out _, SupportCaseVisibility.Team, caseId: Case.Id, closed: true);
+
+        Assert.Single(view.FindAll("[data-visibility]"));
+    }
+
+    private IRenderedComponent<SupportCasesView> RenderView() => RenderView(out _);
+
+    private static void Open(IRenderedComponent<SupportCasesView> view, string subject)
+        => view.FindAll("[data-case] [style*='cursor: pointer']").First(x => x.TextContent.Contains(subject)).Click();
+
+    /// <summary>A case the reader has unread messages in is marked read as it opens, and not before.</summary>
+    [Fact]
+    public void OpeningACaseWithUnreadMessages_MarksItRead()
+    {
+        Attention().Setup<bool>("isAttended").SetResult(true);
+        var view = RenderView(out var cases, unread: 1);
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Never);
+        Assert.Single(view.FindAll("[data-unread]"));
+
+        Open(view, "Export is empty");
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Once);
+        Assert.Empty(view.FindAll("[data-unread]"));
+    }
+
+    /// <summary>
+    /// A case left open on a page in the background must not swallow the answer that arrives: it stays unread,
+    /// and the counters keep saying so, until somebody comes back to the page.
+    /// </summary>
+    [Fact]
+    public async Task AnAnswerToAPageNobodyIsLookingAt_StaysUnread_UntilSomebodyLooks()
+    {
+        var attention = Attention();
+        attention.Setup<bool>("isAttended").SetResult(false);
+        attention.SetupVoid("whenAttended", _ => true);
+        var view = RenderView(out var cases, unread: 1);
+
+        Open(view, "Export is empty");
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Never);
+        Assert.Single(view.FindAll("[data-unread]"));
+
+        var waiting = (DotNetObjectReference<SupportAttention>)attention.VerifyInvoke("whenAttended").Arguments[1];
+        await view.InvokeAsync(() => waiting.Value.OnAttended());
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Once);
+        Assert.Empty(view.FindAll("[data-unread]"));
+    }
+
+    private BunitJSModuleInterop Attention() => JSInterop.SetupModule("./_content/Tharga.Team.Blazor/support-attention.js");
+
+    [Fact]
+    public void ADeepLink_OpensItsCase()
+    {
+        var view = RenderView(out _, caseId: Case.Id);
+
+        Assert.Contains("We are looking into the export.", view.Markup);
+    }
+
+    private IRenderedComponent<SupportCasesView> RenderView(out Mock<ISupportCaseService> cases, SupportCaseVisibility? visibility = null, int unread = 0, string caseId = null, bool mayBePrivate = true, bool closed = false)
+    {
+        var shown = Case with { Visibility = visibility, Status = closed ? SupportCaseStatus.Closed : SupportCaseStatus.Open };
+
+        cases = new Mock<ISupportCaseService>();
+        cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default))
+            .ReturnsAsync(new SupportCasePage { Items = [shown] });
+        cases.Setup(x => x.GetCaseAsync(TeamKey, Case.Id, default)).ReturnsAsync(shown);
+        cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, Case.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(visibility != null, mayBePrivate));
+        cases.Setup(x => x.GetMessagesAsync(TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase, default))
             .ReturnsAsync(new SupportMessagePage { Items = [Reply] });
+        if (unread > 0)
+            cases.Setup(x => x.GetMyUnreadByCaseAsync(TeamKey, default)).ReturnsAsync([new SupportCaseUnread { CaseId = Case.Id, Count = unread }]);
 
         var team = new Mock<ITeam>();
         team.SetupGet(x => x.Key).Returns(TeamKey);
@@ -114,10 +218,13 @@ public class SupportCasesViewRenderTests : BunitContext
         Services.AddSingleton(Mock.Of<ISupportCaseNotifier>());
         Services.AddSingleton(teamState.Object);
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddSingleton(Mock.Of<IIconResolver>());
+        Services.AddSingleton(Mock.Of<ILocalStorageService>());
         Services.AddRadzenComponents();
 
         JSInterop.Mode = JSRuntimeMode.Loose;
+        SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
-        return Render<SupportCasesView>();
+        return Render<SupportCasesView>(p => p.Add(x => x.CaseId, caseId));
     }
 }

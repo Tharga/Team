@@ -1,0 +1,202 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@inject ISupportCaseService SupportCases
+@inject DialogService DialogService
+@inject Microsoft.JSInterop.IJSRuntime JsRuntime
+@implements IAsyncDisposable
+
+@* One case opened inside its card: the transcript, the answer box and what may be done with the case. Rendered
+   only while the card is open, so a closed card reads no messages. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-conversation="@Case.Id">
+    <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="@(!AsStaff)" TimeTemplate="TimeTemplate" />
+
+    @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
+    <RadzenTextArea Value="@_reply" ValueChanged="@(v => _reply = v)"
+                    @oninput="@(e => _reply = e.Value?.ToString())"
+                    Placeholder="@ReplyText" Rows="3" Style="width: 100%;" aria-label="@ReplyText" />
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+        <RadzenButton Text="@ReplyText" Icon="send" Click="ReplyAsync" Disabled="@(string.IsNullOrWhiteSpace(_reply) || _busy)" />
+
+        @* Only while an assistant is answering; on a case already handed over it would promise what has happened. *@
+        @if (!AsStaff && WithAssistant)
+        {
+            <RadzenButton Text="@_member[SupportCasesViewText.TalkToAPerson]" Icon="support_agent"
+                          ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="RequestHumanAsync" Disabled="_busy" />
+        }
+
+        @if (MayClose)
+        {
+            <RadzenButton Text="@(AsStaff ? _staff[SupportAcrossTeamsViewText.Close] : _member[SupportCasesViewText.Close])" Icon="check"
+                          ButtonStyle="ButtonStyle.Light" Click="CloseAsync" Disabled="_busy" data-close="@Case.Id" />
+        }
+
+        @if (Thinking)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_member[SupportCasesViewText.AssistantThinking]</RadzenText>
+        }
+    </RadzenStack>
+
+    @* Offered to the author whenever the host lets each case decide, closed cases included: who reads the history matters after too. *@
+    @if (!AsStaff && _choice.MayChange && Case.Visibility != null)
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-visibility="@Case.Id">
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_member[SupportCasesViewText.VisibilityLabel]</RadzenText>
+            <SupportCaseVisibilityPicker Value="@Case.Visibility.Value" ValueChanged="SetVisibilityAsync" MayBePrivate="_choice.MayBePrivate" Disabled="_busy" />
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@code {
+    /// <summary>The case shown. A new instance is read as a change, and the transcript is read again.</summary>
+    [Parameter, EditorRequired] public SupportCase Case { get; set; }
+
+    /// <summary>Answering as the product's support staff rather than as a member of the case's team.</summary>
+    [Parameter] public bool AsStaff { get; set; }
+
+    /// <summary>
+    /// How long after support's last answer staff may close the case; <c>null</c> lets them close at any time.
+    /// The same window the host gave the service, so the button is not offered where the service would refuse.
+    /// </summary>
+    [Parameter] public TimeSpan? StaffCloseAfter { get; set; }
+
+    /// <summary>Unread messages for this reader; a member opening a case with any marks them read.</summary>
+    [Parameter] public int Unread { get; set; }
+
+    /// <summary>Whether the assistant is working on this case right now.</summary>
+    [Parameter] public bool Thinking { get; set; }
+
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>Raised after this conversation changed the case, so the list around it can read it again.</summary>
+    [Parameter] public EventCallback<string> Changed { get; set; }
+
+    /// <summary>Raised after the case was marked read, with its id.</summary>
+    [Parameter] public EventCallback<string> Read { get; set; }
+
+    /// <summary>Raised after a member wrote, so the host can let the assistant answer.</summary>
+    [Parameter] public EventCallback<string> Written { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _member = TextSet.Empty;
+    private TextSet _staff = TextSet.Empty;
+
+    private SupportCase _shown;
+    private SupportAttention _attention;
+    private SupportCaseVisibilityChoice _choice = SupportCaseVisibilityChoice.None;
+    private SupportMessage[] _messages = [];
+    private string _reply;
+    private bool _busy;
+
+    private bool WithAssistant => Case.AssistantState == SupportAssistantState.Active;
+
+    private string ReplyText => AsStaff ? _staff[SupportAcrossTeamsViewText.AnswerLabel] : _member[SupportCasesViewText.ReplyLabel];
+
+    /// <remarks>
+    /// A conversation with the assistant is neither open nor closed, so it has nothing to close. Staff close only
+    /// once they answered last and the window has passed — closing is otherwise the customer's word.
+    /// </remarks>
+    private bool MayClose
+    {
+        get
+        {
+            if (Case.Status != SupportCaseStatus.Open || WithAssistant) return false;
+            if (!AsStaff || StaffCloseAfter == null) return true;
+
+            var last = _messages.Where(x => x.Kind != SupportMessageKind.System).OrderBy(x => x.Sequence).LastOrDefault();
+            var supportAnsweredLast = last != null && (last.Kind == SupportMessageKind.Assistant || last.AsSupport || last.AuthorIdentity != Case.AuthorIdentity);
+
+            return supportAnsweredLast && last.SentAt <= DateTime.UtcNow - StaffCloseAfter.Value;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _member = await TextProvider.ResolveAsync(SupportCasesViewText.All);
+        _staff = await TextProvider.ResolveAsync(SupportAcrossTeamsViewText.All);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReferenceEquals(_shown, Case)) return;
+
+        _shown = Case;
+        _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
+        _choice = AsStaff ? SupportCaseVisibilityChoice.None : await SupportCases.GetVisibilityChoiceAsync(Case.TeamKey, Case.Id) ?? SupportCaseVisibilityChoice.None;
+
+        // Read once somebody is looking: an answer arriving to a page in the background stays unread until then.
+        if (!AsStaff && Unread > 0)
+        {
+            _attention ??= new SupportAttention(JsRuntime);
+            var caseId = Case.Id;
+            var teamKey = Case.TeamKey;
+            await _attention.WhenAttendedAsync(() => InvokeAsync(async () =>
+            {
+                await SupportCases.MarkReadAsync(teamKey, caseId);
+                await Read.InvokeAsync(caseId);
+            }));
+        }
+    }
+
+    private async Task ReplyAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_reply)) return;
+
+        var body = _reply;
+        await ActAsync(() => AsStaff
+            ? SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, body)
+            : SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, body));
+        _reply = null;
+
+        if (!AsStaff) await Written.InvokeAsync(Case.Id);
+    }
+
+    private Task RequestHumanAsync() => ActAsync(() => SupportCases.RequestHumanAsync(Case.TeamKey, Case.Id));
+
+    /// <remarks>Asked first: the team chooses who reads the case from now on, and staff are reminded the team should close it.</remarks>
+    private async Task CloseAsync()
+    {
+        var title = AsStaff ? _staff[SupportAcrossTeamsViewText.CloseWarningTitle] : _member[SupportCasesViewText.CloseConfirmTitle];
+        var result = await DialogService.OpenAsync<SupportCaseCloseDialog>(title, new Dictionary<string, object>
+        {
+            [nameof(SupportCaseCloseDialog.AsStaff)] = AsStaff,
+            [nameof(SupportCaseCloseDialog.Visibility)] = Case.Visibility,
+            [nameof(SupportCaseCloseDialog.Choice)] = _choice
+        });
+
+        if (result is not SupportCaseCloseChoice choice) return;
+
+        await ActAsync(async () =>
+        {
+            if (choice.Visibility is { } visibility && visibility != Case.Visibility)
+                await SupportCases.SetCaseVisibilityAsync(Case.TeamKey, Case.Id, visibility);
+
+            await SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id);
+        });
+    }
+
+    private Task SetVisibilityAsync(SupportCaseVisibility visibility)
+        => ActAsync(() => SupportCases.SetCaseVisibilityAsync(Case.TeamKey, Case.Id, visibility));
+
+    private async Task ActAsync(Func<Task> act)
+    {
+        _busy = true;
+        try
+        {
+            await act();
+            _shown = null;
+            await Changed.InvokeAsync(Case.Id);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_attention != null) await _attention.DisposeAsync();
+    }
+}

@@ -162,13 +162,18 @@ supported state rather than a backlog.
 
 **Your own support staff answer across every team.** They belong to none of the customers' teams, so the
 team scopes cannot reach those cases. Two system scopes do — `support:all:read` and `support:all:manage` —
-along with `GetCasesAcrossTeamsAsync()` for the queue to enumerate. They deliberately stop at the
-unassigned queue, which has its own pair.
+along with `GetCasesAcrossTeamsAsync()` for the queue to enumerate, `GetAwaitingSupportCountAcrossTeamsAsync()`
+for how much is waiting, and `SupportAcrossTeamsView` to work it. They deliberately stop at the unassigned
+queue, which has its own pair.
 
 **Who reads other people's conversations is yours to decide.** `support:read` and `support:manage` are
 granted to every team Owner and Administrator by default. Where a support conversation is personal rather
 than a team function, set `o.TeamScopeAccessLevel = null` and they are granted by no access level at all —
 still registered and still enforced, but held only through a role you register or an explicit override.
+Or let each case decide: with `o.Visibility = SupportCaseVisibilityMode.PerCase` a case starts as
+`DefaultVisibility` — a conversation with the assistant as `AssistantDefaultVisibility` — and its author may share
+it with their team or keep it to themselves, open or closed, the latter only while nobody else in the team has
+written in it.
 
 Full documentation: [Support cases](https://github.com/Tharga/Team/blob/master/docs/articles/support-cases.md).
 

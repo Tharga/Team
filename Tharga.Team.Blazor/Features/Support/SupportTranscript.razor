@@ -1,42 +1,83 @@
-@* One case's conversation, as the back office reads it.
+@using Tharga.Team.Blazor.Features.User
 
-   Extracted so the team queue and the unassigned queue cannot drift: the two render the same transcript for
-   the same reader, and a copy is what gets extended in one place and not the other. The customer view is
-   deliberately not built on this — it shows a person their own case, with delivery state and read markers
-   that would be noise to an agent. *@
+@* One case's conversation as a chat: the person who raised it on one side, everybody answering on the other. *@
 
-@foreach (var message in Messages ?? [])
-{
-    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
-        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
-            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
-                @message.AuthorName — @message.SentAt.ToLocalTime().ToString("g")
-            </RadzenText>
+<div style="display: flex; flex-direction: column; gap: 0.75rem;">
+    @foreach (var message in Messages ?? [])
+    {
+        if (message.Kind == SupportMessageKind.System)
+        {
+            <div style="align-self: center; max-width: 85%; text-align: center;" data-sender="system">
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-style: italic; color: var(--rz-text-secondary-color);">
+                    @message.Body — @Time(message.SentAt)
+                </RadzenText>
+            </div>
+            continue;
+        }
 
-            @* Which door it came through, which is not the same question as who wrote it. An entry from a
-               channel was attributed on a sender or workspace match rather than by an authenticated caller,
-               and an agent deciding how much weight to put on a name needs to see that. Nothing renders for
-               a message written here. *@
-            @if (message.Source != null)
-            {
-                <RadzenBadge Text="@message.Source.ToString()" BadgeStyle="BadgeStyle.Light" />
-            }
+        var fromAuthor = message.Kind == SupportMessageKind.User && !message.AsSupport && message.AuthorIdentity == CaseAuthorIdentity;
+        var onRight = fromAuthor == AuthorOnRight;
 
-            @* An answer nobody wrote. An agent reading the thread has to be able to tell what the customer
-               was already told by an assistant from what a colleague told them, because the two carry very
-               different weight -- and the name alone does not say it. *@
-            @if (message.Kind == SupportMessageKind.Assistant)
-            {
-                <RadzenBadge Text="@_text[SupportTranscriptText.Assistant]" BadgeStyle="BadgeStyle.Info" />
-            }
-        </RadzenStack>
-        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@message.Body</RadzenText>
-    </RadzenStack>
-}
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")">
+            <div style="flex: 0 0 auto;">
+                @if (message.Kind == SupportMessageKind.Assistant)
+                {
+                    <span title="@_text[SupportTranscriptText.Assistant]" aria-label="@_text[SupportTranscriptText.Assistant]" data-sender="assistant" style="@IconCircle">
+                        <RadzenIcon Icon="smart_toy" />
+                    </span>
+                }
+                else if (fromAuthor)
+                {
+                    <span data-sender="author"><UserAvatar Name="@message.AuthorName" Size="32px" /></span>
+                }
+                else
+                {
+                    <span title="@_text[SupportTranscriptText.Support]" aria-label="@_text[SupportTranscriptText.Support]" data-sender="support" style="@IconCircle">
+                        <RadzenIcon Icon="support_agent" />
+                    </span>
+                }
+            </div>
+
+            <div style="max-width: 75%; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    @if (message.Kind != SupportMessageKind.Assistant)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-weight: 600;">@message.AuthorName</RadzenText>
+                    }
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
+                        @Time(message.SentAt)
+                    </RadzenText>
+                    @* Which door it came through: a name from a channel was matched, not signed in, and carries different weight. *@
+                    @if (message.Source != null)
+                    {
+                        <RadzenBadge Text="@message.Source.ToString()" BadgeStyle="BadgeStyle.Light" />
+                    }
+                </div>
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@message.Body</RadzenText>
+            </div>
+        </div>
+    }
+</div>
 
 @code {
+    private const string IconCircle = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--rz-secondary-lighter); color: var(--rz-secondary);";
+    private const string RightBubble = "background: var(--rz-primary-lighter); border-bottom-right-radius: 0.25rem;";
+    private const string LeftBubble = "background: var(--rz-base-200); border-bottom-left-radius: 0.25rem;";
+
     /// <summary>The entries to render, oldest first.</summary>
     [Parameter] public SupportMessage[] Messages { get; set; } = [];
+
+    /// <summary>Who raised the case; their messages are told apart from the answers by this.</summary>
+    [Parameter] public string CaseAuthorIdentity { get; set; }
+
+    /// <summary>Whether the person who raised the case sits on the right — true when they are the one reading it.</summary>
+    [Parameter] public bool AuthorOnRight { get; set; }
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
