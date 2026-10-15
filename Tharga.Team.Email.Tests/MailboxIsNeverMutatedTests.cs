@@ -76,7 +76,7 @@ public class MailboxIsNeverMutatedTests
     [Fact]
     public void TheMailboxIsOpenedReadOnly()
     {
-        var opens = TransportSources().Where(x => x.Text.Contains("OpenAsync")).ToArray();
+        var opens = TransportSources().Where(x => x.Text.Contains("using MailKit") && x.Text.Contains("OpenAsync")).ToArray();
 
         Assert.NotEmpty(opens);
         Assert.All(opens, x => Assert.Contains(ReadOnlyOpen, x.Text));

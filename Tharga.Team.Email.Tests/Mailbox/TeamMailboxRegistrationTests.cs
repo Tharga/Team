@@ -36,6 +36,23 @@ public class TeamMailboxRegistrationTests
     }
 
     [Fact]
+    public void ThePostmaster_IsRegistered_BehindTheScopeProxy()
+    {
+        using var provider = Build(Fortdocs);
+        using var scope = provider.CreateScope();
+
+        Assert.IsNotType<PostmasterService>(scope.ServiceProvider.GetRequiredService<IPostmasterService>());
+    }
+
+    [Fact]
+    public void RemovingATeam_RemovesItsMailbox()
+    {
+        using var provider = Build(Fortdocs);
+
+        Assert.Contains(provider.GetServices<ITeamPurgeParticipant>(), x => x is TeamMailboxPurgeParticipant);
+    }
+
+    [Fact]
     public void TheNotifier_IsOneForTheWholeApplication()
     {
         using var provider = Build(Fortdocs);
@@ -142,6 +159,7 @@ public class TeamMailboxRegistrationTests
         });
 
         Assert.Contains(services, x => x.ImplementationType == typeof(TeamMailboxPoller));
+        Assert.Contains(services, x => x.ImplementationType == typeof(PostmasterRetentionSweep));
         Assert.Contains(services, x => x.ServiceType == typeof(IMailboxSource));
     }
 }

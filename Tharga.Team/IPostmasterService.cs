@@ -30,6 +30,11 @@ public interface IPostmasterService
     Task<MailContent> GetContentAsync(string mailId, CancellationToken cancellationToken = default);
 
     /// <summary>Delivers an unrouted mail to a team, marked as rerouted.</summary>
+    /// <remarks>
+    /// The team is where the mail goes, not who is asking: routing is authorized by the system scope alone, and
+    /// the receiving team's grants play no part — which is why the parameter is not the <c>teamKey</c> a team
+    /// service takes.
+    /// </remarks>
     [RequireScope(SystemMailboxScopes.PostmasterManage, Audit = AuditMode.Change)]
-    Task<InboundMailItem> RouteAsync(string mailId, string teamKey, CancellationToken cancellationToken = default);
+    Task<InboundMailItem> RouteAsync(string mailId, string toTeamKey, CancellationToken cancellationToken = default);
 }

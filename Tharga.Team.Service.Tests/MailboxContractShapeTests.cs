@@ -68,7 +68,7 @@ public class MailboxContractShapeTests
         {
             Assert.Contains(ScopeOf(m).Scope, systemScopes);
             Assert.False(ScopeOf(m).AllowSystemGrant);
-            Assert.NotEqual("teamKey", m.GetParameters().FirstOrDefault()?.Name);
+            Assert.DoesNotContain(m.GetParameters(), p => p.Name == "teamKey");
         });
     }
 

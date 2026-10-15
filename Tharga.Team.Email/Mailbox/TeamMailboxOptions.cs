@@ -23,6 +23,9 @@ public class TeamMailboxOptions
     /// <summary>How long a replaced key is still accepted after a rotation.</summary>
     public TimeSpan RetirementPeriod { get; set; } = TimeSpan.FromDays(90);
 
+    /// <summary>How long the postmaster keeps mail no team owns before deleting it, with its content.</summary>
+    public TimeSpan PostmasterRetention { get; set; } = TimeSpan.FromDays(90);
+
     /// <summary>
     /// The lowest access level that holds <see cref="MailboxScopes.Read"/>; <c>null</c> registers it grant-only,
     /// so only a role or an override confers it.

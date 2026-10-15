@@ -35,6 +35,7 @@ public static class TeamMailboxRegistration
             x.Suffix = options.Suffix ?? string.Empty;
             x.KeyLength = options.KeyLength;
             x.RetirementPeriod = options.RetirementPeriod;
+            x.PostmasterRetention = options.PostmasterRetention;
             x.ReadAccessLevel = options.ReadAccessLevel;
             x.HandleAccessLevel = options.HandleAccessLevel;
             x.ManageAccessLevel = options.ManageAccessLevel;
@@ -44,12 +45,15 @@ public static class TeamMailboxRegistration
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<ITeamMailNotifier, TeamMailNotifier>();
         services.AddTeamService<ITeamMailboxService, TeamMailboxService>();
+        services.AddSystemService<IPostmasterService, PostmasterService>();
+        services.AddTransient<ITeamPurgeParticipant, TeamMailboxPurgeParticipant>();
 
         if (options.Mail?.Imap?.IsConfigured == true)
         {
             services.TryAddScoped<IMailboxSource, MailClientMailboxSource>();
             services.TryAddScoped<TeamMailReceiver>();
             services.AddHostedService<TeamMailboxPoller>();
+            services.AddHostedService<PostmasterRetentionSweep>();
         }
 
         services.AddThargaScopes(scopes =>
