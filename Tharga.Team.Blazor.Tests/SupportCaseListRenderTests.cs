@@ -192,14 +192,77 @@ public class SupportCaseListRenderTests : BunitContext
     }
 
     [Fact]
-    public async Task TheAuthorClosesTheirOwnCase()
+    public async Task TheAuthorClosesTheirOwnCase_AfterConfirmingIt()
     {
         var view = RenderCases(out var cases);
+        var dialogs = Render<RadzenDialog>();
 
         OpenCase(view, "newest");
         await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click());
 
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", default), Times.Never);
+        Assert.Single(dialogs.FindAll("[data-close-dialog='team']"));
+
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
+
         cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", default), Times.Once);
+    }
+
+    /// <summary>The dialog offers who reads the case from now on, and closing with another choice makes it.</summary>
+    [Fact]
+    public async Task ClosingOffersWhoReadsTheCase_AndKeepsTheChoice()
+    {
+        var view = RenderCases(out var cases);
+        var dialogs = Render<RadzenDialog>();
+
+        OpenCase(view, "newest");
+        await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click());
+
+        var picker = dialogs.FindComponent<SupportCaseVisibilityPicker>();
+        await dialogs.InvokeAsync(() => picker.Instance.ValueChanged.InvokeAsync(SupportCaseVisibility.Private));
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
+
+        cases.Verify(x => x.SetCaseVisibilityAsync(TeamKey, "newest", SupportCaseVisibility.Private, default), Times.Once);
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task CancellingTheDialog_LeavesTheCaseOpen()
+    {
+        var view = RenderCases(out var cases);
+        var dialogs = Render<RadzenDialog>();
+
+        OpenCase(view, "newest");
+        await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click());
+        await dialogs.InvokeAsync(() => dialogs.FindAll("[data-close-dialog] button").First(b => b.TextContent.Contains("Cancel")).Click());
+
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, It.IsAny<string>(), default), Times.Never);
+    }
+
+    /// <summary>Staff may close any time, but are told first that it is better left to the organisation.</summary>
+    [Fact]
+    public async Task StaffAreWarned_BeforeTheyCloseAnOrganisationsCase()
+    {
+        var view = RenderStaff(out var cases, [Case("waiting", 5)]);
+        var dialogs = Render<RadzenDialog>();
+
+        OpenCase(view, "waiting");
+        await view.InvokeAsync(() => view.Find("[data-close]").Click());
+
+        Assert.Contains("better that the organisation closes", dialogs.Find("[data-close-dialog='staff']").TextContent);
+
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
+
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "waiting", default), Times.Once);
+    }
+
+    [Fact]
+    public void TheStaffQueue_SaysWhoMayReadEachCase()
+    {
+        var view = RenderStaff(out _, [Case("shared", 5) with { Visibility = SupportCaseVisibility.Team }, Case("own", 4) with { Visibility = SupportCaseVisibility.Private }]);
+
+        Assert.Equal("team", view.Find("[data-case='shared'] [data-readers]").GetAttribute("data-readers"));
+        Assert.Contains("Only Alice", view.Find("[data-case='own'] [data-readers='author']").TextContent);
     }
 
     [Fact]
@@ -293,6 +356,7 @@ public class SupportCaseListRenderTests : BunitContext
         foreach (var item in items)
         {
             cases.Setup(x => x.GetCaseAsync(TeamKey, item.Id, default)).ReturnsAsync(item);
+            cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, item.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(true, true));
             cases.Setup(x => x.GetMessagesAsync(TeamKey, item.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         }
 

@@ -172,6 +172,12 @@ public interface ISupportCaseService
     Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// What the caller may choose about who reads the case — so a component offers exactly what
+    /// <see cref="SetCaseVisibilityAsync"/> would accept, without knowing who is asking.
+    /// </summary>
+    Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// How many open cases in the team are waiting on an answer — their newest entry came from the person
     /// who raised them. What a support-side indicator shows.
     /// </summary>

@@ -234,6 +234,14 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.MarkReadAsync(teamKey, caseId, cancellationToken);
     }
 
+    /// <remarks>Asking is never refused; somebody outside the team is simply told there is nothing to choose.</remarks>
+    public async Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(teamKey) || !await authorizer.IsMemberOfAsync(teamKey)) return SupportCaseVisibilityChoice.None;
+
+        return await inner.GetVisibilityChoiceAsync(teamKey, caseId, cancellationToken);
+    }
+
     public async Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         await RequireMembershipAsync(teamKey);

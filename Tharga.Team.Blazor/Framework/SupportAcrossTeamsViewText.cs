@@ -18,6 +18,17 @@ public static class SupportAcrossTeamsViewText
 
     public static readonly TextKey Close = new("team.support.acrossTeams.close", "Close case");
 
+    public static readonly TextKey CloseWarningTitle = new("team.support.acrossTeams.close.title", "Close the organisation's case?");
+
+    /// <summary>Closing is the team's word that the problem is solved, so staff are told before they say it for them.</summary>
+    public static readonly TextKey CloseWarning = new("team.support.acrossTeams.close.warning",
+        "It is better that the organisation closes the case themselves, once they agree the problem is solved.");
+
+    public static readonly TextKey CloseAnyway = new("team.support.acrossTeams.close.anyway", "Close anyway");
+
+    /// <summary>Names the one person who may read a case kept to its author.</summary>
+    public static readonly TextKey OnlyTheAuthor = new("team.support.acrossTeams.onlyAuthor", "Only {0}");
+
     public static readonly TextKey Open = new("team.support.acrossTeams.status.open", "Open");
 
     public static readonly TextKey Closed = new("team.support.acrossTeams.status.closed", "Closed");
@@ -47,7 +58,7 @@ public static class SupportAcrossTeamsViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Awaiting, NoCases, NoneMatch, AnswerLabel, Close, Open, Closed, WithAssistant,
+        Awaiting, NoCases, NoneMatch, AnswerLabel, Close, CloseWarningTitle, CloseWarning, CloseAnyway, OnlyTheAuthor, Open, Closed, WithAssistant,
         ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant
     ];
 }

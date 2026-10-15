@@ -40,6 +40,14 @@ public static class SupportCasesViewText
     /// <summary>Lets the person who raised a case close it once it is solved.</summary>
     public static readonly TextKey Close = new("team.support.cases.close", "Close case");
 
+    public static readonly TextKey CloseConfirmTitle = new("team.support.cases.close.title", "Close the case?");
+
+    /// <summary>Says closing is not final, so it is not put off for fear of losing the conversation.</summary>
+    public static readonly TextKey CloseConfirmBody = new("team.support.cases.close.body",
+        "Close it once the problem is solved. Writing to it again opens it again.");
+
+    public static readonly TextKey Cancel = new("team.support.cases.cancel", "Cancel");
+
     public static readonly TextKey Open = new("team.support.cases.status.open", "Open");
 
     public static readonly TextKey Closed = new("team.support.cases.status.closed", "Closed");
@@ -97,7 +105,7 @@ public static class SupportCasesViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, NewCase, SubjectLabel, MessageLabel, Send, CasesTab, NothingYet, NoneMatch, ReplyLabel, Close,
+        Title, NewCase, SubjectLabel, MessageLabel, Send, CasesTab, NothingYet, NoneMatch, ReplyLabel, Close, CloseConfirmTitle, CloseConfirmBody, Cancel,
         Open, Closed, WithAssistant, ClosedForInactivity, SelectTeam, SupportOnline, SupportAway,
         AnsweredByAssistant, AnsweredByHuman, AssistantThinking, TalkToAPerson,
         VisibilityLabel, VisibilityTeam, VisibilityPrivate

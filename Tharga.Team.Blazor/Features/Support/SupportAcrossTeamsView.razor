@@ -51,13 +51,23 @@ else
                             {
                                 <RadzenBadge Text="@_text[SupportAcrossTeamsViewText.NeedsAnswer]" BadgeStyle="BadgeStyle.Danger" data-needs-answer="@item.Id" />
                             }
-                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-team="@item.TeamKey">
-                                @if (TeamIcon(item.TeamKey) is { } icon)
-                                {
-                                    <img src="@icon" alt="" style="height: 1.25rem; width: auto; border-radius: 0.25rem;" />
-                                }
-                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@TeamName(item)</RadzenText>
-                            </RadzenStack>
+                            @if (item.Visibility == SupportCaseVisibility.Private)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-readers="author" title="@TeamName(item)">
+                                    <RadzenIcon Icon="lock" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@string.Format(_text[SupportAcrossTeamsViewText.OnlyTheAuthor], item.AuthorName)</RadzenText>
+                                </RadzenStack>
+                            }
+                            else
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-team="@item.TeamKey" data-readers="team">
+                                    @if (TeamIcon(item.TeamKey) is { } icon)
+                                    {
+                                        <img src="@icon" alt="" style="height: 1.25rem; width: auto; border-radius: 0.25rem;" />
+                                    }
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@TeamName(item)</RadzenText>
+                                </RadzenStack>
+                            }
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
                                 @Time(item.LastMessageAt ?? item.CreatedAt)
                             </RadzenText>

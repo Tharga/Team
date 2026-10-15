@@ -72,6 +72,8 @@ public class TextCoverageTests
         "Features/Support/SupportQueueView.razor",
         "Features/Support/SupportCaseFilter.razor",
         "Features/Support/SupportCaseConversation.razor",
+        "Features/Support/SupportCaseCloseDialog.razor",
+        "Features/Support/SupportCaseVisibilityPicker.razor",
         "Features/Support/SupportAcrossTeamsView.razor",
     ];
 

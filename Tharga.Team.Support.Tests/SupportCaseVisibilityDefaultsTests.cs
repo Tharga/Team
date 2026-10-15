@@ -75,6 +75,20 @@ public class SupportCaseVisibilityDefaultsTests
         Assert.Equal(0, await alice.GetMyAnsweredCountAsync(TeamA));
     }
 
+    [Fact]
+    public async Task TheAuthor_IsOfferedTheChoice_AndPrivateOnlyWhileNobodyElseInTheTeamWrote()
+    {
+        var store = new InMemorySupportCaseStore();
+        var alice = Build(store);
+        var raised = await alice.RaiseCaseAsync(TeamA, null, "The export is empty.");
+
+        Assert.Equal(new SupportCaseVisibilityChoice(true, true), await alice.GetVisibilityChoiceAsync(TeamA, raised.Id));
+
+        await store.AppendMessageAsync(TeamA, raised.Id, new SupportMessage { Sequence = 2, Kind = SupportMessageKind.User, AuthorIdentity = "bob-subject", AuthorName = "Bob", Body = "Same here.", SentAt = DateTime.UtcNow });
+
+        Assert.Equal(new SupportCaseVisibilityChoice(true, false), await alice.GetVisibilityChoiceAsync(TeamA, raised.Id));
+    }
+
     private static ISupportCaseService Build(InMemorySupportCaseStore store)
     {
         var claims = new List<Claim>

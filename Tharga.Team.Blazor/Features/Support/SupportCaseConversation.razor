@@ -1,6 +1,7 @@
 @using Tharga.Team.Support.Cases
 @using Tharga.Team.Blazor.Framework
 @inject ISupportCaseService SupportCases
+@inject DialogService DialogService
 
 @* One case opened inside its card: the transcript, the answer box and what may be done with the case. Rendered
    only while the card is open, so a closed card reads no messages. *@
@@ -35,19 +36,12 @@
         }
     </RadzenStack>
 
-    @* Offered only when the host lets each case decide, which is when a case carries a visibility. *@
-    @if (!AsStaff && Case.Status == SupportCaseStatus.Open && Case.Visibility != null)
+    @* Offered to the author whenever the host lets each case decide, closed cases included: who reads the history matters after too. *@
+    @if (!AsStaff && _choice.MayChange && Case.Visibility != null)
     {
-        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-visibility="@Case.Id">
             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_member[SupportCasesViewText.VisibilityLabel]</RadzenText>
-            <RadzenSelectBar Value="@Case.Visibility.Value" TValue="SupportCaseVisibility" Size="ButtonSize.Small"
-                             Change="@((SupportCaseVisibility v) => SetVisibilityAsync(v))" Disabled="_busy"
-                             aria-label="@_member[SupportCasesViewText.VisibilityLabel]">
-                <Items>
-                    <RadzenSelectBarItem Text="@_member[SupportCasesViewText.VisibilityTeam]" Value="SupportCaseVisibility.Team" />
-                    <RadzenSelectBarItem Text="@_member[SupportCasesViewText.VisibilityPrivate]" Value="SupportCaseVisibility.Private" />
-                </Items>
-            </RadzenSelectBar>
+            <SupportCaseVisibilityPicker Value="@Case.Visibility.Value" ValueChanged="SetVisibilityAsync" MayBePrivate="_choice.MayBePrivate" Disabled="_busy" />
         </RadzenStack>
     }
 </RadzenStack>
@@ -88,6 +82,7 @@
     private TextSet _staff = TextSet.Empty;
 
     private SupportCase _shown;
+    private SupportCaseVisibilityChoice _choice = SupportCaseVisibilityChoice.None;
     private SupportMessage[] _messages = [];
     private string _reply;
     private bool _busy;
@@ -126,6 +121,7 @@
 
         _shown = Case;
         _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
+        _choice = AsStaff ? SupportCaseVisibilityChoice.None : await SupportCases.GetVisibilityChoiceAsync(Case.TeamKey, Case.Id) ?? SupportCaseVisibilityChoice.None;
 
         if (!AsStaff && Unread > 0)
         {
@@ -149,7 +145,27 @@
 
     private Task RequestHumanAsync() => ActAsync(() => SupportCases.RequestHumanAsync(Case.TeamKey, Case.Id));
 
-    private Task CloseAsync() => ActAsync(() => SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id));
+    /// <remarks>Asked first: the team chooses who reads the case from now on, and staff are reminded the team should close it.</remarks>
+    private async Task CloseAsync()
+    {
+        var title = AsStaff ? _staff[SupportAcrossTeamsViewText.CloseWarningTitle] : _member[SupportCasesViewText.CloseConfirmTitle];
+        var result = await DialogService.OpenAsync<SupportCaseCloseDialog>(title, new Dictionary<string, object>
+        {
+            [nameof(SupportCaseCloseDialog.AsStaff)] = AsStaff,
+            [nameof(SupportCaseCloseDialog.Visibility)] = Case.Visibility,
+            [nameof(SupportCaseCloseDialog.Choice)] = _choice
+        });
+
+        if (result is not SupportCaseCloseChoice choice) return;
+
+        await ActAsync(async () =>
+        {
+            if (choice.Visibility is { } visibility && visibility != Case.Visibility)
+                await SupportCases.SetCaseVisibilityAsync(Case.TeamKey, Case.Id, visibility);
+
+            await SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id);
+        });
+    }
 
     private Task SetVisibilityAsync(SupportCaseVisibility visibility)
         => ActAsync(() => SupportCases.SetCaseVisibilityAsync(Case.TeamKey, Case.Id, visibility));

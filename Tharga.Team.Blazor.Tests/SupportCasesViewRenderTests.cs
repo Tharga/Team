@@ -113,10 +113,29 @@ public class SupportCasesViewRenderTests : BunitContext
 
         Assert.Contains("Who can read this case", view.Markup);
 
-        var share = view.FindComponents<Radzen.Blazor.RadzenSelectBar<SupportCaseVisibility>>().Single();
-        await view.InvokeAsync(() => share.Instance.Change.InvokeAsync(SupportCaseVisibility.Team));
+        var share = view.FindComponent<SupportCaseVisibilityPicker>();
+        await view.InvokeAsync(() => share.Instance.ValueChanged.InvokeAsync(SupportCaseVisibility.Team));
 
         cases.Verify(x => x.SetCaseVisibilityAsync(TeamKey, Case.Id, SupportCaseVisibility.Team, default), Times.Once);
+    }
+
+    /// <summary>Once somebody else in the team has written in it, only you is not on offer.</summary>
+    [Fact]
+    public void OnlyYou_IsNotOffered_OnceOthersInTheTeamWrote()
+    {
+        var view = RenderView(out _, SupportCaseVisibility.Team, mayBePrivate: false);
+
+        Open(view, "Export is empty");
+
+        Assert.False(view.FindComponent<SupportCaseVisibilityPicker>().Instance.MayBePrivate);
+    }
+
+    [Fact]
+    public void AClosedCase_StillOffersWhoReadsIt()
+    {
+        var view = RenderView(out _, SupportCaseVisibility.Team, caseId: Case.Id, closed: true);
+
+        Assert.Single(view.FindAll("[data-visibility]"));
     }
 
     private IRenderedComponent<SupportCasesView> RenderView() => RenderView(out _);
@@ -147,14 +166,15 @@ public class SupportCasesViewRenderTests : BunitContext
         Assert.Contains("We are looking into the export.", view.Markup);
     }
 
-    private IRenderedComponent<SupportCasesView> RenderView(out Mock<ISupportCaseService> cases, SupportCaseVisibility? visibility = null, int unread = 0, string caseId = null)
+    private IRenderedComponent<SupportCasesView> RenderView(out Mock<ISupportCaseService> cases, SupportCaseVisibility? visibility = null, int unread = 0, string caseId = null, bool mayBePrivate = true, bool closed = false)
     {
-        var shown = Case with { Visibility = visibility };
+        var shown = Case with { Visibility = visibility, Status = closed ? SupportCaseStatus.Closed : SupportCaseStatus.Open };
 
         cases = new Mock<ISupportCaseService>();
         cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default))
             .ReturnsAsync(new SupportCasePage { Items = [shown] });
         cases.Setup(x => x.GetCaseAsync(TeamKey, Case.Id, default)).ReturnsAsync(shown);
+        cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, Case.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(visibility != null, mayBePrivate));
         cases.Setup(x => x.GetMessagesAsync(TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase, default))
             .ReturnsAsync(new SupportMessagePage { Items = [Reply] });
         if (unread > 0)

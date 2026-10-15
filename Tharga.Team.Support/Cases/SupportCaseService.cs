@@ -427,6 +427,19 @@ internal sealed class SupportCaseService(
         Notify(teamKey, caseId, SupportCaseChange.Read);
     }
 
+    public async Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        if (visibilityMode != SupportCaseVisibilityMode.PerCase) return SupportCaseVisibilityChoice.None;
+
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        var subject = await authorizer.GetSubjectAsync();
+        if (supportCase == null || string.IsNullOrEmpty(subject) || supportCase.AuthorIdentity != subject) return SupportCaseVisibilityChoice.None;
+
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+
+        return new SupportCaseVisibilityChoice(true, SupportCaseVisibilityRules.MayBePrivate(supportCase, messages));
+    }
+
     public async Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => await store.GetAnsweredCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
 
