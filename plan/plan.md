@@ -26,8 +26,11 @@
       into the log. Subscribed beside `UserCreatedEvent`, same try/log guard. Tests: 3 shape
       (`AuthAuditEntriesTests`), 2 wiring (`UserProfileRefreshAuditWiringTests`: audited; a throwing audit logger
       does not fail the resolve). Full suite 3403 green.
-- [~] 5. Docs: `docs/articles/user-management.md`, `README.md`.
-- [ ] 6. Close-out: NuGet re-check, #320 comment, archive `plan/feature.md`, remove `plan/`, push + PR (with approval).
+- [x] 5. Docs: `docs/articles/user-management.md`, `README.md`.
+      Article: new section "Keeping name and email current from trusted sign-ins" after "Where names are edited"
+      (override example, the rules, `SetEMailAsync` for custom repositories, the trade-off against administrator
+      edits) plus the audit entry in "Audit". README: short section after "Which claim identifies a user".
+- [~] 6. Close-out: NuGet re-check, #320 comment, archive `plan/feature.md`, remove `plan/`, push + PR (with approval).
 
 ## Last session
 
