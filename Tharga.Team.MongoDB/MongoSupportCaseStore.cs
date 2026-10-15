@@ -169,8 +169,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     public Task<SupportCase[]> GetCasesAwaitingSupportSinceAsync(DateTime waitingSince, int limit, CancellationToken cancellationToken = default)
     {
         var filter = Builders<SupportCaseEntity>.Filter.And(
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true),
+            AwaitingSupport(Builders<SupportCaseEntity>.Filter.Empty),
             Builders<SupportCaseEntity>.Filter.Lt(x => x.LastMessageAt, waitingSince));
 
         return NewestFirstAsync(filter, _ => true, limit, cancellationToken);
@@ -409,12 +408,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
     public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
-        var filter = Builders<SupportCaseEntity>.Filter.And(
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true));
-
-        return (int)await collection.CountAsync(filter);
+        return (int)await collection.CountAsync(AwaitingSupport(Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey)));
     }
 
     public async Task<int> GetAwaitingSupportCountAcrossTeamsAsync(CancellationToken cancellationToken = default)
@@ -451,11 +445,13 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
                 : Builders<SupportCaseEntity>.Filter.Or(shared, Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity)));
     }
 
+    // A conversation the assistant is still answering waits for the assistant, not for support.
     private static FilterDefinition<SupportCaseEntity> AwaitingSupport(FilterDefinition<SupportCaseEntity> population)
         => Builders<SupportCaseEntity>.Filter.And(
             population,
             Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true));
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.LastMessageFromAuthor, true),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active));
 
     public async Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
     {
@@ -603,7 +599,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ClosedBy = entity.ClosedBy,
         MessageCount = entity.Messages.Length,
         LastMessageAt = entity.LastMessageAt ?? entity.CreatedAt,
-        AwaitingSupport = entity.Status == SupportCaseStatus.Open && entity.LastMessageFromAuthor,
+        AwaitingSupport = entity.Status == SupportCaseStatus.Open && entity.LastMessageFromAuthor && entity.AssistantState != SupportAssistantState.Active,
         AssistantState = entity.AssistantState,
         Visibility = entity.Visibility,
         Bindings = entity.Bindings == null

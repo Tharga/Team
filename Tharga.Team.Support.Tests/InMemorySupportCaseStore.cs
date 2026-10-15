@@ -255,7 +255,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
     private int CountAwaiting(Func<SupportCase, bool> population)
         => _cases
-            .Where(x => population(x.Case) && x.Case.Status == SupportCaseStatus.Open)
+            .Where(x => population(x.Case) && x.Case.Status == SupportCaseStatus.Open && x.Case.AssistantState != SupportAssistantState.Active)
             .Count(x => x.Messages.Count > 0
                         && x.Messages[^1].Kind == SupportMessageKind.User
                         && !x.Messages[^1].AsSupport
@@ -345,6 +345,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         {
             LastMessageAt = last?.SentAt ?? supportCase.CreatedAt,
             AwaitingSupport = supportCase.Status == SupportCaseStatus.Open
+                              && supportCase.AssistantState != SupportAssistantState.Active
                               && last is { Kind: SupportMessageKind.User, AsSupport: false }
                               && last.AuthorIdentity == supportCase.AuthorIdentity
         };

@@ -49,6 +49,33 @@ public class SupportStaffCountTests
         Assert.Equal(1, await staff.GetAwaitingSupportCountAcrossTeamsAsync());
     }
 
+    /// <summary>
+    /// A conversation the assistant is answering waits for the assistant; counting it would flick the staff
+    /// counter up and back down on every message somebody writes to the bot.
+    /// </summary>
+    [Fact]
+    public async Task TheCountAcrossTeams_LeavesOutConversationsTheAssistantIsAnswering()
+    {
+        var store = new InMemorySupportCaseStore();
+        await store.AddCaseAsync(new SupportCase
+        {
+            Id = "case-bot",
+            TeamKey = TeamA,
+            AuthorIdentity = Alice,
+            AuthorName = Alice,
+            Subject = "Asking the bot",
+            Status = SupportCaseStatus.Open,
+            CreatedAt = DateTime.UtcNow,
+            MessageCount = 1,
+            AssistantState = SupportAssistantState.Active
+        }, new SupportMessage { Sequence = 1, Kind = SupportMessageKind.User, AuthorIdentity = Alice, AuthorName = Alice, Body = "How do I export?", SentAt = DateTime.UtcNow });
+
+        var staff = SupportStaff(store, SystemSupportScopes.AllManage);
+
+        Assert.Equal(0, await staff.GetAwaitingSupportCountAcrossTeamsAsync());
+        Assert.False((await staff.GetCaseAsync(TeamA, "case-bot")).AwaitingSupport);
+    }
+
     [Fact]
     public async Task TheCountAcrossTeams_IsRefusedWithoutTheCrossTeamGrant()
     {
