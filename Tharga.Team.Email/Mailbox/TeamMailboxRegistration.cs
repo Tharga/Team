@@ -1,0 +1,66 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Tharga.Team.Service;
+
+namespace Tharga.Team.Email.Mailbox;
+
+/// <summary>
+/// Registers a mailbox for every team: an opaque, rotatable address per team, behind the team scopes it declares.
+/// </summary>
+public static class TeamMailboxRegistration
+{
+    private const string ReadDescription = "List and open the team's received mail, and see the team's mail addresses.";
+    private const string HandleDescription = "Record what became of a received mail and what it belongs to.";
+    private const string ManageDescription = "Issue and rotate the team's mail address. Rotating changes the address every sender knows; the old one keeps working until it retires.";
+    private const string PostmasterReadDescription = "List and open mail that reached the shared mailbox at an address no team owns. It may hold any team's material, so every open is audited.";
+    private const string PostmasterManageDescription = "Route a mail the postmaster holds to a team, which delivers it there marked as rerouted.";
+
+    /// <summary>
+    /// Registers <see cref="ITeamMailboxService"/> and its scopes. A persistence adapter supplies
+    /// <see cref="ITeamMailKeyStore"/>; <c>Tharga.Team.MongoDB</c> registers one.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No <see cref="TeamMailboxOptions.Domain"/> is configured.</exception>
+    public static IServiceCollection AddThargaTeamMailbox(this IServiceCollection services, Action<TeamMailboxOptions> configure)
+    {
+        var options = new TeamMailboxOptions();
+        configure?.Invoke(options);
+        if (string.IsNullOrWhiteSpace(options.Domain)) throw new InvalidOperationException($"{nameof(TeamMailboxOptions)}.{nameof(TeamMailboxOptions.Domain)} must be set: it is the domain every team address is on.");
+        _ = MailKeyGenerator.New(options.KeyLength);
+
+        services.Configure<TeamMailboxOptions>(x =>
+        {
+            x.Domain = options.Domain;
+            x.Suffix = options.Suffix ?? string.Empty;
+            x.KeyLength = options.KeyLength;
+            x.RetirementPeriod = options.RetirementPeriod;
+            x.ReadAccessLevel = options.ReadAccessLevel;
+            x.HandleAccessLevel = options.HandleAccessLevel;
+            x.ManageAccessLevel = options.ManageAccessLevel;
+        });
+
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<ITeamMailNotifier, TeamMailNotifier>();
+        services.AddTeamService<ITeamMailboxService, TeamMailboxService>();
+
+        services.AddThargaScopes(scopes =>
+        {
+            RegisterTeamScope(scopes, MailboxScopes.Read, options.ReadAccessLevel, ReadDescription);
+            RegisterTeamScope(scopes, MailboxScopes.Handle, options.HandleAccessLevel, HandleDescription);
+            RegisterTeamScope(scopes, MailboxScopes.Manage, options.ManageAccessLevel, ManageDescription);
+        });
+
+        services.AddThargaSystemScopes(scopes =>
+        {
+            scopes.Register(SystemMailboxScopes.PostmasterRead, PostmasterReadDescription);
+            scopes.Register(SystemMailboxScopes.PostmasterManage, PostmasterManageDescription);
+        });
+
+        return services;
+    }
+
+    private static void RegisterTeamScope(ScopeRegistry scopes, string scope, AccessLevel? level, string description)
+    {
+        if (level is { } accessLevel) scopes.Register(scope, accessLevel, description);
+        else scopes.RegisterGrantOnly(scope, description);
+    }
+}

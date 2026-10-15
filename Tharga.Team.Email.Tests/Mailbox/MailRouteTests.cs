@@ -7,11 +7,11 @@ public class MailRouteTests
     private static readonly TeamMailboxOptions Options = new() { Domain = "fortdocs.app", Suffix = "-case" };
     private static readonly DateTime Now = new(2026, 10, 15, 12, 0, 0, DateTimeKind.Utc);
 
-    private static readonly StoredMailKey Primary = new("team-a", "primarykey01", MailKeyRole.Primary, Now.AddDays(-10), null);
-    private static readonly StoredMailKey Retiring = new("team-a", "secondary001", MailKeyRole.Secondary, Now.AddDays(-100), Now.AddDays(30));
-    private static readonly StoredMailKey Retired = new("team-a", "retiredkey01", MailKeyRole.Secondary, Now.AddDays(-200), Now.AddDays(-1));
+    private static readonly TeamMailKeyRecord Primary = new() { TeamKey = "team-a", Key = "primarykey01", Role = MailKeyRole.Primary, CreatedAt = Now.AddDays(-10), RetiresAt = null };
+    private static readonly TeamMailKeyRecord Retiring = new() { TeamKey = "team-a", Key = "secondary001", Role = MailKeyRole.Secondary, CreatedAt = Now.AddDays(-100), RetiresAt = Now.AddDays(30) };
+    private static readonly TeamMailKeyRecord Retired = new() { TeamKey = "team-a", Key = "retiredkey01", Role = MailKeyRole.Secondary, CreatedAt = Now.AddDays(-200), RetiresAt = Now.AddDays(-1) };
 
-    private static StoredMailKey Lookup(string key) => new[] { Primary, Retiring, Retired }.FirstOrDefault(x => x.Key == key);
+    private static TeamMailKeyRecord Lookup(string key) => new[] { Primary, Retiring, Retired }.FirstOrDefault(x => x.Key == key);
 
     private static MailRouteDecision Route(params string[] deliveredTo) => MailRoute.Decide(deliveredTo, Options, Lookup, Now);
 

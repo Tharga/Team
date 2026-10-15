@@ -15,7 +15,7 @@ namespace Tharga.Team.Email.Mailbox;
 /// </remarks>
 internal static class MailRoute
 {
-    public static MailRouteDecision Decide(IReadOnlyList<string> deliveredTo, TeamMailboxOptions options, Func<string, StoredMailKey> findKey, DateTime now)
+    public static MailRouteDecision Decide(IReadOnlyList<string> deliveredTo, TeamMailboxOptions options, Func<string, TeamMailKeyRecord> findKey, DateTime now)
     {
         foreach (var address in deliveredTo)
         {

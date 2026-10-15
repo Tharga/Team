@@ -16,4 +16,16 @@ public class TeamMailboxOptions
 
     /// <summary>How long a replaced key is still accepted after a rotation.</summary>
     public TimeSpan RetirementPeriod { get; set; } = TimeSpan.FromDays(90);
+
+    /// <summary>
+    /// The lowest access level that holds <see cref="MailboxScopes.Read"/>; <c>null</c> registers it grant-only,
+    /// so only a role or an override confers it.
+    /// </summary>
+    public AccessLevel? ReadAccessLevel { get; set; } = AccessLevel.User;
+
+    /// <summary>The lowest access level that holds <see cref="MailboxScopes.Handle"/>; <c>null</c> for grant-only.</summary>
+    public AccessLevel? HandleAccessLevel { get; set; } = AccessLevel.User;
+
+    /// <summary>The lowest access level that holds <see cref="MailboxScopes.Manage"/>; <c>null</c> for grant-only.</summary>
+    public AccessLevel? ManageAccessLevel { get; set; } = AccessLevel.Administrator;
 }
