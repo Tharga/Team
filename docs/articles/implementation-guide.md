@@ -1679,7 +1679,8 @@ somebody guessed and the log should not hand candidate codes to everyone who can
 `ITeamEmailSender` has one job, `SendInviteAsync` (two overloads, see below), so configuring email here is a decision about
 invitation delivery — not about handing the toolkit your mail pipeline. (The only other mail the toolkit sends
 is support mail, configured separately in **Tharga.Team.Support**. Both obey the same rules outside production;
-see *Mail outside production* below.)
+see *Mail outside production* below. Receiving mail into a team's own mailbox is in
+[Email, team mailboxes & the postmaster](team-email.md).)
 
 Three-way choice, and it works identically on the facade and granular paths:
 
@@ -1687,19 +1688,25 @@ Three-way choice, and it works identically on the facade and granular paths:
 // 1. Your own sender — wins over SMTP, which is then ignored.
 o.AddEmailService<MyEmailSender>();          // any ITeamEmailSender
 
-// 2. Or the built-in SMTP sender.
+// 2. Or SMTP: the settings here, the sender from Tharga.Team.Email.
 o.Email = new EmailOptions
 {
     SmtpHost = "smtp.example.com",
     FromAddress = "no-reply@example.com",
     // FromName falls back to the application Title when unset.
 };
+builder.Services.AddThargaEmailInvitations();
 
 // 3. Or neither — no email is sent, and no sender is registered.
 ```
 
 On the granular path set these on `AddThargaTeamBlazor`; on the facade set them on `AddThargaTeam` (or on its
 `o.Blazor` section — the facade's own `Email` wins if both are set).
+
+> [!IMPORTANT]
+> **Changed in 3.26:** `o.Email` alone no longer registers a sender. The SMTP sender moved to `Tharga.Team.Email`
+> (MailKit, one SMTP stack with support mail), so `Tharga.Team.Service` carries no mail code; install the package
+> and call `AddThargaEmailInvitations()`. With settings and no sender, startup logs a warning saying so.
 
 > **With no sender registered, invitations are not sent and nothing reports it.** `InviteUserDialog` and
 > `TeamComponent` resolve the sender with `GetService`, so they degrade to **"Copy invitation link"** and an

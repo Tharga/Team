@@ -13,6 +13,7 @@ MongoDB persistence layer for [Tharga.Team](https://www.nuget.org/packages/Tharg
 - `TeamMemberBase` - Base record for team member entities.
 - `TeamEntityBase` - Base record for team entities.
 - `UserServiceRepositoryBase` - User service base class with MongoDB persistence.
+- Team mailbox stores - `ITeamMailKeyStore` (each team's mail keys in one document, so rotation is one write) and `ITeamMailStore` (received mail, kept once per delivery), registered with the team repository. Collections `TeamMailKey` and `InboundMail`, renamable through `ThargaTeamOptions`.
 
 ## Quick start
 

@@ -22,7 +22,7 @@ env:
   # 3.25: ISupportCaseService gained members (an implementer must add them); a conversation the assistant
   # is answering is no longer awaiting support or unread; a closed case's visibility can change; and the
   # support components' text catalogues lost keys for parts that no longer exist.
-  MAJOR_MINOR: '3.25'
+  MAJOR_MINOR: '3.26'
 
 permissions:
   contents: write
