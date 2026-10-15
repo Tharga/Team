@@ -122,6 +122,27 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         }
     }
 
+    /// <summary>Connects to the IMAP server and opens the folder read-only; null when that worked, otherwise why not.</summary>
+    internal async Task<string> CheckReadAsync(CancellationToken cancellationToken)
+    {
+        if (!CanRead) return "No IMAP server is configured.";
+
+        try
+        {
+            using var client = new ImapClient { Timeout = (int)_options.Timeout.TotalMilliseconds };
+            await ConnectAsync(client, _options.Imap, cancellationToken);
+            var folder = await client.GetFolderAsync(_options.Folder ?? "INBOX", cancellationToken);
+            await folder.OpenAsync(FolderAccess.ReadOnly, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
+            return null;
+        }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "The mailbox could not be opened.");
+            return e.Message;
+        }
+    }
+
     /// <remarks>
     /// <c>UseSsl</c> on a submission port (587, 25) means STARTTLS, required — what <c>System.Net.Mail</c> meant
     /// by it, and what SMTP on those ports speaks. Anywhere else it means TLS from the first byte (465, 993).

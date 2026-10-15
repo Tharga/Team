@@ -19,6 +19,8 @@ Branch `feature/team-mailbox` off `origin/master`. FortDocs `feature/FD-676/inbo
 
 - [x] 12. **Allowed domains as one value.** `Email__Override__AllowedDomains=fortdocs.se,eplicta.se` — what FortDocs' pipelines write — bound to an empty array, so the toolkit's policy allowed no domain and redirected everyone outside production (safe, but not what was configured). `OutboundMailPolicyConfiguration` now reads a single value and the policy splits every entry on `,` and `;`. 5 tests; guide updated.
 
+- [x] 13. **Mailbox health** (asked for by FortDocs F1): `ITeamMailboxHealth.CheckAsync` connects and opens the catch-all folder read-only and returns `MailboxHealth` (not configured / reachable / error) without throwing — the poller only logs a failed read, so nothing else lets a health page show that mail stopped arriving. Registered by `AddThargaTeamMailbox`. 2 tests.
+
 Follow-up PR (not this branch), with FortDocs FD-769: the **thread tracker**, headers first — our own opaque `Message-ID` on every sent mail (never naming the item), matched when it comes back in `In-Reply-To`/`References`; `Reply-To` set to the item address, which routing already resolves; no reference in the body; a subject token only as a fallback for mail that lost its headers, opaque and never a diarienummer, decided with FD-678. Durable, recorded with the item in one unique insert. Then support onto the thread tracker, closing the ledger gaps. With FortDocs FD-769: outbound send with tracking reference, and the rich-text composer component.
 
 ## Last session

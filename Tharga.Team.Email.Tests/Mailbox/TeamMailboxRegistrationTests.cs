@@ -14,6 +14,7 @@ public class TeamMailboxRegistrationTests
         services.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
         services.AddSingleton<ITeamMailKeyStore>(new InMemoryTeamMailKeyStore());
         services.AddSingleton<ITeamMailStore>(new InMemoryTeamMailStore());
+        services.AddSingleton<IInboundMailContentStore>(new InMemoryContentStore());
         services.AddThargaTeamMailbox(configure);
         return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
     }
@@ -161,5 +162,34 @@ public class TeamMailboxRegistrationTests
         Assert.Contains(services, x => x.ImplementationType == typeof(TeamMailboxPoller));
         Assert.Contains(services, x => x.ImplementationType == typeof(PostmasterRetentionSweep));
         Assert.Contains(services, x => x.ServiceType == typeof(IMailboxSource));
+    }
+
+    [Fact]
+    public async Task WithoutIMAPSettings_TheHealthCheckSaysSo_WithoutConnecting()
+    {
+        using var provider = Build(Fortdocs);
+
+        var health = await provider.GetRequiredService<ITeamMailboxHealth>().CheckAsync();
+
+        Assert.False(health.IsConfigured);
+        Assert.False(health.IsReachable);
+    }
+
+    [Fact]
+    public async Task AMailboxThatCannotBeReached_IsReported_WithTheReason()
+    {
+        using var provider = Build(o =>
+        {
+            Fortdocs(o);
+            o.Mail.Imap.Host = "127.0.0.1";
+            o.Mail.Imap.Port = 1;
+            o.Mail.Timeout = TimeSpan.FromSeconds(2);
+        });
+
+        var health = await provider.GetRequiredService<ITeamMailboxHealth>().CheckAsync();
+
+        Assert.True(health.IsConfigured);
+        Assert.False(health.IsReachable);
+        Assert.False(string.IsNullOrWhiteSpace(health.Error));
     }
 }

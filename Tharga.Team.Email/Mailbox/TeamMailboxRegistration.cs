@@ -44,6 +44,7 @@ public static class TeamMailboxRegistration
 
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<ITeamMailNotifier, TeamMailNotifier>();
+        services.TryAddSingleton<ITeamMailboxHealth, TeamMailboxHealth>();
         services.AddTeamService<ITeamMailboxService, TeamMailboxService>();
         services.AddSystemService<IPostmasterService, PostmasterService>();
         services.AddTransient<ITeamPurgeParticipant, TeamMailboxPurgeParticipant>();
