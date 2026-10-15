@@ -32,7 +32,8 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
         var raisedBy = string.IsNullOrWhiteSpace(supportCase.TeamName)
             ? $"_raised by {SlackText.Escape(supportCase.AuthorName)}_"
             : $"_raised by {SlackText.Escape(supportCase.AuthorName)} in {SlackText.Escape(supportCase.TeamName)}_";
-        var text = $"*{SlackText.Escape(supportCase.Subject)}*\n{SlackText.Escape(openingMessage)}\n{raisedBy}";
+        var heading = RepeatsTheMessage(supportCase.Subject, openingMessage) ? "" : $"*{SlackText.Escape(supportCase.Subject)}*\n";
+        var text = $"{heading}{SlackText.Escape(openingMessage)}\n{raisedBy}";
 
         var result = await slackClient.PostAsync(channel, text, cancellationToken: cancellationToken);
 
@@ -44,6 +45,18 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
             ExternalId = result.MessageId
         };
     }
+
+    /// <summary>Whether the subject only repeats the message's opening words, as a subject derived from it does.</summary>
+    internal static bool RepeatsTheMessage(string subject, string message)
+    {
+        if (string.IsNullOrWhiteSpace(subject)) return true;
+
+        var opening = Collapse(subject).TrimEnd('…').TrimEnd();
+        return Collapse(message).StartsWith(opening, StringComparison.Ordinal);
+    }
+
+    private static string Collapse(string text)
+        => string.Join(' ', (text ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
 
     public async Task<bool> PostAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {

@@ -62,6 +62,31 @@ public class SupportCaseTeamNameTests
             null, Arg.Any<CancellationToken>());
     }
 
+    /// <summary>A subject taken from the message's first words would only say them twice in the thread.</summary>
+    [Theory]
+    [InlineData("The export is empty.", "The export is empty.", true)]
+    [InlineData("The nightly export finished without an error but…", "The nightly export finished without an error but produced no rows.", true)]
+    [InlineData("Export", "The nightly export is empty.", false)]
+    [InlineData(null, "Anything", true)]
+    public void TheSubject_IsLeftOut_WhenItOnlyRepeatsTheMessage(string subject, string message, bool repeats)
+    {
+        Assert.Equal(repeats, SlackSupportChannel.RepeatsTheMessage(subject, message));
+    }
+
+    [Fact]
+    public async Task ACaseRaisedWithoutASubject_PostsTheMessageOnce()
+    {
+        var slack = Substitute.For<ISlackClient>();
+        slack.PostAsync(default, default, default, default).ReturnsForAnyArgs(SlackPostResult.Ok("1.0"));
+        var channel = new SlackSupportChannel(slack, Options.Create(new SupportCaseOptions { SlackChannel = Channel }));
+
+        await Service(new InMemorySupportCaseStore(), Directory((TeamKey, "Acme")), channel).RaiseCaseAsync(TeamKey, null, "The export is empty.");
+
+        await slack.Received(1).PostAsync(Channel,
+            Arg.Is<string>(text => text.Split("The export is empty.", StringSplitOptions.None).Length == 2 && !text.Contains('*')),
+            null, Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public void ANotification_EscapesEveryValueItSubstitutes_ButNotItsOwnTemplate()
     {
