@@ -20,8 +20,13 @@
       `UserServiceRepositoryBaseProfileRefreshTests` (3), through the real resolve path: only the changed value is
       written (`SetNameAsync` / `SetEMailAsync`). Full suite 3398 green; no new warnings (all 13 unique warnings on a
       clean build are pre-existing XML-doc ones in files this branch does not touch).
-- [~] 4. Audit: `AuthAuditEntries.UserProfileRefreshed` + subscription in `ThargaBlazorRegistration`; tests.
-- [ ] 5. Docs: `docs/articles/user-management.md`, `README.md`.
+- [x] 4. Audit: `AuthAuditEntries.UserProfileRefreshed` + subscription in `ThargaBlazorRegistration`; tests.
+      Action `user-profile-refreshed`, DataChange, the user as actor, subject via the host's resolver. Metadata:
+      `user.key`, `changed` (`name`, `email` or both) and the resulting `user.email`; the name itself is not copied
+      into the log. Subscribed beside `UserCreatedEvent`, same try/log guard. Tests: 3 shape
+      (`AuthAuditEntriesTests`), 2 wiring (`UserProfileRefreshAuditWiringTests`: audited; a throwing audit logger
+      does not fail the resolve). Full suite 3403 green.
+- [~] 5. Docs: `docs/articles/user-management.md`, `README.md`.
 - [ ] 6. Close-out: NuGet re-check, #320 comment, archive `plan/feature.md`, remove `plan/`, push + PR (with approval).
 
 ## Last session

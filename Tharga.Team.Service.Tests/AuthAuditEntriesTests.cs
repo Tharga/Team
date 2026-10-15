@@ -117,4 +117,49 @@ public class AuthAuditEntriesTests
         Assert.Null(entry.Metadata);
         Assert.Equal("a@test.com", entry.CallerIdentity);
     }
+
+    [Fact]
+    public void UserProfileRefreshed_IsADataChangeByTheUserThemselves()
+    {
+        var user = new TestUser { Key = "u1", Identity = "id-1", Name = "Anna Andersson", EMail = "anna@test.com" };
+
+        var entry = AuthAuditEntries.UserProfileRefreshed(user, "Anna Svensson", "anna.svensson@test.com", Caller(new Claim(ClaimTypes.NameIdentifier, "sub-1")));
+
+        Assert.Equal(AuditEventType.DataChange, entry.EventType);
+        Assert.Equal("auth", entry.Feature);
+        Assert.Equal("user-profile-refreshed", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal(AuditCallerType.User, entry.CallerType);
+        Assert.Equal("id-1", entry.CallerIdentity);
+        Assert.Equal("sub-1", entry.CallerUserIdentity);
+        Assert.Equal("u1", entry.Metadata["user.key"]);
+        Assert.Equal("name,email", entry.Metadata["changed"]);
+        Assert.Equal("anna.svensson@test.com", entry.Metadata["user.email"]);
+    }
+
+    [Fact]
+    public void UserProfileRefreshed_NamesOnlyWhatChanged()
+    {
+        var user = new TestUser { Key = "u1", Identity = "id-1", Name = "Anna Andersson", EMail = "anna@test.com" };
+
+        var nameOnly = AuthAuditEntries.UserProfileRefreshed(user, "Anna Svensson", null, Caller());
+        var emailOnly = AuthAuditEntries.UserProfileRefreshed(user, null, "anna.svensson@test.com", Caller());
+
+        Assert.Equal("name", nameOnly.Metadata["changed"]);
+        Assert.Equal("anna@test.com", nameOnly.Metadata["user.email"]);
+        Assert.Equal("email", emailOnly.Metadata["changed"]);
+        Assert.Equal("anna.svensson@test.com", emailOnly.Metadata["user.email"]);
+    }
+
+    [Fact]
+    public void UserProfileRefreshed_ReadsTheSubjectThroughTheHostsResolver()
+    {
+        var user = new TestUser { Key = "u1", Identity = "oid-1", EMail = "anna@test.com" };
+        var resolver = new UserIdentityResolver([DirectoryClaimTypes.ObjectId]);
+
+        var entry = AuthAuditEntries.UserProfileRefreshed(user, "Anna Svensson", null,
+            Caller(new Claim(ClaimTypes.NameIdentifier, "sub-1"), new Claim(DirectoryClaimTypes.ObjectIdentifier, "oid-1")), resolver);
+
+        Assert.Equal("oid-1", entry.CallerUserIdentity);
+    }
 }
