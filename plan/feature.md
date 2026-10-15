@@ -31,7 +31,7 @@ Every team can receive real mail at an address nobody can guess:
 
 ## Scopes
 
-- Team: `mailbox:read` (list and open the team's mail, see its addresses), `mailbox:manage` (rotate the key, set a message's outcome). Registered at a host-chosen level, like support.
+- Team: `mailbox:read` (list and open the team's mail, see its addresses), `mailbox:handle` (record what became of a mail), `mailbox:manage` (issue and rotate the key). Handling and managing are separate because a case officer and an administrator are different people. Registered at a host-chosen level, like support.
 - System: `mailbox:postmaster:read` (list and open unrouted mail; every open audited), `mailbox:postmaster:manage` (route a message to a team). Never team-level.
 
 ## Out of scope here
