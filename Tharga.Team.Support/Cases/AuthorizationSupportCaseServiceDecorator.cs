@@ -242,6 +242,13 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.GetVisibilityChoiceAsync(teamKey, caseId, cancellationToken);
     }
 
+    public async Task<int> GetMyOpenCountAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+
+        return await inner.GetMyOpenCountAsync(teamKey, cancellationToken);
+    }
+
     public async Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         await RequireMembershipAsync(teamKey);

@@ -225,6 +225,10 @@ public interface ISupportCaseStore
     Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult(0);
 
+    /// <summary>How many of this person's own cases are open, the assistant's conversations aside. Defaults to none.</summary>
+    Task<int> GetOpenCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(0);
+
     /// <summary>
     /// A team's cases that its support readers may see under per-case visibility — those shared with the team,
     /// plus <paramref name="identity"/>'s own — newest first.

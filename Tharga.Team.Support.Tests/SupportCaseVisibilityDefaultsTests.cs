@@ -62,6 +62,20 @@ public class SupportCaseVisibilityDefaultsTests
         Assert.Equal(0, await alice.GetMyAnsweredCountAsync(TeamA));
     }
 
+    /// <summary>What an organisation's counter falls back to once nothing is unread: its open cases, the assistant's conversations aside.</summary>
+    [Fact]
+    public async Task OpenCases_AreCounted_ButNotClosedOnesOrConversationsWithTheAssistant()
+    {
+        var store = new InMemorySupportCaseStore();
+        var alice = Build(store);
+        await alice.RaiseCaseAsync(TeamA, null, "The export is empty.");
+        var closed = await alice.RaiseCaseAsync(TeamA, null, "The import is slow.");
+        await alice.CloseCaseAsync(TeamA, closed.Id);
+        await alice.RaiseCaseAsync(TeamA, null, "How do I export?", SupportAssistance.Assistant);
+
+        Assert.Equal(1, await alice.GetMyOpenCountAsync(TeamA));
+    }
+
     [Fact]
     public async Task AClosedCase_IsNotWaitingForAnything()
     {

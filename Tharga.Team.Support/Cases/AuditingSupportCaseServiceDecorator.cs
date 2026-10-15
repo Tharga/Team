@@ -245,6 +245,9 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetVisibilityChoiceAsync(teamKey, caseId, cancellationToken);
 
+    public Task<int> GetMyOpenCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetMyOpenCountAsync(teamKey, cancellationToken);
+
     public Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetMyAnsweredCountAsync(teamKey, cancellationToken);
 

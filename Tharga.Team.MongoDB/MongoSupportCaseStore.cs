@@ -411,6 +411,13 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
             Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active));
 
+    public async Task<int> GetOpenCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => (int)await collection.CountAsync(Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.Status, SupportCaseStatus.Open),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active)));
+
     public async Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => (int)await collection.CountAsync(Builders<SupportCaseEntity>.Filter.And(
             Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),

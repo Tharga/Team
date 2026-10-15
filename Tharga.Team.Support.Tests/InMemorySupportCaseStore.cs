@@ -228,6 +228,12 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     private static bool IsAnAnswerTo(SupportMessage message, string identity)
         => message.Kind != SupportMessageKind.System && (message.AsSupport || message.AuthorIdentity != identity);
 
+    public Task<int> GetOpenCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases.Count(x => x.Case.TeamKey == teamKey
+                                             && x.Case.AuthorIdentity == identity
+                                             && x.Case.Status == SupportCaseStatus.Open
+                                             && x.Case.AssistantState != SupportAssistantState.Active));
+
     public Task<int> GetAnsweredCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases.Count(x => x.Case.TeamKey == teamKey
                                              && x.Case.AuthorIdentity == identity

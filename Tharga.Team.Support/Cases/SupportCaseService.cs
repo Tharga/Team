@@ -440,6 +440,9 @@ internal sealed class SupportCaseService(
         return new SupportCaseVisibilityChoice(true, SupportCaseVisibilityRules.MayBePrivate(supportCase, messages));
     }
 
+    public async Task<int> GetMyOpenCountAsync(string teamKey, CancellationToken cancellationToken = default)
+        => await store.GetOpenCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
+
     public async Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => await store.GetAnsweredCountAsync(teamKey, await authorizer.GetSubjectAsync(), cancellationToken);
 

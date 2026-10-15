@@ -171,6 +171,9 @@ public interface ISupportCaseService
     /// </summary>
     Task<int> GetMyAnsweredCountAsync(string teamKey, CancellationToken cancellationToken = default);
 
+    /// <summary>How many of the caller's own cases are open, conversations with the assistant aside.</summary>
+    Task<int> GetMyOpenCountAsync(string teamKey, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// What the caller may choose about who reads the case — so a component offers exactly what
     /// <see cref="SetCaseVisibilityAsync"/> would accept, without knowing who is asking.
