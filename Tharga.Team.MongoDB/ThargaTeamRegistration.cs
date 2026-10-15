@@ -84,6 +84,16 @@ public static class ThargaTeamRegistration
             services.TrackMongoCollection(typeof(ISupportMailPositionCollection), typeof(SupportMailPositionCollection));
             services.TryAddScoped<ISupportMailPositionStore, MongoSupportMailPositionStore>();
 
+            // Team mailboxes: each team's keys in one document, so a rotation is one write; received mail with a
+            // unique id per delivery, so reading the shared mailbox twice keeps each mail once. TryAdd so a host
+            // substituting its own stores wins.
+            services.AddTransient<ITeamMailKeysCollection, TeamMailKeysCollection>();
+            services.TrackMongoCollection(typeof(ITeamMailKeysCollection), typeof(TeamMailKeysCollection));
+            services.TryAddScoped<ITeamMailKeyStore, MongoTeamMailKeyStore>();
+            services.AddTransient<IInboundMailCollection, InboundMailCollection>();
+            services.TrackMongoCollection(typeof(IInboundMailCollection), typeof(InboundMailCollection));
+            services.TryAddScoped<ITeamMailStore, MongoTeamMailStore>();
+
             // Opens both collections at startup. Slack allows three seconds for an inbound event and the
             // first one after a restart took 3.4 s, all of it creating the ledger and assuring its indexes.
             services.AddSingleton<IHostedService, SupportCollectionWarmUp>();

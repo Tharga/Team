@@ -36,6 +36,17 @@ public record ThargaTeamOptions
     public string SupportCaseCollectionName { get; set; } = "SupportCase";
 
     /// <summary>
+    /// Collection holding each team's mail keys, one document per team. Default <c>TeamMailKey</c>.
+    /// </summary>
+    public string TeamMailKeyCollectionName { get; set; } = "TeamMailKey";
+
+    /// <summary>
+    /// Collection holding received mail for teams' mailboxes and the postmaster — the envelope only; the raw
+    /// message is kept by the host's content store. Default <c>InboundMail</c>.
+    /// </summary>
+    public string InboundMailCollectionName { get; set; } = "InboundMail";
+
+    /// <summary>
     /// Collection remembering which inbound channel events have been handled. Default
     /// <c>SupportEventLedger</c>.
     /// </summary>
