@@ -1,0 +1,19 @@
+namespace Tharga.Team.Email.Mailbox;
+
+/// <summary>
+/// How a team's mail address is made, and how long a replaced key keeps working.
+/// </summary>
+public class TeamMailboxOptions
+{
+    /// <summary>The domain every team address is on, e.g. <c>fortdocs.app</c>. The catch-all mailbox receives the whole domain.</summary>
+    public string Domain { get; set; }
+
+    /// <summary>Written after the key in the local part, e.g. <c>-case</c> for <c>{key}-case@…</c>; empty for none.</summary>
+    public string Suffix { get; set; } = string.Empty;
+
+    /// <summary>How many characters a key has. Twelve lowercase letters and digits is about 62 bits.</summary>
+    public int KeyLength { get; set; } = 12;
+
+    /// <summary>How long a replaced key is still accepted after a rotation.</summary>
+    public TimeSpan RetirementPeriod { get; set; } = TimeSpan.FromDays(90);
+}
