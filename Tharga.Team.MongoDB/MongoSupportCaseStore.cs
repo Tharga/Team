@@ -379,7 +379,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
         {
             var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity)?.LastReadSequence ?? 0;
-            var count = entity.Messages.Count(x => x.Sequence > read);
+            var count = entity.Messages.Count(x => x.Sequence > read && IsAnAnswerTo(x, identity));
 
             if (count > 0) unread.Add(new SupportCaseUnread { CaseId = entity.CaseId, Count = count });
         }
@@ -394,11 +394,15 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         {
             var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity)?.LastReadSequence ?? 0;
 
-            if (entity.Messages.Any(x => x.Sequence > read)) unread++;
+            if (entity.Messages.Any(x => x.Sequence > read && IsAnAnswerTo(x, identity))) unread++;
         }
 
         return unread;
     }
+
+    // Only an answer waits to be read: a note that the case closed or reopened, or the reader's own words, never does.
+    private static bool IsAnAnswerTo(SupportMessageEntity message, string identity)
+        => message.Kind != SupportMessageKind.System && (message.AsSupport || message.AuthorIdentity != identity);
 
     // A conversation with the assistant is read as it happens, so its answers are never left waiting to be read.
     private static FilterDefinition<SupportCaseEntity> UnreadPopulation(string teamKey, string identity)

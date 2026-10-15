@@ -98,6 +98,28 @@ public class SupportStaffCountTests
         Assert.Empty(await store.GetUnreadByCaseAsync(TeamA, Alice));
     }
 
+    /// <summary>
+    /// A note that the case closed is not an answer; counting it lit a badge for a case the list no longer shows,
+    /// which nothing the reader could open would clear.
+    /// </summary>
+    [Fact]
+    public async Task OnlyAnswersAreUnread_NotTheNoteThatTheCaseClosed()
+    {
+        var store = new InMemorySupportCaseStore();
+        var alice = Member(store, TeamA);
+        var raised = await alice.RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        var staff = SupportStaff(store, SystemSupportScopes.AllManage);
+        await staff.ReplyToCaseAsync(TeamA, raised.Id, "Fixed now.");
+        Assert.Equal(1, await alice.GetMyUnreadCountAsync(TeamA));
+
+        await alice.MarkReadAsync(TeamA, raised.Id);
+        await alice.CloseCaseAsync(TeamA, raised.Id);
+
+        Assert.Equal(0, await alice.GetMyUnreadCountAsync(TeamA));
+        Assert.Empty(await alice.GetMyUnreadByCaseAsync(TeamA));
+    }
+
     [Fact]
     public async Task TheCountAcrossTeams_IsRefusedWithoutTheCrossTeamGrant()
     {

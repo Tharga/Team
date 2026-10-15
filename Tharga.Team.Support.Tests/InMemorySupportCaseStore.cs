@@ -214,14 +214,19 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
             .Select(x => new SupportCaseUnread
             {
                 CaseId = x.Case.Id,
-                Count = x.Messages.Count - (_reads.TryGetValue((x.Case.Id, identity), out var read) ? read : 0)
+                Count = x.Messages.Count(m => m.Sequence > ReadUpTo(x.Case.Id, identity) && IsAnAnswerTo(m, identity))
             })
             .Where(x => x.Count > 0)]);
 
     public Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases
             .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity && x.Case.AssistantState != SupportAssistantState.Active)
-            .Count(x => (_reads.TryGetValue((x.Case.Id, identity), out var read) ? read : 0) < x.Messages.Count));
+            .Count(x => x.Messages.Any(m => m.Sequence > ReadUpTo(x.Case.Id, identity) && IsAnAnswerTo(m, identity))));
+
+    private int ReadUpTo(string caseId, string identity) => _reads.TryGetValue((caseId, identity), out var read) ? read : 0;
+
+    private static bool IsAnAnswerTo(SupportMessage message, string identity)
+        => message.Kind != SupportMessageKind.System && (message.AsSupport || message.AuthorIdentity != identity);
 
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => Task.FromResult(CountAwaiting(x => x.TeamKey == teamKey));
