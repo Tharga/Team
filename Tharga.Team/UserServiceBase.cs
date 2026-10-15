@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.Logging;
+using Tharga.Toolkit;
 
 namespace Tharga.Team;
 
@@ -13,6 +14,7 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
     // wrong per-instance -- a second instance stamping LastSeen once per interval of its own is correct.
     private static readonly ConcurrentDictionary<string, DateTime> _lastSeenStamped = new();
     private static readonly ConcurrentDictionary<string, byte> _directoryIdBackfillAttempted = new();
+    private static readonly ConcurrentDictionary<string, string> _profileRefreshAttempted = new();
     private readonly ILogger<UserServiceBase> _logger;
     private readonly IIconStore _iconStore;
     private readonly ITeamCache _cache;
@@ -100,6 +102,42 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
         UserCreatedEvent?.Invoke(this, new UserCreatedEventArgs(user, claimsPrincipal));
     }
 
+    /// <summary>
+    /// Raised when a stored user's name and/or email were refreshed from a sign-in the host trusts. Never raised
+    /// unless <see cref="ShouldRefreshProfile"/> is overridden; an event rather than a dependency for the reason
+    /// <see cref="UserCreatedEvent"/> gives.
+    /// </summary>
+    public event EventHandler<UserProfileRefreshedEventArgs> UserProfileRefreshedEvent;
+
+    /// <summary>
+    /// Whether the stored name and email should follow this sign-in's claims. Default <c>false</c>: a user's
+    /// <see cref="IUser.Name"/> and <see cref="IUser.EMail"/> are written once, at creation, and an address set
+    /// afterwards stays.
+    /// </summary>
+    /// <remarks>
+    /// Override to trust a sign-in — typically by the identity provider it came through, when that provider
+    /// verifies who the person is. Evaluated on every resolve, so keep it to reading the principal. When it
+    /// returns true, a non-empty claim value that differs from the stored one is written through
+    /// <see cref="SetUserProfileAsync"/>, the user's cache entry is dropped and
+    /// <see cref="UserProfileRefreshedEvent"/> is raised. A name guessed from the email address, which a display
+    /// name falls back to when the claims carry none, is never written as the name.
+    /// </remarks>
+    protected virtual bool ShouldRefreshProfile(ClaimsPrincipal claimsPrincipal) => false;
+
+    /// <summary>
+    /// Writes a refreshed name and/or email. <paramref name="name"/> or <paramref name="email"/> is null when that
+    /// value is to be left unchanged.
+    /// </summary>
+    /// <remarks>
+    /// Throws rather than no-opping when unimplemented, as <see cref="DeleteUserAsync"/> does: a host that opted in
+    /// through <see cref="ShouldRefreshProfile"/> and whose store cannot write would otherwise see nothing
+    /// happen and nothing reported. The failure is logged and never fails the resolve.
+    /// </remarks>
+    protected virtual Task SetUserProfileAsync(string userKey, string name, string email)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetUserProfileAsync)}. Implement it to refresh a " +
+            $"user's name and email from trusted sign-ins ({nameof(ShouldRefreshProfile)}).");
+
     /// <summary>Finds or creates the user for <paramref name="claimsPrincipal"/>, keyed by <see cref="ResolveUserIdentity"/>.</summary>
     protected abstract Task<IUser> GetUserAsync(ClaimsPrincipal claimsPrincipal);
     protected abstract IAsyncEnumerable<IUser> GetAllAsync();
@@ -139,6 +177,52 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
         {
             _logger?.LogWarning(ex, "Failed to stamp activity for user {UserKey}.", user.Key);
         }
+
+        try
+        {
+            await RefreshProfileAsync(user, claimsPrincipal);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to refresh the profile of user {UserKey} from the sign-in.", user.Key);
+        }
+    }
+
+    private async Task RefreshProfileAsync(IUser user, ClaimsPrincipal claimsPrincipal)
+    {
+        if (!ShouldRefreshProfile(claimsPrincipal)) return;
+
+        var claimedEMail = claimsPrincipal.GetEmail();
+        var claimedName = ClaimedName(claimsPrincipal);
+
+        var name = Differing(user.Name, claimedName, StringComparison.Ordinal);
+        var email = Differing(user.EMail, claimedEMail, StringComparison.OrdinalIgnoreCase);
+        if (name == null && email == null) return;
+
+        // One attempt per distinct value per user per process: a store that does not keep the change would
+        // otherwise be written, and the cache dropped, on every request.
+        var attempt = $"{name}\n{email}";
+        if (_profileRefreshAttempted.TryGetValue(user.Key, out var previous) && previous == attempt) return;
+        _profileRefreshAttempted[user.Key] = attempt;
+
+        await SetUserProfileAsync(user.Key, name, email);
+        await _cache.RemoveUserAsync(user.Identity);
+
+        UserProfileRefreshedEvent?.Invoke(this, new UserProfileRefreshedEventArgs(user, name, email, claimsPrincipal));
+    }
+
+    // Without the email claims, so GetDisplayName cannot fall back to a name guessed from the address.
+    private static string ClaimedName(ClaimsPrincipal claimsPrincipal)
+        => claimsPrincipal.Claims
+            .Where(c => c.Type is not ("email" or "emails") && !(c.Type == "preferred_username" && c.Value.Contains('@')))
+            .GetDisplayName();
+
+    private static string Differing(string stored, string claimed, StringComparison comparison)
+    {
+        var value = claimed?.Trim();
+        if (string.IsNullOrEmpty(value)) return null;
+
+        return string.Equals(stored, value, comparison) ? null : value;
     }
 
     private async Task StampLastSeenAsync(string userKey)

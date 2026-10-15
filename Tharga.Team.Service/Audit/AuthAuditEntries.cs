@@ -25,6 +25,7 @@ public static class AuthAuditEntries
 
     public const string SignInAction = "signin";
     public const string UserCreatedAction = "user-created";
+    public const string UserProfileRefreshedAction = "user-profile-refreshed";
 
     /// <summary>An interactive sign-in completing.</summary>
     /// <remarks>
@@ -78,6 +79,42 @@ public static class AuthAuditEntries
             CallerUserIdentity = (identityResolver ?? UserIdentityResolver.Default).GetSubject(principal),
             Metadata = Describe(user)
         };
+
+    /// <summary>
+    /// A stored user's name and/or email refreshed from a sign-in the host trusts
+    /// (<c>UserServiceBase.ShouldRefreshProfile</c>). <paramref name="name"/> or <paramref name="email"/> is null
+    /// when that value was left unchanged.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AuditEventType.DataChange"/> with the user as their own actor, like <see cref="UserCreated(IUser, ClaimsPrincipal)"/>.
+    /// The metadata names which values changed and the address the user now has; the name itself is not copied
+    /// into the log.
+    /// </remarks>
+    public static AuditEntry UserProfileRefreshed(IUser user, string name, string email, ClaimsPrincipal principal)
+        => UserProfileRefreshed(user, name, email, principal, UserIdentityResolver.Default);
+
+    /// <summary>A refreshed profile, with the subject read by the host's identity resolver.</summary>
+    public static AuditEntry UserProfileRefreshed(IUser user, string name, string email, ClaimsPrincipal principal, UserIdentityResolver identityResolver)
+    {
+        var metadata = Describe(user) ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        metadata["changed"] = string.Join(",", new[] { name != null ? "name" : null, email != null ? "email" : null }.Where(x => x != null));
+        if (email != null) metadata["user.email"] = email;
+
+        return new AuditEntry
+        {
+            Timestamp = DateTime.UtcNow,
+            EventType = AuditEventType.DataChange,
+            Feature = Feature,
+            Action = UserProfileRefreshedAction,
+            MethodName = nameof(UserProfileRefreshed),
+            Success = true,
+            CallerType = AuditCallerType.User,
+            CallerSource = AuditCallerSource.Web,
+            CallerIdentity = user?.Identity ?? Identity(principal),
+            CallerUserIdentity = (identityResolver ?? UserIdentityResolver.Default).GetSubject(principal),
+            Metadata = metadata
+        };
+    }
 
     private static string Identity(ClaimsPrincipal principal)
         => principal?.FindFirst(ClaimTypes.Email)?.Value

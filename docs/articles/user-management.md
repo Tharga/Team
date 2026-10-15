@@ -376,6 +376,48 @@ override, so the row keeps tracking that user's later renames rather than pinnin
 Accepting an invitation clears the per-team override and promotes the admin-entered name to `IUser.Name`,
 so an accepted member's name and email come from the user record — see the co-member note above.
 
+## Keeping name and email current from trusted sign-ins
+
+A user's `Name` and `EMail` are written once, when the record is created on the first sign-in, and never read from
+the claims again. That is the right default: an address an administrator set, or a name the user chose on the
+profile page, stays. But some sign-ins are a better source than what was stored at creation — typically one through
+an identity provider that verifies who the person is — and only the host knows which.
+
+Override `ShouldRefreshProfile` on your user service to say which sign-ins to trust:
+
+```csharp
+public class AppUserService : UserServiceRepositoryBase<UserEntity>
+{
+    private const string VerifiedIssuer = "https://id.example.com/";
+
+    protected override bool ShouldRefreshProfile(ClaimsPrincipal claimsPrincipal)
+        => claimsPrincipal.FindFirst("http://schemas.microsoft.com/identity/claims/identityprovider")?.Value
+            ?.StartsWith(VerifiedIssuer, StringComparison.OrdinalIgnoreCase) == true;
+}
+```
+
+When it returns `true`, every resolve compares the sign-in's name and email with the stored user:
+
+- **Only a non-empty value that differs is written.** An absent claim never blanks a stored value.
+- **The name comes from name claims only.** A display name falls back to a name guessed from the email address when
+  the claims carry none; that guess is never written as the name.
+- **Email is compared case-insensitively**, the name exactly; both are trimmed.
+- After a write the user's cache entry is dropped, so the next resolve reads the new values, and
+  `UserProfileRefreshedEvent` is raised.
+- **One attempt per distinct value per user per process.** A store that does not keep the change is not rewritten,
+  and its cache dropped, on every request.
+- **A failure never fails the sign-in.** It is logged, as the last-seen stamp is.
+
+`UserServiceRepositoryBase` writes through the repository: `SetNameAsync`, and `SetEMailAsync` for the address. A
+host repository that implements `IUserRepository` itself must implement `SetEMailAsync`; its default throws
+`NotSupportedException` rather than pretending to save. A user service built directly on `UserServiceBase`
+overrides `SetUserProfileAsync(userKey, name, email)` — `null` means that value stays unchanged.
+
+Opting in makes the trusted provider the source of truth for those two values: an administrator's change to them
+is overwritten by the next trusted sign-in. Leave `ShouldRefreshProfile` alone and nothing changes.
+
+Each refresh is audited under feature `auth` as `user-profile-refreshed` — see [Audit](#audit).
+
 ## Verifying users
 
 - **Per user** — the Verify action on a row checks the directory and shows a badge:
@@ -632,6 +674,12 @@ User administration is audited under feature `user`: `verify` (with the outcome)
 summary entry with the processed count), and `delete` (team count, whether the directory user was
 deleted, any directory error). The all-team removal inside a delete is additionally audited under
 feature `team` as `remove-member-all`. The directory-only listing is a read and is not audited.
+
+A name or email refreshed from a trusted sign-in (see
+[Keeping name and email current from trusted sign-ins](#keeping-name-and-email-current-from-trusted-sign-ins)) is
+audited under feature `auth` as `user-profile-refreshed`, with the user as the actor. Its metadata names what
+changed (`changed`: `name`, `email` or both) and the resulting `user.email`; the name itself is not copied into the
+log.
 
 ## Custom directory providers
 
