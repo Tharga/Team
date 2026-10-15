@@ -7,7 +7,7 @@ namespace Tharga.Team.Email.Mailbox;
 /// A team's mailbox. Enforces nothing: it is registered behind the scope proxy, which checks every call
 /// against the scope its interface method declares.
 /// </summary>
-internal sealed class TeamMailboxService : ITeamMailboxService
+internal sealed class TeamMailboxService : ITeamMailboxService, ITeamMailboxProvisioning
 {
     private const int UniqueKeyAttempts = 5;
 
@@ -66,6 +66,12 @@ internal sealed class TeamMailboxService : ITeamMailboxService
         await _keys.IssueAsync(await NewKeyAsync(teamKey, MailKeyRole.Primary, cancellationToken), cancellationToken);
 
         return await GetAddressesAsync(teamKey, cancellationToken);
+    }
+
+    public async Task<string> EnsureItemAddressAsync(string teamKey, string itemKey, CancellationToken cancellationToken = default)
+    {
+        var primary = (await EnsureKeyAsync(teamKey, cancellationToken)).Primary;
+        return primary == null ? null : TeamMailAddress.ForItem(primary.Key, itemKey, _options);
     }
 
     public async Task<TeamMailAddresses> RotateKeyAsync(string teamKey, CancellationToken cancellationToken = default)

@@ -142,4 +142,26 @@ public class TeamMailboxKeyTests
     {
         Assert.Null(await Service().GetItemAddressAsync(TeamKey, "0f8d4e2a91c7"));
     }
+
+    [Fact]
+    public async Task Provisioning_IssuesTheFirstKey_AndAnItemAddressOnIt()
+    {
+        ITeamMailboxProvisioning provisioning = Service();
+
+        var address = await provisioning.EnsureItemAddressAsync(TeamKey, "0f8d4e2a91c7");
+
+        var primary = (await Service().GetAddressesAsync(TeamKey)).Primary;
+        Assert.Equal($"{primary.Key}-case+0f8d4e2a91c7@fortdocs.app", address);
+        Assert.Single(_store.All);
+    }
+
+    [Fact]
+    public async Task Provisioning_KeepsTheKeyATeamHas()
+    {
+        var first = await Service().EnsureKeyAsync(TeamKey);
+
+        var again = await ((ITeamMailboxProvisioning)Service()).EnsureKeyAsync(TeamKey);
+
+        Assert.Equal(first.Primary.Key, again.Primary.Key);
+    }
 }

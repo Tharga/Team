@@ -34,9 +34,12 @@ else
         @if (_addresses?.Primary == null)
         {
             <RadzenText TextStyle="TextStyle.Body2">@_text[TeamMailAddressViewText.NoAddress]</RadzenText>
-            <div>
-                <RadzenButton Text="@_text[TeamMailAddressViewText.Issue]" Icon="add" Click="IssueAsync" Disabled="_busy" />
-            </div>
+            @if (AllowChange)
+            {
+                <div>
+                    <RadzenButton Text="@_text[TeamMailAddressViewText.Issue]" Icon="add" Click="IssueAsync" Disabled="_busy" />
+                </div>
+            }
         }
         else
         {
@@ -55,9 +58,12 @@ else
                 </RadzenAlert>
             }
 
-            <div>
-                <RadzenButton Text="@_text[TeamMailAddressViewText.Rotate]" Icon="autorenew" ButtonStyle="ButtonStyle.Light" Click="RotateAsync" Disabled="_busy" />
-            </div>
+            @if (AllowChange)
+            {
+                <div>
+                    <RadzenButton Text="@_text[TeamMailAddressViewText.Rotate]" Icon="autorenew" ButtonStyle="ButtonStyle.Light" Click="RotateAsync" Disabled="_busy" />
+                </div>
+            }
         }
     </RadzenStack>
 }
@@ -67,6 +73,12 @@ else
 
     /// <summary>Renders a moment; the host may supply its own, otherwise the local date is shown.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>
+    /// Offers creating and changing the address. The host sets it from the reader's grant: the service refuses a
+    /// reader without <c>mailbox:manage</c> anyway, and a button that can only fail is worse than none.
+    /// </summary>
+    [Parameter] public bool AllowChange { get; set; } = true;
 
     private TextSet _text = TextSet.Empty;
     private bool _ready;
@@ -102,6 +114,10 @@ else
         {
             _addresses = await Mailbox.EnsureKeyAsync(_teamKey);
         }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[TeamMailAddressViewText.NotPermitted]);
+        }
         finally
         {
             _busy = false;
@@ -125,6 +141,10 @@ else
         try
         {
             _addresses = await Mailbox.RotateKeyAsync(_teamKey);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[TeamMailAddressViewText.NotPermitted]);
         }
         finally
         {

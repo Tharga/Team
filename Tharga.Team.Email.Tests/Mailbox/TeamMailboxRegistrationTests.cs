@@ -192,4 +192,14 @@ public class TeamMailboxRegistrationTests
         Assert.False(health.IsReachable);
         Assert.False(string.IsNullOrWhiteSpace(health.Error));
     }
+
+    [Fact]
+    public void Provisioning_IsTheUncheckedService_ForHostCodeOnly()
+    {
+        using var provider = Build(Fortdocs);
+        using var scope = provider.CreateScope();
+
+        Assert.IsType<TeamMailboxService>(scope.ServiceProvider.GetRequiredService<ITeamMailboxProvisioning>());
+        Assert.NotNull(typeof(ITeamMailboxProvisioning).GetCustomAttributes(typeof(System.ComponentModel.EditorBrowsableAttribute), false).SingleOrDefault());
+    }
 }

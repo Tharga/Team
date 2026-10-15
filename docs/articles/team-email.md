@@ -58,6 +58,9 @@ it retires.
   the sender the new address in time.
 - Retired keys are kept, never reissued: mail to an old address reaches the postmaster, never a team that drew the
   same key later.
+- **Host code can issue a key on its own authority** through `ITeamMailboxProvisioning` — when a feature is switched
+  on, or to show an item's address to whoever may read the item. It is an *internal* service: it checks nothing, so
+  it is never injected into a component, and a host calls it only behind a check of its own.
 
 ### Receiving
 
@@ -142,7 +145,8 @@ Both are in `Tharga.Team.Blazor` and take a `TimeTemplate` to render moments the
 - **`PostmasterView`** — the postmaster's list with a count, the envelope of an opened mail, and routing to a team
   chosen from a list (when the reader may list teams) or typed.
 - **`TeamMailAddressView`** — the selected team's address with a copy button, a retiring address as a warning with
-  its date, and changing the address only after a confirmation that says senders must be told.
+  its date, and changing the address only after a confirmation that says senders must be told. `AllowChange`
+  hides creating and changing for a reader without `mailbox:manage`.
 
 A reader without the grant sees a refusal, never the data. Texts are in `PostmasterViewText` and
 `TeamMailAddressViewText`.

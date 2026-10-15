@@ -21,6 +21,8 @@ Branch `feature/team-mailbox` off `origin/master`. FortDocs `feature/FD-676/inbo
 
 - [x] 13. **Mailbox health** (asked for by FortDocs F1): `ITeamMailboxHealth.CheckAsync` connects and opens the catch-all folder read-only and returns `MailboxHealth` (not configured / reachable / error) without throwing — the poller only logs a failed read, so nothing else lets a health page show that mail stopped arriving. Registered by `AddThargaTeamMailbox`. 2 tests.
 
+- [x] 14. **Provisioning and `AllowChange`** (FortDocs F2): `ITeamMailboxProvisioning` in `Tharga.Team`, marked `[EditorBrowsable(Never)]` so the internal-service guard covers it — `EnsureKeyAsync`, `EnsureItemAddressAsync` without a caller's grant, for host code behind its own check (`TeamMailboxService` implements it, registered unproxied). `TeamMailAddressView.AllowChange` hides create/change for a reader without manage, and a refusal now shows a notice instead of throwing. 5 tests.
+
 Follow-up PR (not this branch), with FortDocs FD-769: the **thread tracker**, headers first — our own opaque `Message-ID` on every sent mail (never naming the item), matched when it comes back in `In-Reply-To`/`References`; `Reply-To` set to the item address, which routing already resolves; no reference in the body; a subject token only as a fallback for mail that lost its headers, opaque and never a diarienummer, decided with FD-678. Durable, recorded with the item in one unique insert. Then support onto the thread tracker, closing the ledger gaps. With FortDocs FD-769: outbound send with tracking reference, and the rich-text composer component.
 
 ## Last session

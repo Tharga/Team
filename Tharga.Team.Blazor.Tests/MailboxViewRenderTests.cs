@@ -42,7 +42,7 @@ public class MailboxViewRenderTests : BunitContext
         SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
     }
 
-    private IRenderedComponent<TeamMailAddressView> RenderAddress(TeamMailAddresses addresses, out Mock<ITeamMailboxService> mailbox)
+    private IRenderedComponent<TeamMailAddressView> RenderAddress(TeamMailAddresses addresses, out Mock<ITeamMailboxService> mailbox, bool allowChange = true)
     {
         mailbox = new Mock<ITeamMailboxService>();
         mailbox.Setup(x => x.GetAddressesAsync(TeamKey, default)).ReturnsAsync(addresses);
@@ -58,7 +58,7 @@ public class MailboxViewRenderTests : BunitContext
         Services.AddSingleton(teamState.Object);
         Common();
 
-        return Render<TeamMailAddressView>();
+        return Render<TeamMailAddressView>(p => p.Add(x => x.AllowChange, allowChange));
     }
 
     private IRenderedComponent<PostmasterView> RenderPostmaster(out Mock<IPostmasterService> postmaster, bool permitted = true)
@@ -188,5 +188,22 @@ public class MailboxViewRenderTests : BunitContext
 
         Assert.Contains("You do not have access to mail that belongs to no team.", view.Markup);
         Assert.DoesNotContain("Begäran om handling", view.Markup);
+    }
+
+    [Fact]
+    public void AReaderWhoMayNotChangeTheAddress_SeesItWithoutTheButtons()
+    {
+        var view = RenderAddress(new TeamMailAddresses { TeamKey = TeamKey, Primary = Primary }, out _, allowChange: false);
+
+        Assert.Contains("8fjgthitwne3-case@fortdocs.app", view.Markup);
+        Assert.DoesNotContain(view.FindAll("button"), b => b.TextContent.Contains("Change address"));
+    }
+
+    [Fact]
+    public void AReaderWhoMayNotCreateTheAddress_IsNotOfferedTo()
+    {
+        var view = RenderAddress(new TeamMailAddresses { TeamKey = TeamKey }, out _, allowChange: false);
+
+        Assert.DoesNotContain(view.FindAll("button"), b => b.TextContent.Contains("Create address"));
     }
 }
