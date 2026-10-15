@@ -35,7 +35,14 @@ internal sealed class OutboundMailPolicyConfiguration(IConfiguration configurati
 {
     public void Configure(OutboundMailPolicyOptions options)
     {
-        configuration?.GetSection(OutboundMailPolicyOptions.SectionName).Bind(options);
+        var section = configuration?.GetSection(OutboundMailPolicyOptions.SectionName);
+        if (section == null) return;
+
+        section.Bind(options);
+
+        // A pipeline variable writes one value, "a.se,b.se"; the binder turns that into an empty array.
+        var single = section.GetSection(nameof(OutboundMailPolicyOptions.AllowedDomains)).Value;
+        if (!string.IsNullOrWhiteSpace(single)) options.AllowedDomains = [single];
     }
 }
 

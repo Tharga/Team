@@ -27,6 +27,7 @@ public sealed class OutboundMailPolicy : IOutboundMailPolicy
         _environment = environment;
         _address = Configured(value.Address);
         _allowedDomains = (value.AllowedDomains ?? [])
+            .SelectMany(x => (x ?? string.Empty).Split([',', ';'], StringSplitOptions.RemoveEmptyEntries))
             .Select(Configured)
             .Where(x => x != null)
             .Select(x => x.TrimStart('@'))

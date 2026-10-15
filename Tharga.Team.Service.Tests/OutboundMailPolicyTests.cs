@@ -133,4 +133,14 @@ public class OutboundMailPolicyTests
 
         Assert.Equal(OutboundMailAction.Deliver, decision.Action);
     }
+
+    [Fact]
+    public void AnEntryHoldingSeveralDomains_AllowsEachOfThem()
+    {
+        var policy = Policy("Staging", Override, "fortdocs.se,eplicta.se");
+
+        Assert.Equal(OutboundMailAction.Deliver, policy.Decide(Colleague, Subject).Action);
+        Assert.Equal(OutboundMailAction.Deliver, policy.Decide("lisa@fortdocs.se", Subject).Action);
+        Assert.Equal(OutboundMailAction.Redirect, policy.Decide(Customer, Subject).Action);
+    }
 }
