@@ -185,17 +185,31 @@ builder.Services.AddThargaSupportCases(o =>
 | `TeamWide` (default) | every case in the team — the behaviour before this option existed |
 | `PerCase` | only cases their author has shared with the team, plus their own |
 
-Under `PerCase` a new case starts `Private`, and its author shares it — or takes it back — while it is
-open:
+Under `PerCase` a new case starts as `DefaultVisibility` (`Private` unless you say otherwise), and its
+author shares it — or takes it back — at any time:
 
 ```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Visibility = SupportCaseVisibilityMode.PerCase;
+    o.DefaultVisibility = SupportCaseVisibility.Team;               // a support case is the team's
+    o.AssistantDefaultVisibility = SupportCaseVisibility.Private;   // a conversation with the assistant is the asker's own
+});
+
 await supportCases.SetCaseVisibilityAsync(teamKey, caseId, SupportCaseVisibility.Team);
 ```
 
+- **A conversation with the assistant starts as `AssistantDefaultVisibility`** (null uses
+  `DefaultVisibility`), and **takes `DefaultVisibility` when it is handed to a person** — from then on it is a
+  support case and reads as one.
 - **Only the author decides.** A team manager cannot share somebody else's case, and neither can your own
   support staff: a grant to answer every case is not a grant to widen who else reads one.
-- **Only while the case is open.** A closed case keeps the visibility it closed with; reopening it makes it
-  changeable again.
+- **Open or closed.** Who may read a case's history matters as much once it is over, so a closed case can
+  still change.
+- **Private only while nobody else in the team has written in it.** Once a colleague has joined the
+  conversation it is no longer only the author's to hide; support's answers do not count as the team writing.
+  `GetVisibilityChoiceAsync(teamKey, caseId)` says what the caller may choose — whether they may change it at
+  all, and whether `Private` is on offer — so a component offers exactly what the service would accept.
 - **Your support staff are unaffected.** `support:all:*` reaches a case whatever it says, and so does the
   author.
 - **Listings and counts follow it.** `GetCasesAsync` and `GetAwaitingSupportCountAsync` return only what the
@@ -236,6 +250,24 @@ is the whole reason it exists rather than telling somebody to raise a second cas
 
 **Reopening an already-open case does nothing and is not an error.** Two people looking at the same closed
 case both press the button; the second sees an open case rather than a complaint.
+
+**Writing to a closed case reopens it.** Whatever is written — on the site, by mail, or as a reply in its
+Slack thread — continues the conversation that explains it rather than being refused, so the case opens
+again first and the entry lands in it.
+
+## Who closes a case
+
+Closing is the customer's word that the problem is solved. The author and the team's own support readers close
+whenever they like. Your own staff (`support:all:manage`) may too, unless you hold them to a window:
+
+```csharp
+builder.Services.AddThargaSupportCases(o => o.StaffCloseAfter = TimeSpan.FromDays(14));   // default: null
+```
+
+With a window set, staff close a case only once support answered last and the customer has said nothing for
+that long; otherwise the service refuses. `SupportAcrossTeamsView` takes the same value as a parameter, so it
+does not offer Close where the service would refuse it. Without a window, the view still asks first, and says
+it is better that the team closes the case themselves.
 
 ## Closing after inactivity
 
@@ -288,8 +320,23 @@ Four components ship in `Tharga.Team.Blazor`, and **all are optional**:
 case's team through `ITeamOversightService` when the caller can list teams, and shows the team key when
 they cannot.
 
-Under `PerCase` visibility, `SupportCasesView` offers the author a switch on an open case to share it with
-their team.
+**`SupportCasesView`** has two tabs — the cases first, then where help is asked for. `Tab` names the one to
+show (`SupportCasesView.CasesTab` or `NewCaseTab`) and `TabChanged` reports a change, so a page can keep its
+address in step and link straight to either. Cases are expandable cards; each conversation loads when its card
+opens. Both lists share a filter — status and kind of conversation, open support cases by default — remembered
+in the browser under `StorageKey`, and both read every page of the listing rather than the first.
+
+**Closing asks first.** The team's dialog offers who may read the case from now on, under `PerCase`, with
+`Private` offered only where `GetVisibilityChoiceAsync` allows it; the staff dialog says it is better left to the
+team. A conversation with the assistant is neither open nor closed, so it has nothing to close and shows
+what it is instead of a status.
+
+**An answer is marked read only once somebody is looking.** An open conversation on a page in a background
+tab, or in a window without focus, leaves the answer unread — and every count saying so — until the reader
+comes back. `SupportAttention` exposes the same check to a host's own components.
+
+**`SupportAcrossTeamsView`** marks what needs an answer and lists it first, shows each case's team with its
+icon (through `IIconResolver`), and shows who may read a private case.
 
 `SupportQueueView` needs `support:read`, and the service refuses without it — so gate rendering on the scope
 to spare a member a refusal they can do nothing about.
@@ -703,13 +750,12 @@ them. The two carry very different weight.
 
 ### What it does to the queue
 
-**An assistant answer takes the case out of the awaiting-an-answer count, and a customer reply puts it back.**
-This is the same rule read state already uses: a position, not a flag.
+**A conversation the assistant is answering never waits for support.** It waits for the assistant, so it is in
+no awaiting-an-answer count, and its answers are never unread — the customer reads them as they arrive.
+Counting it would flick support's counter up and back down on every message somebody writes to the assistant.
 
-It matters in both directions. If an answered case stayed in the queue, the queue would show every case
-including the ones handled perfectly, which is how people learn to ignore a queue. If it cleared permanently,
-a customer replying *that did not help* would sit unseen. Replying re-raises it, so a dissatisfied customer is
-always back in front of a person.
+**Once it is handed to a person it is an ordinary case**, and the customer's first message to that person puts it
+in front of support like any other.
 
 **A conversation the assistant is answering reaches no channel.** No Slack thread and no mail to support
 are opened for it. Asking for a person opens nothing by itself; the customer's first message to a person
@@ -801,7 +847,10 @@ privileged:
 
 | Method | Answers | Requires |
 |---|---|---|
-| `GetMyUnreadCountAsync(teamKey)` | my own cases holding entries I have not read | membership |
+| `GetMyUnreadCountAsync(teamKey)` | my own cases holding an answer I have not read | membership |
+| `GetMyUnreadByCaseAsync(teamKey)` | the same, per case, with how many | membership |
+| `GetMyOpenCountAsync(teamKey)` | my own open cases | membership |
+| `GetMyAnsweredCountAsync(teamKey)` | my own open cases support answered last, read or not | membership |
 | `GetAwaitingSupportCountAsync(teamKey)` | open cases whose newest entry came from the person who raised them | `support:read` |
 | `GetAwaitingSupportCountAcrossTeamsAsync()` | the same, in every team | `support:all:read` |
 | `GetAwaitingUnassignedCountAsync()` | the same, in the cases no team owns | `support:unassigned:read` |
@@ -823,6 +872,11 @@ the count.
 people on one case have independent state, and the marker never moves backwards — a second tab showing an
 older page cannot relight the indicator. Replying counts as reading, so writing a message does not light your
 own chip.
+
+**Only an answer is unread** — an entry by somebody else, or by support. A note that the case closed or
+reopened is not, so closing a case never leaves a light on for a case the list no longer shows. The open and
+answered counts are what a host shows once nothing is unread: the cases still going on, and those waiting on
+the customer to reply or close them. All of them leave conversations with the assistant aside.
 
 ```csharp
 var unread = await support.GetMyUnreadCountAsync(teamKey);

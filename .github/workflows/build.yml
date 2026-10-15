@@ -18,7 +18,11 @@ env:
   # through consent could previously change that same consent, which with time-bounded consent means
   # removing their own expiry. A host with its own ITeamService decorator must also forward the new
   # access-request members, or they resolve to the throwing defaults.
-  MAJOR_MINOR: '3.24'
+  #
+  # 3.25: ISupportCaseService gained members (an implementer must add them); a conversation the assistant
+  # is answering is no longer awaiting support or unread; a closed case's visibility can change; and the
+  # support components' text catalogues lost keys for parts that no longer exist.
+  MAJOR_MINOR: '3.25'
 
 permissions:
   contents: write

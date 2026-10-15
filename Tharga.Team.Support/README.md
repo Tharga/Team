@@ -170,8 +170,10 @@ queue, which has its own pair.
 granted to every team Owner and Administrator by default. Where a support conversation is personal rather
 than a team function, set `o.TeamScopeAccessLevel = null` and they are granted by no access level at all —
 still registered and still enforced, but held only through a role you register or an explicit override.
-Or let each case decide: with `o.Visibility = SupportCaseVisibilityMode.PerCase` a case starts private and
-its author may share it with their team while it is open.
+Or let each case decide: with `o.Visibility = SupportCaseVisibilityMode.PerCase` a case starts as
+`DefaultVisibility` — a conversation with the assistant as `AssistantDefaultVisibility` — and its author may share
+it with their team or keep it to themselves, open or closed, the latter only while nobody else in the team has
+written in it.
 
 Full documentation: [Support cases](https://github.com/Tharga/Team/blob/master/docs/articles/support-cases.md).
 
