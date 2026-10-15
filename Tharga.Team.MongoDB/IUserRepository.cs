@@ -32,6 +32,19 @@ public interface IUserRepository<TUserEntity> : IRepository
     Task SetIconAsync(string userKey, string reference) => Task.CompletedTask;
 
     /// <summary>
+    /// Sets <see cref="IUser.EMail"/> on the user document.
+    /// </summary>
+    /// <remarks>
+    /// Declared with a default implementation so existing custom repositories keep compiling. The default
+    /// throws rather than no-opping, for the reason <see cref="DeleteAsync"/> gives: an address that was asked
+    /// to change and silently did not is a missing implementation dressed as success.
+    /// </remarks>
+    Task SetEMailAsync(string userKey, string email)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetEMailAsync)}. Implement it to support " +
+            "changing a user's email address.");
+
+    /// <summary>
     /// Deletes the user document.
     /// </summary>
     /// <remarks>

@@ -3,9 +3,12 @@
 - [x] 0. NuGet update — `chore(deps): nuget update` (dcf0f63): DataProtection 10.0.13, Identity.Web 4.16.1,
       Extensions.AI 10.11.0. 3378 tests green from the executables.
 - [x] 0b. `mission.md` records the tracker decision: file-based with GitHub issues.
-- [ ] 1. `IUserRepository.SetEMailAsync` (default throws) + `UserRepository` implementation; tests in
+- [x] 1. `IUserRepository.SetEMailAsync` (default throws) + `UserRepository` implementation; tests in
       Tharga.Team.MongoDB.Tests.
-- [ ] 2. `UserServiceBase`: `ShouldRefreshProfile`, the refresh in `TouchUserAsync`, `SetUserProfileAsync` (default
+      `UserRepositoryEMailTests` (3): writes `EMail` on the user found by key; a host repository that never
+      implemented it gets `NotSupportedException` naming the type. No shape guard - `EMail` is a required `IUser`
+      member, unlike Name/DirectoryId/LastSeen. Full suite 3381 green.
+- [~] 2. `UserServiceBase`: `ShouldRefreshProfile`, the refresh in `TouchUserAsync`, `SetUserProfileAsync` (default
       throws), `UserProfileRefreshedEvent` + args, per-process attempt guard; tests beside
       `UserServiceBaseActivityStampingTests`.
 - [ ] 3. `UserServiceRepositoryBase.SetUserProfileAsync` through the repository; tests.

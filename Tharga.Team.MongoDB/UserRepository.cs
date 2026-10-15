@@ -49,6 +49,16 @@ internal class UserRepository<TUserEntity> : IUserRepository<TUserEntity>
         return _collection.UpdateOneAsync(filter, update);
     }
 
+    public virtual Task SetEMailAsync(string userKey, string email)
+    {
+        var filter = new FilterDefinitionBuilder<TUserEntity>()
+            .Eq(x => x.Key, userKey);
+        var update = new UpdateDefinitionBuilder<TUserEntity>()
+            .Set(x => x.EMail, email);
+
+        return _collection.UpdateOneAsync(filter, update);
+    }
+
     public virtual Task SetLastSeenAsync(string userKey, DateTime lastSeen)
     {
         if (!_entityDeclaresLastSeen) return Task.CompletedTask;
