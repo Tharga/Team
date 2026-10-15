@@ -39,7 +39,10 @@ public class ComponentDependencyResolutionTests
     private static readonly string[] FromOptionalPackages =
     [
         "ISupportCaseService",
-        "ISupportCaseNotifier"
+        "ISupportCaseNotifier",
+        "ITeamMailboxService",
+        "IPostmasterService",
+        "ITeamMailNotifier"
     ];
 
     /// <summary>Services the host supplies by construction — its own storage types and member type.</summary>
