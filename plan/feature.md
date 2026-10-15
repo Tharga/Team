@@ -26,6 +26,7 @@ Every team can receive real mail at an address nobody can guess:
 - New package **`Tharga.Team.Email`**; `Tharga.Team.Support` depends on it. Contracts and scopes in `Tharga.Team`, Mongo adapters in `Tharga.Team.MongoDB`, views in `Tharga.Team.Blazor` (contracts only, no MailKit).
 - **Content:** the envelope (sender, recipients, subject, Message-Id, received, route) in the toolkit's store; the **raw MIME** handed to `IInboundMailContentStore`, which the host implements (FortDocs: Azure Blob).
 - Nothing is registered automatically: the toolkit delivers and lists mail; what a person does with it is the consumer's.
+- **Invitations** move onto the same transport: the SMTP invitation sender leaves `Tharga.Team.Service` for `Tharga.Team.Email` (one SMTP stack, MailKit only), opted into with one call; the `ITeamEmailSender` contract stays in `Tharga.Team`. Same release, so consumers migrate once.
 - Support's own matching (channel binding + event ledger) moves onto the shared tracker in a **follow-up PR**, so it cannot destabilise this one. That follow-up also closes the two ledger gaps (24-hour retention; ledger written before the case).
 
 ## Scopes

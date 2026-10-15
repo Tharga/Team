@@ -14,10 +14,12 @@ Branch `feature/team-mailbox` off `origin/master`. FortDocs `feature/FD-676/inbo
 - [ ] 7. **Receiving**: mailbox poller over the moved transport (raw MIME added to the fetch), routing by delivery headers, raw content handed to `IInboundMailContentStore` before the unique insert. Multi-instance test: the same message twice → one item.
 - [ ] 8. **Postmaster**: list (sender, subject, received only), open (audited), route to a team (marked re-routed), retention purge (option, audited).
 - [ ] 9. **Blazor**: `PostmasterView` and a team mail-address view with `*Text` keys.
-- [ ] 10. **Docs and version**: README, `docs/articles/team-email.md`, bump `MAJOR_MINOR` to 3.26.
+- [ ] 10. **Invitations onto the shared transport.** `SmtpTeamEmailSender` (System.Net.Mail, in `Tharga.Team.Service`) is replaced by a MailKit-based `ITeamEmailSender` in `Tharga.Team.Email`, switched on with `AddThargaEmailInvitations()` and keeping its own options (`noreply@` stays separate from support's reply address, as `ITeamEmailSender`'s remarks require) and the `IOutboundMailPolicy`. `Tharga.Team.Service` and `Tharga.Team.Blazor` keep no SMTP code and never reference `Tharga.Team.Email`. A startup warning when SMTP invitation settings exist but no sender is registered, since the manual-link fallback looks like success. Migration note: install `Tharga.Team.Email` and add the call; custom senders are unaffected.
+- [ ] 11. **Docs and version**: README, `docs/articles/team-email.md`, bump `MAJOR_MINOR` to 3.26.
 
 Follow-up PR (not this branch): support onto the thread tracker, closing the ledger gaps. With FortDocs FD-769: outbound send with tracking reference, and the rich-text composer component.
 
 ## Last session
 
+- 2026-10-15: Decided to move the invitation sender onto the shared transport too (step 10), in the same 3.26 release so consumers migrate once.
 - 2026-10-15: Branch created, packages updated. Decided: a separate `Tharga.Team.Email` package shared by support and the organisation mailbox; the case stays per product. Next: confirm the plan, then step 1.
