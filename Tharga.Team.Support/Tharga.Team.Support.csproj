@@ -44,7 +44,7 @@
       IHttpClientFactory covers it.
     -->
     <PackageReference Include="MailKit" Version="4.18.1" />
-    <PackageReference Include="Microsoft.Extensions.AI" Version="10.10.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.11.0" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <!-- The inbound Slack endpoint is an ASP.NET route. Private, so it does not flow to consumers that
          only reference this package for the notification sink. -->
