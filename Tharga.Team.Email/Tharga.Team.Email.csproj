@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Authors>Daniel Bohlin</Authors>
+    <Company>Thargelion AB</Company>
+    <Product>Tharga Team Email</Product>
+    <Description>E-mail for Tharga Team — reading over IMAP, sending over SMTP and MIME handling, shared by support cases and any other mailbox a host keeps.</Description>
+    <PackageIconUrl>https://thargelion.net/assets/component-team.png</PackageIconUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <DebugType>portable</DebugType>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSource>true</IncludeSource>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!--
+      NU5048: PackageIconUrl is deprecated in favour of an embedded PackageIcon.
+      Suppressed deliberately. Tharga packages reference their icon from
+      https://thargelion.net/assets/ so all package icons are maintained in one
+      place and can be updated without republishing a package.
+    -->
+    <NoWarn>1701;1702;CS1591;NU5048</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      This package exists to quarantine MailKit. It is the mail stack: IMAP for reading, SMTP for sending,
+      and MIME parsing, which is needed regardless because inbound mail is multipart. The BCL has no IMAP
+      client, and taking MailKit for reading makes a second SMTP stack pointless. Support cases and an
+      organisation's own mailbox both use it; a consumer who wants neither never takes it.
+    -->
+    <PackageReference Include="MailKit" Version="4.18.1" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tharga.Team.Support" />
+    <InternalsVisibleTo Include="Tharga.Team.Support.Tests" />
+    <InternalsVisibleTo Include="Tharga.Team.Email.Tests" />
+  </ItemGroup>
+</Project>

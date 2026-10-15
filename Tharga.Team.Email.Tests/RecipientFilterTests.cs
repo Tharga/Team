@@ -1,6 +1,6 @@
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
-namespace Tharga.Team.Support.Tests;
+namespace Tharga.Team.Email.Tests;
 
 /// <summary>
 /// Which mail an instance answers for, when one mailbox serves more than one site.

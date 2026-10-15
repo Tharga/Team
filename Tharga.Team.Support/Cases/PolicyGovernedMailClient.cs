@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Tharga.Team.Service.Email;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -9,18 +9,18 @@ namespace Tharga.Team.Support.Cases;
 /// (Tharga/Team#290): outside production it goes only to an allowed domain or the override address, or is withheld.
 /// </summary>
 /// <remarks>
-/// <b>A decorator rather than a change to <see cref="SupportMailClient"/></b>, because the transport namespace is
+/// <b>A decorator rather than a change to <see cref="MailClient"/></b>, because the transport namespace is
 /// kept ignorant of Team types so it can be lifted into its own package unchanged — which
 /// <c>TransportNamespaceIsolationTests</c> guards. The policy is a Team rule, so it is applied here, around the
-/// transport. It is the registered <see cref="ISupportMailClient"/>, so no caller reaches the bare transport.
+/// transport. It is the registered <see cref="IMailClient"/>, so no caller reaches the bare transport.
 /// <para>
 /// A withheld mail reports a failed send, so a case records the reply as not delivered rather than as sent.
 /// </para>
 /// </remarks>
 internal sealed class PolicyGovernedMailClient(
-    ISupportMailClient inner,
+    IMailClient inner,
     IOutboundMailPolicy policy,
-    ILogger<PolicyGovernedMailClient> logger = null) : ISupportMailClient
+    ILogger<PolicyGovernedMailClient> logger = null) : IMailClient
 {
     private const string WithheldMessage = "Withheld by the non-production mail policy: set Email:Override to receive it.";
 

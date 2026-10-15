@@ -1,7 +1,7 @@
 using MimeKit;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
-namespace Tharga.Team.Support.Tests;
+namespace Tharga.Team.Email.Tests;
 
 /// <summary>
 /// Reading a received mail: who sent it, which address it was delivered to, and whether a person sent it at

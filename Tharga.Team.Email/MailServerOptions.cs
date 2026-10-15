@@ -1,4 +1,4 @@
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Connection settings for one mail server — the IMAP side or the SMTP side.

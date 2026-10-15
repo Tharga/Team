@@ -1,4 +1,4 @@
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Decides whether a mail was addressed to this instance, for a mailbox shared by more than one site.

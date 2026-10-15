@@ -1,4 +1,4 @@
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// A mail to send.

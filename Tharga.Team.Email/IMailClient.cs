@@ -1,4 +1,4 @@
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Sends and reads mail for the support module.
@@ -13,7 +13,7 @@ namespace Tharga.Team.Support.Email;
 /// is sent and is authoritative, so a mail server being down must not become the caller's problem.
 /// </para>
 /// </remarks>
-public interface ISupportMailClient
+public interface IMailClient
 {
     /// <summary>Whether enough is configured to send. False leaves the channel dormant.</summary>
     bool CanSend { get; }

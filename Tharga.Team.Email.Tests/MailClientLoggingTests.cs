@@ -1,14 +1,14 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
-namespace Tharga.Team.Support.Tests;
+namespace Tharga.Team.Email.Tests;
 
 /// <summary>
 /// A failed send is logged without the recipient's address: an address is personal data, and logs travel further
 /// than mail does. The same finding CodeQL raised on PR #305 for the withheld-mail logs.
 /// </summary>
-public class SupportMailClientLoggingTests
+public class MailClientLoggingTests
 {
     private const string Customer = "kund@kommun.se";
 
@@ -21,7 +21,7 @@ public class SupportMailClientLoggingTests
         options.Smtp.UseSsl = false;
         var logger = new CapturingLogger();
 
-        var result = await new SupportMailClient(Options.Create(options), logger).SendAsync(new OutboundMail(Customer, "Re: printer", "body"));
+        var result = await new MailClient(Options.Create(options), logger).SendAsync(new OutboundMail(Customer, "Re: printer", "body"));
 
         Assert.False(result.Success);
         var entry = Assert.Single(logger.Entries);
@@ -30,7 +30,7 @@ public class SupportMailClientLoggingTests
         Assert.DoesNotContain("kommun.se", entry.Message);
     }
 
-    private sealed class CapturingLogger : ILogger<SupportMailClient>
+    private sealed class CapturingLogger : ILogger<MailClient>
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];
 

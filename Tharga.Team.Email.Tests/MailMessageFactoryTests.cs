@@ -1,7 +1,7 @@
 using MimeKit;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
-namespace Tharga.Team.Support.Tests;
+namespace Tharga.Team.Email.Tests;
 
 /// <summary>
 /// The headers that make a mail thread, asserted without a mail server.

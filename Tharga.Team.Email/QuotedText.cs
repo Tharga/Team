@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Trims the quoted thread and signature off a reply, leaving what the person actually wrote.

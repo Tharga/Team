@@ -1,7 +1,7 @@
 using System.Net;
 using System.Text.RegularExpressions;
 
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Flattens an HTML mail body to the plain text a transcript stores.

@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Tharga.Team.Service.Email;
 using Tharga.Team.Support.Cases;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Tests;
 
@@ -16,7 +16,7 @@ public class SupportMailClientPolicyTests
     private const string Override = "test-inbox@eplicta.se";
     private const string Subject = "Re: printer";
 
-    private readonly ISupportMailClient _inner = Substitute.For<ISupportMailClient>();
+    private readonly IMailClient _inner = Substitute.For<IMailClient>();
 
     public SupportMailClientPolicyTests()
     {
@@ -115,6 +115,6 @@ public class SupportMailClientPolicyTests
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        Assert.IsType<PolicyGovernedMailClient>(scope.ServiceProvider.GetRequiredService<ISupportMailClient>());
+        Assert.IsType<PolicyGovernedMailClient>(scope.ServiceProvider.GetRequiredService<IMailClient>());
     }
 }

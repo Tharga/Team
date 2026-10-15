@@ -37,8 +37,8 @@ public readonly record struct SupportMailPosition(uint UidValidity, uint LastUid
 /// </para>
 /// <para>
 /// <b>It duplicates the transport's own position type</b> rather than sharing it. Everything under
-/// <c>Tharga.Team.Support.Email</c> is about mail and only mail, so that it can be lifted out as a move
-/// rather than a rewrite; a port declared here cannot reach into it. Two small records that must agree are
+/// <c>Tharga.Team.Email</c> is about mail and only mail, and lives in a package of its own; a port declared
+/// here cannot reach into it. Two small records that must agree are
 /// cheaper than a boundary that leaks, and the poller is the one place that converts between them.
 /// </para>
 /// </remarks>

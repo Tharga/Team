@@ -1,4 +1,4 @@
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// How the support module reads and sends mail.

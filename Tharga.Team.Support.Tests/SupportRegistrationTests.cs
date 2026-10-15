@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support.Cases;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 using Tharga.Team.Support.Notifications;
 using Tharga.Team.Support.Slack;
 
@@ -163,7 +163,7 @@ public class SupportRegistrationTests
 
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportCaseService>());
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<EmailEventHandler>());
-        Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportMailClient>());
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IMailClient>());
 
         // The poller is a hosted service, so nothing else would ever construct it.
         Assert.Single(provider.GetServices<IHostedService>().OfType<SupportMailPoller>());

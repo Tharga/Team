@@ -1,7 +1,7 @@
 using MimeKit;
 using MimeKit.Utils;
 
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Builds the MIME message for an <see cref="OutboundMail"/>.

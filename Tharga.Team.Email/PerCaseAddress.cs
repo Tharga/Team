@@ -1,4 +1,4 @@
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// The per-case reply address, <c>support+{caseId}@example.com</c>, built and read back.

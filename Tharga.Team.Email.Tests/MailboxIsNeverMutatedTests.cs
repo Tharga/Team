@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace Tharga.Team.Support.Tests;
+namespace Tharga.Team.Email.Tests;
 
 /// <summary>
 /// The mailbox is read and never written.
@@ -43,19 +43,23 @@ public class MailboxIsNeverMutatedTests
 
     private static readonly Regex TransportFile = new(@"\.cs$", RegexOptions.Compiled);
 
+    private static bool IsBuildOutput(FileInfo file, DirectoryInfo root) =>
+        Path.GetRelativePath(root.FullName, file.FullName).Split(Path.DirectorySeparatorChar)[0] is "bin" or "obj";
+
     private static (string Name, string Text)[] TransportSources()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "Tharga.Team.Support"))) dir = dir.Parent;
+        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "Tharga.Team.Email"))) dir = dir.Parent;
 
         Assert.NotNull(dir);
 
-        var root = new DirectoryInfo(Path.Combine(dir.FullName, "Tharga.Team.Support", "Email"));
+        var root = new DirectoryInfo(Path.Combine(dir.FullName, "Tharga.Team.Email"));
 
         Assert.True(root.Exists, $"The mail transport was not found at {root.FullName}.");
 
         return [.. root.GetFiles("*", SearchOption.AllDirectories)
             .Where(f => TransportFile.IsMatch(f.Name))
+            .Where(f => !IsBuildOutput(f, root))
             .Select(f => (f.Name, File.ReadAllText(f.FullName)))];
     }
 
@@ -66,7 +70,7 @@ public class MailboxIsNeverMutatedTests
         var sources = TransportSources();
 
         Assert.NotEmpty(sources);
-        Assert.Contains(sources, x => x.Name == "SupportMailClient.cs");
+        Assert.Contains(sources, x => x.Name == "MailClient.cs");
     }
 
     [Fact]

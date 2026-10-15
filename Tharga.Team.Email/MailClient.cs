@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Sends over SMTP and reads over IMAP, using MailKit.
@@ -22,7 +22,7 @@ namespace Tharga.Team.Support.Email;
 /// interval measured in minutes.
 /// </para>
 /// </remarks>
-internal sealed class SupportMailClient(IOptions<MailOptions> options, ILogger<SupportMailClient> logger = null) : ISupportMailClient
+internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClient> logger = null) : IMailClient
 {
     /// <summary>How many messages one poll will take, so a large backlog cannot stall a deployment.</summary>
     private const int MaxMessagesPerFetch = 100;

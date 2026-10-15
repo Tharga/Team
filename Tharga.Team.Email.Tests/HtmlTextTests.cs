@@ -1,6 +1,6 @@
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
-namespace Tharga.Team.Support.Tests;
+namespace Tharga.Team.Email.Tests;
 
 /// <summary>
 /// Flattening an HTML mail body into the text a transcript stores.

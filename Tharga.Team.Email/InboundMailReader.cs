@@ -1,6 +1,6 @@
 using MimeKit;
 
-namespace Tharga.Team.Support.Email;
+namespace Tharga.Team.Email;
 
 /// <summary>
 /// Turns a received MIME message into an <see cref="InboundMail"/>.

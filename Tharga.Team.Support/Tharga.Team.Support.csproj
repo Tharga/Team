@@ -35,15 +35,9 @@
   <ItemGroup>
     <!--
       This package exists to quarantine dependencies out of Tharga.Team.Service, which every consumer
-      installs. MailKit is the first one to arrive, and the reason the quarantine was set up in advance.
-      It is the mail stack for the email support channel: IMAP for reading, SMTP for sending, and MIME
-      parsing, which is needed regardless because inbound mail is multipart. The BCL has no IMAP client,
-      and taking MailKit for reading makes a second SMTP stack pointless.
-
-      Slack still needs no third-party package of its own — it is an HTTPS endpoint that takes JSON, so
-      IHttpClientFactory covers it.
+      installs. Mail comes from Tharga.Team.Email, which carries MailKit. Slack needs no third-party package
+      of its own — it is an HTTPS endpoint that takes JSON, so IHttpClientFactory covers it.
     -->
-    <PackageReference Include="MailKit" Version="4.18.1" />
     <PackageReference Include="Microsoft.Extensions.AI" Version="10.11.0" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
     <!-- The inbound Slack endpoint is an ASP.NET route. Private, so it does not flow to consumers that
@@ -53,6 +47,7 @@
   <ItemGroup>
     <!-- References the service; nothing references this back, so no consumer acquires it by accident. -->
     <ProjectReference Include="..\Tharga.Team.Service\Tharga.Team.Service.csproj" />
+    <ProjectReference Include="..\Tharga.Team.Email\Tharga.Team.Email.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Tharga.Team.Support.Tests" />
