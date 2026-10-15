@@ -16,8 +16,11 @@
       email claims - its last fallback is a name guessed from the address ("anna.svensson@" -> "Anna Svensson"),
       which a test caught; a guess must never overwrite a real name. Email compared case-insensitively, name
       ordinally; values trimmed; empty never overwrites. Full suite 3395 green.
-- [~] 3. `UserServiceRepositoryBase.SetUserProfileAsync` through the repository; tests.
-- [ ] 4. Audit: `AuthAuditEntries.UserProfileRefreshed` + subscription in `ThargaBlazorRegistration`; tests.
+- [x] 3. `UserServiceRepositoryBase.SetUserProfileAsync` through the repository; tests.
+      `UserServiceRepositoryBaseProfileRefreshTests` (3), through the real resolve path: only the changed value is
+      written (`SetNameAsync` / `SetEMailAsync`). Full suite 3398 green; no new warnings (all 13 unique warnings on a
+      clean build are pre-existing XML-doc ones in files this branch does not touch).
+- [~] 4. Audit: `AuthAuditEntries.UserProfileRefreshed` + subscription in `ThargaBlazorRegistration`; tests.
 - [ ] 5. Docs: `docs/articles/user-management.md`, `README.md`.
 - [ ] 6. Close-out: NuGet re-check, #320 comment, archive `plan/feature.md`, remove `plan/`, push + PR (with approval).
 
