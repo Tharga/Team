@@ -1,5 +1,6 @@
 using Blazored.LocalStorage;
 using Bunit;
+using Microsoft.JSInterop;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Radzen;
@@ -147,6 +148,7 @@ public class SupportCasesViewRenderTests : BunitContext
     [Fact]
     public void OpeningACaseWithUnreadMessages_MarksItRead()
     {
+        Attention().Setup<bool>("isAttended").SetResult(true);
         var view = RenderView(out var cases, unread: 1);
 
         cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Never);
@@ -157,6 +159,32 @@ public class SupportCasesViewRenderTests : BunitContext
         cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Once);
         Assert.Empty(view.FindAll("[data-unread]"));
     }
+
+    /// <summary>
+    /// A case left open on a page in the background must not swallow the answer that arrives: it stays unread,
+    /// and the counters keep saying so, until somebody comes back to the page.
+    /// </summary>
+    [Fact]
+    public async Task AnAnswerToAPageNobodyIsLookingAt_StaysUnread_UntilSomebodyLooks()
+    {
+        var attention = Attention();
+        attention.Setup<bool>("isAttended").SetResult(false);
+        attention.SetupVoid("whenAttended", _ => true);
+        var view = RenderView(out var cases, unread: 1);
+
+        Open(view, "Export is empty");
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Never);
+        Assert.Single(view.FindAll("[data-unread]"));
+
+        var waiting = (DotNetObjectReference<SupportAttention>)attention.VerifyInvoke("whenAttended").Arguments[1];
+        await view.InvokeAsync(() => waiting.Value.OnAttended());
+
+        cases.Verify(x => x.MarkReadAsync(TeamKey, Case.Id, default), Times.Once);
+        Assert.Empty(view.FindAll("[data-unread]"));
+    }
+
+    private BunitJSModuleInterop Attention() => JSInterop.SetupModule("./_content/Tharga.Team.Blazor/support-attention.js");
 
     [Fact]
     public void ADeepLink_OpensItsCase()
