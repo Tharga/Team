@@ -373,9 +373,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     /// </remarks>
     public async Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
     {
-        var filter = Builders<SupportCaseEntity>.Filter.And(
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity));
+        var filter = UnreadPopulation(teamKey, identity);
 
         var unread = new List<SupportCaseUnread>();
         await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
@@ -391,20 +389,23 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
     public async Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
     {
-        var filter = Builders<SupportCaseEntity>.Filter.And(
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
-            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity));
-
         var unread = 0;
-        await foreach (var entity in collection.GetAsync(filter).WithCancellation(cancellationToken))
+        await foreach (var entity in collection.GetAsync(UnreadPopulation(teamKey, identity)).WithCancellation(cancellationToken))
         {
-            var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity);
+            var read = Array.Find(entity.Reads ?? [], x => x.Identity == identity)?.LastReadSequence ?? 0;
 
-            if ((read?.LastReadSequence ?? 0) < entity.Messages.Length) unread++;
+            if (entity.Messages.Any(x => x.Sequence > read)) unread++;
         }
 
         return unread;
     }
+
+    // A conversation with the assistant is read as it happens, so its answers are never left waiting to be read.
+    private static FilterDefinition<SupportCaseEntity> UnreadPopulation(string teamKey, string identity)
+        => Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.TeamKey, teamKey),
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.AuthorIdentity, identity),
+            Builders<SupportCaseEntity>.Filter.Ne(x => x.AssistantState, SupportAssistantState.Active));
 
     public async Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
     {

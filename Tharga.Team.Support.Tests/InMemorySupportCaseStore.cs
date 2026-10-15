@@ -210,7 +210,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
     public Task<SupportCaseUnread[]> GetUnreadByCaseAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult<SupportCaseUnread[]>([.. _cases
-            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity)
+            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity && x.Case.AssistantState != SupportAssistantState.Active)
             .Select(x => new SupportCaseUnread
             {
                 CaseId = x.Case.Id,
@@ -220,7 +220,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
     public Task<int> GetUnreadCountAsync(string teamKey, string identity, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases
-            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity)
+            .Where(x => x.Case.TeamKey == teamKey && x.Case.AuthorIdentity == identity && x.Case.AssistantState != SupportAssistantState.Active)
             .Count(x => (_reads.TryGetValue((x.Case.Id, identity), out var read) ? read : 0) < x.Messages.Count));
 
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)

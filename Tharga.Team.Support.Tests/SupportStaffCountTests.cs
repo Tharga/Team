@@ -76,6 +76,28 @@ public class SupportStaffCountTests
         Assert.False((await staff.GetCaseAsync(TeamA, "case-bot")).AwaitingSupport);
     }
 
+    /// <summary>A conversation with the assistant is read as it happens, so its answers never wait to be read.</summary>
+    [Fact]
+    public async Task TheAssistantsAnswers_AreNeverUnread()
+    {
+        var store = new InMemorySupportCaseStore();
+        await store.AddCaseAsync(new SupportCase
+        {
+            Id = "case-bot",
+            TeamKey = TeamA,
+            AuthorIdentity = Alice,
+            AuthorName = Alice,
+            Subject = "Asking the bot",
+            Status = SupportCaseStatus.Open,
+            CreatedAt = DateTime.UtcNow,
+            MessageCount = 1,
+            AssistantState = SupportAssistantState.Active
+        }, new SupportMessage { Sequence = 1, Kind = SupportMessageKind.Assistant, Body = "Use the export button.", SentAt = DateTime.UtcNow });
+
+        Assert.Equal(0, await store.GetUnreadCountAsync(TeamA, Alice));
+        Assert.Empty(await store.GetUnreadByCaseAsync(TeamA, Alice));
+    }
+
     [Fact]
     public async Task TheCountAcrossTeams_IsRefusedWithoutTheCrossTeamGrant()
     {
