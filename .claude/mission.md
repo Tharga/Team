@@ -6,6 +6,10 @@ Team management infrastructure: Tharga.Team, Tharga.Team.Service, Tharga.Team.Mo
 
 - **CI**: GitHub Actions
 
+## Issue tracker
+
+None — a NuGet library; GitHub issues on Tharga/Team are the backlog and incoming requests, plans are file-based (`plan/` on the feature branch). Decided 2026-10-15.
+
 ## Workflow Overrides
 
 - The PR description is used for **release notes** — write it at a level suitable for package consumers (what changed, why, how to use it). Avoid internal implementation details.
