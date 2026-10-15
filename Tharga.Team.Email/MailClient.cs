@@ -1,6 +1,7 @@
 using MailKit;
 using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
+using MailKit.Security;
 using MailKit.Search;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -35,7 +36,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
 
     public async Task<MailSendResult> SendAsync(OutboundMail mail, CancellationToken cancellationToken = default)
     {
-        if (!CanSend) return MailSendResult.Failed("Support email is not configured for sending.");
+        if (!CanSend) return MailSendResult.Failed("Email is not configured for sending.");
         if (string.IsNullOrWhiteSpace(mail.To)) return MailSendResult.Failed("No recipient.");
 
         try
@@ -53,7 +54,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         catch (Exception e)
         {
             // The recipient is deliberately not logged: an address is personal data, and logs travel further than mail.
-            logger?.LogError(e, "A support mail could not be sent.");
+            logger?.LogError(e, "A mail could not be sent.");
 
             return MailSendResult.Failed(e.Message);
         }
@@ -113,13 +114,22 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
     /// </remarks>
     private static async Task ConnectAsync(IMailService client, MailServerOptions server, CancellationToken cancellationToken)
     {
-        await client.ConnectAsync(server.Host, server.Port ?? 0, server.UseSsl, cancellationToken);
+        await client.ConnectAsync(server.Host, server.Port ?? 0, SecurityOf(server), cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(server.UserName))
         {
             await client.AuthenticateAsync(server.UserName, server.Password, cancellationToken);
         }
     }
+
+    /// <remarks>
+    /// <c>UseSsl</c> on a submission port (587, 25) means STARTTLS, required — what <c>System.Net.Mail</c> meant
+    /// by it, and what SMTP on those ports speaks. Anywhere else it means TLS from the first byte (465, 993).
+    /// Without it, TLS is still used whenever the server offers it.
+    /// </remarks>
+    internal static SecureSocketOptions SecurityOf(MailServerOptions server) => server.UseSsl
+        ? server.Port is 587 or 25 ? SecureSocketOptions.StartTls : SecureSocketOptions.SslOnConnect
+        : SecureSocketOptions.StartTlsWhenAvailable;
 
     private static async Task<byte[]> RawAsync(MimeMessage message, CancellationToken cancellationToken)
     {

@@ -50,9 +50,9 @@ public record ThargaBlazorOptions : BlazorOptions
     public IconOptions Icon { get; set; } = new();
 
     /// <summary>
-    /// SMTP settings for the built-in email sender. When set — and no custom sender is registered via
-    /// <see cref="AddEmailService{T}"/> — <c>SmtpTeamEmailSender</c> is registered as
-    /// <see cref="ITeamEmailSender"/>. Leave null to send no email.
+    /// SMTP settings for invitation email. The sender that uses them comes from <c>Tharga.Team.Email</c>
+    /// (<c>services.AddThargaEmailInvitations()</c>) unless a custom one is registered via
+    /// <see cref="AddEmailService{T}"/>; with settings and no sender, startup logs a warning. Leave null to send no email.
     /// </summary>
     /// <remarks>
     /// <b>This is invitation delivery and nothing else</b>
