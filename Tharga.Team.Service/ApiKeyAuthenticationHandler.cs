@@ -18,6 +18,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     private readonly IAuditLogger _auditLogger;
     private readonly ITenantRoleService _tenantRoleService;
     private readonly ITeamService _teamService;
+    private readonly IUserService _userService;
 
     /// <summary>
     /// Creates a new instance of the API key authentication handler.
@@ -30,7 +31,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         IScopeRegistry scopeRegistry = null,
         CompositeAuditLogger auditLogger = null,
         ITenantRoleService tenantRoleService = null,
-        ITeamService teamService = null)
+        ITeamService teamService = null,
+        IUserService userService = null)
         : base(options, logger, encoder)
     {
         _apiKeyAdministrationService = apiKeyAdministrationService;
@@ -38,6 +40,58 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         _auditLogger = auditLogger;
         _tenantRoleService = tenantRoleService;
         _teamService = teamService;
+        _userService = userService;
+    }
+
+    /// <summary>
+    /// What a private key's owner may currently do in the key's team, or why the key must be refused.
+    /// </summary>
+    /// <remarks>
+    /// <b>A private key is its owner's credential, so it cannot outlive or outrank them</b> (Tharga/Team#323).
+    /// It used to be checked on its own: the key kept working after its owner was removed, suspended,
+    /// disabled or deleted, and kept the level it was minted at after the owner was demoted.
+    /// <para>
+    /// <b>The grant comes from <see cref="TeamGrantResolver.ResolveFromMemberAsync"/></b>, the single copy of
+    /// what a member may do, so a key and its owner's own session cannot disagree about the owner.
+    /// </para>
+    /// <para>
+    /// <b>Fails closed, unlike <see cref="IsTeamLiveAsync"/>.</b> A store fault refuses the key. A private
+    /// key is the case where a credential must stop with a person, and letting it through whenever the
+    /// owner cannot be looked up is exactly the window that matters. The blast radius is also smaller:
+    /// only private keys depend on this lookup, not every key on the deployment.
+    /// </para>
+    /// </remarks>
+    private async Task<(TeamGrant Grant, string Refusal)> ResolveOwnerAsync(IApiKey key)
+    {
+        if (_teamService == null || _userService == null)
+            return (null, "The owner of this private API key cannot be verified.");
+
+        try
+        {
+            var member = await _teamService.GetTeamMemberAsync(key.TeamKey, key.OwnerMemberKey);
+            if (member == null || member.State != MembershipState.Member)
+                return (null, "The owner of this private API key is no longer a member of the team.");
+            if (member.SuspendedAt != null)
+                return (null, "The owner of this private API key is suspended from the team.");
+
+            // The member key is the user key, so the user record is one read away.
+            var user = await _userService.GetUserByKeyAsync(key.OwnerMemberKey);
+            if (user == null)
+                return (null, "The owner of this private API key no longer exists.");
+            if (user.DisabledAt != null)
+                return (null, "The owner of this private API key is disabled.");
+
+            var grant = await new TeamGrantResolver(_teamService, _scopeRegistry, _tenantRoleService)
+                .ResolveFromMemberAsync(key.TeamKey, member);
+            return grant == null
+                ? (null, "The owner of this private API key holds no access to the team.")
+                : (grant, null);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not verify the owner of a private API key. Refusing the key.");
+            return (null, "The owner of this private API key could not be verified.");
+        }
     }
 
     /// <summary>
@@ -123,6 +177,17 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             return AuthenticateResult.Fail("The team this API key belongs to no longer exists.");
         }
 
+        TeamGrant ownerGrant = null;
+        if (key.TeamKey != null && !string.IsNullOrEmpty(key.OwnerMemberKey))
+        {
+            (ownerGrant, var refusal) = await ResolveOwnerAsync(key);
+            if (refusal != null)
+            {
+                LogAuthEvent(key.Name ?? key.TeamKey, key.TeamKey, key.Key, false, refusal);
+                return AuthenticateResult.Fail(refusal);
+            }
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.Name, key.Name ?? key.TeamKey ?? "system"),
@@ -147,22 +212,25 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         {
             // Team key: resolve scopes through registry
             var (accessLevel, roleNames, scopeOverrides) = ResolveKeyDetails(key);
+
+            IEnumerable<string> scopes = _tenantRoleService != null
+                ? await _tenantRoleService.GetEffectiveScopesAsync(key.TeamKey, accessLevel, roleNames, scopeOverrides)
+                : _scopeRegistry?.GetEffectiveScopes(accessLevel, roleNames, scopeOverrides) ?? [];
+
+            if (ownerGrant != null)
+            {
+                // Never more than the owner holds now: a key can narrow its owner's access, never widen it.
+                scopes = scopes.Intersect(ownerGrant.Scopes, StringComparer.Ordinal);
+                accessLevel = AccessLevelPrivilege.Clamp(accessLevel, ownerGrant.AccessLevel);
+                claims.Add(new Claim(TeamClaimTypes.ApiKeyOwner, key.OwnerMemberKey));
+            }
+
             claims.Add(new Claim(TeamClaimTypes.TeamKey, key.TeamKey));
             claims.Add(new Claim(TeamClaimTypes.AccessLevel, accessLevel.ToString()));
 
-            if (_tenantRoleService != null)
+            foreach (var scope in scopes)
             {
-                foreach (var scope in await _tenantRoleService.GetEffectiveScopesAsync(key.TeamKey, accessLevel, roleNames, scopeOverrides))
-                {
-                    claims.Add(new Claim(TeamClaimTypes.Scope, scope));
-                }
-            }
-            else if (_scopeRegistry != null)
-            {
-                foreach (var scope in _scopeRegistry.GetEffectiveScopes(accessLevel, roleNames, scopeOverrides))
-                {
-                    claims.Add(new Claim(TeamClaimTypes.Scope, scope));
-                }
+                claims.Add(new Claim(TeamClaimTypes.Scope, scope));
             }
 
             foreach (var tag in key.Tags ?? Array.Empty<Tag>())
