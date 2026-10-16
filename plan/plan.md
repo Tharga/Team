@@ -15,9 +15,10 @@ Branch: `feature/personal-api-keys` (from `master` after PR #324 merged; GitHub 
   - The shape copies the purge cascade. A new public `ITeamMemberRemovalParticipant` (hosts can add their own) and `TeamMemberRemovalCascade`, invoked from `AuthorizationTeamServiceDecorator` after each of `RemoveMemberAsync`, `LeaveTeamAsync` (current user via `IUserService`) and `RemoveUserFromAllTeamsAsync`. For the last, teams are read **before** removal, across every `AccessLevel`. The cascade never throws: the removal already happened, and authentication is the guarantee. `ApiKeyOwnerRemovalParticipant` goes through `IApiKeyAdministrationService`, so it covers a host's key store and fires lifecycle handlers; it is a no-op without a key service. Registered with `TryAddEnumerable` in the composition root.
   - Also fixed: `o.ApiKey` forwarding in `ThargaTeamRegistration` was a hand-written list (the #177 defect class); it is now `OptionsForwarder.Copy`, guarded by `ForwardsEveryApiKeyOption`.
   - Tests: 12 in `ApiKeyOwnerRemovalTests` + 2 in `AddThargaTeamTests`. Service 1217/1217, Blazor 1421/1421.
-- [~] 5. Sample: map `apikeys:oversee` to the Developer role.
-- [ ] 6. Full test suite; commit.
-- [ ] 7. Push the branch for the user to test (no PR yet).
+- [x] 5. Sample: map `apikeys:oversee` to the Developer role.
+- [x] 6. Full test suite; commit.
+  - Whole solution 3476/3476, none skipped.
+- [x] 7. Push the branch for the user to test (no PR yet).
 
 ## Notes
 
@@ -25,7 +26,7 @@ Branch: `feature/personal-api-keys` (from `master` after PR #324 merged; GitHub 
 
 ## Last session
 
-2026-10-16 — Branch created, no NuGet updates, plan written. Next: confirm the plan and decisions D1–D3, then step 1.
+2026-10-16 — All steps done and pushed for testing. Next: the user tests in the sample (create a private key, then remove, suspend or demote its owner); then close-out (NuGet re-check, docs, plan 05 v4 note, Requests.md note, version line 3.28, archive the plan, remove `plan/`, open the PR closing #323).
 
 ## README / docs changes needed at close
 
