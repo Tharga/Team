@@ -31,7 +31,16 @@ internal static class MailRoute
                 : new MailRouteDecision(key.TeamKey, parsed.ItemKey, address, MailRouteReason.RetiringKey, key.RetiresAt);
         }
 
-        return Postmaster(null, deliveredTo.FirstOrDefault(), MailRouteReason.UnknownAddress);
+        return Postmaster(null, Intended(deliveredTo, options), MailRouteReason.UnknownAddress);
+    }
+
+    // A catch-all names its own mailbox first, so the address the sender wrote is the first one on our domain that is not that mailbox.
+    private static string Intended(IReadOnlyList<string> deliveredTo, TeamMailboxOptions options)
+    {
+        var mailbox = options.Mail?.Imap?.UserName;
+        var suffix = "@" + options.Domain;
+        return deliveredTo.FirstOrDefault(x => x.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && !string.Equals(x, mailbox, StringComparison.OrdinalIgnoreCase))
+               ?? deliveredTo.FirstOrDefault();
     }
 
     private static MailRouteDecision Postmaster(string itemKey, string deliveredTo, MailRouteReason reason) => new(null, itemKey, deliveredTo, reason, null);

@@ -88,6 +88,30 @@ public class MailRouteTests
     }
 
     [Fact]
+    public async Task ACatchAllNamesItsOwnMailboxFirst_SoThePostmasterRecordsTheAddressTheSenderWrote()
+    {
+        var options = new TeamMailboxOptions { Domain = "fortdocs.app", Suffix = "-case" };
+        options.Mail.Imap.UserName = "inkorg@fortdocs.app";
+
+        var decision = await MailRoute.DecideAsync(["inkorg@fortdocs.app", "random123@fortdocs.app", "kund@example.org"], options, Lookup, Now);
+
+        Assert.Null(decision.TeamKey);
+        Assert.Equal("random123@fortdocs.app", decision.DeliveredTo);
+    }
+
+    [Fact]
+    public async Task ACatchAllsOwnMailbox_NeverHidesAnOrganisationsAddressBehindIt()
+    {
+        var options = new TeamMailboxOptions { Domain = "fortdocs.app", Suffix = "-case" };
+        options.Mail.Imap.UserName = "inkorg@fortdocs.app";
+
+        var decision = await MailRoute.DecideAsync(["inkorg@fortdocs.app", "primarykey01-case@fortdocs.app"], options, Lookup, Now);
+
+        Assert.Equal("team-a", decision.TeamKey);
+        Assert.Equal("primarykey01-case@fortdocs.app", decision.DeliveredTo);
+    }
+
+    [Fact]
     public async Task NoRecipientAtAll_GoesToThePostmaster()
     {
         var decision = await Route();
