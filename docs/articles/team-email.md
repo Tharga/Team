@@ -89,6 +89,25 @@ before that mail and reads it again next time; the mails before it in the batch 
 
 The mailbox is only ever read: nothing is marked, moved or deleted on the server.
 
+**A forwarding catch-all names its own mailbox first.** A catch-all that forwards to a mailbox — cPanel's *Default
+Address*, for example — writes that mailbox into `Delivered-To` and keeps the address the sender wrote in
+`Envelope-To`. Routing reads every delivery header and skips any address that is not a team's, so the mail still
+reaches its team; and for mail no team claims, the postmaster records the first address on your domain that is not
+the catch-all mailbox itself (`TeamMailboxOptions.Mail.Imap.UserName`), so staff see who the sender meant.
+
+Setting one up:
+
+- Point the domain's catch-all at one mailbox, and give that mailbox's IMAP settings to `TeamMailboxOptions.Mail`.
+- Turn off any automatic folders for plus-addressing (`name+tag@`) on that mailbox: item addresses use `+`, and the
+  poller reads one folder (`Mail.Folder`, `INBOX` by default).
+- Send a test mail to an address nobody owns and check that the postmaster shows that address, not the mailbox's.
+
+### Health
+
+`ITeamMailboxHealth.CheckAsync` connects to the catch-all mailbox and opens its folder read-only, and returns a
+`MailboxHealth` (`IsConfigured`, `IsReachable`, `Error`) without throwing. Put it on your health endpoint: the
+poller only logs a failed read, so a wrong password otherwise shows as mail that never arrives.
+
 ### What a host does with the mail
 
 Nothing is registered anywhere automatically. `ITeamMailboxService` lists a team's mail, opens one, returns its
