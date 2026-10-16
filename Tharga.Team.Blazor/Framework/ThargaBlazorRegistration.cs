@@ -127,6 +127,17 @@ public static class ThargaBlazorRegistration
                                 logger?.LogWarning(ex, "Failed to audit the creation of a user on first sign-in.");
                             }
                         };
+                        auditable.UserProfileRefreshedEvent += (_, e) =>
+                        {
+                            try
+                            {
+                                auditLogger.Log(AuthAuditEntries.UserProfileRefreshed(e.User, e.Name, e.EMail, e.Principal, identityResolver));
+                            }
+                            catch (Exception ex)
+                            {
+                                logger?.LogWarning(ex, "Failed to audit a profile refreshed from a sign-in.");
+                            }
+                        };
                     }
                 }
 

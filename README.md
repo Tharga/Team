@@ -176,6 +176,22 @@ builder.AddThargaTeam(o =>
 
 Leave it unset and nothing changes. See [Which claim identifies a user](docs/articles/implementation-guide.md#which-claim-identifies-a-user).
 
+## Keeping name and email current from the sign-in
+
+A user's `Name` and `EMail` are stored once, on the first sign-in. To have them follow the sign-in for providers you
+trust — one that verifies who the person is, say — override `ShouldRefreshProfile` on your user service:
+
+```csharp
+protected override bool ShouldRefreshProfile(ClaimsPrincipal claimsPrincipal)
+    => claimsPrincipal.FindFirst("http://schemas.microsoft.com/identity/claims/identityprovider")?.Value
+        ?.StartsWith("https://id.example.com/", StringComparison.OrdinalIgnoreCase) == true;
+```
+
+Only a non-empty value that differs is written, a name guessed from the email address never replaces a real one,
+and a failure never fails the sign-in. Each refresh is audited as `auth/user-profile-refreshed`. Off by default.
+A custom `IUserRepository` must implement the new `SetEMailAsync`. See
+[Keeping name and email current from trusted sign-ins](docs/articles/user-management.md#keeping-name-and-email-current-from-trusted-sign-ins).
+
 ## Extending the member grid
 
 A host that adds a field to its member type can surface it on the member row itself rather than in a second

@@ -38,7 +38,7 @@ builder.Services.AddScoped<IInboundMailContentStore, MyBlobContentStore>();
 builder.Services.AddThargaEmailInvitations();   // settings from o.Email, or pass them here
 ```
 
-The SMTP invitation sender, through the same transport and the outbound mail policy. **New in 3.26** — it replaces `SmtpTeamEmailSender`, which lived in `Tharga.Team.Service`; `o.Email` alone no longer registers a sender.
+The SMTP invitation sender, through the same transport and the outbound mail policy. **New in 3.27** — it replaces `SmtpTeamEmailSender`, which lived in `Tharga.Team.Service`; `o.Email` alone no longer registers a sender.
 
 ## Moving from Tharga.Team.Support
 

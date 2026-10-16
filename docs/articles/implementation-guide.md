@@ -1704,7 +1704,7 @@ On the granular path set these on `AddThargaTeamBlazor`; on the facade set them 
 `o.Blazor` section — the facade's own `Email` wins if both are set).
 
 > [!IMPORTANT]
-> **Changed in 3.26:** `o.Email` alone no longer registers a sender. The SMTP sender moved to `Tharga.Team.Email`
+> **Changed in 3.27:** `o.Email` alone no longer registers a sender. The SMTP sender moved to `Tharga.Team.Email`
 > (MailKit, one SMTP stack with support mail), so `Tharga.Team.Service` carries no mail code; install the package
 > and call `AddThargaEmailInvitations()`. With settings and no sender, startup logs a warning saying so.
 
@@ -1746,7 +1746,7 @@ Or in code: `builder.Services.Configure<OutboundMailPolicyOptions>(o => o.Addres
   as well if wanted.
 - **Allowed domains may also be one value**, separated by commas or semicolons —
   `Email__Override__AllowedDomains=example.com,example.se`, the shape a pipeline variable or app setting writes.
-  Before 3.26 that bound to no domain at all, so every recipient was redirected.
+  Before 3.27 that bound to no domain at all, so every recipient was redirected.
 - **A value like `$(MailOverride)`** — an undefined pipeline variable arriving as its own name — counts as unset.
 - **At startup, outside production**, the log states the policy in force, and warns when everything is being
   withheld.
