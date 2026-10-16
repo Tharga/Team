@@ -87,6 +87,12 @@ identity whose `IssuerAssignedId` is the upstream subject — the key for linkin
 account in an older system. Needs only `User.Read.All`. An unknown directory id throws
 `InvalidOperationException`, as deletion and renaming do; a user with no identities yields an empty list.
 
+To read many users at once, `GetIdentitiesByIdsAsync(directoryIds)` makes one Graph request per 15 ids
+(`GET /users?$filter=id in (...)&$select=id,identities`) and returns a `DirectoryUserIdentities` per user
+Graph knows. Unknown ids are left out. This is what the **Sign-in** column in `UsersView` uses, one call
+per visible page. Name the providers with `o.Blazor.SignInMethods` (see *User management & directory* in
+the docs).
+
 ## Entra app-registration permissions
 
 Grant the app registration **application** (app-only) Graph permissions, with admin consent:
