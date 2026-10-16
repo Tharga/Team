@@ -13,6 +13,9 @@ internal sealed class MongoTeamMailStore(IInboundMailCollection collection) : IT
 
     public async Task<bool> AddAsync(InboundMailItem item, CancellationToken cancellationToken = default)
     {
+        // Every instance reads the mailbox, so a mail already taken in is the ordinary case; asking first keeps it out of the error log.
+        if (await collection.CountAsync(Filter.Eq(x => x.MailId, item.Id)) > 0) return false;
+
         try
         {
             await collection.AddAsync(ToEntity(item));

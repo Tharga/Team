@@ -41,6 +41,18 @@ public class TeamMailStoreTests
     }
 
     [Fact]
+    public async Task AMailAlreadyTakenIn_IsNotAddedAgain_SoAnotherInstanceReadingItIsNoError()
+    {
+        _collection.CountAsync(Arg.Do<FilterDefinition<InboundMailEntity>>(x => _sent = x)).Returns(1L);
+
+        var added = await new MongoTeamMailStore(_collection).AddAsync(Item());
+
+        Assert.False(added);
+        Assert.Contains("\"MailId\" : \"mail-1\"", Render(_sent));
+        await _collection.DidNotReceive().AddAsync(Arg.Any<InboundMailEntity>());
+    }
+
+    [Fact]
     public async Task ATeamsUnhandledCount_NamesTheTeam_AndCountsOnlyMailWithNoOutcome()
     {
         _collection.CountAsync(Arg.Do<FilterDefinition<InboundMailEntity>>(x => _sent = x)).Returns(2L);
