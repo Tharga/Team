@@ -57,14 +57,9 @@ public static class ThargaTeamRegistration
                 .AddAuthentication()
                 .AddThargaApiKeyAuthentication(o =>
                 {
-                    // Keep in sync with ApiKeyOptions — forward every setting the consumer set on o.ApiKey.
-                    o.AdvancedMode = options.ApiKey.AdvancedMode;
-                    o.AutoKeyCount = options.ApiKey.AutoKeyCount;
-                    o.AutoLockKeys = options.ApiKey.AutoLockKeys;
-                    o.MaxExpiryDays = options.ApiKey.MaxExpiryDays;
-                    o.LastUsedThrottle = options.ApiKey.LastUsedThrottle;
-                    o.MinKeyLength = options.ApiKey.MinKeyLength;
-                    o.MaxKeyLength = options.ApiKey.MaxKeyLength;
+                    // Every public setting, by reflection. This was a hand-written list kept "in sync" by
+                    // comment -- the shape that silently dropped options twice before (Tharga/Team#177).
+                    OptionsForwarder.Copy(options.ApiKey, o);
                 });
 
             builder.Services.AddThargaApiKeys();

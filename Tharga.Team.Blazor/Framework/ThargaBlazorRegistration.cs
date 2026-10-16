@@ -67,6 +67,12 @@ public static class ThargaBlazorRegistration
         // lifetime and a startup failure to lose.
         services.TryAddScoped<TeamPurgeCascade>();
 
+        // The same shape for someone leaving a team: removal, leaving, and user deletion each run the
+        // participants afterwards. Private API keys are the first; they are cleaned up through
+        // IApiKeyAdministrationService, so this covers a host's own key store too (Tharga/Team#323).
+        services.TryAddScoped<TeamMemberRemovalCascade>();
+        services.TryAddEnumerable(ServiceDescriptor.Transient<ITeamMemberRemovalParticipant, ApiKeyOwnerRemovalParticipant>());
+
         if (o._teamService != null)
         {
             services.AddScoped<ITeamStateService, TeamStateService>();
@@ -515,7 +521,8 @@ public static class ThargaBlazorRegistration
             var dynamicRoleOptions = sp.GetService<DynamicTenantRoleOptions>();
             var purgeCascade = sp.GetService<TeamPurgeCascade>();
             var consentOptions = sp.GetService<IOptions<ConsentOptions>>()?.Value;
-            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade, consentOptions);
+            var memberRemovalCascade = sp.GetService<TeamMemberRemovalCascade>();
+            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade, consentOptions, memberRemovalCascade);
         });
     }
 
