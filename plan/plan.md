@@ -15,9 +15,11 @@ Branch: `feature/user-sign-in-methods` (from `master`, GitHub Actions flow).
   - The option has a public setter so `ThargaBlazorOptionsForwarder` carries it from `o.Blazor` on the facade path. Extra fallbacks: `userName` → "Username", unknown types show the raw type, a non-URL issuer is shown as is. A throwing host mapping counts as no match. Fallback labels come in through `SignInFallbackLabels` so the component can translate them. 11 tests in `SignInMethodResolverTests`; Blazor suite 1410/1410.
 - [x] 5. `UsersListView` "Sign-in" column: gate, lazy per-visible-page load with a cache, refresh on page/sort/filter, degraded rendering on failure. Text keys + coverage. Gate tests.
   - Loads in `OnAfterRenderAsync` from `_grid.PagedView`, so paging, sorting, filtering and reloads need no per-event wiring. `UserAdminGate.PendingSignInRows` skips rows already read or failed, so it cannot loop. A cache keyed by user survives `LoadDataAsync`. Cell states: Not linked (with a hint), loading spinner, None, chips (optional icon), Unavailable (with the error in a tooltip). The registration is checked through `IServiceProviderIsService`, never resolved, and `SignInMethodOptions` comes through `GetService` with a fallback, so granular-path hosts cannot lose the circuit. 9 text keys. Tests: gate + pending rows in `UserAdminGateTests`, plus `SignInMethodOptionsRegistrationTests` for both entry points. Blazor suite 1419/1419.
-- [~] 6. Sample site: map an example provider so the column is visible.
-- [ ] 7. Run the full test suite; commit.
-- [ ] 8. Push the branch for the user to test (no PR yet).
+- [x] 6. Sample site: map an example provider so the column is visible.
+  - Maps a Google issuer to "Google". The column appears only when the sample's Entra directory is configured (`AzureAd:ClientSecret` in user secrets).
+- [x] 7. Run the full test suite; commit.
+  - Whole solution 3443/3443, none skipped, across all 7 test projects.
+- [x] 8. Push the branch for the user to test (no PR yet).
 
 ## Notes
 
@@ -25,7 +27,7 @@ Branch: `feature/user-sign-in-methods` (from `master`, GitHub Actions flow).
 
 ## Last session
 
-2026-10-16 — Branch created, no NuGet updates available, plan written. Next: confirm the plan, then step 1.
+2026-10-16 — All steps done and pushed for testing. Next: the user tests the column in the sample (Entra configured) and gives feedback; then close-out (NuGet re-check, docs, close #322, propose the filter follow-up, archive the plan, remove `plan/`, open the PR).
 
 ## README / docs changes needed at close
 
