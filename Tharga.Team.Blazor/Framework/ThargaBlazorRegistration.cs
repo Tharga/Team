@@ -355,6 +355,7 @@ public static class ThargaBlazorRegistration
         }
 
         RegisterIcons(services, o);
+        services.AddSingleton(o.SignInMethods ?? new SignInMethodOptions());
         RegisterEmail(services, o);
 
         services.AddSingleton(Options.Create(o));
