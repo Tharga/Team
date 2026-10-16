@@ -11,7 +11,8 @@ namespace Tharga.Team.Service;
 /// </summary>
 public class ApiKeyManagementService : IApiKeyManagementService
 {
-    // Matches Tharga.Team.Blazor.Framework.Roles.Developer (not referenceable from this assembly).
+    // Matches Tharga.Team.Blazor.Framework.Roles.Developer (not referenceable from this assembly). Legacy
+    // oversight only: SystemApiKeyScopes.Oversee replaces it, and it is removed in 4.0.
     private const string DeveloperRole = "Developer";
 
     private readonly IApiKeyAdministrationService _inner;
@@ -26,7 +27,7 @@ public class ApiKeyManagementService : IApiKeyManagementService
     public async IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false)
     {
         var callerMemberKey = GetCallerMemberKey();
-        var isDeveloper = IsDeveloper();
+        var canOversee = CanOversee();
         var privilegedAllowed = allowPrivileged && IsPrivileged();
 
         await foreach (var key in _inner.GetKeysAsync(teamKey))
@@ -47,8 +48,8 @@ public class ApiKeyManagementService : IApiKeyManagementService
                 continue;
             }
 
-            // PrivateKeyScope.All — own + Developer (audit) + privileged (when the host opted in).
-            if (isOwner || isDeveloper || privilegedAllowed) yield return key;
+            // PrivateKeyScope.All — own + oversight (apikeys:oversee, or Developer until 4.0) + privileged (when the host opted in).
+            if (isOwner || canOversee || privilegedAllowed) yield return key;
         }
     }
 
@@ -102,7 +103,7 @@ public class ApiKeyManagementService : IApiKeyManagementService
     }
 
     /// <summary>
-    /// Guards mutation of an owner-scoped (private) key: only the owner, or a Developer-role caller (audit
+    /// Guards mutation of an owner-scoped (private) key: only the owner, or a caller with oversight (audit
     /// escape), may recycle/lock/delete/edit it. Team-wide keys (and unknown keys) pass through.
     /// </summary>
     private async Task EnsureCanMutateAsync(string teamKey, string key)
@@ -117,7 +118,7 @@ public class ApiKeyManagementService : IApiKeyManagementService
 
         var callerMemberKey = GetCallerMemberKey();
         var isOwner = callerMemberKey != null && target.OwnerMemberKey == callerMemberKey;
-        if (isOwner || IsDeveloper()) return;
+        if (isOwner || CanOversee()) return;
 
         throw new UnauthorizedAccessException("This API key is private to another member and can only be managed by its owner.");
     }
@@ -125,8 +126,21 @@ public class ApiKeyManagementService : IApiKeyManagementService
     private string GetCallerMemberKey()
         => _httpContextAccessor?.HttpContext?.User?.FindFirst(TeamClaimTypes.MemberKey)?.Value;
 
-    private bool IsDeveloper()
-        => _httpContextAccessor?.HttpContext?.User?.IsInRole(DeveloperRole) ?? false;
+    /// <summary>
+    /// Whether the caller may see and manage other members' private keys: the
+    /// <see cref="SystemApiKeyScopes.Oversee"/> system scope, or — until 4.0 — the <c>Developer</c> role.
+    /// </summary>
+    /// <remarks>
+    /// The scope is read as a <i>system</i> grant (<see cref="TeamClaimTypes.SystemScope"/>), never as a team
+    /// scope, so a team role cannot be configured to reach other members' keys. The role is kept so hosts
+    /// that relied on it do not lose oversight silently on upgrade (Tharga/Team#323).
+    /// </remarks>
+    private bool CanOversee()
+    {
+        var user = _httpContextAccessor?.HttpContext?.User;
+        if (user == null) return false;
+        return user.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee) || user.IsInRole(DeveloperRole);
+    }
 
     private bool IsPrivileged()
     {

@@ -255,6 +255,7 @@ public static class ThargaBlazorRegistration
                 scopes.Register(SystemTeamScopes.Purge, "Permanently remove a soft-deleted team and drop its storage. Irreversible, and the only team operation needing the database privilege to drop data.");
                 scopes.Register(SystemUserScopes.Manage, "Administer users (cross-team): verify against the external directory, list directory-only users, and delete users.");
                 scopes.Register(SystemTeamScopes.Manage, "Rename any team and set its icon (cross-team). Does not grant consent or custom-role changes.");
+                scopes.Register(SystemApiKeyScopes.Oversee, "See and manage other members' private API keys in any team, to investigate an incident or retire a departed person's keys.");
                 // Demo mode. A system grant because the operation drops system scopes and application
                 // roles -- inert for a caller holding none, which is every customer's own team owner. The
                 // run-as half stays a team scope at Administrator (Tharga/Team#223).
