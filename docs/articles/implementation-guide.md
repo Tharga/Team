@@ -1348,10 +1348,33 @@ By default every team key is visible to all team admins and any Owner can recycl
 - **Mint** — server-side via `IApiKeyAdministrationService.CreateKeyAsync(..., ownerMemberKey: currentMember.Key)`, or from the UI via the "Private (only me)" toggle (which calls `IApiKeyManagementService.CreateKeyAsync(ownerScoped: true)`; the service forces the owner to the *caller's own* member key — a caller can't mint a key owned by someone else).
 - **Visibility / mutation** are enforced in `ApiKeyManagementService` from the authenticated principal (a `MemberKey` claim, added by the claims transformation):
   - **Owner** sees and manages their own private keys.
-  - **Developer role** sees and manages all (audit/incident escape).
+  - **Oversight** — a caller holding the `apikeys:oversee` system scope (`SystemApiKeyScopes.Oversee`) sees and manages all (audit/incident escape). Map it to a role like any other system scope: `o.ConfigureSystemRoles = roles => roles.Map("Administrator", SystemApiKeyScopes.Oversee);`. A *team* scope with the same name does not count. The legacy `Developer` role still grants oversight until 4.0; map the scope explicitly if you rely on it.
   - **Privileged access levels** (Administrator/Owner) can *see* private keys **only when the host opts in** — and remain **view-only** (they cannot recycle/lock/delete others').
 - **`ApiKeyView` parameters** — `ShowPrivateKeys` (`None` default / `Mine` / `All`) and `AllowPrivilegedAccess` (default false; only meaningful with `All`). The actual visibility is always intersected with the caller's identity server-side, so the flags can never reveal a key the caller isn't entitled to.
 - Existing keys have a null `OwnerMemberKey` (team-wide) — behaviour is unchanged unless you opt in. Not to be confused with **system keys** (team-less infra keys via `SystemApiKeyView`); private keys are still team-scoped.
+
+#### A private key ends with its owner
+
+A private key acts *on behalf of* its owner, so on every request the authentication handler checks the owner as well as the key:
+
+- **Refused** when the owner is no longer a member of the team (removed, left, or never accepted the invitation), is suspended, or their user is disabled or deleted. Each refusal is audited as an authentication failure with its reason. Lifting the suspension or re-enabling the user brings the key back.
+- **Fail closed** — if the owner cannot be looked up (the store faults, or no team/user service is registered), the key is refused.
+- **Never more than the owner** — the key's effective scopes are its own scopes **intersected** with what the owner holds now (role, tenant roles, scope overrides), and its `AccessLevel` claim is the less privileged of the key's and the owner's. Demoting the owner narrows the key on the next request.
+- **`ApiKeyOwner` claim** (`TeamClaimTypes.ApiKeyOwner`) carries the owner's user key, so an API can tell who a request acts for. It is deliberately not a `MemberKey` claim: the key is not itself a member.
+
+Team-wide keys are unaffected and never trigger an owner lookup.
+
+#### Cleanup when the owner leaves
+
+When someone stops being a member — `RemoveMemberAsync`, `LeaveTeamAsync`, or `RemoveUserFromAllTeamsAsync` (user deletion) — their private keys in that team are **deleted** by default. To keep them for audit instead, disable them:
+
+```csharp
+o.ApiKey.OwnerRemovedAction = PrivateKeyOwnerRemovedAction.Disable;
+```
+
+Cleanup goes through `IApiKeyAdministrationService`, so it covers a custom key store and notifies registered `IApiKeyLifecycleHandler`s. It runs after the removal succeeds and never fails it; authentication is the guarantee, cleanup is housekeeping.
+
+The hook is public: implement `ITeamMemberRemovalParticipant` and register it with `services.TryAddEnumerable(ServiceDescriptor.Transient<ITeamMemberRemovalParticipant, MyCleanup>())` to clean up your own per-member data the same way.
 
 ### Verification
 
