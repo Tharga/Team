@@ -107,6 +107,54 @@ directory user to an identity in another system. `AddThargaEntraUserDirectory` r
 directory id throws `InvalidOperationException`. It is unchecked, so call it only from code that has
 already authorized the caller.
 
+`GetIdentitiesByIdsAsync(directoryIds)` reads several users at once and returns one
+`DirectoryUserIdentities(DirectoryId, Identities)` per id the directory knows; unknown ids are left out
+rather than failing the read. Entra answers it with one Graph request per 15 ids
+(`GET /users?$filter=id in (...)&$select=id,identities`). A custom `IUserIdentityDirectory` gets a default
+implementation that calls `GetIdentitiesAsync` once per id, so it keeps working unchanged; override it if
+your directory can read many users in one request.
+
+For administration UI, use the gated `IUserManagementService.GetSignInIdentitiesAsync(userKeys)` instead.
+It requires `users:manage`, maps your user keys to directory ids, makes one batch read and returns
+`UserSignInIdentities(UserKey, Identities)`. Users with no directory id are left out.
+
+### Showing how users sign in
+
+When an `IUserIdentityDirectory` is registered (`AddThargaEntraUserDirectory` registers one), `UsersView`
+shows a **Sign-in** column to holders of `users:manage`, with one chip per way the user signs in. Only the
+rows on the visible page are read, in a single directory call, so the cost does not grow with the number
+of users. A user with no directory link shows *Not linked*. A directory failure marks the column
+*Unavailable*, with the error in the tooltip, and leaves the rest of the grid working.
+
+The directory reports identities in its own terms, a sign-in type and an issuer. Name them from your host:
+
+```csharp
+builder.AddThargaTeam(o =>
+{
+    o.Blazor.SignInMethods.Add(identity => identity.Issuer == "https://broker.example/"
+        ? new SignInMethod("e-ID", iconUrl: "/images/eid.svg")
+        : null);
+});
+```
+
+Mappings are tried in the order added, and the first that returns a `SignInMethod` wins. Return `null`
+for an identity a mapping does not recognise. Identities no mapping claims fall back:
+
+| Sign-in type | Shown as |
+|---|---|
+| `federated` | The issuer's host name (e.g. `broker.example`) |
+| `emailAddress` | *Email* |
+| `userName` | *Username* |
+| `userPrincipalName` | Hidden; set `o.Blazor.SignInMethods.ShowUserPrincipalName = true` to show it as *Account* |
+| anything else | The sign-in type itself |
+
+Entra gives every user a `userPrincipalName` identity, which is why it is hidden by default: it says
+nothing about how the user actually signs in. A mapping that throws is treated as not matching. Chips
+with the same label are shown once.
+
+A host with its own `IUserManagementService` implementation shows no sign-in methods until it implements
+`GetSignInIdentitiesAsync`. The interface's default returns nothing, so existing implementations still compile.
+
 When no directory service is registered, all directory features (verify actions, the Directory column,
 the directory-only tab, the delete-from-directory opt-in) are hidden — the rest of user administration
 still works.

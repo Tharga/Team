@@ -266,7 +266,8 @@ public static class ThargaBlazorRegistration
                 sp.GetRequiredService<IUserService>(),
                 sp.GetRequiredService<ITeamService>(),
                 sp.GetService<IUserDirectoryService>(),
-                o.WriteNameToDirectory));
+                o.WriteNameToDirectory,
+                sp.GetService<IUserIdentityDirectory>()));
 
             // Server-side claims enrichment — always registered, reads selected_team_id cookie.
             // The membership/consent claim computation is shared with the in-circuit revalidator below.
@@ -354,6 +355,7 @@ public static class ThargaBlazorRegistration
         }
 
         RegisterIcons(services, o);
+        services.AddSingleton(o.SignInMethods ?? new SignInMethodOptions());
         RegisterEmail(services, o);
 
         services.AddSingleton(Options.Create(o));

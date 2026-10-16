@@ -74,6 +74,13 @@ builder.AddThargaTeam(o =>
     o.Blazor.Consent.Roles = ["Developer"];
     o.Blazor.Consent.GrantTeamsRead = true;
 
+    // Names for the Sign-in column on /users (shown once the Entra directory below is configured). The
+    // directory reports an issuer URL; only the host knows what to call it. Unmapped federated identities
+    // fall back to the issuer's host name, and email identities show as "Email".
+    o.Blazor.SignInMethods.Add(identity => identity.Issuer?.Contains("google", StringComparison.OrdinalIgnoreCase) == true
+        ? new SignInMethod("Google")
+        : null);
+
     // Demo: localize the team menu strings (here to Swedish). A real app would bridge to its content system.
     o.Blazor.AddTextProvider<SampleMenuTextProvider>();
 
