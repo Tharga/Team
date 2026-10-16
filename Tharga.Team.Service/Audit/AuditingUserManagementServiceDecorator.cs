@@ -155,6 +155,9 @@ public class AuditingUserManagementServiceDecorator : IUserManagementService
     public IAsyncEnumerable<DirectoryUser> GetDirectoryOnlyUsersAsync(CancellationToken cancellationToken = default)
         => _inner.GetDirectoryOnlyUsersAsync(cancellationToken);
 
+    public Task<UserSignInIdentities[]> GetSignInIdentitiesAsync(IEnumerable<string> userKeys, CancellationToken cancellationToken = default)
+        => _inner.GetSignInIdentitiesAsync(userKeys, cancellationToken);
+
     private static Dictionary<string, string> Meta(params (string Key, string Value)[] pairs)
     {
         var metadata = new Dictionary<string, string>();

@@ -67,6 +67,12 @@ public sealed class AuthorizationUserManagementServiceDecorator : IUserManagemen
         }
     }
 
+    public async Task<UserSignInIdentities[]> GetSignInIdentitiesAsync(IEnumerable<string> userKeys, CancellationToken cancellationToken = default)
+    {
+        await RequireUsersManageAsync(nameof(GetSignInIdentitiesAsync));
+        return await _inner.GetSignInIdentitiesAsync(userKeys, cancellationToken);
+    }
+
     private async Task RequireUsersManageAsync(string operation)
     {
         if (await _authorizer.HasSystemScopeAsync(SystemUserScopes.Manage)) return;
