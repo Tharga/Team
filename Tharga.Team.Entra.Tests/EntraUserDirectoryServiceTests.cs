@@ -311,4 +311,95 @@ public class EntraUserDirectoryServiceTests
 
         Assert.Empty(handler.Requests);
     }
+
+    // ---- GetIdentitiesByIdsAsync ----
+
+    [Fact]
+    public async Task GetIdentitiesByIds_OneFilteredRequest_SelectingIdAndIdentities()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK,
+            """{"value":[{"id":"oid-1","identities":[{"signInType":"emailAddress","issuer":"contoso","issuerAssignedId":"a@b.c"}]},{"id":"oid-2","identities":[]}]}""");
+
+        var result = await sut.GetIdentitiesByIdsAsync(["oid-1", "oid-2"]);
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Get, request.Method);
+        Assert.Equal($"{BaseAddress}users?$filter=id in ('oid-1','oid-2')&$select=id,identities", Uri.UnescapeDataString(request.Uri));
+        Assert.Equal("Bearer token-123", request.Authorization);
+        Assert.Equal(["oid-1", "oid-2"], result.Select(x => x.DirectoryId));
+        Assert.Equal(new DirectoryUserIdentity("emailAddress", "contoso", "a@b.c"), Assert.Single(result[0].Identities));
+        Assert.Empty(result[1].Identities);
+    }
+
+    [Fact]
+    public async Task GetIdentitiesByIds_ChunksAtFifteenIds()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK, """{"value":[]}""");
+        handler.Enqueue(HttpStatusCode.OK, """{"value":[]}""");
+
+        await sut.GetIdentitiesByIdsAsync(Enumerable.Range(1, 16).Select(i => $"oid-{i}"));
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(15, Uri.UnescapeDataString(handler.Requests[0].Uri).Split("'oid-").Length - 1);
+        Assert.Contains("'oid-16'", Uri.UnescapeDataString(handler.Requests[1].Uri));
+    }
+
+    [Fact]
+    public async Task GetIdentitiesByIds_ReturnsInRequestedOrder_LeavingOutUnknownIds()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK, """{"value":[{"id":"oid-2","identities":[]},{"id":"oid-1","identities":[]}]}""");
+
+        var result = await sut.GetIdentitiesByIdsAsync(["oid-1", "oid-gone", "oid-2"]);
+
+        Assert.Equal(["oid-1", "oid-2"], result.Select(x => x.DirectoryId));
+    }
+
+    [Fact]
+    public async Task GetIdentitiesByIds_EscapesQuotesInIds()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK, """{"value":[]}""");
+
+        await sut.GetIdentitiesByIdsAsync(["o'brien"]);
+
+        Assert.Contains("id in ('o''brien')", Uri.UnescapeDataString(Assert.Single(handler.Requests).Uri));
+    }
+
+    [Fact]
+    public async Task GetIdentitiesByIds_FollowsNextLink()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.OK, $$"""{"value":[{"id":"oid-1","identities":[]}],"@odata.nextLink":"{{BaseAddress}}users?page=2"}""");
+        handler.Enqueue(HttpStatusCode.OK, """{"value":[{"id":"oid-2","identities":[]}]}""");
+
+        var result = await sut.GetIdentitiesByIdsAsync(["oid-1", "oid-2"]);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(["oid-1", "oid-2"], result.Select(x => x.DirectoryId));
+    }
+
+    [Fact]
+    public async Task GetIdentitiesByIds_NoIds_MakesNoRequest()
+    {
+        var (sut, handler) = Build();
+
+        var result = await sut.GetIdentitiesByIdsAsync([null, ""]);
+
+        Assert.Empty(result);
+        Assert.Empty(handler.Requests);
+    }
+
+    [Fact]
+    public async Task GetIdentitiesByIds_Forbidden_ThrowsWithStatus()
+    {
+        var (sut, handler) = Build();
+        handler.Enqueue(HttpStatusCode.Forbidden, """{"error":{"message":"Insufficient privileges"}}""");
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => sut.GetIdentitiesByIdsAsync(["oid-1"]));
+
+        Assert.Equal(HttpStatusCode.Forbidden, ex.StatusCode);
+    }
 }

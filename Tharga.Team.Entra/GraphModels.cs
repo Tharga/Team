@@ -32,8 +32,20 @@ internal sealed record GraphUserPage
     public string NextLink { get; init; }
 }
 
+internal sealed record GraphUserIdentitiesPage
+{
+    [JsonPropertyName("value")]
+    public IReadOnlyList<GraphUserIdentities> Value { get; init; }
+
+    [JsonPropertyName("@odata.nextLink")]
+    public string NextLink { get; init; }
+}
+
 internal sealed record GraphUserIdentities
 {
+    [JsonPropertyName("id")]
+    public string Id { get; init; }
+
     [JsonPropertyName("identities")]
     public IReadOnlyList<GraphObjectIdentity> Identities { get; init; }
 }

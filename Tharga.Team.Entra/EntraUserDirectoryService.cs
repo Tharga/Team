@@ -18,6 +18,9 @@ public class EntraUserDirectoryService : IUserDirectoryService, IUserIdentityDir
     private const string SelectFields = "id,displayName,mail,userPrincipalName,accountEnabled";
     private const int PageSize = 999;
 
+    /// <summary>Graph accepts at most 15 values in an <c>in</c> filter.</summary>
+    internal const int IdBatchSize = 15;
+
     private readonly HttpClient _httpClient;
     private readonly IEntraTokenProvider _tokenProvider;
 
@@ -106,6 +109,44 @@ public class EntraUserDirectoryService : IUserDirectoryService, IUserIdentityDir
 
         var graphUser = await response.Content.ReadFromJsonAsync<GraphUserIdentities>(cancellationToken);
         return (graphUser?.Identities ?? []).Select(x => x.ToDirectoryUserIdentity()).ToArray();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Graph <c>GET /users?$filter=id in (...)&amp;$select=id,identities</c>, one request per
+    /// <see cref="IdBatchSize"/> ids — Graph's limit on the values of an <c>in</c> filter. An id Graph does
+    /// not return is left out. Needs only <c>User.Read.All</c>, as the single read does.
+    /// </remarks>
+    public async Task<DirectoryUserIdentities[]> GetIdentitiesByIdsAsync(IEnumerable<string> directoryIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(directoryIds);
+
+        var ids = directoryIds.Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal).ToArray();
+        var found = new Dictionary<string, DirectoryUserIdentities>(StringComparer.Ordinal);
+
+        foreach (var chunk in ids.Chunk(IdBatchSize))
+        {
+            var values = string.Join(",", chunk.Select(x => $"'{x.Replace("'", "''")}'"));
+            var url = $"users?$filter={Uri.EscapeDataString($"id in ({values})")}&$select=id,identities";
+            while (url != null)
+            {
+                using var response = await SendAsync(HttpMethod.Get, url, cancellationToken);
+                await EnsureSuccessAsync(response, cancellationToken);
+
+                var page = await response.Content.ReadFromJsonAsync<GraphUserIdentitiesPage>(cancellationToken);
+                foreach (var graphUser in page?.Value ?? [])
+                {
+                    if (string.IsNullOrEmpty(graphUser.Id)) continue;
+                    found[graphUser.Id] = new DirectoryUserIdentities(graphUser.Id,
+                        (graphUser.Identities ?? []).Select(x => x.ToDirectoryUserIdentity()).ToArray());
+                }
+
+                url = page?.NextLink;
+            }
+        }
+
+        // In the order asked for, not the order Graph happened to return.
+        return ids.Where(found.ContainsKey).Select(x => found[x]).ToArray();
     }
 
     public async IAsyncEnumerable<DirectoryUser> GetUsersAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
