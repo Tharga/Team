@@ -27,6 +27,22 @@ public static class UserAdminGate
         => hasUsersManageScope && directoryRegistered;
 
     /// <summary>
+    /// Whether the users list shows how each user signs in. A directory feature, so it needs everything
+    /// <see cref="ShowDirectoryFeatures"/> does, and a directory that can read identities on top.
+    /// </summary>
+    public static bool ShowSignInMethods(bool showDirectoryFeatures, bool identityDirectoryRegistered)
+        => showDirectoryFeatures && identityDirectoryRegistered;
+
+    /// <summary>
+    /// The rows whose sign-in methods still need reading: linked to a directory account, not read yet, and
+    /// not already failed. A failed row is not retried on the next render, which would loop.
+    /// </summary>
+    public static UserViewModel[] PendingSignInRows(IEnumerable<UserViewModel> visibleRows)
+        => (visibleRows ?? [])
+            .Where(x => x != null && !string.IsNullOrEmpty(x.DirectoryId) && x.SignInMethods == null && x.SignInError == null)
+            .ToArray();
+
+    /// <summary>
     /// Whether the Teams tab offers deleting a team. Requires the <see cref="SystemTeamScopes.Delete"/>
     /// system scope, which authorizes deleting any team irrespective of membership.
     /// </summary>

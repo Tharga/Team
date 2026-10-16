@@ -54,4 +54,13 @@ public record UserViewModel
     public string DisabledBy { get; init; }
 
     public bool IsDisabled => DisabledAt.HasValue;
+
+    /// <summary>
+    /// How the user signs in, once read from the directory; null until then. Mutable because the list
+    /// reads it for the visible page after rendering, not with the rows.
+    /// </summary>
+    public Tharga.Team.Blazor.Framework.SignInMethod[] SignInMethods { get; set; }
+
+    /// <summary>Why the sign-in methods could not be read, or null.</summary>
+    public string SignInError { get; set; }
 }
