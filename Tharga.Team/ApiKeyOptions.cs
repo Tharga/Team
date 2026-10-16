@@ -38,6 +38,17 @@ public class ApiKeyOptions
     public TimeSpan LastUsedThrottle { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
+    /// What happens to a member's private (owner-scoped) keys in a team when they stop being a member of it:
+    /// removed, leaving, or deleted as a user. Default <see cref="PrivateKeyOwnerRemovedAction.Delete"/>.
+    /// </summary>
+    /// <remarks>
+    /// Either way the keys stop authenticating the moment the owner is removed — that is checked on every
+    /// request, not by this. This decides only whether they are also cleaned up, so they are not listed,
+    /// and cannot come back if the same person is invited again.
+    /// </remarks>
+    public PrivateKeyOwnerRemovedAction OwnerRemovedAction { get; set; } = PrivateKeyOwnerRemovedAction.Delete;
+
+    /// <summary>
     /// Absolute floor for both <see cref="MinKeyLength"/> and <see cref="MaxKeyLength"/>. 24 alphanumeric
     /// characters is ≈143 bits of entropy (well above 128-bit) and matches the historical minimum, so the
     /// secret can never be configured weaker than keys minted before these options existed.

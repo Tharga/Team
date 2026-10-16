@@ -246,6 +246,36 @@ public class AddThargaTeamTests
         Assert.True(options.AutoLockKeys);
     }
 
+    /// <summary>
+    /// Every <see cref="ApiKeyOptions"/> setting reaches the container, driven by the type's own shape so
+    /// a setting added later is covered without anyone remembering. The forwarding used to be a hand-written
+    /// list, the defect class behind Tharga/Team#177; <c>OwnerRemovedAction</c> (#323) is the first setting
+    /// added since it became reflection.
+    /// </summary>
+    [Fact]
+    public void ForwardsEveryApiKeyOption()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.ApiKey.OwnerRemovedAction = PrivateKeyOwnerRemovedAction.Disable);
+        var provider = builder.Services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<ApiKeyOptions>>().Value;
+        Assert.Equal(PrivateKeyOwnerRemovedAction.Disable, options.OwnerRemovedAction);
+        Assert.NotEmpty(OptionsForwarder.ForwardableProperties<ApiKeyOptions>());
+        Assert.Contains(OptionsForwarder.ForwardableProperties<ApiKeyOptions>(), p => p.Name == nameof(ApiKeyOptions.OwnerRemovedAction));
+    }
+
+    [Fact]
+    public void RegistersTheMemberRemovalCascade_WithThePrivateKeyParticipant()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam();
+
+        Assert.Contains(builder.Services, d => d.ServiceType == typeof(TeamMemberRemovalCascade));
+        Assert.Single(builder.Services, d => d.ServiceType == typeof(ITeamMemberRemovalParticipant)
+            && d.ImplementationType?.Name == "ApiKeyOwnerRemovalParticipant");
+    }
+
     [Fact]
     public void AddApiKeyLifecycleHandler_RegistersHandler_And_Decorates()
     {
