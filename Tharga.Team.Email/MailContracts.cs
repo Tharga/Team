@@ -115,6 +115,14 @@ public readonly record struct MailFetchResult(
 /// <param name="FromName">The sender's display name, or null.</param>
 /// <param name="To">The <c>To</c> addresses, lower-cased.</param>
 /// <param name="Cc">The <c>Cc</c> addresses, lower-cased.</param>
+/// <param name="BouncedMessageId">
+/// When this mail reports that another could not be delivered, the <c>Message-ID</c> of that other mail;
+/// otherwise null.
+/// </param>
+/// <param name="BounceReason">
+/// When this mail reports a failed delivery, why it failed as the reporting server put it, trimmed to a few
+/// hundred characters; otherwise null.
+/// </param>
 public readonly record struct InboundMail(
     string MessageId,
     string From,
@@ -130,4 +138,6 @@ public readonly record struct InboundMail(
     byte[] Raw = null,
     string FromName = null,
     IReadOnlyList<string> To = null,
-    IReadOnlyList<string> Cc = null);
+    IReadOnlyList<string> Cc = null,
+    string BouncedMessageId = null,
+    string BounceReason = null);

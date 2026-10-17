@@ -47,12 +47,20 @@ internal sealed class EmailSupportChannel(
         => Task.FromResult<SupportChannelBinding>(null);
 
     public async Task<bool> PostAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
+        => (await PostWithResultAsync(binding, message, cancellationToken)).Delivered;
+
+    /// <remarks>
+    /// The reason is the mail client's own, so a mail withheld by the non-production policy says so rather than
+    /// reading as a transport failure.
+    /// </remarks>
+    public async Task<SupportChannelPostResult> PostWithResultAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
-        if (!mailClient.CanSend || string.IsNullOrWhiteSpace(binding?.Address)) return false;
+        if (!mailClient.CanSend) return SupportChannelPostResult.Failed("No mail server is configured for sending.");
+        if (string.IsNullOrWhiteSpace(binding?.Address)) return SupportChannelPostResult.Failed("The case has no address to mail.");
 
         // It arrived from this channel, so the correspondent has already read it in their own mail client.
         // Sending it back is how every message in a thread ends up appearing twice.
-        if (message.Source == SupportChannelType.Email) return false;
+        if (message.Source == SupportChannelType.Email) return SupportChannelPostResult.Failed(null);
 
         // The subject and the case id are neither on the binding nor on the message, and the correspondent
         // reads the subject line even though their mail client threads on the headers. One read by binding
@@ -71,13 +79,20 @@ internal sealed class EmailSupportChannel(
                 ReplyTo: ReplyToFor(supportCase?.Id)),
             cancellationToken);
 
-        // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case.
+        // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case,
+        // and a bounce naming it finds the very entry that did not arrive.
         if (result.Success && supportCase != null && !string.IsNullOrWhiteSpace(result.MessageId))
         {
-            await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = result.MessageId, Address = binding.Address }, cancellationToken);
+            await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, new SupportChannelBinding
+            {
+                ChannelType = SupportChannelType.Email,
+                ExternalId = result.MessageId,
+                Address = binding.Address,
+                MessageSequence = message.Sequence
+            }, cancellationToken);
         }
 
-        return result.Success;
+        return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
     }
 
     /// <summary>Every message id the case's mail thread has carried, oldest first: the opening mail, then each reply and answer.</summary>

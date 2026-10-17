@@ -142,6 +142,26 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var status = await inner.ResendAsync(teamKey, caseId, sequence, cancellationToken);
+
+            Log("resend", nameof(ResendAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.Delivery, status.ToString())));
+
+            return status;
+        }
+        catch (Exception ex)
+        {
+            Log("resend", nameof(ResendAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
     public Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetMyUnreadByCaseAsync(teamKey, cancellationToken);
 

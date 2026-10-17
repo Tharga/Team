@@ -122,6 +122,63 @@ public class EmailSupportChannelTests
         await mail.DidNotReceive().SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task ARefusedSend_SaysWhatTheMailServerSaid()
+    {
+        var (channel, mail, store) = Build();
+        store.GetCaseByBindingAsync(SupportChannelType.Email, OpeningId, Arg.Any<CancellationToken>()).Returns(Case());
+        mail.SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>()).Returns(MailSendResult.Failed("550 5.7.1 Relaying denied"));
+
+        var result = await channel.PostWithResultAsync(Binding(), Message("Looking into it."));
+
+        Assert.False(result.Delivered);
+        Assert.Equal("550 5.7.1 Relaying denied", result.Error);
+    }
+
+    /// <summary>A mail the non-production policy withheld says so, rather than reading as a transport failure.</summary>
+    [Fact]
+    public async Task AWithheldSend_SaysThePolicyWithheldIt()
+    {
+        var mail = Substitute.For<IMailClient>();
+        mail.CanSend.Returns(true);
+        var policy = Substitute.For<Tharga.Team.Service.Email.IOutboundMailPolicy>();
+        policy.Decide(Arg.Any<string>(), Arg.Any<string>()).Returns(new Tharga.Team.Service.Email.OutboundMailDecision(Tharga.Team.Service.Email.OutboundMailAction.Withhold, Correspondent, "Re: Export is empty"));
+        var store = Substitute.For<ISupportCaseStore>();
+        store.GetCaseByBindingAsync(SupportChannelType.Email, OpeningId, Arg.Any<CancellationToken>()).Returns(Case());
+        ISupportChannel channel = new EmailSupportChannel(new PolicyGovernedMailClient(mail, policy), store, Options.Create(new MailOptions { FromAddress = "support@fortdocs.se" }));
+
+        var result = await channel.PostWithResultAsync(Binding(), Message("Looking into it."));
+
+        Assert.False(result.Delivered);
+        Assert.Contains("Withheld by the non-production mail policy", result.Error);
+    }
+
+    [Fact]
+    public async Task NothingToSendWith_IsAFailureThatSaysSo()
+    {
+        var (channel, _, _) = Build(canSend: false);
+
+        var result = await channel.PostWithResultAsync(Binding(), Message("Looking into it."));
+
+        Assert.False(result.Delivered);
+        Assert.False(string.IsNullOrWhiteSpace(result.Error));
+    }
+
+    /// <summary>A bounce names the answer by its id alone, so the id has to know which entry it carried.</summary>
+    [Fact]
+    public async Task ASentAnswersId_IsRecordedWithTheEntryItCarried()
+    {
+        var (channel, mail, store) = Build();
+        store.GetCaseByBindingAsync(SupportChannelType.Email, OpeningId, Arg.Any<CancellationToken>()).Returns(Case());
+        mail.SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>()).Returns(MailSendResult.Ok("answer-2@fortdocs.se"));
+
+        await channel.PostWithResultAsync(Binding(), Message("Looking into it."));
+
+        await store.Received(1).AddBindingAsync(TeamKey, "case-1",
+            Arg.Is<SupportChannelBinding>(x => x.ExternalId == "answer-2@fortdocs.se" && x.MessageSequence == 2 && x.Address == Correspondent),
+            Arg.Any<CancellationToken>());
+    }
+
 
 
     /// <summary>

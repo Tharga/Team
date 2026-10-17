@@ -160,6 +160,9 @@ public record SupportMessageEntity
     public SupportMessageDelivery Delivery { get; init; }
 
     [BsonIgnoreIfNull]
+    public string DeliveryError { get; init; }
+
+    [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.String)]
     public SupportChannelType? Source { get; init; }
 
@@ -177,4 +180,7 @@ public record SupportChannelBindingEntity
 
     [BsonIgnoreIfNull]
     public string Address { get; init; }
+
+    [BsonIgnoreIfNull]
+    public int? MessageSequence { get; init; }
 }

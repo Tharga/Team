@@ -9,7 +9,16 @@
    only while the card is open, so a closed card reads no messages. *@
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-conversation="@Case.Id">
-    <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="@(!AsStaff)" TimeTemplate="TimeTemplate" />
+    @* Whether an answer reached the customer is support's concern, and sending it again speaks for support. *@
+    @if (AsStaff)
+    {
+        <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="false" TimeTemplate="TimeTemplate"
+                           ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync" />
+    }
+    else
+    {
+        <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate" />
+    }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
     <RadzenTextArea Value="@_reply" ValueChanged="@(v => _reply = v)"
@@ -154,6 +163,8 @@
     }
 
     private Task RequestHumanAsync() => ActAsync(() => SupportCases.RequestHumanAsync(Case.TeamKey, Case.Id));
+
+    private Task ResendAsync(SupportMessage message) => ActAsync(() => SupportCases.ResendAsync(Case.TeamKey, Case.Id, message.Sequence));
 
     /// <remarks>Asked first: the team chooses who reads the case from now on, and staff are reminded the team should close it.</remarks>
     private async Task CloseAsync()

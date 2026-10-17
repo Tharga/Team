@@ -48,6 +48,9 @@ internal sealed class EmailEventHandler(
             return EmailHandlingOutcome.Ignored("addressed elsewhere");
         }
 
+        // A bounce is automated too, but it is news about an answer rather than noise, so it is read first.
+        if (!string.IsNullOrWhiteSpace(mail.BouncedMessageId)) return await BounceAsync(mail, cancellationToken);
+
         // Answering one of these is how a support case and a vacation responder fill each other's mailboxes
         // overnight.
         if (mail.IsAutomated) return EmailHandlingOutcome.Ignored("automated");
@@ -119,6 +122,46 @@ internal sealed class EmailEventHandler(
         });
 
         return EmailHandlingOutcome.Applied(supportCase.Id);
+    }
+
+    /// <summary>
+    /// Marks the answer a bounce reports as not delivered, with the reason the far server gave.
+    /// </summary>
+    /// <remarks>
+    /// <b>Never a case.</b> A bounce that names no answer this instance sent is somebody else's — another
+    /// site sharing the mailbox, or mail sent before ids were recorded — and opening a case from it would put
+    /// a mail server's complaint in the queue as if a customer had written. The reason is kept on the entry
+    /// rather than logged, because it often quotes the recipient's address.
+    /// </remarks>
+    private async Task<EmailHandlingOutcome> BounceAsync(InboundMail mail, CancellationToken cancellationToken)
+    {
+        var supportCase = await store.GetCaseByBindingAsync(SupportChannelType.Email, mail.BouncedMessageId, cancellationToken);
+        var sequence = supportCase?.Bindings?.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email && x.ExternalId == mail.BouncedMessageId)?.MessageSequence;
+
+        if (sequence == null)
+        {
+            logger?.LogDebug("Ignored a bounce for a mail that is no recorded support answer.");
+
+            return EmailHandlingOutcome.Ignored(supportCase == null ? "bounce for an unknown mail" : "bounce for a mail that is no answer");
+        }
+
+        if (!await ledger.TryRecordAsync(Source, mail.MessageId, cancellationToken)) return EmailHandlingOutcome.Ignored("already handled");
+
+        await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence.Value, SupportMessageDelivery.Failed,
+            string.IsNullOrWhiteSpace(mail.BounceReason) ? "The receiving mail server returned the answer as undeliverable." : mail.BounceReason,
+            cancellationToken);
+
+        notifier?.Notify(new SupportCaseUpdatedEventArgs
+        {
+            TeamKey = supportCase.TeamKey,
+            CaseId = supportCase.Id,
+            Change = SupportCaseChange.DeliveryChanged,
+            FromChannel = true
+        });
+
+        logger?.LogWarning("The answer {Sequence} on support case {CaseId} bounced and is marked as not delivered.", sequence.Value, supportCase.Id);
+
+        return EmailHandlingOutcome.Undelivered(supportCase.Id);
     }
 
     /// <summary>
@@ -276,16 +319,19 @@ internal sealed class EmailEventHandler(
 /// <param name="CaseId">The case it reached, or null.</param>
 /// <param name="Reason">Why it was ignored, or null when it was applied.</param>
 /// <param name="OpenedCase">True when it opened a case rather than continuing one.</param>
+/// <param name="Bounced">True when it was a bounce that marked one of the case's answers as not delivered.</param>
 /// <remarks>
 /// Ignoring is the common outcome and is not a failure: a shared mailbox carries mail for other sites, for
 /// other systems and for people. It is reported rather than thrown so the poller can log a count instead of
 /// treating a busy mailbox as a series of errors.
 /// </remarks>
-internal readonly record struct EmailHandlingOutcome(bool WasApplied, string CaseId, string Reason, bool OpenedCase = false)
+internal readonly record struct EmailHandlingOutcome(bool WasApplied, string CaseId, string Reason, bool OpenedCase = false, bool Bounced = false)
 {
     public static EmailHandlingOutcome Ignored(string reason) => new(false, null, reason);
 
     public static EmailHandlingOutcome Applied(string caseId) => new(true, caseId, null);
 
     public static EmailHandlingOutcome Raised(string caseId) => new(true, caseId, null, true);
+
+    public static EmailHandlingOutcome Undelivered(string caseId) => new(true, caseId, null, Bounced: true);
 }

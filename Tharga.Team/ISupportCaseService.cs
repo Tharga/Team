@@ -55,6 +55,16 @@ public interface ISupportCaseService
     Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Sends one transcript entry to the case's channels again, and returns where it stands now.
+    /// </summary>
+    /// <remarks>
+    /// Only an entry that is <see cref="SupportMessageDelivery.Failed"/> or <see cref="SupportMessageDelivery.Pending"/>
+    /// is sent; any other is left alone and its status returned, so pressing the button again after it went
+    /// through sends nothing twice. Authorized exactly as <see cref="AnswerCaseAsync"/> is.
+    /// </remarks>
+    Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Has the assistant answer the newest message on a case, and appends what it says.
     /// </summary>
     /// <remarks>

@@ -98,6 +98,102 @@ public class SupportTranscriptRenderTests : BunitContext
         Assert.Equal(["author", "support"], view.FindAll("[data-sender]").Select(x => x.GetAttribute("data-sender")).ToArray());
     }
 
+    private static SupportMessage Answer(SupportMessageDelivery delivery, string error = null)
+        => Message(2, SupportMessageKind.User, "sam", "Sam Support", "Looking into it.") with { AsSupport = true, Delivery = delivery, DeliveryError = error };
+
+    [Fact]
+    public void AnAnswerThatWasSent_SaysNothingAboutIt()
+    {
+        var view = RenderDelivery([Answer(SupportMessageDelivery.Sent)]);
+
+        Assert.Empty(view.FindAll("[data-delivery]"));
+    }
+
+    [Fact]
+    public void AnAnswerNotYetSent_SaysSo()
+    {
+        var view = RenderDelivery([Answer(SupportMessageDelivery.Pending)]);
+
+        Assert.Equal("pending", view.Find("[data-delivery]").GetAttribute("data-delivery"));
+        Assert.Contains(SupportTranscriptText.NotSentYet.Default, view.Markup);
+    }
+
+    /// <summary>With no channel there is nowhere to send it, so Pending is not news.</summary>
+    [Fact]
+    public void AnAnswerOnACaseWithNoChannel_SaysNothingAboutPending()
+    {
+        var view = RenderDelivery([Answer(SupportMessageDelivery.Pending)], hasChannels: false);
+
+        Assert.Empty(view.FindAll("[data-delivery]"));
+    }
+
+    [Fact]
+    public void AnAnswerNotDelivered_SaysWhy_AndOffersToSendItAgain()
+    {
+        var view = RenderDelivery([Answer(SupportMessageDelivery.Failed, "554 5.7.23 SPF validation failed")], resend: _ => { });
+
+        Assert.Equal("failed", view.Find("[data-delivery]").GetAttribute("data-delivery"));
+        Assert.Contains(SupportTranscriptText.NotDelivered.Default, view.Markup);
+        Assert.Contains("554 5.7.23 SPF validation failed", view.Find("[data-delivery-error]").TextContent);
+        Assert.Contains(SupportTranscriptText.SendAgain.Default, view.Find("[data-resend]").TextContent);
+    }
+
+    [Fact]
+    public void SendingAgain_HandsTheAnswerToTheHost()
+    {
+        SupportMessage resent = null;
+        var view = RenderDelivery([Answer(SupportMessageDelivery.Failed, "Mailbox full")], resend: x => resent = x);
+
+        view.Find("[data-resend]").Click();
+
+        Assert.Equal(2, resent?.Sequence);
+    }
+
+    [Fact]
+    public void AReaderWhoMayNotAnswer_IsNotOfferedToSendAgain()
+    {
+        var view = RenderDelivery([Answer(SupportMessageDelivery.Failed, "Mailbox full")]);
+
+        Assert.Equal("failed", view.Find("[data-delivery]").GetAttribute("data-delivery"));
+        Assert.Empty(view.FindAll("[data-resend]"));
+    }
+
+    /// <summary>The customer is reading the answer on the site; whether it also reached a channel is support's concern.</summary>
+    [Fact]
+    public void TheCustomer_IsNotShownDelivery()
+    {
+        var view = RenderDelivery([Answer(SupportMessageDelivery.Failed, "Mailbox full")], showDelivery: false);
+
+        Assert.Empty(view.FindAll("[data-delivery]"));
+    }
+
+    [Fact]
+    public void WhatTheCustomerWrote_NeverCarriesADeliveryStatus()
+    {
+        var view = RenderDelivery([Message(1, SupportMessageKind.User, Author, "Alice", "Help.") with { Delivery = SupportMessageDelivery.Failed, DeliveryError = "x" }]);
+
+        Assert.Empty(view.FindAll("[data-delivery]"));
+    }
+
+    private IRenderedComponent<SupportTranscript> RenderDelivery(SupportMessage[] messages, bool hasChannels = true, bool showDelivery = true, Action<SupportMessage> resend = null)
+    {
+        Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddSingleton(Mock.Of<IIconResolver>());
+        Services.AddRadzenComponents();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+
+        return Render<SupportTranscript>(parameters =>
+        {
+            parameters
+                .Add(x => x.Messages, messages)
+                .Add(x => x.CaseAuthorIdentity, Author)
+                .Add(x => x.ShowDelivery, showDelivery)
+                .Add(x => x.HasChannels, hasChannels);
+
+            if (resend != null) parameters.Add(x => x.Resend, resend);
+        });
+    }
+
     private IRenderedComponent<SupportTranscript> Render(bool authorOnRight)
     {
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();

@@ -79,7 +79,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Visibility = supportCase.Visibility,
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
-            Bindings = [.. (supportCase.Bindings ?? []).Select(x => new SupportChannelBindingEntity { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })],
+            Bindings = [.. (supportCase.Bindings ?? []).Select(ToEntity)],
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
@@ -473,12 +473,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     {
         var entity = await RequireCaseAsync(teamKey, caseId);
 
-        var added = new SupportChannelBindingEntity
-        {
-            ChannelType = binding.ChannelType,
-            ExternalId = binding.ExternalId,
-            Address = binding.Address
-        };
+        var added = ToEntity(binding);
 
         // Cases written before this always started with an empty list store it as null, which $push refuses.
         var update = entity.Bindings == null
@@ -493,17 +488,23 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     /// positional operator - the sequence is its position, and rewriting the whole array would race with a
     /// reply arriving at the same moment.
     /// </remarks>
-    public async Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default)
+    public async Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, string error = null, CancellationToken cancellationToken = default)
     {
         var entity = await RequireCaseAsync(teamKey, caseId);
 
         var index = Array.FindIndex(entity.Messages, x => x.Sequence == sequence);
         if (index < 0) return;
 
-        var update = Builders<SupportCaseEntity>.Update
-            .Set($"Messages.{index}.Delivery", delivery.ToString());
+        await UpdateAsync(teamKey, caseId, DeliveryUpdate(index, delivery, error));
+    }
 
-        await UpdateAsync(teamKey, caseId, update);
+    private static UpdateDefinition<SupportCaseEntity> DeliveryUpdate(int index, SupportMessageDelivery delivery, string error)
+    {
+        var update = Builders<SupportCaseEntity>.Update.Set($"Messages.{index}.Delivery", delivery.ToString());
+
+        return delivery == SupportMessageDelivery.Failed && !string.IsNullOrWhiteSpace(error)
+            ? update.Set($"Messages.{index}.DeliveryError", error)
+            : update.Unset($"Messages.{index}.DeliveryError");
     }
 
     public async Task<int> DeleteCasesForTeamAsync(string teamKey, CancellationToken cancellationToken = default)
@@ -620,7 +621,23 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Visibility = entity.Visibility,
         Bindings = entity.Bindings == null
             ? []
-            : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })]
+            : [.. entity.Bindings.Select(ToBinding)]
+    };
+
+    private static SupportChannelBinding ToBinding(SupportChannelBindingEntity entity) => new()
+    {
+        ChannelType = entity.ChannelType,
+        ExternalId = entity.ExternalId,
+        Address = entity.Address,
+        MessageSequence = entity.MessageSequence
+    };
+
+    private static SupportChannelBindingEntity ToEntity(SupportChannelBinding binding) => new()
+    {
+        ChannelType = binding.ChannelType,
+        ExternalId = binding.ExternalId,
+        Address = binding.Address,
+        MessageSequence = binding.MessageSequence
     };
 
     private static SupportMessage ToMessage(SupportMessageEntity entity) => new()
@@ -632,6 +649,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Body = entity.Body,
         SentAt = entity.SentAt,
         Delivery = entity.Delivery,
+        DeliveryError = entity.Delivery == SupportMessageDelivery.Failed ? entity.DeliveryError : null,
         Source = entity.Source,
         AsSupport = entity.AsSupport
     };
@@ -645,6 +663,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Body = message.Body,
         SentAt = message.SentAt,
         Delivery = message.Delivery,
+        DeliveryError = message.Delivery == SupportMessageDelivery.Failed ? message.DeliveryError : null,
         Source = message.Source,
         AsSupport = message.AsSupport
     };

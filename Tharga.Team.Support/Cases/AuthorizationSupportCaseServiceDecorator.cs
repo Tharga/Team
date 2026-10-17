@@ -79,6 +79,14 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.AnswerCaseAsync(teamKey, caseId, body, cancellationToken);
     }
 
+    /// <remarks>Authorized as answering is: sending an entry again speaks on the channel exactly as answering does.</remarks>
+    public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        return await inner.ResendAsync(teamKey, caseId, sequence, cancellationToken);
+    }
+
     public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         await RequireMembershipAsync(teamKey);

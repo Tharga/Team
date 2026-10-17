@@ -6,12 +6,12 @@ See `feature.md` for scope. Steps follow its numbering.
 
 - [x] 1. Binding kept on a mail-opened case (`MongoSupportCaseStore.AddCaseAsync`); `MailClient.Newer` drops UIDs at or below the position, because IMAP answers `n:*` with the highest UID even when nothing is newer. 4 tests. (7430421)
 - [x] 1b. Mail thread: every answer's and reply's Message-ID is recorded as a binding, an answer names the whole thread (In-Reply-To the newest), quotes the conversation so far newest first, and outside production a reply from the policy's override address corresponds. 8 tests.
-- [~] 2. Ledger duplicates not logged as errors.
-- [ ] 3. Sender → team matching.
+- [x] 2. Ledger duplicates not logged as errors: a repeat is answered by a read. (580f685)
+- [~] 3. Sender → team matching.
 - [ ] 4. Attachments in and out.
 - [ ] 5. Rich text.
 - [ ] 6. Several mailboxes.
-- [ ] 7. Delivery status and retry.
+- [x] 7. Delivery status and retry: a failed answer keeps its reason (`DeliveryError`, from `ISupportChannel.PostWithResultAsync`), a bounce (DSN) marks the answer it names Failed via the binding's `MessageSequence` and never opens a case, `ResendAsync` sends a Failed or Pending entry again, the transcript shows Not sent yet / Not delivered + reason / Send again to support, and a policy redirect is logged at Information. 49 tests.
 - [ ] 8. Unassigned queue like the cases view, with filters.
 - [ ] 9. No no-reply defaults (guard test).
 - [ ] 10. Mail to users: categories and opt-out, writing to users, notices on events.

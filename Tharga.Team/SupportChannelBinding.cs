@@ -36,4 +36,14 @@ public record SupportChannelBinding
     /// </para>
     /// </remarks>
     public string Address { get; init; }
+
+    /// <summary>
+    /// The transcript entry this external id was sent for, when it was recorded for an outgoing message —
+    /// the <c>Message-ID</c> of a mailed answer. <c>null</c> for an id that opened or replied to the thread.
+    /// </summary>
+    /// <remarks>
+    /// A bounce names the mail it bounces by its id and nothing else, so this is what lets one mark the
+    /// right answer as not delivered rather than only the case.
+    /// </remarks>
+    public int? MessageSequence { get; init; }
 }

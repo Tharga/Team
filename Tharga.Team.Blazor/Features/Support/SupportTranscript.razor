@@ -54,6 +54,34 @@
                     }
                 </div>
                 <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@message.Body</RadzenText>
+
+                @* Only an answer is followed to its channel; what the customer wrote reached us by definition. *@
+                @if (ShowDelivery && !fromAuthor && message.Kind == SupportMessageKind.User)
+                {
+                    if (message.Delivery == SupportMessageDelivery.Pending && HasChannels)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0 rz-mt-1" Style="color: var(--rz-text-secondary-color);" data-delivery="pending">
+                            @_text[SupportTranscriptText.NotSentYet]
+                        </RadzenText>
+                    }
+                    else if (message.Delivery == SupportMessageDelivery.Failed)
+                    {
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.25rem;" data-delivery="failed">
+                            <RadzenIcon Icon="error_outline" Style="font-size: 1rem; color: var(--rz-danger);" />
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-weight: 600; color: var(--rz-danger);">@_text[SupportTranscriptText.NotDelivered]</RadzenText>
+                            @if (!string.IsNullOrWhiteSpace(message.DeliveryError))
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="overflow-wrap: anywhere;" data-delivery-error="@message.Sequence">@message.DeliveryError</RadzenText>
+                            }
+                            @if (Resend.HasDelegate)
+                            {
+                                <RadzenButton Text="@_text[SupportTranscriptText.SendAgain]" Icon="send" Size="ButtonSize.ExtraSmall"
+                                              ButtonStyle="ButtonStyle.Light" Disabled="@_resending.Contains(message.Sequence)"
+                                              Click="@(() => ResendAsync(message))" data-resend="@message.Sequence" />
+                            }
+                        </div>
+                    }
+                }
             </div>
         </div>
     }
@@ -75,6 +103,40 @@
 
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>
+    /// Whether answers say if they reached the case's channels. For support; the customer is reading the
+    /// answer on the site already.
+    /// </summary>
+    [Parameter] public bool ShowDelivery { get; set; }
+
+    /// <summary>
+    /// Whether the case is projected onto any channel. Without one an answer has nowhere to go, so its
+    /// Pending status says nothing worth showing.
+    /// </summary>
+    [Parameter] public bool HasChannels { get; set; }
+
+    /// <summary>
+    /// Sends an answer that did not arrive again. Offered only when set, so pass it only for a reader who may
+    /// answer the case.
+    /// </summary>
+    [Parameter] public EventCallback<SupportMessage> Resend { get; set; }
+
+    private readonly HashSet<int> _resending = [];
+
+    private async Task ResendAsync(SupportMessage message)
+    {
+        if (!_resending.Add(message.Sequence)) return;
+
+        try
+        {
+            await Resend.InvokeAsync(message);
+        }
+        finally
+        {
+            _resending.Remove(message.Sequence);
+        }
+    }
 
     private RenderFragment Time(DateTime value)
         => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));

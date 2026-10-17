@@ -38,6 +38,10 @@ internal sealed class PolicyGovernedMailClient(
             return Task.FromResult(MailSendResult.Failed(WithheldMessage));
         }
 
+        // The override is configuration, so it is named; the customer's own address is not, for the reason above.
+        if (decision.Action == OutboundMailAction.Redirect)
+            logger?.LogInformation("Redirecting a support mail to {Recipient} instead of the customer it was addressed to, because the environment is not production.", decision.Recipient);
+
         return inner.SendAsync(mail with { To = decision.Recipient, Subject = decision.Subject }, cancellationToken);
     }
 

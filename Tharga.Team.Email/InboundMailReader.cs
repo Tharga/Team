@@ -38,6 +38,8 @@ internal static class InboundMailReader
     {
         ArgumentNullException.ThrowIfNull(message);
 
+        var bounce = BounceReader.Read(message);
+
         return new InboundMail(
             MessageId: message.MessageId,
             From: Sender(message),
@@ -47,13 +49,15 @@ internal static class InboundMailReader
             SentAt: message.Date,
             InReplyTo: message.InReplyTo,
             References: [.. message.References],
-            IsAutomated: IsAutomated(message),
+            IsAutomated: bounce != null || IsAutomated(message),
             HadAttachments: message.Attachments.Any(),
             Uid: uid,
             Raw: raw,
             FromName: message.From.Mailboxes.FirstOrDefault()?.Name,
             To: [.. message.To.Mailboxes.Select(x => Normalize(x.Address)).Where(x => x.Length > 0)],
-            Cc: [.. message.Cc.Mailboxes.Select(x => Normalize(x.Address)).Where(x => x.Length > 0)]);
+            Cc: [.. message.Cc.Mailboxes.Select(x => Normalize(x.Address)).Where(x => x.Length > 0)],
+            BouncedMessageId: bounce?.MessageId,
+            BounceReason: bounce?.Reason);
     }
 
     private static string Sender(MimeMessage message)

@@ -299,12 +299,12 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
-    public Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default)
+    public Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, string error = null, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);
 
         var index = found.Messages.FindIndex(x => x.Sequence == sequence);
-        if (index >= 0) found.Messages[index] = found.Messages[index] with { Delivery = delivery };
+        if (index >= 0) found.Messages[index] = found.Messages[index] with { Delivery = delivery, DeliveryError = delivery == SupportMessageDelivery.Failed ? error : null };
 
         Replace(found.Case, found.Messages);
 

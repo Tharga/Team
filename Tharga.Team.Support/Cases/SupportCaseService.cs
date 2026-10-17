@@ -164,6 +164,24 @@ internal sealed class SupportCaseService(
     public Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
         => WriteAsync(teamKey, caseId, body, asSupport: true, cancellationToken);
 
+    public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken)
+            ?? throw new InvalidOperationException($"No case '{caseId}' on team '{teamKey}'.");
+
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+        var message = messages.FirstOrDefault(x => x.Sequence == sequence)
+            ?? throw new InvalidOperationException($"Support case '{caseId}' has no entry {sequence}.");
+
+        if (message.Delivery is not (SupportMessageDelivery.Failed or SupportMessageDelivery.Pending)) return message.Delivery;
+
+        var status = await DeliverAsync(teamKey, caseId, supportCase, message, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.DeliveryChanged);
+
+        return status;
+    }
+
     public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         var subject = await authorizer.GetSubjectAsync();
@@ -268,7 +286,7 @@ internal sealed class SupportCaseService(
         }
 
         await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence,
-            opened ? SupportMessageDelivery.Sent : SupportMessageDelivery.Pending, cancellationToken);
+            opened ? SupportMessageDelivery.Sent : SupportMessageDelivery.Pending, cancellationToken: cancellationToken);
     }
 
     /// <summary>Posts a reply into every projection the case has.</summary>
@@ -282,13 +300,17 @@ internal sealed class SupportCaseService(
     /// post is Failed, which is a thing that went wrong. A reply that reached one channel and was refused by
     /// another counts as Sent: the entry is one field, and it did reach somebody.
     /// </para>
+    /// <para>
+    /// A Failed entry keeps the first reason a channel gave, which is the one somebody fixing it starts from.
+    /// </para>
     /// </remarks>
-    private async Task DeliverAsync(string teamKey, string caseId, SupportCase existing, SupportMessage message, CancellationToken cancellationToken)
+    private async Task<SupportMessageDelivery> DeliverAsync(string teamKey, string caseId, SupportCase existing, SupportMessage message, CancellationToken cancellationToken)
     {
-        if (_channels.Length == 0) return;
+        if (_channels.Length == 0) return message.Delivery;
 
         var attempted = false;
         var delivered = false;
+        string error = null;
 
         foreach (var channel in _channels)
         {
@@ -297,7 +319,9 @@ internal sealed class SupportCaseService(
             if (binding == null) continue;
 
             attempted = true;
-            delivered |= await channel.PostAsync(binding, message, cancellationToken);
+            var result = await channel.PostWithResultAsync(binding, message, cancellationToken);
+            delivered |= result?.Delivered == true;
+            if (result?.Delivered != true) error ??= result?.Error;
         }
 
         var status = !attempted
@@ -306,7 +330,9 @@ internal sealed class SupportCaseService(
                 ? SupportMessageDelivery.Sent
                 : SupportMessageDelivery.Failed;
 
-        await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence, status, cancellationToken);
+        await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence, status, status == SupportMessageDelivery.Failed ? error : null, cancellationToken);
+
+        return status;
     }
 
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)

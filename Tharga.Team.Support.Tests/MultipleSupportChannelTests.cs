@@ -51,12 +51,12 @@ public class MultipleSupportChannelTests
         await service.ReplyToCaseAsync(TeamKey, raised.Id, "Looking into it.");
 
         // Each channel is given a binding of its own type, never the other's.
-        await slack.Received(1).PostAsync(
+        await slack.Received(1).PostWithResultAsync(
             Arg.Is<SupportChannelBinding>(x => x.ChannelType == SupportChannelType.Slack),
             Arg.Is<SupportMessage>(x => x.Body == "Looking into it."),
             Arg.Any<CancellationToken>());
 
-        await email.Received(1).PostAsync(
+        await email.Received(1).PostWithResultAsync(
             Arg.Is<SupportChannelBinding>(x => x.ChannelType == SupportChannelType.Email),
             Arg.Is<SupportMessage>(x => x.Body == "Looking into it."),
             Arg.Any<CancellationToken>());
@@ -167,6 +167,8 @@ public class MultipleSupportChannelTests
 
         channel.PostAsync(Arg.Any<SupportChannelBinding>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>())
             .Returns(postSucceeds);
+        channel.PostWithResultAsync(Arg.Any<SupportChannelBinding>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>())
+            .Returns(new SupportChannelPostResult(postSucceeds));
 
         return channel;
     }

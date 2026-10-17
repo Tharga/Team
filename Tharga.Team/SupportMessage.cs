@@ -46,6 +46,17 @@ public record SupportMessage
     public SupportMessageDelivery Delivery { get; init; }
 
     /// <summary>
+    /// Why the entry did not reach its channel, as the channel put it; <c>null</c> unless
+    /// <see cref="Delivery"/> is <see cref="SupportMessageDelivery.Failed"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Kept because "not delivered" alone cannot be acted on.</b> A recipient the server refused, a bounce
+    /// saying the sending domain failed SPF and a policy withholding mail outside production are three
+    /// different fixes, and only the reason says which one is needed.
+    /// </remarks>
+    public string DeliveryError { get; init; }
+
+    /// <summary>
     /// The channel this entry arrived from, or <c>null</c> when it was written through the application
     /// itself.
     /// </summary>

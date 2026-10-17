@@ -24,5 +24,10 @@ public enum SupportCaseChange
     /// Somebody read the case, so their unread count changed. A subscriber that records a read when it
     /// reacts must ignore this one, or reading would answer itself.
     /// </summary>
-    Read
+    Read,
+
+    /// <summary>
+    /// Whether an entry reached its channel changed: a bounce came back for it, or it was sent again.
+    /// </summary>
+    DeliveryChanged
 }

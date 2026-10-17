@@ -41,4 +41,17 @@ public interface ISupportChannel
     /// <summary>Posts a message into an already-opened projection.</summary>
     /// <returns><c>true</c> when the channel accepted it.</returns>
     Task<bool> PostAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Posts a message into an already-opened projection, saying why when the channel did not take it.
+    /// </summary>
+    /// <remarks>
+    /// <b>A default that wraps <see cref="PostAsync"/></b>, so a host's own channel keeps compiling and simply
+    /// reports no reason. A channel that knows why it failed overrides this, and the reason is kept on the
+    /// entry as <see cref="SupportMessage.DeliveryError"/>.
+    /// </remarks>
+    async Task<SupportChannelPostResult> PostWithResultAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
+        => await PostAsync(binding, message, cancellationToken)
+            ? SupportChannelPostResult.Ok()
+            : SupportChannelPostResult.Failed(null);
 }
