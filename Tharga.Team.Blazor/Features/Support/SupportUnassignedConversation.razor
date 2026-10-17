@@ -1,0 +1,186 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@inject ISupportCaseService SupportCases
+
+@* One case that belongs to no team, opened inside its card: the transcript, the answer, and giving it a team.
+   Rendered only while the card is open, so a closed card reads no messages. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-conversation="@Case.Id">
+
+    <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" TimeTemplate="TimeTemplate"
+                       ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync" />
+
+    @if (Case.Status == SupportCaseStatus.Open)
+    {
+        @* oninput as well as the value binding: Radzen binds on change, so the Answer button would stay disabled until the box lost focus. *@
+        <RadzenTextArea Value="@_answer" ValueChanged="@(v => _answer = v)"
+                        @oninput="@(e => _answer = e.Value?.ToString())"
+                        Placeholder="@_text[SupportUnassignedViewText.AnswerLabel]"
+                        Rows="3" Style="width: 100%;" aria-label="@_text[SupportUnassignedViewText.AnswerLabel]" />
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenButton Text="@_text[SupportUnassignedViewText.AnswerLabel]" Icon="send" Click="AnswerAsync"
+                          Disabled="@(string.IsNullOrWhiteSpace(_answer) || _busy)" data-answer="@Case.Id" />
+            <RadzenButton Text="@_text[SupportUnassignedViewText.Close]" Icon="check" ButtonStyle="ButtonStyle.Light"
+                          Click="CloseAsync" Disabled="_busy" data-close="@Case.Id" />
+        </RadzenStack>
+    }
+    else
+    {
+        <div>
+            <RadzenButton Text="@_text[SupportUnassignedViewText.Reopen]" Icon="refresh"
+                          ButtonStyle="ButtonStyle.Light" Click="ReopenAsync" Disabled="_busy" data-reopen="@Case.Id" />
+        </div>
+    }
+
+    @* Offered only for a team that is listed: one deleted since the mail arrived would take the case into nobody's queue. *@
+    @if (Case.SuggestedTeams is { Length: > 0 })
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-suggestions="@Case.Id">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[SupportUnassignedViewText.Suggested]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@SuggestionReasonText</RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                @foreach (var suggestion in Case.SuggestedTeams)
+                {
+                    @if (IsListed(suggestion.Key))
+                    {
+                        <RadzenButton Text="@_text.Format(SupportUnassignedViewText.AssignToSuggested, SuggestionName(suggestion))"
+                                      ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small"
+                                      Click="@(() => AssignToAsync(suggestion.Key))" Disabled="_busy" />
+                    }
+                    else
+                    {
+                        <RadzenBadge Text="@SuggestionName(suggestion)" BadgeStyle="BadgeStyle.Light" />
+                    }
+                }
+            </RadzenStack>
+        </RadzenStack>
+    }
+
+    @* Offered on a closed case too: which tenant a case belonged to is worth recording after it is answered. *@
+    @if (Teams is { Length: > 0 })
+    {
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenDropDown Data="Teams" TextProperty="Name" ValueProperty="Key"
+                            Value="@_assignTo" ValueChanged="@((string v) => _assignTo = v)"
+                            TValue="string" AllowClear="true"
+                            Placeholder="@_text[SupportUnassignedViewText.AssignLabel]"
+                            Style="min-width: 16rem;" aria-label="@_text[SupportUnassignedViewText.AssignLabel]" />
+            <RadzenButton Text="@_text[SupportUnassignedViewText.AssignAction]" Click="AssignAsync"
+                          Disabled="@(string.IsNullOrWhiteSpace(_assignTo) || _busy)" />
+        </RadzenStack>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+            @_text[SupportUnassignedViewText.CannotListTeams]
+        </RadzenText>
+    }
+</RadzenStack>
+
+@code {
+    /// <summary>The case shown. A new instance is read as a change, and the transcript is read again.</summary>
+    [Parameter, EditorRequired] public SupportCase Case { get; set; }
+
+    /// <summary>The teams the case may be given, in the order to offer them; empty when the reader cannot list teams.</summary>
+    [Parameter] public SupportCaseTeam[] Teams { get; set; } = [];
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>Raised with the case id after this conversation changed the case, so the list around it can read it again.</summary>
+    [Parameter] public EventCallback<string> Changed { get; set; }
+
+    /// <summary>
+    /// Raised after giving the case a team: <c>true</c> when it now has the team, <c>false</c> when somebody
+    /// assigned it first. Either way the case has left the unassigned queue.
+    /// </summary>
+    [Parameter] public EventCallback<bool> Assigned { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    private SupportCase _shown;
+    private SupportMessage[] _messages = [];
+    private string _answer;
+    private string _assignTo;
+    private bool _busy;
+
+    private string SuggestionReasonText
+        => Case.SuggestionReason switch
+        {
+            SupportTeamSuggestionReason.SeveralTeams => _text[SupportUnassignedViewText.ReasonSeveralTeams],
+            SupportTeamSuggestionReason.SharedAddress => _text[SupportUnassignedViewText.ReasonSharedAddress],
+            _ => _text[SupportUnassignedViewText.ReasonSenderNotVerified]
+        };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportUnassignedViewText.All);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReferenceEquals(_shown, Case)) return;
+
+        _shown = Case;
+        _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
+    }
+
+    private bool IsListed(string teamKey) => (Teams ?? []).Any(x => x.Key == teamKey);
+
+    /// <remarks>The team's name as it is now when it can be listed, since it may have been renamed after the mail arrived.</remarks>
+    private string SuggestionName(SupportCaseTeam suggestion)
+        => (Teams ?? []).FirstOrDefault(x => x.Key == suggestion.Key)?.Name
+           ?? (string.IsNullOrWhiteSpace(suggestion.Name) ? suggestion.Key : suggestion.Name);
+
+    private async Task AnswerAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_answer)) return;
+
+        var body = _answer;
+        await ActAsync(() => SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, body));
+        _answer = null;
+    }
+
+    private Task CloseAsync() => ActAsync(() => SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id));
+
+    private Task ReopenAsync() => ActAsync(() => SupportCases.ReopenCaseAsync(Case.TeamKey, Case.Id));
+
+    private Task ResendAsync(SupportMessage message) => ActAsync(() => SupportCases.ResendAsync(Case.TeamKey, Case.Id, message.Sequence));
+
+    private Task AssignAsync() => AssignToAsync(_assignTo);
+
+    /// <remarks>Checked against the system scope by the service, never against the receiving team.</remarks>
+    private async Task AssignToAsync(string teamKey)
+    {
+        if (string.IsNullOrWhiteSpace(teamKey)) return;
+
+        _busy = true;
+        try
+        {
+            var assigned = await SupportCases.AssignCaseAsync(Case.Id, teamKey);
+            _assignTo = null;
+            await Assigned.InvokeAsync(assigned);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ActAsync(Func<Task> act)
+    {
+        _busy = true;
+        try
+        {
+            await act();
+            _shown = null;
+            await Changed.InvokeAsync(Case.Id);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

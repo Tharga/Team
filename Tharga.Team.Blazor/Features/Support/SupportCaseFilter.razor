@@ -3,8 +3,8 @@
 @using Tharga.Team.Blazor.Framework
 @inject IJSRuntime JsRuntime
 
-@* Which cases a list shows: by status and by kind of conversation. Nothing chosen means everything, and the
-   choice is remembered in the browser under the host's key. *@
+@* Which cases a list shows: by status, by kind of conversation and by what was searched for. Nothing chosen
+   means everything, and the status and kind are remembered in the browser under the host's key. *@
 
 <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
     <RadzenSelectBar Value="@Statuses" TValue="IEnumerable<SupportCaseStatus>" Multiple="true" Size="ButtonSize.Small"
@@ -15,13 +15,23 @@
         </Items>
     </RadzenSelectBar>
 
-    <RadzenSelectBar Value="@Kinds" TValue="IEnumerable<SupportAssistance>" Multiple="true" Size="ButtonSize.Small"
-                     Change="@((IEnumerable<SupportAssistance> v) => SetAsync(Statuses, v))" aria-label="@_text[SupportCaseFilterText.KindLabel]">
-        <Items>
-            <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Support]" Icon="support_agent" Value="SupportAssistance.None" />
-            <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Assistant]" Icon="smart_toy" Value="SupportAssistance.Assistant" />
-        </Items>
-    </RadzenSelectBar>
+    @if (ShowKinds)
+    {
+        <RadzenSelectBar Value="@Kinds" TValue="IEnumerable<SupportAssistance>" Multiple="true" Size="ButtonSize.Small"
+                         Change="@((IEnumerable<SupportAssistance> v) => SetAsync(Statuses, v))" aria-label="@_text[SupportCaseFilterText.KindLabel]">
+            <Items>
+                <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Support]" Icon="support_agent" Value="SupportAssistance.None" />
+                <RadzenSelectBarItem Text="@_text[SupportCaseFilterText.Assistant]" Icon="smart_toy" Value="SupportAssistance.Assistant" />
+            </Items>
+        </RadzenSelectBar>
+    }
+
+    @if (ShowSearch)
+    {
+        <RadzenTextBox Value="@Search" @oninput="@(e => SearchAsync(e.Value?.ToString()))"
+                       Placeholder="@_text[SupportCaseFilterText.Search]" aria-label="@_text[SupportCaseFilterText.Search]"
+                       Style="min-width: 14rem;" data-search="true" />
+    }
 </RadzenStack>
 
 @code {
@@ -31,6 +41,18 @@
     /// <summary>Raised whenever the choice changes, including when a remembered one is restored.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
+    /// <summary>
+    /// Whether the kind of conversation is offered. Turn it off for a list no assistant can answer in, such as
+    /// the cases that belong to no team; the kind then lets every case through.
+    /// </summary>
+    [Parameter] public bool ShowKinds { get; set; } = true;
+
+    /// <summary>
+    /// Whether a search box is offered. It matches the subject, who wrote, the case id, the team and the
+    /// suggested teams, and the address a case corresponds with; it is not remembered.
+    /// </summary>
+    [Parameter] public bool ShowSearch { get; set; }
+
     private static readonly SupportCaseStatus[] DefaultStatuses = [SupportCaseStatus.Open];
     private static readonly SupportAssistance[] DefaultKinds = [SupportAssistance.None];
 
@@ -39,6 +61,9 @@
 
     /// <summary>The kinds of conversation shown; none chosen shows every kind. Support by default.</summary>
     public IEnumerable<SupportAssistance> Kinds { get; private set; } = DefaultKinds;
+
+    /// <summary>What was searched for; every word must appear somewhere in the case. Empty shows every case.</summary>
+    public string Search { get; private set; }
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
@@ -81,7 +106,7 @@
     }
 
     /// <summary>Whether a case passes the choice.</summary>
-    public bool Shows(SupportCase item) => Shows(item, Statuses, Kinds);
+    public bool Shows(SupportCase item) => Shows(item, Statuses, ShowKinds ? Kinds : []) && Matches(item, Search);
 
     /// <summary>Whether a case passes the default choice, for a list rendered before the filter is.</summary>
     public static bool ShowsByDefault(SupportCase item) => Shows(item, DefaultStatuses, DefaultKinds);
@@ -95,6 +120,26 @@
         var kindPasses = !kinds.Any() || kinds.Contains(kind);
 
         return statusPasses && kindPasses;
+    }
+
+    private static bool Matches(SupportCase item, string search)
+    {
+        var terms = (search ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (terms.Length == 0) return true;
+
+        var fields = new[] { item.Subject, item.AuthorName, item.Id, item.TeamName, item.TeamKey }
+            .Concat((item.Bindings ?? []).Select(x => x.Address))
+            .Concat((item.SuggestedTeams ?? []).SelectMany(x => new[] { x.Name, x.Key }))
+            .Where(x => !string.IsNullOrEmpty(x))
+            .ToArray();
+
+        return terms.All(term => fields.Any(field => field.Contains(term, StringComparison.CurrentCultureIgnoreCase)));
+    }
+
+    private async Task SearchAsync(string search)
+    {
+        Search = search;
+        await Changed.InvokeAsync();
     }
 
     private async Task SetAsync(IEnumerable<SupportCaseStatus> statuses, IEnumerable<SupportAssistance> kinds)

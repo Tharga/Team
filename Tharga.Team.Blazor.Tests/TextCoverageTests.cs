@@ -76,6 +76,7 @@ public class TextCoverageTests
         "Features/Support/SupportCaseVisibilityPicker.razor",
         "Features/Support/SupportAcrossTeamsView.razor",
         "Features/Support/SupportUnassignedView.razor",
+        "Features/Support/SupportUnassignedConversation.razor",
         "Features/Mailbox/PostmasterView.razor",
         "Features/Mailbox/TeamMailAddressView.razor",
     ];
@@ -249,6 +250,7 @@ public class TextCoverageTests
         // in exactly the way a literal string is.
         Assert.All(AuditLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportUnassignedViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportCaseFilterText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()

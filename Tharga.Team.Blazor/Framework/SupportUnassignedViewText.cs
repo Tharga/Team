@@ -12,6 +12,7 @@ namespace Tharga.Team.Blazor.Framework;
 /// </remarks>
 public static class SupportUnassignedViewText
 {
+    /// <summary>The queue's name, for a host that labels the place it shows it; the view itself carries no heading.</summary>
     public static readonly TextKey Title = new("team.support.unassigned.title", "Unassigned support cases");
 
     /// <summary>
@@ -26,6 +27,15 @@ public static class SupportUnassignedViewText
         "These arrived without a team — usually by email from a sender whose team could not be determined. Answer them here, and give one a team only when you know which it is.");
 
     public static readonly TextKey NoCases = new("team.support.unassigned.none", "Nothing is waiting without a team.");
+
+    /// <summary>Shown when there are cases but the filter hides every one.</summary>
+    public static readonly TextKey NoneMatch = new("team.support.unassigned.noneMatch", "No case matches the filter.");
+
+    /// <summary>Follows the number of open cases whose newest entry is from the sender.</summary>
+    public static readonly TextKey Awaiting = new("team.support.unassigned.awaiting", "awaiting an answer");
+
+    /// <summary>Marks a case whose newest entry is from the sender, so support sees what to answer.</summary>
+    public static readonly TextKey NeedsAnswer = new("team.support.unassigned.needsAnswer", "Needs an answer");
 
     public static readonly TextKey From = new("team.support.unassigned.from", "from");
 
@@ -88,7 +98,7 @@ public static class SupportUnassignedViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, Explanation, NoCases, From, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
+        Title, Explanation, NoCases, NoneMatch, Awaiting, NeedsAnswer, From, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
         AssignLabel, AssignAction, AlreadyAssigned, CannotListTeams, NotPermitted,
         Suggested, ReasonSeveralTeams, ReasonSenderNotVerified, ReasonSharedAddress, AssignToSuggested
     ];
