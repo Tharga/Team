@@ -87,6 +87,8 @@ public class TextCoverageTests
         "Features/Messages/UserMessageComposeView.razor",
         "Features/Messages/UserMessageLogView.razor",
         "Features/Messages/UserMessageDetails.razor",
+        "Features/User/UserNoticePreferencesView.razor",
+        "Features/Team/UserNoticeTeamDefaultsView.razor",
     ];
 
     /// <summary>
@@ -266,6 +268,9 @@ public class TextCoverageTests
         Assert.All(UserMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserMessageComposeViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserMessageLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserNoticePreferencesViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserNoticeTeamDefaultsViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserNoticeText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()

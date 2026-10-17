@@ -106,6 +106,42 @@ public record ThargaTeamOptions
     /// <summary>Collection holding the log of messages staff sent to users, default <c>UserMessage</c>.</summary>
     public string UserMessageCollectionName { get; set; } = DefaultUserMessageCollectionName;
 
+    /// <summary>The default for <see cref="UserNoticeCollectionName"/>.</summary>
+    public const string DefaultUserNoticeCollectionName = "UserNotice";
+
+    /// <summary>Collection holding raised notice occurrences until they are distributed, default <c>UserNotice</c>.</summary>
+    public string UserNoticeCollectionName { get; set; } = DefaultUserNoticeCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeItemCollectionName"/>.</summary>
+    public const string DefaultUserNoticeItemCollectionName = "UserNoticeItem";
+
+    /// <summary>Collection holding each user's notices until and after they are mailed, default <c>UserNoticeItem</c>.</summary>
+    public string UserNoticeItemCollectionName { get; set; } = DefaultUserNoticeItemCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeStreamCollectionName"/>.</summary>
+    public const string DefaultUserNoticeStreamCollectionName = "UserNoticeStream";
+
+    /// <summary>Collection holding when each user's next notice mail is due, default <c>UserNoticeStream</c>.</summary>
+    public string UserNoticeStreamCollectionName { get; set; } = DefaultUserNoticeStreamCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticePreferenceCollectionName"/>.</summary>
+    public const string DefaultUserNoticePreferenceCollectionName = "UserNoticePreference";
+
+    /// <summary>Collection holding users' notice choices that differ from a default, default <c>UserNoticePreference</c>.</summary>
+    public string UserNoticePreferenceCollectionName { get; set; } = DefaultUserNoticePreferenceCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeTeamDefaultCollectionName"/>.</summary>
+    public const string DefaultUserNoticeTeamDefaultCollectionName = "UserNoticeTeamDefault";
+
+    /// <summary>Collection holding teams' notice defaults that differ from the catalogue's, default <c>UserNoticeTeamDefault</c>.</summary>
+    public string UserNoticeTeamDefaultCollectionName { get; set; } = DefaultUserNoticeTeamDefaultCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeRetention"/>.</summary>
+    public static readonly TimeSpan DefaultUserNoticeRetention = TimeSpan.FromDays(90);
+
+    /// <summary>How long a distributed occurrence and a mailed notice are kept, which is also how long an occurrence raised again is recognised and not sent twice; default 90 days.</summary>
+    public TimeSpan UserNoticeRetention { get; set; } = DefaultUserNoticeRetention;
+
     /// <summary>
     /// Whether to report, at startup, stored team members that carry no access level and are therefore
     /// being treated as <see cref="AccessLevel.Owner"/>. Default <c>true</c>.

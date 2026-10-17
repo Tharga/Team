@@ -40,6 +40,11 @@
     </MemberActionItems>
 </TeamComponent>
 
+@* What the team's members receive of automatic notices until they choose; needs notices:manage on the team. *@
+<div class="rz-mt-4">
+    <UserNoticeTeamDefaultsView />
+</div>
+
 @code {
     [Inject] private Tharga.Team.Sample.Framework.Team.MemberProjectDemo Projects { get; set; }
     [Inject] private NotificationService NotificationService { get; set; }

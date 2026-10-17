@@ -63,6 +63,11 @@ public class PersistedEnumRepresentationTests
         Assert.Contains("SupportMessageEntity.Source", found);
         Assert.Contains("SupportCaseEntity.Visibility", found);
         Assert.Contains("SupportCaseEntity.SuggestionReason", found);
+        Assert.Contains("UserNoticeEntity.Status", found);
+        Assert.Contains("UserNoticeItemEntity.Status", found);
+        Assert.Contains("UserNoticeItemEntity.Delivery", found);
+        Assert.Contains("UserNoticePreferenceEntity.Delivery", found);
+        Assert.Contains("UserNoticeTeamDefaultEntity.Delivery", found);
     }
 
     /// <summary>

@@ -308,10 +308,42 @@ builder.Services.AddThargaUserMail(o =>
 
     o.AddCategory(new UserMailCategory { Key = "news", Name = "Product news", Description = "What is new in the product, a few times a year." });
     o.AddCategory(new UserMailCategory { Key = "tips", Name = "Tips", Description = "Ways to get more out of the product.", OnByDefault = false });
+    o.AddCategory(new UserMailCategory { Key = "work", Name = "Notices about my work", Description = "Automatic notices about what happens in your teams." });
 });
 
 // Messages staff write to users of chosen teams, in service messages and product news but never in tips.
 builder.Services.AddThargaUserMessages(o => o.StaffMessageCategories = [UserMailCategories.ServiceKey, "news"]);
+
+// Automatic notices, raised from server code through IUserNoticeRaiser. Each user chooses on their profile, each team
+// administrator sets the team's defaults, and turning "Notices about my work" off stops them all.
+builder.Services.AddThargaUserNotices(o =>
+{
+    o.DigestTime = new TimeOnly(7, 0);
+    o.TimeZoneId = "Europe/Stockholm";
+
+    o.Add(new UserNoticeType
+    {
+        Key = "member.joined",
+        Name = "Someone joins a team I administer",
+        Description = "When an invited person accepts and becomes a member.",
+        Category = "work",
+        Audience = UserNoticeAudience.AtLeast(AccessLevel.Administrator),
+        Deliveries = [UserNoticeDelivery.AtOnce, UserNoticeDelivery.Digest],
+        Subject = "{name} joined {subject}",
+        Body = "<p><b>{name}</b> accepted the invitation and is now a member of {subject}.</p>",
+        Placeholders = ["name"]
+    });
+
+    o.Add(new UserNoticeType
+    {
+        Key = "apikey.expiring",
+        Name = "An API key of mine is about to expire",
+        Category = "work",
+        Audience = UserNoticeAudience.NamedOnly,
+        Subject = "Your API key {subject} expires in {days} days",
+        Placeholders = ["days"]
+    });
+});
 
 var app = builder.Build();
 

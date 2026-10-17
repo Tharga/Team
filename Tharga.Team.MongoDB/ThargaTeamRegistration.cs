@@ -50,6 +50,21 @@ public static class ThargaTeamRegistration
         services.TrackMongoCollection(typeof(IUserMessageCollection), typeof(UserMessageCollection));
         services.TryAddScoped<IUserMessageLog, MongoUserMessageLog>();
 
+        // Automatic notices: occurrences until distributed, each user's notices and streams until mailed, and the
+        // choices and team defaults that differ from a default. TryAdd so a host keeping them elsewhere wins.
+        services.AddTransient<IUserNoticeCollection, UserNoticeCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeCollection), typeof(UserNoticeCollection));
+        services.AddTransient<IUserNoticeItemCollection, UserNoticeItemCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeItemCollection), typeof(UserNoticeItemCollection));
+        services.AddTransient<IUserNoticeStreamCollection, UserNoticeStreamCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeStreamCollection), typeof(UserNoticeStreamCollection));
+        services.TryAddScoped<IUserNoticeOutbox, MongoUserNoticeOutbox>();
+        services.AddTransient<IUserNoticePreferenceCollection, UserNoticePreferenceCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticePreferenceCollection), typeof(UserNoticePreferenceCollection));
+        services.AddTransient<IUserNoticeTeamDefaultCollection, UserNoticeTeamDefaultCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeTeamDefaultCollection), typeof(UserNoticeTeamDefaultCollection));
+        services.TryAddScoped<IUserNoticePreferenceStore, MongoUserNoticePreferenceStore>();
+
         if (o._userEntity != null)
         {
             // Where a user mail goes, read from the user record when it is sent.
@@ -142,7 +157,7 @@ public static class ThargaTeamRegistration
             var directoryType = typeof(MongoSupportSenderDirectory<,,>).MakeGenericType(o._userEntity, o._teamEntity, o._teamMemberModel);
             services.TryAddScoped(typeof(ISupportSenderDirectory), directoryType);
 
-            // Who a staff message may reach: the active members of the teams it is written within.
+            // Who a staff message or a notice may reach: the active members of the teams it is written or raised in.
             services.TryAddScoped(typeof(IUserMessageMemberDirectory), typeof(MongoUserMessageMemberDirectory<,,>).MakeGenericType(o._userEntity, o._teamEntity, o._teamMemberModel));
         }
     }

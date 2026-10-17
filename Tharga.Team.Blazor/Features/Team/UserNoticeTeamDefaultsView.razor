@@ -1,0 +1,149 @@
+@using Tharga.Team.Blazor.Framework
+@inject IUserNoticeTeamService TeamNotices
+@inject ITeamStateService TeamState
+@inject NotificationService NotificationService
+
+@* A team's defaults for automatic notices: what its members receive, and how, until they choose for themselves. The
+   service requires notices:manage on the team, so a reader without it is told rather than shown switches that fail. *@
+
+<RadzenCard>
+    @if (!_ready)
+    {
+        <Loading />
+    }
+    else if (_teamKey == null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            @_text[UserNoticeTeamDefaultsViewText.SelectTeam]
+        </RadzenAlert>
+    }
+    else if (!_permitted)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            @_text[UserNoticeTeamDefaultsViewText.NotPermitted]
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserNoticeTeamDefaultsViewText.Title]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserNoticeTeamDefaultsViewText.Explanation]</RadzenText>
+
+            @if (_defaults.Length == 0)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-empty>@_text[UserNoticeTeamDefaultsViewText.Empty]</RadzenText>
+            }
+
+            @foreach (var value in _defaults)
+            {
+                var notice = value.Notice;
+                var description = Description(notice);
+
+                <RadzenStack @key="@($"{notice.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-notice="@notice.Key">
+                    <RadzenSwitch Value="@value.Enabled" Disabled="@_busy" Change="@(enabled => SetAsync(value, enabled, value.Delivery))" aria-label="@Name(notice)" />
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+                        <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(notice)</strong></RadzenText>
+                        @if (description != null)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@description</RadzenText>
+                        }
+                        @if (notice.Deliveries.Length > 1)
+                        {
+                            <RadzenSelectBar TValue="UserNoticeDelivery" Value="@value.Delivery" Disabled="@(_busy || !value.Enabled)" Size="ButtonSize.ExtraSmall"
+                                             Change="@(delivery => SetAsync(value, value.Enabled, delivery))" aria-label="@_text[UserNoticeText.Delivery]" data-delivery="@notice.Key">
+                                <Items>
+                                    @foreach (var delivery in notice.Deliveries)
+                                    {
+                                        <RadzenSelectBarItem Text="@_text[UserNoticeText.For(delivery)]" Value="@delivery" />
+                                    }
+                                </Items>
+                            </RadzenSelectBar>
+                        }
+                        @if (value.IsSet)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-changed="@notice.Key">@_text[UserNoticeTeamDefaultsViewText.Changed]</RadzenText>
+                        }
+                    </RadzenStack>
+                </RadzenStack>
+            }
+        </RadzenStack>
+    }
+</RadzenCard>
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    /// <summary>The team whose defaults are shown and changed; the selected team when not set.</summary>
+    [Parameter] public string TeamKey { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private UserNoticeTeamDefault[] _defaults = [];
+    private string _loadedFor;
+    private string _teamKey;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+    private int _revision;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_ready && _loadedFor == TeamKey) return;
+
+        _loadedFor = TeamKey;
+        _ready = false;
+        _permitted = true;
+        _defaults = [];
+
+        _teamKey = string.IsNullOrWhiteSpace(TeamKey) ? (TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key) : TeamKey;
+
+        if (_teamKey != null)
+        {
+            try
+            {
+                _defaults = await TeamNotices.GetTeamDefaultsAsync(_teamKey) ?? [];
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _permitted = false;
+            }
+        }
+
+        _text = await TextProvider.ResolveAsync([.. UserNoticeTeamDefaultsViewText.All, .. _defaults.SelectMany(x => Keys(x.Notice))]);
+        _ready = true;
+    }
+
+    private async Task SetAsync(UserNoticeTeamDefault value, bool enabled, UserNoticeDelivery delivery)
+    {
+        _busy = true;
+        try
+        {
+            var changed = await TeamNotices.SetTeamDefaultAsync(_teamKey, value.Notice.Key, enabled, delivery);
+            _defaults = [.. _defaults.Select(x => x.Notice.Key == value.Notice.Key ? changed : x)];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _revision++;
+            NotificationService.Notify(NotificationSeverity.Warning, _text[UserNoticeTeamDefaultsViewText.NotPermitted]);
+        }
+        catch (Exception)
+        {
+            _revision++;
+            NotificationService.Notify(NotificationSeverity.Error, _text[UserNoticeTeamDefaultsViewText.SaveFailed]);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string Name(UserNoticeType notice) => _text[new TextKey(notice.NameKey, notice.Name)];
+
+    private string Description(UserNoticeType notice)
+        => string.IsNullOrWhiteSpace(notice.Description) ? null : _text[new TextKey(notice.DescriptionKey, notice.Description)];
+
+    private static IEnumerable<TextKey> Keys(UserNoticeType notice)
+    {
+        yield return new TextKey(notice.NameKey, notice.Name);
+        if (!string.IsNullOrWhiteSpace(notice.Description)) yield return new TextKey(notice.DescriptionKey, notice.Description);
+    }
+}

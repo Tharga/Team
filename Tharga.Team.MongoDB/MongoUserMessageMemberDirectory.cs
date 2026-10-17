@@ -2,7 +2,7 @@ using Tharga.MongoDB;
 
 namespace Tharga.Team.MongoDB;
 
-/// <summary>MongoDB adapter for <see cref="IUserMessageMemberDirectory"/>, over the team and user repositories.</summary>
+/// <summary>MongoDB adapter for <see cref="IUserMessageMemberDirectory"/>, over the team and user repositories, for staff messages and automatic notices.</summary>
 /// <remarks>
 /// <b>Reads the repositories, not the services</b>, because the services list only what the caller is a member of and a
 /// staff message reaches teams its writer belongs to none of; the message service in front of this is what is checked.
@@ -50,9 +50,20 @@ internal sealed class MongoUserMessageMemberDirectory<TUserEntity, TTeamEntity, 
         return await ActiveAsync(found);
     }
 
-    private async Task<UserMessageMember[]> ActiveAsync(IEnumerable<TTeamEntity> found)
+    /// <remarks>Reads only the teams the user is in, and only the user's own record.</remarks>
+    public async Task<UserMessageMember[]> GetActiveMembershipsOfUserAsync(string userKey, CancellationToken cancellationToken = default)
     {
-        var memberships = Memberships(found).ToArray();
+        if (string.IsNullOrWhiteSpace(userKey)) return [];
+
+        var found = new List<TTeamEntity>();
+        await foreach (var team in teams.GetTeamsByUserAsync(userKey).WithCancellation(cancellationToken)) found.Add(team);
+
+        return await ActiveAsync(found, userKey);
+    }
+
+    private async Task<UserMessageMember[]> ActiveAsync(IEnumerable<TTeamEntity> found, string onlyUserKey = null)
+    {
+        var memberships = Memberships(found).Where(x => onlyUserKey == null || string.Equals(x.Member.Key, onlyUserKey, StringComparison.Ordinal)).ToArray();
         var enabled = (await users.GetByKeysAsync([.. memberships.Select(x => x.Member.Key).Distinct(StringComparer.Ordinal)]))
             .Where(x => x.DisabledAt == null)
             .GroupBy(x => x.Key, StringComparer.Ordinal)
@@ -66,7 +77,8 @@ internal sealed class MongoUserMessageMemberDirectory<TUserEntity, TTeamEntity, 
                 UserKey = x.Member.Key,
                 Name = !string.IsNullOrWhiteSpace(x.Member.Name) ? x.Member.Name : enabled[x.Member.Key].Name,
                 AccessLevel = x.Member.AccessLevel,
-                Roles = x.Member.TenantRoles ?? []
+                Roles = x.Member.TenantRoles ?? [],
+                ScopeOverrides = x.Member.ScopeOverrides ?? []
             })];
     }
 

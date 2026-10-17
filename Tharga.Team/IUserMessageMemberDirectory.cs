@@ -2,7 +2,7 @@ using System.ComponentModel;
 
 namespace Tharga.Team;
 
-/// <summary>Reads the teams and their active members a message may reach; internal and unchecked, so write messages through <see cref="IUserMessageService"/>, never by injecting this.</summary>
+/// <summary>Reads the teams and their active members a message or a notice may reach; internal and unchecked, so write messages through <see cref="IUserMessageService"/>, never by injecting this.</summary>
 /// <remarks>
 /// An active member has accepted, is not suspended and has a user record that is not disabled, in a team that is not
 /// deleted. <c>Tharga.Team.MongoDB</c> registers one over the team and user repositories; a host with its own stores
@@ -19,6 +19,10 @@ public interface IUserMessageMemberDirectory
 
     /// <summary>The active memberships of every team, one per member and team.</summary>
     Task<UserMessageMember[]> GetActiveMembersOfEveryTeamAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>The active memberships of one user, one per team; by default read from every team's, which a host's own directory may answer more directly.</summary>
+    async Task<UserMessageMember[]> GetActiveMembershipsOfUserAsync(string userKey, CancellationToken cancellationToken = default)
+        => [.. (await GetActiveMembersOfEveryTeamAsync(cancellationToken) ?? []).Where(x => x != null && string.Equals(x.UserKey, userKey, StringComparison.Ordinal))];
 }
 
 /// <summary>One active membership a message may reach.</summary>
@@ -38,4 +42,7 @@ public sealed record UserMessageMember
 
     /// <summary>The tenant roles the member holds in the team.</summary>
     public string[] Roles { get; init; } = [];
+
+    /// <summary>The scopes granted to the member in the team beyond their access level and roles.</summary>
+    public string[] ScopeOverrides { get; init; } = [];
 }
