@@ -64,6 +64,13 @@ public class ApiKeyLifecycleDecorator : IApiKeyAdministrationService
         return result;
     }
 
+    public async Task<IApiKey> CreatePersonalSystemKeyAsync(string name, string[] scopes, string ownerUserKey, DateTime? expiryDate = null, string createdBy = null)
+    {
+        var result = await _inner.CreatePersonalSystemKeyAsync(name, scopes, ownerUserKey, expiryDate, createdBy);
+        await NotifyAsync(ApiKeyLifecycleReason.Created, result);
+        return result;
+    }
+
     public async Task<IApiKey> RefreshSystemKeyAsync(string key)
     {
         var result = await _inner.RefreshSystemKeyAsync(key);

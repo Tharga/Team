@@ -1,4 +1,5 @@
 ﻿using System.Runtime.CompilerServices;
+using Microsoft.Extensions.Logging;
 using Tharga.Team;
 
 namespace Tharga.Team.Service;
@@ -16,6 +17,9 @@ public class UserManagementService : IUserManagementService
     private readonly IUserDirectoryService _directoryService;
     private readonly bool _writeNameToDirectory;
     private readonly IUserIdentityDirectory _identityDirectory;
+    private readonly IApiKeyAdministrationService _apiKeys;
+    private readonly PrivateKeyOwnerRemovedAction _ownerRemovedAction;
+    private readonly ILogger<UserManagementService> _logger;
 
     /// <param name="userService">The user store.</param>
     /// <param name="teamService">The team store, used to remove memberships and to find owned teams.</param>
@@ -26,13 +30,19 @@ public class UserManagementService : IUserManagementService
     /// wants the directory authoritative.
     /// </param>
     /// <param name="identityDirectory">The directory's sign-in identity reader, when one is registered.</param>
-    public UserManagementService(IUserService userService, ITeamService teamService, IUserDirectoryService directoryService = null, bool writeNameToDirectory = false, IUserIdentityDirectory identityDirectory = null)
+    /// <param name="apiKeys">The API key store, when API keys are registered, used to clean up a deleted user's personal system keys.</param>
+    /// <param name="ownerRemovedAction">Whether those keys are deleted or disabled; see <see cref="ApiKeyOptions.OwnerRemovedAction"/>.</param>
+    /// <param name="logger">Where a failed key cleanup is reported, since it never fails the deletion.</param>
+    public UserManagementService(IUserService userService, ITeamService teamService, IUserDirectoryService directoryService = null, bool writeNameToDirectory = false, IUserIdentityDirectory identityDirectory = null, IApiKeyAdministrationService apiKeys = null, PrivateKeyOwnerRemovedAction ownerRemovedAction = PrivateKeyOwnerRemovedAction.Delete, ILogger<UserManagementService> logger = null)
     {
+        _logger = logger;
         _userService = userService;
         _teamService = teamService;
         _directoryService = directoryService;
         _writeNameToDirectory = writeNameToDirectory;
         _identityDirectory = identityDirectory;
+        _apiKeys = apiKeys;
+        _ownerRemovedAction = ownerRemovedAction;
     }
 
     public async Task<UserSignInIdentities[]> GetSignInIdentitiesAsync(IEnumerable<string> userKeys, CancellationToken cancellationToken = default)
@@ -141,6 +151,7 @@ public class UserManagementService : IUserManagementService
         // and the state is now repairable through SystemTeamScopes.SetOwner.
         var removedTeamCount = await _teamService.RemoveUserFromAllTeamsAsync(user.Key);
         await _userService.DeleteUserAsync(user.Key);
+        await RemovePersonalSystemKeysAsync(user.Key);
 
         var directoryDeleted = false;
         if (deleteFromDirectory && directoryError == null)
@@ -157,6 +168,50 @@ public class UserManagementService : IUserManagementService
         }
 
         return new UserDeleteResult(directoryDeleted, directoryError, removedTeamCount);
+    }
+
+    /// <summary>
+    /// Deletes, or disables, a deleted user's personal system keys, per <see cref="ApiKeyOptions.OwnerRemovedAction"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Hygiene, not the security fix.</b> Authentication already refuses a personal system key whose owner
+    /// no longer exists. This keeps the keys from being listed once their owner is gone. The user's personal
+    /// team keys are handled by the member-removal participants, as each membership ends above.
+    /// <para>
+    /// <b>Never throws</b>, like <see cref="TeamMemberRemovalCascade"/>: it runs after the user record is gone,
+    /// so a failure here cannot be reported as a failed deletion without telling the caller something untrue.
+    /// It is logged instead.
+    /// </para>
+    /// </remarks>
+    private async Task RemovePersonalSystemKeysAsync(string userKey)
+    {
+        if (_apiKeys == null) return;
+
+        try
+        {
+            // Collected first: acting while enumerating would change the sequence being read.
+            var owned = new List<IApiKey>();
+            await foreach (var key in _apiKeys.GetSystemKeysAsync())
+            {
+                if (string.Equals(key.OwnerMemberKey, userKey, StringComparison.Ordinal)) owned.Add(key);
+            }
+
+            foreach (var key in owned)
+            {
+                if (_ownerRemovedAction == PrivateKeyOwnerRemovedAction.Disable)
+                {
+                    if (key.DisabledAt == null) await _apiKeys.SetSystemKeyDisabledAsync(key.Key, true, "Owner deleted");
+                }
+                else
+                {
+                    await _apiKeys.DeleteSystemKeyAsync(key.Key);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Deleting user {UserKey} could not clean up their personal system API keys. The deletion stands.", userKey);
+        }
     }
 
     /// <remarks>

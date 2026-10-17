@@ -2,6 +2,7 @@
 @inject IJSRuntime Js
 @inject DialogService DialogService
 @inject NotificationService NotificationService
+@inject IThargaTextProvider TextProvider
 
 @*
     Shown immediately after an API key is created or regenerated. Whether this is the *only* chance to
@@ -14,23 +15,23 @@
     @if (RemainsRetrievable)
     {
         <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-            Copy this key now, or read it later from the key list — it stays <b>stored</b> until the key is locked. Lock it once you have copied it, to clear the stored value.
+            @_text[ApiKeyRevealDialogText.RemainsRetrievable]
         </RadzenAlert>
     }
     else
     {
         <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" AllowClose="false">
-            Copy this key now. For security it is <b>shown only once</b> and is <b>not stored</b> — you will not be able to retrieve it again. If you lose it, regenerate the key to get a new one.
+            @_text[ApiKeyRevealDialogText.ShownOnce]
         </RadzenAlert>
     }
 
     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
         <RadzenTextBox Value="@ApiKey" ReadOnly="true" Style="width: 100%; font-family: monospace;" />
-        <RadzenButton Icon="content_copy" Text="Copy" Click="@CopyAsync" />
+        <RadzenButton Icon="content_copy" Text="@_text[ApiKeyRevealDialogText.Copy]" Click="@CopyAsync" />
     </RadzenStack>
 
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
-        <RadzenButton Text="Done" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close())" />
+        <RadzenButton Text="@_text[ApiKeyRevealDialogText.Done]" ButtonStyle="ButtonStyle.Base" Variant="Variant.Flat" Click="@(() => DialogService.Close())" />
     </RadzenStack>
 </RadzenStack>
 
@@ -45,9 +46,16 @@
     /// </summary>
     [Parameter] public bool RemainsRetrievable { get; set; }
 
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(ApiKeyRevealDialogText.All);
+    }
+
     private async Task CopyAsync()
     {
         await Js.InvokeVoidAsync("clipboard.copyText", ApiKey);
-        NotificationService.Notify(NotificationSeverity.Success, "API key copied to the clipboard.");
+        NotificationService.Notify(NotificationSeverity.Success, _text[ApiKeyRevealDialogText.Copied]);
     }
 }

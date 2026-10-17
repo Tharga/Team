@@ -12,14 +12,20 @@ public interface IApiKeyManagementService
 {
     /// <summary>
     /// Returns the team's API keys for the caller. Team-wide keys are always included; owner-scoped
-    /// ("private") keys are included per <paramref name="privateKeys"/>, intersected with the caller's
-    /// entitlement (owner sees own; Developer-role sees all; <paramref name="allowPrivileged"/> additionally
-    /// lets Administrator/Owner see private keys). Defaults preserve the original team-wide-only behaviour.
+    /// ("private", shown as "Personal") keys are included per <paramref name="privateKeys"/>, intersected with
+    /// the caller's entitlement (owner sees own; an <see cref="SystemApiKeyScopes.Oversee"/> holder sees all;
+    /// <paramref name="allowPrivileged"/> additionally lets Administrator/Owner see private keys). Defaults
+    /// preserve the original team-wide-only behaviour.
     /// </summary>
     [RequireScope(ApiKeyScopes.Manage)]
     IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false);
 
     /// <summary>Creates a new API key. When <paramref name="ownerScoped"/> is true the key is private to the caller (owner = the caller's team-member key); a caller can only ever mint a key owned by themselves.</summary>
+    /// <remarks>
+    /// <see cref="ApiKeyOptions.TeamKeys"/> decides what is allowed: <see cref="ApiKeyOwnership.Shared"/> refuses
+    /// <paramref name="ownerScoped"/> with an <see cref="InvalidOperationException"/>, and
+    /// <see cref="ApiKeyOwnership.Personal"/> makes every key private whatever <paramref name="ownerScoped"/> says.
+    /// </remarks>
     [RequireScope(ApiKeyScopes.Manage)]
     Task<IApiKey> CreateKeyAsync(string teamKey, string name, AccessLevel accessLevel, string[] roles = null, string[] scopeOverrides = null, DateTime? expiryDate = null, IReadOnlyList<Tag> tags = null, bool ownerScoped = false);
 
