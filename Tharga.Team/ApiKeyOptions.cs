@@ -49,23 +49,6 @@ public class ApiKeyOptions
     public PrivateKeyOwnerRemovedAction OwnerRemovedAction { get; set; } = PrivateKeyOwnerRemovedAction.Delete;
 
     /// <summary>
-    /// When true, every <b>new</b> team API key must be private (owner-scoped), so each key has exactly one
-    /// responsible person. Default: false.
-    /// </summary>
-    /// <remarks>
-    /// Enforced where keys are created, not only in the UI: <c>CreateKeyAsync</c> on both
-    /// <see cref="IApiKeyManagementService"/> and the default <see cref="IApiKeyAdministrationService"/>
-    /// refuses a team key with no owner, rather than quietly making it the caller's. <c>ApiKeyView</c> follows
-    /// the option on its own: its create card always makes a private key, and private keys are always listed.
-    /// <para>
-    /// Existing team-wide keys keep working and stay listed and manageable; the option governs new keys only.
-    /// System keys are not affected. Requires <see cref="AdvancedMode"/>: simple mode auto-creates keys that
-    /// have no owner, so the combination fails at startup.
-    /// </para>
-    /// </remarks>
-    public bool RequirePrivateKeys { get; set; }
-
-    /// <summary>
     /// Absolute floor for both <see cref="MinKeyLength"/> and <see cref="MaxKeyLength"/>. 24 alphanumeric
     /// characters is ≈143 bits of entropy (well above 128-bit) and matches the historical minimum, so the
     /// secret can never be configured weaker than keys minted before these options existed.

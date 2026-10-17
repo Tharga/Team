@@ -1,6 +1,5 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Options;
 using Tharga.Team;
 
 namespace Tharga.Team.Service;
@@ -14,13 +13,11 @@ public class ApiKeyManagementService : IApiKeyManagementService
 {
     private readonly IApiKeyAdministrationService _inner;
     private readonly IHttpContextAccessor _httpContextAccessor;
-    private readonly ApiKeyOptions _options;
 
-    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null)
+    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null)
     {
         _inner = inner;
         _httpContextAccessor = httpContextAccessor;
-        _options = options?.Value;
     }
 
     public async IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false)
@@ -54,10 +51,6 @@ public class ApiKeyManagementService : IApiKeyManagementService
 
     public Task<IApiKey> CreateKeyAsync(string teamKey, string name, AccessLevel accessLevel, string[] roles = null, string[] scopeOverrides = null, DateTime? expiryDate = null, IReadOnlyList<Tag> tags = null, bool ownerScoped = false)
     {
-        // Checked here as well as in the default administration service, so the UI is held to it even when a
-        // host registers its own IApiKeyAdministrationService.
-        PrivateKeyRequirement.Ensure(_options, ownerScoped);
-
         string ownerMemberKey = null;
         if (ownerScoped)
         {
