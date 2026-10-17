@@ -9,6 +9,21 @@ public interface IUserRepository<TUserEntity> : IRepository
     Task<TUserEntity> GetAsync(string identity);
     Task<TUserEntity> GetByKeyAsync(string userKey);
 
+    /// <summary>The users with these keys, each once; a key no user has is left out.</summary>
+    /// <remarks>A default interface method that asks for one key at a time, so a host's own repository keeps compiling; the built-in one asks the database once.</remarks>
+    async Task<TUserEntity[]> GetByKeysAsync(IReadOnlyCollection<string> userKeys)
+    {
+        var found = new List<TUserEntity>();
+
+        foreach (var userKey in (userKeys ?? []).Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal))
+        {
+            var user = await GetByKeyAsync(userKey);
+            if (user != null) found.Add(user);
+        }
+
+        return [.. found];
+    }
+
     /// <summary>
     /// Every user whose <see cref="IUser.EMail"/> is <paramref name="email"/>, compared trimmed and ignoring
     /// case; empty for a blank address.

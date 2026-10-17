@@ -21,6 +21,13 @@ public interface IUserMailQueue
 
     /// <summary>What became of a queued mail, or null when there is none with this id.</summary>
     Task<UserMailDelivery> GetAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>Validates, sanitizes and stores the content once, then queues one mail per distinct recipient that each name it.</summary>
+    /// <exception cref="ArgumentException">The batch names no recipient, the category is not registered, it has no subject or body, or it exceeds the configured limits.</exception>
+    Task<UserMailBatchQueued> QueueBatchAsync(UserMailBatch batch, CancellationToken cancellationToken = default);
+
+    /// <summary>What became of the mails of a queued batch, or null when there is none with this id.</summary>
+    Task<UserMailBatchDelivery> GetBatchAsync(string id, CancellationToken cancellationToken = default);
 }
 
 /// <summary>The outcome of <see cref="IUserMailQueue.QueueAsync"/>.</summary>
@@ -61,6 +68,9 @@ public sealed record UserMailDelivery
 
     /// <summary>The deduplication key it was queued with, if any.</summary>
     public string DeduplicationKey { get; init; }
+
+    /// <summary>The batch whose content it carries, or null for a mail queued on its own.</summary>
+    public string BatchId { get; init; }
 
     /// <summary>Where it stands.</summary>
     public required UserMailStatus Status { get; init; }

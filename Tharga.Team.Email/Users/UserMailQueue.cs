@@ -4,7 +4,7 @@ using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Email.Users;
 
-/// <summary>Checks, sanitizes and stores mail to one user for the sender to deliver.</summary>
+/// <summary>Checks, sanitizes and stores mail to users for the sender to deliver.</summary>
 /// <remarks>
 /// <b>Everything that can be refused is refused here</b>, while the caller is still there to hear it: an unknown
 /// category, a mail with nothing to say, files over the limits. What can only be known later — whether the user
@@ -23,7 +23,7 @@ internal sealed class UserMailQueue(
     {
         var accepted = Accept(mail);
 
-        return await outbox.AddAsync(accepted, timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+        return await outbox.AddAsync(accepted, Now(), cancellationToken);
     }
 
     public async Task<UserMailDelivery> GetAsync(string id, CancellationToken cancellationToken = default)
@@ -39,6 +39,7 @@ internal sealed class UserMailQueue(
             Category = item.Mail.Category,
             Subject = item.Mail.Subject,
             DeduplicationKey = item.Mail.DeduplicationKey,
+            BatchId = item.BatchId,
             Status = item.Status,
             Attempts = item.Attempts,
             QueuedAt = item.QueuedAt,
@@ -49,25 +50,26 @@ internal sealed class UserMailQueue(
         };
     }
 
+    public async Task<UserMailBatchQueued> QueueBatchAsync(UserMailBatch batch, CancellationToken cancellationToken = default)
+    {
+        var accepted = Accept(batch);
+
+        var id = await outbox.AddBatchAsync(accepted, Now(), cancellationToken);
+
+        return new UserMailBatchQueued(id, accepted.RecipientUserKeys.Length);
+    }
+
+    public async Task<UserMailBatchDelivery> GetBatchAsync(string id, CancellationToken cancellationToken = default)
+        => string.IsNullOrWhiteSpace(id) ? null : await outbox.GetBatchDeliveryAsync(id, cancellationToken);
+
     /// <summary>The mail as it is stored: trimmed, sanitized, its text derived when missing and its files described.</summary>
     internal UserMail Accept(UserMail mail)
     {
         ArgumentNullException.ThrowIfNull(mail);
-        var o = options.Value;
 
         if (string.IsNullOrWhiteSpace(mail.RecipientUserKey)) throw new ArgumentException("A mail to a user names the user's key.", nameof(mail));
 
-        var category = categories.Get(mail.Category, nameof(mail));
-
-        var subject = OneLine(mail.Subject);
-        if (subject.Length == 0) throw new ArgumentException("A mail to a user has a subject.", nameof(mail));
-
-        var html = SafeHtml.Sanitize(mail.BodyHtml);
-        var body = string.IsNullOrWhiteSpace(mail.Body) ? null : mail.Body.Replace("\r\n", "\n").Trim();
-        body ??= html == null ? null : HtmlText.ToPlainText(html);
-
-        if (string.IsNullOrWhiteSpace(body)) throw new ArgumentException("A mail to a user has a body, as text or as HTML with something readable in it.", nameof(mail));
-        if (body.Length + (html?.Length ?? 0) > o.MaxBodyLength) throw new ArgumentException($"The mail's body is longer than the {o.MaxBodyLength} characters allowed.", nameof(mail));
+        var content = AcceptContent(mail.Category, mail.Subject, mail.BodyHtml, mail.Body, mail.Attachments, nameof(mail));
 
         var replyTo = string.IsNullOrWhiteSpace(mail.ReplyTo) ? null : mail.ReplyTo.Trim();
         if (replyTo != null && !MailboxAddress.TryParse(replyTo, out _)) throw new ArgumentException($"'{replyTo}' is not an address replies can be sent to.", nameof(mail));
@@ -78,13 +80,52 @@ internal sealed class UserMailQueue(
         return new UserMail
         {
             RecipientUserKey = mail.RecipientUserKey.Trim(),
+            Category = content.Category,
+            Subject = content.Subject,
+            BodyHtml = content.BodyHtml,
+            Body = content.Body,
+            Attachments = content.Attachments,
+            ReplyTo = replyTo,
+            DeduplicationKey = deduplicationKey
+        };
+    }
+
+    /// <summary>The batch as it is stored: each recipient once, and its content checked exactly as a single mail's is.</summary>
+    internal UserMailBatch Accept(UserMailBatch batch)
+    {
+        ArgumentNullException.ThrowIfNull(batch);
+
+        string[] recipients = [.. (batch.RecipientUserKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.Ordinal)];
+        if (recipients.Length == 0) throw new ArgumentException("A mail to many users names at least one user's key.", nameof(batch));
+
+        var content = AcceptContent(batch.Category, batch.Subject, batch.BodyHtml, batch.Body, batch.Attachments, nameof(batch));
+
+        return content with { RecipientUserKeys = recipients };
+    }
+
+    private UserMailBatch AcceptContent(string categoryKey, string subjectLine, string bodyHtml, string bodyText, UserMailAttachment[] attachments, string parameterName)
+    {
+        var o = options.Value;
+        var category = categories.Get(categoryKey, parameterName);
+
+        var subject = OneLine(subjectLine);
+        if (subject.Length == 0) throw new ArgumentException("A mail to a user has a subject.", parameterName);
+
+        var html = SafeHtml.Sanitize(bodyHtml);
+        var body = string.IsNullOrWhiteSpace(bodyText) ? null : bodyText.Replace("\r\n", "\n").Trim();
+        body ??= html == null ? null : HtmlText.ToPlainText(html);
+
+        if (string.IsNullOrWhiteSpace(body)) throw new ArgumentException("A mail to a user has a body, as text or as HTML with something readable in it.", parameterName);
+        if (body.Length + (html?.Length ?? 0) > o.MaxBodyLength) throw new ArgumentException($"The mail's body is longer than the {o.MaxBodyLength} characters allowed.", parameterName);
+
+        return new UserMailBatch
+        {
+            RecipientUserKeys = [],
             Category = category.Key,
             Subject = subject,
             BodyHtml = html,
             Body = body,
-            Attachments = Attachments(mail.Attachments, o),
-            ReplyTo = replyTo,
-            DeduplicationKey = deduplicationKey
+            Attachments = Attachments(attachments, o)
         };
     }
 
@@ -106,6 +147,8 @@ internal sealed class UserMailQueue(
         })];
     }
 
-    private static string OneLine(string value)
+    private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;
+
+    internal static string OneLine(string value)
         => string.Join(' ', (value ?? string.Empty).Split(['\r', '\n', '\t'], StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0));
 }

@@ -163,7 +163,9 @@ builder.AddThargaTeam(o =>
         // apikeys:oversee lets a Developer see and manage other members' private API keys -- to investigate
         // an incident, or retire a departed person's keys. The Developer role still has this on its own
         // until 4.0; mapping it here is what keeps it after that (Tharga/Team#323).
-        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee);
+        //
+        // messages:send lets a Developer write to users of any team from /messages and read what was sent.
+        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at
@@ -307,6 +309,9 @@ builder.Services.AddThargaUserMail(o =>
     o.AddCategory(new UserMailCategory { Key = "news", Name = "Product news", Description = "What is new in the product, a few times a year." });
     o.AddCategory(new UserMailCategory { Key = "tips", Name = "Tips", Description = "Ways to get more out of the product.", OnByDefault = false });
 });
+
+// Messages staff write to users of chosen teams, in service messages and product news but never in tips.
+builder.Services.AddThargaUserMessages(o => o.StaffMessageCategories = [UserMailCategories.ServiceKey, "news"]);
 
 var app = builder.Build();
 

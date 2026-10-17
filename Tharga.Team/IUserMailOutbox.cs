@@ -32,6 +32,18 @@ public interface IUserMailOutbox
 
     /// <summary>The stored mail with this id, or null.</summary>
     Task<UserMailItem> GetAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>Stores the batch's content once and one queued mail, due at once, per recipient it names, and returns the batch's id.</summary>
+    Task<string> AddBatchAsync(UserMailBatch batch, DateTime queuedAt, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddBatchAsync)}. Implement it to queue one mail to many users.");
+
+    /// <summary>The content of a batch, its files without their bytes once every mail of it is done, or null when there is no such batch.</summary>
+    Task<UserMailBatch> GetBatchContentAsync(string batchId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetBatchContentAsync)}. Implement it to send one mail to many users.");
+
+    /// <summary>How many mails of a batch stand where and why those given up were, or null when there is no such batch.</summary>
+    Task<UserMailBatchDelivery> GetBatchDeliveryAsync(string batchId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetBatchDeliveryAsync)}. Implement it to report on one mail to many users.");
 }
 
 /// <summary>A mail as the outbox keeps it: what was queued and where it stands.</summary>
@@ -40,8 +52,11 @@ public sealed record UserMailItem
     /// <summary>The mail's id.</summary>
     public required string Id { get; init; }
 
-    /// <summary>The mail as it was queued, after sanitizing.</summary>
+    /// <summary>The mail as it was queued, after sanitizing; for a mail of a batch only its recipient, category and subject, the rest being the batch's.</summary>
     public required UserMail Mail { get; init; }
+
+    /// <summary>The batch whose content the mail carries, or null for a mail queued on its own.</summary>
+    public string BatchId { get; init; }
 
     /// <summary>Where it stands.</summary>
     public required UserMailStatus Status { get; init; }

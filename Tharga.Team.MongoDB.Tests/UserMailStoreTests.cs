@@ -16,6 +16,7 @@ public class UserMailStoreTests
     private static readonly DateTime Now = new(2026, 10, 17, 12, 0, 0, DateTimeKind.Utc);
 
     private readonly IUserMailCollection _mail = Substitute.For<IUserMailCollection>();
+    private readonly IUserMailBatchCollection _batches = Substitute.For<IUserMailBatchCollection>();
     private readonly IUserMailPreferenceCollection _preferences = Substitute.For<IUserMailPreferenceCollection>();
 
     private FilterDefinition<UserMailEntity> _filter;
@@ -90,7 +91,7 @@ public class UserMailStoreTests
         UserMailEntity added = null;
         await _mail.AddAsync(Arg.Do<UserMailEntity>(x => added = x));
 
-        var queued = await new MongoUserMailOutbox(_mail).AddAsync(Mail(), Now);
+        var queued = await new MongoUserMailOutbox(_mail, _batches).AddAsync(Mail(), Now);
 
         Assert.False(queued.Duplicate);
         Assert.Equal(added.Id.ToString(), queued.Id);
@@ -103,7 +104,7 @@ public class UserMailStoreTests
         var existing = MongoUserMailOutbox.ToEntity(Mail("d1"), Now);
         _mail.GetOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserMailEntity, bool>>>(), Arg.Any<OneOption<UserMailEntity>>(), Arg.Any<CancellationToken>()).Returns(existing);
 
-        var queued = await new MongoUserMailOutbox(_mail).AddAsync(Mail("d1"), Now);
+        var queued = await new MongoUserMailOutbox(_mail, _batches).AddAsync(Mail("d1"), Now);
 
         Assert.True(queued.Duplicate);
         Assert.Equal(existing.Id.ToString(), queued.Id);
@@ -116,7 +117,7 @@ public class UserMailStoreTests
         var stored = MongoUserMailOutbox.ToEntity(Mail(), Now.AddMinutes(-1)) with { Attempts = 1 };
         CaptureUpdate(stored);
 
-        var claimed = await new MongoUserMailOutbox(_mail).ClaimNextAsync("instance-a", Now, TimeSpan.FromMinutes(5));
+        var claimed = await new MongoUserMailOutbox(_mail, _batches).ClaimNextAsync("instance-a", Now, TimeSpan.FromMinutes(5));
 
         Assert.Equal(EMode.FirstOrDefault, _options.Mode);
         Assert.Contains("NextAttemptAt", _options.Sort.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).ToString());
@@ -141,7 +142,7 @@ public class UserMailStoreTests
     {
         CaptureUpdate(null);
 
-        Assert.Null(await new MongoUserMailOutbox(_mail).ClaimNextAsync("instance-a", Now, TimeSpan.FromMinutes(5)));
+        Assert.Null(await new MongoUserMailOutbox(_mail, _batches).ClaimNextAsync("instance-a", Now, TimeSpan.FromMinutes(5)));
     }
 
     [Fact]
@@ -150,7 +151,7 @@ public class UserMailStoreTests
         var stored = MongoUserMailOutbox.ToEntity(Mail(), Now);
         CaptureUpdate(stored);
 
-        var written = await new MongoUserMailOutbox(_mail).MarkSentAsync(stored.Id.ToString(), "instance-a", "<m1@example.com>", Now);
+        var written = await new MongoUserMailOutbox(_mail, _batches).MarkSentAsync(stored.Id.ToString(), "instance-a", "<m1@example.com>", Now);
 
         Assert.True(written);
         Assert.Equal(EMode.FirstOrDefault, _options.Mode);
@@ -171,7 +172,7 @@ public class UserMailStoreTests
     public async Task AnOutcomeForAMailTakenOverByAnother_IsRefused()
     {
         CaptureUpdate(null);
-        var outbox = new MongoUserMailOutbox(_mail);
+        var outbox = new MongoUserMailOutbox(_mail, _batches);
         var id = ObjectId.GenerateNewId().ToString();
 
         Assert.False(await outbox.MarkFailedAsync(id, "instance-a", "late", Now));
@@ -186,7 +187,7 @@ public class UserMailStoreTests
         var stored = MongoUserMailOutbox.ToEntity(Mail(), Now);
         CaptureUpdate(stored);
 
-        await new MongoUserMailOutbox(_mail).PostponeAsync(stored.Id.ToString(), "instance-a", "451 try later", Now.AddMinutes(2));
+        await new MongoUserMailOutbox(_mail, _batches).PostponeAsync(stored.Id.ToString(), "instance-a", "451 try later", Now.AddMinutes(2));
 
         var update = Render(_update);
         Assert.DoesNotContain("\"Status\"", update);

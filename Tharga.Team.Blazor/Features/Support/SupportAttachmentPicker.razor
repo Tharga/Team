@@ -1,10 +1,10 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using Microsoft.JSInterop
 @using Tharga.Team.Support.Cases
-@inject ISupportCaseService SupportCases
+@inject IServiceProvider Services
 
-@* Files to send with an answer: chosen in the browser, read in at once so a later choice cannot lose them, and held
-   to the same limits the service applies. *@
+@* Files to send with an answer or a message: chosen in the browser, read in at once so a later choice cannot lose
+   them, and held to the limits given, or else to the support service's. *@
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-attachment-picker>
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
@@ -50,6 +50,9 @@
     /// <summary>Whether choosing and removing is off, as while an answer is being sent.</summary>
     [Parameter] public bool Disabled { get; set; }
 
+    /// <summary>The limits the files are held to; when not set, the support service's limits for an answer.</summary>
+    [Parameter] public SupportAttachmentLimits Limits { get; set; }
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
@@ -74,8 +77,17 @@
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(SupportAttachmentText.All);
-        _limits = await SupportCases.GetAttachmentLimitsAsync() ?? SupportAttachmentLimits.Default;
+        _limits = Limits ?? await SupportLimitsAsync() ?? SupportAttachmentLimits.Default;
     }
+
+    protected override void OnParametersSet()
+    {
+        if (Limits != null) _limits = Limits;
+    }
+
+    /// <remarks>Resolved rather than injected, so the picker also serves a host that has no support cases.</remarks>
+    private async Task<SupportAttachmentLimits> SupportLimitsAsync()
+        => Services.GetService(typeof(ISupportCaseService)) is ISupportCaseService supportCases ? await supportCases.GetAttachmentLimitsAsync() : null;
 
     private async Task ChooseAsync(InputFileChangeEventArgs e)
     {

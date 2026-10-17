@@ -44,7 +44,9 @@ public class ComponentDependencyResolutionTests
         "IPostmasterService",
         "ITeamMailNotifier",
         // Registered by AddThargaUserMail in Tharga.Team.Email; only a host that sends mail to users places the view.
-        "IUserMailPreferenceService"
+        "IUserMailPreferenceService",
+        // Registered by AddThargaUserMessages in Tharga.Team.Email; only a host whose staff write to users places the views.
+        "IUserMessageService"
     ];
 
     /// <summary>Services the host supplies by construction — its own storage types and member type.</summary>

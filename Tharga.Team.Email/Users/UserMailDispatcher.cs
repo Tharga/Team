@@ -29,6 +29,9 @@ internal sealed class UserMailDispatcher(
 {
     internal const string OptedOutReason = "The recipient does not receive this category.";
     internal const string WithheldReason = "Withheld by the non-production mail policy: set Email:Override to receive it.";
+    internal const string BatchGoneReason = "The content this mail shares with others is no longer stored.";
+
+    private readonly Dictionary<string, UserMailBatch> _batches = new(StringComparer.Ordinal);
 
     /// <summary>Sends claimed mail until none is due or a batch is done, and returns how many were handled.</summary>
     public async Task<int> RunAsync(string claimant, CancellationToken cancellationToken)
@@ -65,7 +68,9 @@ internal sealed class UserMailDispatcher(
 
     private async Task<UserMailStatus> SendAsync(UserMailItem item, string claimant, CancellationToken cancellationToken)
     {
-        var mail = item.Mail;
+        var mail = await ContentOfAsync(item, cancellationToken);
+        if (mail == null) return await FailAsync(item, claimant, BatchGoneReason, cancellationToken);
+
         var category = categories.Find(mail.Category);
         if (category == null) return await FailAsync(item, claimant, $"The mail category '{mail.Category}' is no longer registered.", cancellationToken);
 
@@ -98,6 +103,26 @@ internal sealed class UserMailDispatcher(
 
         await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, Now(), cancellationToken), item);
         return UserMailStatus.Sent;
+    }
+
+    /// <summary>The mail with its content: its own, or for a mail of a batch the batch's, read once per pass; null when the batch is gone.</summary>
+    private async Task<UserMail> ContentOfAsync(UserMailItem item, CancellationToken cancellationToken)
+    {
+        if (item.BatchId == null) return item.Mail;
+
+        if (!_batches.TryGetValue(item.BatchId, out var batch))
+        {
+            batch = await outbox.GetBatchContentAsync(item.BatchId, cancellationToken);
+            _batches[item.BatchId] = batch;
+        }
+
+        return batch == null ? null : item.Mail with
+        {
+            Subject = batch.Subject,
+            BodyHtml = batch.BodyHtml,
+            Body = batch.Body,
+            Attachments = batch.Attachments ?? []
+        };
     }
 
     private OutboundMail Outbound(UserMail mail, UserMailRecipient recipient, OutboundMailDecision decision)

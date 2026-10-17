@@ -1,0 +1,98 @@
+@inject IUserMessageService Messages
+
+@* One sent message opened in the log: who it was written to, how many of its mails stand where, and why any was not
+   sent. Read when it is first shown, so a closed card costs nothing. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-message-details="@Message.Id">
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@Text[UserMessageLogViewText.To]</RadzenText>
+        @foreach (var line in Selection())
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-selection>@line</RadzenText>
+        }
+        @if (Shown.AttachmentCount > 0)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-attachments="@Shown.AttachmentCount">@Text.Format(UserMessageLogViewText.Attachments, Shown.AttachmentCount)</RadzenText>
+        }
+    </RadzenStack>
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" Wrap="FlexWrap.Wrap">
+        @foreach (var (key, label, count) in Outcomes())
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0" AlignItems="AlignItems.Center" data-outcome="@key">
+                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@count</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@label</RadzenText>
+            </RadzenStack>
+        }
+    </RadzenStack>
+
+    @if (Shown.Failures.Length > 0)
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-failures>
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@Text[UserMessageLogViewText.Failures]</RadzenText>
+            @foreach (var failure in Shown.Failures)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-failure="@failure.UserKey">
+                    <strong>@(string.IsNullOrWhiteSpace(failure.Name) ? failure.UserKey : failure.Name)</strong>: @failure.Reason
+                </RadzenText>
+            }
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@code {
+    /// <summary>The message as the log listed it; its details are read when this is first shown.</summary>
+    [Parameter, EditorRequired] public SentUserMessage Message { get; set; }
+
+    /// <summary>The teams, users and roles a message could be written to, for naming them.</summary>
+    [Parameter] public UserMessageChoices Choices { get; set; }
+
+    /// <summary>The log's resolved strings.</summary>
+    [Parameter] public TextSet Text { get; set; } = TextSet.Empty;
+
+    private SentUserMessage _details;
+
+    private SentUserMessage Shown => _details ?? Message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _details = await Messages.GetSentMessageAsync(Message.Id);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _details = null;
+        }
+    }
+
+    private IEnumerable<(string Key, string Label, int Count)> Outcomes()
+    {
+        yield return ("sent", Text[UserMessageLogViewText.Sent], Shown.Outcomes.Sent);
+        yield return ("queued", Text[UserMessageLogViewText.Queued], Shown.Outcomes.Queued);
+        yield return ("skipped", Text[UserMessageLogViewText.Skipped], Shown.Outcomes.Skipped);
+        yield return ("failed", Text[UserMessageLogViewText.Failed], Shown.Outcomes.Failed);
+    }
+
+    private IEnumerable<string> Selection()
+    {
+        var recipients = Shown.Recipients ?? new UserMessageRecipients();
+
+        yield return recipients.AllTeams
+            ? Text[UserMessageLogViewText.AllTeams]
+            : Text.Format(UserMessageLogViewText.Teams, Join(recipients.TeamKeys.Select(TeamName)));
+
+        if (recipients.EveryMember) yield return Text[UserMessageLogViewText.Everyone];
+        if (recipients.AccessLevels.Length > 0) yield return Text.Format(UserMessageLogViewText.AccessLevels, Join(recipients.AccessLevels.Select(x => Text[AccessLevelText.For(x)])));
+        if (recipients.Roles.Length > 0) yield return Text.Format(UserMessageLogViewText.Roles, Join(recipients.Roles));
+        if (recipients.UserKeys.Length > 0) yield return Text.Format(UserMessageLogViewText.Users, Join(recipients.UserKeys.Select(UserName)));
+    }
+
+    private string TeamName(string key)
+        => Choices?.Teams.FirstOrDefault(x => x.Key == key) is { Name: { Length: > 0 } name } ? name : key;
+
+    private string UserName(string key)
+        => Choices?.Users.FirstOrDefault(x => x.UserKey == key) is { Name: { Length: > 0 } name } ? name : key;
+
+    private static string Join(IEnumerable<string> values) => string.Join(", ", values);
+}

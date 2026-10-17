@@ -71,6 +71,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
 {
     private readonly object _gate = new();
     private readonly List<UserMailItem> _items = [];
+    private readonly Dictionary<string, UserMailBatch> _batches = [];
 
     public IReadOnlyList<UserMailItem> Items
     {
@@ -78,6 +79,77 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
     }
 
     public UserMailItem Single => Items.Single();
+
+    public IReadOnlyDictionary<string, UserMailBatch> Batches
+    {
+        get { lock (_gate) return new Dictionary<string, UserMailBatch>(_batches); }
+    }
+
+    public int BatchContentReads { get; private set; }
+
+    public Task<string> AddBatchAsync(UserMailBatch batch, DateTime queuedAt, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var id = Guid.NewGuid().ToString("N");
+            _batches[id] = batch with { RecipientUserKeys = [] };
+
+            foreach (var recipient in batch.RecipientUserKeys)
+            {
+                _items.Add(new UserMailItem
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject },
+                    BatchId = id,
+                    Status = UserMailStatus.Queued,
+                    QueuedAt = queuedAt,
+                    NextAttemptAt = queuedAt
+                });
+            }
+
+            return Task.FromResult(id);
+        }
+    }
+
+    public Task<UserMailBatch> GetBatchContentAsync(string batchId, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            BatchContentReads++;
+            return Task.FromResult(_batches.GetValueOrDefault(batchId));
+        }
+    }
+
+    public Task<UserMailBatchDelivery> GetBatchDeliveryAsync(string batchId, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (!_batches.ContainsKey(batchId)) return Task.FromResult<UserMailBatchDelivery>(null);
+
+            var items = _items.Where(x => x.BatchId == batchId).ToArray();
+            var queued = items.Count(x => x.Status == UserMailStatus.Queued);
+
+            return Task.FromResult(new UserMailBatchDelivery
+            {
+                Id = batchId,
+                Recipients = items.Length,
+                Outcomes = new UserMailOutcomes
+                {
+                    Queued = queued,
+                    Sent = items.Count(x => x.Status == UserMailStatus.Sent),
+                    Skipped = items.Count(x => x.Status == UserMailStatus.Skipped),
+                    Failed = items.Count(x => x.Status == UserMailStatus.Failed)
+                },
+                Failures = [.. items.Where(x => x.Status == UserMailStatus.Failed).Select(x => new UserMailFailure { UserKey = x.Mail.RecipientUserKey, Reason = x.Reason })],
+                CompletedAt = queued == 0 ? items.Max(x => x.CompletedAt) : null
+            });
+        }
+    }
+
+    public void ForgetBatch(string batchId)
+    {
+        lock (_gate) _batches.Remove(batchId);
+    }
 
     public Task<UserMailQueued> AddAsync(UserMail mail, DateTime queuedAt, CancellationToken cancellationToken = default)
     {

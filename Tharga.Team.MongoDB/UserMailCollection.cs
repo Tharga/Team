@@ -38,6 +38,10 @@ public record UserMailEntity : EntityBase
     [BsonIgnoreIfNull]
     public string DeduplicationKey { get; init; }
 
+    /// <summary>The batch whose content the mail carries, or null for a mail queued on its own.</summary>
+    [BsonIgnoreIfNull]
+    public string BatchId { get; init; }
+
     /// <summary>Where the mail stands, stored by name.</summary>
     [BsonRepresentation(BsonType.String)]
     public UserMailStatus Status { get; init; }
@@ -98,8 +102,9 @@ public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
 
 /// <summary>Queued mail to users, default collection name <c>UserMail</c>.</summary>
 /// <remarks>
-/// Due mail is found by status and due time; a deduplication key is unique where one was given; and a mail that is
-/// done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never does.
+/// Due mail is found by status and due time; a deduplication key is unique where one was given; a batch's mail by its
+/// batch and status; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a
+/// queued one never does.
 /// </remarks>
 public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, IUserMailCollection
 {
@@ -125,6 +130,8 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.DeduplicationKey),
             new CreateIndexOptions { Unique = true, Sparse = true, Name = "DeduplicationKey" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.CompletedAt),
-            new CreateIndexOptions { ExpireAfter = _retention, Name = "CompletedAt_ttl" })
+            new CreateIndexOptions { ExpireAfter = _retention, Name = "CompletedAt_ttl" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.BatchId).Ascending(x => x.Status),
+            new CreateIndexOptions { Name = "BatchId_Status" })
     ];
 }

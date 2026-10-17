@@ -1,0 +1,131 @@
+@using Tharga.Blazor
+@inject IUserMessageService Messages
+
+@* The log of every message staff sent to users, newest first. A message's details, with why any mail was not sent,
+   are read only when its card is opened. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[UserMessageLogViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-message-log>
+        @if (_items.Count == 0)
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-empty>@_text[UserMessageLogViewText.Empty]</RadzenText>
+        }
+        else
+        {
+            foreach (var item in _items)
+            {
+                <div @key="item.Id" data-message="@item.Id">
+                    <ExpandableCard Text="@item.Subject" Icon="mail" AllowSaveState="false">
+                        <TopMenu>
+                            <RadzenBadge Text="@CategoryName(item.Category)" BadgeStyle="BadgeStyle.Light" data-category="@item.Id" />
+                            <RadzenBadge Text="@_text.Format(UserMessageLogViewText.Recipients, item.RecipientCount)" BadgeStyle="BadgeStyle.Info" data-recipients="@item.Id" />
+                            @if (item.Outcomes.Failed > 0)
+                            {
+                                <RadzenBadge Text="@($"{item.Outcomes.Failed} {_text[UserMessageLogViewText.Failed]}")" BadgeStyle="BadgeStyle.Danger" data-failed="@item.Id" />
+                            }
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-sent-by="@item.Id">@_text.Format(UserMessageLogViewText.SentBy, item.SentByName)</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-time="@item.Id">@Time(item.SentAt)</RadzenText>
+                        </TopMenu>
+                        <ChildContent>
+                            <UserMessageDetails Message="item" Choices="_choices" Text="_text" />
+                        </ChildContent>
+                    </ExpandableCard>
+                </div>
+            }
+        }
+
+        @if (_nextCursor != null)
+        {
+            <RadzenButton Text="@_text[UserMessageLogViewText.ShowMore]" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Disabled="@_busy" Click="MoreAsync" data-show-more />
+        }
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>How many messages one page reads.</summary>
+    [Parameter] public int PageSize { get; set; } = 20;
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+
+    private UserMessageChoices _choices;
+    private List<SentUserMessage> _items = [];
+    private string _nextCursor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+
+        _text = await TextProvider.ResolveAsync([.. UserMessageLogViewText.All, .. AccessLevelText.All, .. (_choices?.Categories ?? []).Select(x => new TextKey(x.NameKey, x.Name))]);
+        _ready = true;
+    }
+
+    /// <summary>Reads the log again from its newest message, as after a message was sent.</summary>
+    public Task RefreshAsync() => InvokeAsync(async () =>
+    {
+        await ReloadAsync();
+        StateHasChanged();
+    });
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            _choices ??= await Messages.GetChoicesAsync();
+
+            var page = await Messages.GetSentAsync(null, PageSize);
+            _items = [.. page.Items];
+            _nextCursor = page.NextCursor;
+            _permitted = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _items = [];
+            _nextCursor = null;
+            _permitted = false;
+        }
+    }
+
+    private async Task MoreAsync()
+    {
+        _busy = true;
+        try
+        {
+            var page = await Messages.GetSentAsync(_nextCursor, PageSize);
+            _items.AddRange(page.Items.Where(x => _items.All(y => y.Id != x.Id)));
+            _nextCursor = page.NextCursor;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string CategoryName(string key)
+        => _choices?.Categories.FirstOrDefault(x => x.Key == key) is { } category ? _text[new TextKey(category.NameKey, category.Name)] : key;
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
+}

@@ -36,6 +36,16 @@ internal class UserRepository<TUserEntity> : IUserRepository<TUserEntity>
         return _collection.GetOneAsync(x => x.Key == userKey);
     }
 
+    public virtual async Task<TUserEntity[]> GetByKeysAsync(IReadOnlyCollection<string> userKeys)
+    {
+        string[] keys = [.. (userKeys ?? []).Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal)];
+        if (keys.Length == 0) return [];
+
+        var filter = new FilterDefinitionBuilder<TUserEntity>().In(x => x.Key, keys);
+
+        return await _collection.GetAsync(filter).ToArrayAsync();
+    }
+
     /// <remarks>
     /// An anchored, escaped, case-insensitive pattern rather than an equality, because addresses are stored as
     /// the sign-in provider spelled them. It cannot use an index, which is acceptable for a lookup made once per

@@ -41,7 +41,14 @@ public static class ThargaTeamRegistration
         services.TryAddScoped<IUserMailPreferenceStore, MongoUserMailPreferenceStore>();
         services.AddTransient<IUserMailCollection, UserMailCollection>();
         services.TrackMongoCollection(typeof(IUserMailCollection), typeof(UserMailCollection));
+        services.AddTransient<IUserMailBatchCollection, UserMailBatchCollection>();
+        services.TrackMongoCollection(typeof(IUserMailBatchCollection), typeof(UserMailBatchCollection));
         services.TryAddScoped<IUserMailOutbox, MongoUserMailOutbox>();
+
+        // The log of messages staff sent to users; TryAdd so a host keeping it elsewhere wins.
+        services.AddTransient<IUserMessageCollection, UserMessageCollection>();
+        services.TrackMongoCollection(typeof(IUserMessageCollection), typeof(UserMessageCollection));
+        services.TryAddScoped<IUserMessageLog, MongoUserMessageLog>();
 
         if (o._userEntity != null)
         {
@@ -134,6 +141,9 @@ public static class ThargaTeamRegistration
         {
             var directoryType = typeof(MongoSupportSenderDirectory<,,>).MakeGenericType(o._userEntity, o._teamEntity, o._teamMemberModel);
             services.TryAddScoped(typeof(ISupportSenderDirectory), directoryType);
+
+            // Who a staff message may reach: the active members of the teams it is written within.
+            services.TryAddScoped(typeof(IUserMessageMemberDirectory), typeof(MongoUserMessageMemberDirectory<,,>).MakeGenericType(o._userEntity, o._teamEntity, o._teamMemberModel));
         }
     }
 }

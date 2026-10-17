@@ -91,8 +91,20 @@ public record ThargaTeamOptions
     /// <summary>The default for <see cref="UserMailRetention"/>.</summary>
     public static readonly TimeSpan DefaultUserMailRetention = TimeSpan.FromDays(90);
 
-    /// <summary>How long a mail to a user is kept once sent, skipped or given up; a queued one is kept until then, default 90 days.</summary>
+    /// <summary>How long a mail to a user is kept once sent, skipped or given up, a batch once its last mail is, and a sent message from when it was sent; default 90 days.</summary>
     public TimeSpan UserMailRetention { get; set; } = DefaultUserMailRetention;
+
+    /// <summary>The default for <see cref="UserMailBatchCollectionName"/>.</summary>
+    public const string DefaultUserMailBatchCollectionName = "UserMailBatch";
+
+    /// <summary>Collection holding the content one mail to many users shares, stored once, default <c>UserMailBatch</c>.</summary>
+    public string UserMailBatchCollectionName { get; set; } = DefaultUserMailBatchCollectionName;
+
+    /// <summary>The default for <see cref="UserMessageCollectionName"/>.</summary>
+    public const string DefaultUserMessageCollectionName = "UserMessage";
+
+    /// <summary>Collection holding the log of messages staff sent to users, default <c>UserMessage</c>.</summary>
+    public string UserMessageCollectionName { get; set; } = DefaultUserMessageCollectionName;
 
     /// <summary>
     /// Whether to report, at startup, stored team members that carry no access level and are therefore

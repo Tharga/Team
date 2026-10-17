@@ -37,6 +37,26 @@ internal sealed class MongoUserMailPreferenceStore(IUserMailPreferenceCollection
     public Task ClearChoiceAsync(string userKey, string categoryKey, CancellationToken cancellationToken = default)
         => collection.DeleteManyAsync(Of(userKey, categoryKey));
 
+    /// <remarks>Asked in slices of <see cref="KeysPerQuery"/> keys, so each query stays small and uses the user and category index.</remarks>
+    public async Task<IReadOnlyDictionary<string, bool>> GetChoicesForCategoryAsync(string categoryKey, IReadOnlyCollection<string> userKeys, CancellationToken cancellationToken = default)
+    {
+        var choices = new Dictionary<string, bool>(StringComparer.Ordinal);
+        string[] keys = [.. (userKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)];
+
+        foreach (var slice in keys.Chunk(KeysPerQuery))
+        {
+            await foreach (var choice in collection.GetAsync(OfCategory(categoryKey, slice), cancellationToken: cancellationToken))
+                choices[choice.UserKey] = choice.Receives;
+        }
+
+        return choices;
+    }
+
+    internal const int KeysPerQuery = 1000;
+
     internal static FilterDefinition<UserMailPreferenceEntity> Of(string userKey, string categoryKey)
         => Builders<UserMailPreferenceEntity>.Filter.Eq(x => x.UserKey, userKey) & Builders<UserMailPreferenceEntity>.Filter.Eq(x => x.Category, categoryKey);
+
+    internal static FilterDefinition<UserMailPreferenceEntity> OfCategory(string categoryKey, IEnumerable<string> userKeys)
+        => Builders<UserMailPreferenceEntity>.Filter.In(x => x.UserKey, userKeys) & Builders<UserMailPreferenceEntity>.Filter.Eq(x => x.Category, categoryKey);
 }
