@@ -123,6 +123,16 @@ public readonly record struct MailFetchResult(
 /// When this mail reports a failed delivery, why it failed as the reporting server put it, trimmed to a few
 /// hundred characters; otherwise null.
 /// </param>
+/// <param name="SenderVerified">
+/// True when a DKIM signature on the mail verifies and its signing domain is the <c>From</c> address's domain or
+/// a parent of it. False when it is unsigned, when no such signature verifies, or when it could not be checked.
+/// </param>
+/// <param name="SenderDomain">The signing domain that vouches for the sender when <paramref name="SenderVerified"/>; otherwise null.</param>
+/// <remarks>
+/// <b>Verified vouches for the domain's mail system, not for a person.</b> A large provider signs only what its
+/// own account holder sent, so there it amounts to the address; a company domain signs whatever its servers
+/// relay, so it is only as strict as that company is about who may send as whom.
+/// </remarks>
 public readonly record struct InboundMail(
     string MessageId,
     string From,
@@ -140,4 +150,6 @@ public readonly record struct InboundMail(
     IReadOnlyList<string> To = null,
     IReadOnlyList<string> Cc = null,
     string BouncedMessageId = null,
-    string BounceReason = null);
+    string BounceReason = null,
+    bool SenderVerified = false,
+    string SenderDomain = null);

@@ -60,6 +60,19 @@ internal static class InboundMailReader
             BounceReason: bounce?.Reason);
     }
 
+    /// <summary>
+    /// Reads as <see cref="Read"/> does, and records whether <paramref name="verifier"/> finds the sender
+    /// verified; a null verifier leaves it unverified.
+    /// </summary>
+    public static async Task<InboundMail> ReadAsync(MimeMessage message, DkimSenderVerifier verifier, uint uid = 0, byte[] raw = null, CancellationToken cancellationToken = default)
+    {
+        var mail = Read(message, uid, raw);
+
+        var domain = verifier == null ? null : await verifier.VerifiedDomainAsync(message, cancellationToken);
+
+        return domain == null ? mail : mail with { SenderVerified = true, SenderDomain = domain };
+    }
+
     private static string Sender(MimeMessage message)
         => Normalize(message.From.Mailboxes.FirstOrDefault()?.Address);
 

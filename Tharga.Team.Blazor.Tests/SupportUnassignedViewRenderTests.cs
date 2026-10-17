@@ -145,18 +145,83 @@ public class SupportUnassignedViewRenderTests : BunitContext
         Assert.DoesNotContain("Cannot sign in", view.Markup);
     }
 
+    /// <summary>
+    /// The teams the sender matched are offered with why none was chosen, and one click gives the case one of
+    /// them through the same operation the dropdown uses.
+    /// </summary>
+    [Fact]
+    public void ASuggestedTeam_IsOfferedWithItsReasonAndAssignsInOneClick()
+    {
+        var view = RenderView(out var cases, supportCase: Suggesting(SupportTeamSuggestionReason.SenderNotVerified, "acme"));
+
+        Subject(view).Click();
+
+        Assert.Contains("Suggested teams", view.Markup);
+        Assert.Contains("could not be verified", view.Markup);
+
+        view.FindAll("button").First(b => b.TextContent.Trim() == "Assign to Acme").Click();
+
+        cases.Verify(x => x.AssignCaseAsync("case-1", "acme", default), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(SupportTeamSuggestionReason.SeveralTeams, "more than one team")]
+    [InlineData(SupportTeamSuggestionReason.SharedAddress, "More than one user account")]
+    public void EachReason_IsSaidInWords(SupportTeamSuggestionReason reason, string expected)
+    {
+        var view = RenderView(out _, supportCase: Suggesting(reason, "acme"));
+
+        Subject(view).Click();
+
+        Assert.Contains(expected, view.Markup);
+    }
+
+    /// <summary>
+    /// <b>Only a team that still exists can be assigned</b>, for the reason the dropdown lists teams rather than
+    /// taking a key: a team deleted since the mail arrived would take the case into nobody's queue.
+    /// </summary>
+    [Fact]
+    public void ASuggestedTeamThatIsNotListed_IsNamedButNotOffered()
+    {
+        var view = RenderView(out _, supportCase: Suggesting(SupportTeamSuggestionReason.SeveralTeams, "gone"));
+
+        Subject(view).Click();
+
+        Assert.Contains("Gone Ltd", view.Markup);
+        Assert.DoesNotContain(view.FindAll("button"), b => b.TextContent.Contains("Gone Ltd"));
+    }
+
+    [Fact]
+    public void ACaseWithNoSuggestions_ShowsNone()
+    {
+        var view = RenderView(out _);
+
+        Subject(view).Click();
+
+        Assert.DoesNotContain("Suggested teams", view.Markup);
+    }
+
+    private static SupportCase Suggesting(SupportTeamSuggestionReason reason, string teamKey) => Case with
+    {
+        SuggestedTeams = [new SupportCaseTeam { Key = teamKey, Name = teamKey == "acme" ? "Acme (then)" : "Gone Ltd" }],
+        SuggestionReason = reason
+    };
+
     private static AngleSharp.Dom.IElement Subject(IRenderedComponent<SupportUnassignedView> view)
         => view.FindAll("button").First(b => b.TextContent.Contains("Cannot sign in"));
 
     private IRenderedComponent<SupportUnassignedView> RenderView(
         out Mock<ISupportCaseService> cases,
         bool withOversight = true,
-        bool assignSucceeds = true)
+        bool assignSucceeds = true,
+        SupportCase supportCase = null)
     {
+        supportCase ??= Case;
+
         cases = new Mock<ISupportCaseService>();
         cases.Setup(x => x.GetUnassignedCasesAsync(null, 20, default))
-            .ReturnsAsync(new SupportCasePage { Items = [Case] });
-        cases.Setup(x => x.GetCaseAsync(null, Case.Id, default)).ReturnsAsync(Case);
+            .ReturnsAsync(new SupportCasePage { Items = [supportCase] });
+        cases.Setup(x => x.GetCaseAsync(null, Case.Id, default)).ReturnsAsync(supportCase);
         cases.Setup(x => x.GetMessagesAsync(null, Case.Id, null, 50, default))
             .ReturnsAsync(new SupportMessagePage { Items = [Arrived] });
         cases.Setup(x => x.AssignCaseAsync(Case.Id, It.IsAny<string>(), default)).ReturnsAsync(assignSucceeds);

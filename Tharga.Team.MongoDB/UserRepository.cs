@@ -1,4 +1,6 @@
-﻿using MongoDB.Driver;
+﻿using System.Text.RegularExpressions;
+using MongoDB.Bson;
+using MongoDB.Driver;
 using Tharga.MongoDB;
 
 namespace Tharga.Team.MongoDB;
@@ -33,6 +35,25 @@ internal class UserRepository<TUserEntity> : IUserRepository<TUserEntity>
     {
         return _collection.GetOneAsync(x => x.Key == userKey);
     }
+
+    /// <remarks>
+    /// An anchored, escaped, case-insensitive pattern rather than an equality, because addresses are stored as
+    /// the sign-in provider spelled them. It cannot use an index, which is acceptable for a lookup made once per
+    /// new support mail.
+    /// </remarks>
+    public virtual async Task<TUserEntity[]> GetByEMailAsync(string email)
+    {
+        var wanted = email?.Trim();
+        if (string.IsNullOrEmpty(wanted)) return [];
+
+        var filter = new FilterDefinitionBuilder<TUserEntity>()
+            .Regex(x => x.EMail, EMailPattern(wanted));
+
+        return await _collection.GetAsync(filter).ToArrayAsync();
+    }
+
+    internal static BsonRegularExpression EMailPattern(string email)
+        => new($@"^\s*{Regex.Escape(email)}\s*$", "i");
 
     public virtual Task AddAsync(TUserEntity user)
     {

@@ -62,10 +62,34 @@ public static class SupportUnassignedViewText
     public static readonly TextKey NotPermitted = new("team.support.unassigned.notPermitted",
         "You do not have access to support cases that belong to no team.");
 
+    /// <summary>Heads the teams the sender's address matched.</summary>
+    public static readonly TextKey Suggested = new("team.support.unassigned.suggested", "Suggested teams");
+
+    /// <summary>Why the suggestions are not the case's team: the sender belongs to several.</summary>
+    /// <remarks>
+    /// Each reason says what was <i>not</i> established, because that is what the reader has to supply. A
+    /// suggestion without its reason reads as the toolkit's recommendation, and an operator who trusts it is
+    /// back to guessing.
+    /// </remarks>
+    public static readonly TextKey ReasonSeveralTeams = new("team.support.unassigned.reason.severalTeams",
+        "The sender is verified and belongs to more than one team.");
+
+    /// <summary>Why the suggestions are not the case's team: the mail could not be verified.</summary>
+    public static readonly TextKey ReasonSenderNotVerified = new("team.support.unassigned.reason.notVerified",
+        "The sender's address belongs to these teams, but the mail could not be verified as coming from it.");
+
+    /// <summary>Why the suggestions are not the case's team: more than one account holds the address.</summary>
+    public static readonly TextKey ReasonSharedAddress = new("team.support.unassigned.reason.sharedAddress",
+        "More than one user account has the sender's address.");
+
+    /// <summary>The one-click action giving the case a suggested team; <c>{0}</c> is the team's name.</summary>
+    public static readonly TextKey AssignToSuggested = new("team.support.unassigned.suggested.assign", "Assign to {0}");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         Title, Explanation, NoCases, From, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
-        AssignLabel, AssignAction, AlreadyAssigned, CannotListTeams, NotPermitted
+        AssignLabel, AssignAction, AlreadyAssigned, CannotListTeams, NotPermitted,
+        Suggested, ReasonSeveralTeams, ReasonSenderNotVerified, ReasonSharedAddress, AssignToSuggested
     ];
 }

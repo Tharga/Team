@@ -80,6 +80,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
             Bindings = [.. (supportCase.Bindings ?? []).Select(ToEntity)],
+            SuggestedTeams = supportCase.SuggestedTeams is { Length: > 0 } suggested ? [.. suggested.Select(ToEntity)] : null,
+            SuggestionReason = supportCase.SuggestedTeams is { Length: > 0 } ? supportCase.SuggestionReason : null,
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
@@ -621,7 +623,17 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Visibility = entity.Visibility,
         Bindings = entity.Bindings == null
             ? []
-            : [.. entity.Bindings.Select(ToBinding)]
+            : [.. entity.Bindings.Select(ToBinding)],
+        SuggestedTeams = entity.SuggestedTeams == null
+            ? []
+            : [.. entity.SuggestedTeams.Select(x => new SupportCaseTeam { Key = x.Key, Name = x.Name })],
+        SuggestionReason = entity.SuggestionReason
+    };
+
+    private static SupportCaseTeamEntity ToEntity(SupportCaseTeam team) => new()
+    {
+        Key = team.Key,
+        Name = team.Name
     };
 
     private static SupportChannelBinding ToBinding(SupportChannelBindingEntity entity) => new()

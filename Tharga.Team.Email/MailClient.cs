@@ -22,8 +22,12 @@ namespace Tharga.Team.Email;
 /// process-local state that has to be revived after every network blip, and it buys nothing at a poll
 /// interval measured in minutes.
 /// </para>
+/// <para>
+/// <b>Every mail read has its sender checked</b> by <see cref="DkimSenderVerifier"/>, the process-wide one over
+/// DNS unless another is given, so <see cref="InboundMail.SenderVerified"/> means the same on every read path.
+/// </para>
 /// </remarks>
-internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClient> logger = null) : IMailClient
+internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClient> logger = null, DkimSenderVerifier senderVerifier = null) : IMailClient
 {
     /// <summary>How many messages one poll will take, so a large backlog cannot stall a deployment.</summary>
     private const int MaxMessagesPerFetch = 100;
@@ -92,7 +96,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
             {
                 var message = await folder.GetMessageAsync(uid, cancellationToken);
 
-                mails.Add(InboundMailReader.Read(message, uid.Id, includeRaw ? await RawAsync(message, cancellationToken) : null));
+                mails.Add(await InboundMailReader.ReadAsync(message, senderVerifier ?? DkimSenderVerifier.Shared, uid.Id, includeRaw ? await RawAsync(message, cancellationToken) : null, cancellationToken));
                 highest = uid.Id;
             }
 

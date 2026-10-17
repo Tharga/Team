@@ -99,6 +99,33 @@ else
                                 </div>
                             }
 
+                            @* The teams the sender's address matched, with why none was chosen. One click assigns
+                               through the same operation as the dropdown, and only to a team that is listed, for
+                               the reason the dropdown lists them: a team deleted since the mail arrived would
+                               take the case out of this queue and into nobody's. *@
+                            @if (_selected.SuggestedTeams is { Length: > 0 })
+                            {
+                                <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+                                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[SupportUnassignedViewText.Suggested]</RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@SuggestionReasonText(_selected)</RadzenText>
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                                        @foreach (var suggestion in _selected.SuggestedTeams)
+                                        {
+                                            @if (IsListed(suggestion.Key))
+                                            {
+                                                <RadzenButton Text="@_text.Format(SupportUnassignedViewText.AssignToSuggested, SuggestionName(suggestion))"
+                                                              ButtonStyle="ButtonStyle.Secondary" Size="ButtonSize.Small"
+                                                              Click="@(() => AssignToAsync(suggestion.Key))" Disabled="_busy" />
+                                            }
+                                            else
+                                            {
+                                                <RadzenBadge Text="@SuggestionName(suggestion)" BadgeStyle="BadgeStyle.Light" />
+                                            }
+                                        }
+                                    </RadzenStack>
+                                </RadzenStack>
+                            }
+
                             @* Assigning is offered on a closed case too: which tenant a case belonged to is
                                worth recording even after it is answered, and refusing would leave a closed
                                case unassignable forever. *@
@@ -180,6 +207,21 @@ else
             : item.ClosedReason == SupportCaseClosureReason.Inactivity
                 ? _text[SupportUnassignedViewText.ClosedForInactivity]
                 : _text[SupportUnassignedViewText.Closed];
+
+    private string SuggestionReasonText(SupportCase item)
+        => item.SuggestionReason switch
+        {
+            SupportTeamSuggestionReason.SeveralTeams => _text[SupportUnassignedViewText.ReasonSeveralTeams],
+            SupportTeamSuggestionReason.SharedAddress => _text[SupportUnassignedViewText.ReasonSharedAddress],
+            _ => _text[SupportUnassignedViewText.ReasonSenderNotVerified]
+        };
+
+    private bool IsListed(string teamKey) => _teams.Any(x => x.Key == teamKey);
+
+    /// <remarks>The team's name as it is now when it can be listed, since it may have been renamed after the mail arrived.</remarks>
+    private string SuggestionName(SupportCaseTeam suggestion)
+        => _teams.FirstOrDefault(x => x.Key == suggestion.Key)?.Name
+           ?? (string.IsNullOrWhiteSpace(suggestion.Name) ? suggestion.Key : suggestion.Name);
 
     /// <remarks>
     /// <b>The refusal is caught rather than left to take the circuit down.</b> This is a panel on a page
@@ -297,19 +339,21 @@ else
         }
     }
 
+    private Task AssignAsync() => AssignToAsync(_assignTo);
+
     /// <remarks>
     /// The case leaves this queue when it succeeds, so the selection is dropped rather than reloaded — there
     /// is nothing here to go back to. A refusal means another operator was first, and the queue is refreshed
     /// so the operator sees that rather than a button that did nothing.
     /// </remarks>
-    private async Task AssignAsync()
+    private async Task AssignToAsync(string teamKey)
     {
-        if (_selected == null || string.IsNullOrWhiteSpace(_assignTo)) return;
+        if (_selected == null || string.IsNullOrWhiteSpace(teamKey)) return;
 
         _busy = true;
         try
         {
-            var assigned = await SupportCases.AssignCaseAsync(_selected.Id, _assignTo);
+            var assigned = await SupportCases.AssignCaseAsync(_selected.Id, teamKey);
 
             _message = assigned ? null : _text[SupportUnassignedViewText.AlreadyAssigned];
 

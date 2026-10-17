@@ -28,7 +28,9 @@ internal sealed class EmailEventHandler(
     TimeProvider timeProvider,
     ISupportCaseNotifier notifier = null,
     ILogger<EmailEventHandler> logger = null,
-    Tharga.Team.Service.Email.IOutboundMailPolicy policy = null)
+    Tharga.Team.Service.Email.IOutboundMailPolicy policy = null,
+    ISupportSenderDirectory senderDirectory = null,
+    IOptions<SupportCaseOptions> caseOptions = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
     internal const string Source = "email";
@@ -69,9 +71,8 @@ internal sealed class EmailEventHandler(
         var supportCase = await MatchAsync(mail, cancellationToken);
 
         // Mail that belongs to no existing case is somebody asking for help for the first time, so it opens
-        // one rather than being dropped. It opens *unassigned*: which team a sender belongs to is not
-        // knowable from a From header, and guessing which tenant a case concerns is the guess that puts one
-        // customer's problem in another customer's list.
+        // one rather than being dropped. Which team it opens in is RaiseAsync's to decide, and its answer is
+        // usually none.
         if (supportCase == null) return await RaiseAsync(mail, cancellationToken);
 
         var binding = supportCase.Bindings.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email);
@@ -95,11 +96,10 @@ internal sealed class EmailEventHandler(
             Sequence = 0,
             Kind = SupportMessageKind.User,
 
-            // No account, so no identity -- the address is a display name rather than an identifier. Writing
-            // it here would be wrong twice: it is the field authorization compares a caller's subject
-            // against, and the inactivity sweep reads "support wrote last" as *the newest entry is not the
-            // author's*, so a customer's own reply would arm the clock that closes their case.
-            AuthorIdentity = null,
+            // The correspondent is the case's author, so the reply carries the author's identity -- none for a
+            // case opened unattributed. Anything else and "support wrote last" would read the customer's own
+            // reply as an answer, arming the clock that closes their case.
+            AuthorIdentity = supportCase.AuthorIdentity,
             AuthorName = mail.From,
             Body = body,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
@@ -165,12 +165,20 @@ internal sealed class EmailEventHandler(
     }
 
     /// <summary>
-    /// Opens an unassigned case from a mail that matches nothing.
+    /// Opens a case from a mail that matches nothing — in the sender's team when that is certain, otherwise
+    /// unassigned.
     /// </summary>
     /// <remarks>
-    /// <b>Unattributed, and that is the honest record.</b> A <c>From</c> header authenticates nobody, so the
-    /// address becomes the display name and <see cref="SupportCase.AuthorIdentity"/> stays null. An
-    /// unverified address in the identity field would be a claim the product then trusts.
+    /// <b>Unattributed unless the sender is proven, and that is the honest record.</b> A <c>From</c> header
+    /// authenticates nobody, so the address becomes the display name and
+    /// <see cref="SupportCase.AuthorIdentity"/> stays null. An unverified address in the identity field would be
+    /// a claim the product then trusts.
+    /// <para>
+    /// <b>The exception is <see cref="SupportSenderPlacement"/>'s one certain answer</b>: the transport verified
+    /// the sender, one account holds the address, and it is an active member of one team. The case then opens
+    /// in that team as if that member had raised it on the site — their identity, their name, the visibility a
+    /// site case starts with. Every lesser match is kept on the case as suggestions for staff.
+    /// </para>
     /// <para>
     /// <b>The binding carries the sender as the correspondent</b>, which is what makes the trust rule work
     /// from the second mail onwards: the case corresponds with exactly one address, so a stranger who learns
@@ -189,19 +197,28 @@ internal sealed class EmailEventHandler(
 
         if (string.IsNullOrWhiteSpace(body)) return EmailHandlingOutcome.Ignored("empty body");
 
+        var placement = SupportSenderPlacement.Decide(mail.SenderVerified, await SendersAsync(mail.From, cancellationToken));
+        var team = placement.Team;
+        var authorIdentity = placement.Sender?.Identity;
+        var authorName = placement.Sender?.Name ?? mail.From;
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var caseId = Guid.NewGuid().ToString();
 
         var supportCase = new SupportCase
         {
             Id = caseId,
-            TeamKey = null,
-            AuthorIdentity = null,
-            AuthorName = mail.From,
+            TeamKey = team?.Key,
+            TeamName = team?.Name,
+            AuthorIdentity = authorIdentity,
+            AuthorName = authorName,
             Subject = string.IsNullOrWhiteSpace(mail.Subject) ? SubjectFromMessage.Derive(body) : mail.Subject.Trim(),
             Status = SupportCaseStatus.Open,
             CreatedAt = now,
             MessageCount = 1,
+            Visibility = team == null ? null : DefaultVisibility(),
+            SuggestedTeams = placement.Suggestions,
+            SuggestionReason = placement.Reason,
             Bindings =
             [
                 new SupportChannelBinding
@@ -217,8 +234,8 @@ internal sealed class EmailEventHandler(
         {
             Sequence = 1,
             Kind = SupportMessageKind.User,
-            AuthorIdentity = null,
-            AuthorName = mail.From,
+            AuthorIdentity = authorIdentity,
+            AuthorName = authorName,
             Body = body,
             SentAt = now,
 
@@ -228,18 +245,50 @@ internal sealed class EmailEventHandler(
             Source = SupportChannelType.Email
         }, cancellationToken);
 
+        if (team != null) await store.MarkReadAsync(team.Key, caseId, authorIdentity, 1, cancellationToken);
+
         notifier?.Notify(new SupportCaseUpdatedEventArgs
         {
-            TeamKey = null,
+            TeamKey = team?.Key,
             CaseId = caseId,
             Change = SupportCaseChange.Raised,
             FromChannel = true
         });
 
-        logger?.LogInformation("Opened unassigned support case {CaseId} from a mail sent by {Sender}.", caseId, mail.From);
+        if (team != null)
+            logger?.LogInformation("Opened support case {CaseId} in team {TeamKey}: the mail's sender is verified and a member of that team alone.", caseId, team.Key);
+        else
+            logger?.LogInformation("Opened unassigned support case {CaseId} from a mail sent by {Sender}, suggesting {SuggestionCount} team(s).", caseId, mail.From, placement.Suggestions.Length);
 
         return EmailHandlingOutcome.Raised(caseId);
     }
+
+    /// <summary>
+    /// The accounts holding the sender's address, or none when there is no directory or it fails.
+    /// </summary>
+    /// <remarks>
+    /// <b>A failure here must not lose the mail.</b> The ledger has already recorded it, so an exception would
+    /// mean it is never read again; opening it unassigned instead costs only the suggestion.
+    /// </remarks>
+    private async Task<SupportSender[]> SendersAsync(string address, CancellationToken cancellationToken)
+    {
+        if (senderDirectory == null || string.IsNullOrWhiteSpace(address)) return [];
+
+        try
+        {
+            return await senderDirectory.FindAsync(address, cancellationToken) ?? [];
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger?.LogWarning(e, "The sender of a support mail could not be looked up, so its case opens without a team.");
+
+            return [];
+        }
+    }
+
+    /// <summary>What a case raised on the site starts as, so a case opened in a team by mail reads no differently.</summary>
+    private SupportCaseVisibility? DefaultVisibility()
+        => caseOptions?.Value is { Visibility: SupportCaseVisibilityMode.PerCase } configured ? configured.DefaultVisibility : null;
 
     private static bool IsOurOwn(InboundMail mail, MailOptions options)
         => !string.IsNullOrWhiteSpace(options.FromAddress) &&

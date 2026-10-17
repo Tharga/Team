@@ -8,6 +8,33 @@ public interface IUserRepository<TUserEntity> : IRepository
     IAsyncEnumerable<TUserEntity> GetAsync();
     Task<TUserEntity> GetAsync(string identity);
     Task<TUserEntity> GetByKeyAsync(string userKey);
+
+    /// <summary>
+    /// Every user whose <see cref="IUser.EMail"/> is <paramref name="email"/>, compared trimmed and ignoring
+    /// case; empty for a blank address.
+    /// </summary>
+    /// <remarks>
+    /// <b>Every match, not the first.</b> Nothing makes an address unique — the built-in collection indexes
+    /// only <c>Identity</c> — and a caller deciding whose mail this is has to know when two accounts claim it.
+    /// <para>
+    /// A default interface method that reads every user, so a host's own repository keeps compiling and
+    /// answers correctly, if slowly; the built-in one asks the database.
+    /// </para>
+    /// </remarks>
+    async Task<TUserEntity[]> GetByEMailAsync(string email)
+    {
+        var wanted = email?.Trim();
+        if (string.IsNullOrEmpty(wanted)) return [];
+
+        var found = new List<TUserEntity>();
+        await foreach (var user in GetAsync())
+        {
+            if (string.Equals(user.EMail?.Trim(), wanted, StringComparison.OrdinalIgnoreCase)) found.Add(user);
+        }
+
+        return [.. found];
+    }
+
     Task AddAsync(TUserEntity user);
     Task SetNameAsync(string userKey, string name);
 

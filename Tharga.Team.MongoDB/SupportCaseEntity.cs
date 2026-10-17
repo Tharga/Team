@@ -110,6 +110,14 @@ public record SupportCaseEntity : EntityBase
     /// <summary>How far each participant has read. Absent until somebody opens the case.</summary>
     [BsonIgnoreIfNull]
     public SupportCaseReadEntity[] Reads { get; init; }
+
+    /// <summary>Teams the sender's address matched when the case opened unassigned. Absent when none did.</summary>
+    [BsonIgnoreIfNull]
+    public SupportCaseTeamEntity[] SuggestedTeams { get; init; }
+
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.String)]
+    public SupportTeamSuggestionReason? SuggestionReason { get; init; }
 }
 
 /// <summary>How far one person has read a case's transcript.</summary>

@@ -66,6 +66,42 @@ public class SupportContractSerializationTests
         }
     }
 
+    /// <summary>
+    /// Arrays compare by reference, so the suggestions are asserted field by field rather than by record equality.
+    /// </summary>
+    [Fact]
+    public void SupportCase_RoundTrips_WithSuggestedTeams()
+    {
+        var supportCase = new SupportCase
+        {
+            Id = "case-1",
+            AuthorIdentity = null,
+            AuthorName = "anna@example.com",
+            Subject = "Export is empty",
+            Status = SupportCaseStatus.Open,
+            CreatedAt = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc),
+            MessageCount = 1,
+            SuggestedTeams = [new SupportCaseTeam { Key = "acme", Name = "Acme" }],
+            SuggestionReason = SupportTeamSuggestionReason.SenderNotVerified
+        };
+
+        var restored = RoundTrip(supportCase);
+
+        Assert.Equal(supportCase.SuggestedTeams[0], Assert.Single(restored.SuggestedTeams));
+        Assert.Equal(SupportTeamSuggestionReason.SenderNotVerified, restored.SuggestionReason);
+    }
+
+    [Fact]
+    public void SupportSender_RoundTrips()
+    {
+        var sender = new SupportSender { Identity = "sub-1", Name = "Anna", Teams = [new SupportCaseTeam { Key = "acme", Name = "Acme" }] };
+
+        var restored = RoundTrip(sender);
+
+        Assert.Equal("sub-1", restored.Identity);
+        Assert.Equal(sender.Teams[0], Assert.Single(restored.Teams));
+    }
+
     private static T RoundTrip<T>(T value)
         => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(value));
 }

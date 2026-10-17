@@ -91,6 +91,11 @@ public static class SupportRegistration
     /// storage is the host's decision and this package must not acquire a database dependency.
     /// </para>
     /// <para>
+    /// <b>Mail from a verified sender in one team opens in that team when an <see cref="ISupportSenderDirectory"/>
+    /// is registered</b> — <c>AddThargaTeamRepository</c> registers one when it has both the user and the team
+    /// repository. Without one, every new mail opens unassigned, as before.
+    /// </para>
+    /// <para>
     /// <b>Nothing else may be registered as <see cref="ISupportCaseService"/>.</b> The only registration is
     /// the authorizing decorator; the implementation it wraps is internal and unregistered by itself, so
     /// there is no unchecked instance in the container for a component to resolve by accident.

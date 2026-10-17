@@ -28,10 +28,10 @@ public class EmailEventHandlerTests
         var outcome = await handler.HandleAsync(Mail());
 
         Assert.True(outcome.WasApplied);
-        // Named but not identified: the address is a display name, and AuthorIdentity is the field
-        // authorization compares a caller's subject against.
+        // Named by address and counted as the author's: the correspondent is who the case is with, and a reply
+        // attributed to nobody would read as support having answered last.
         await store.Received(1).AppendMessageAsync(TeamKey, CaseId,
-            Arg.Is<SupportMessage>(x => x.Body == "Any news?" && x.AuthorIdentity == null && x.AuthorName == Correspondent),
+            Arg.Is<SupportMessage>(x => x.Body == "Any news?" && x.AuthorIdentity == "sub-1" && x.AuthorName == Correspondent),
             Arg.Any<CancellationToken>());
     }
 

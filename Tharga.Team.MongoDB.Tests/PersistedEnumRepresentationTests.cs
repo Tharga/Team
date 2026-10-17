@@ -61,6 +61,7 @@ public class PersistedEnumRepresentationTests
         // Nullable, and therefore the shape most likely to slip past a sweep that forgets to unwrap.
         Assert.Contains("SupportMessageEntity.Source", found);
         Assert.Contains("SupportCaseEntity.Visibility", found);
+        Assert.Contains("SupportCaseEntity.SuggestionReason", found);
     }
 
     /// <summary>

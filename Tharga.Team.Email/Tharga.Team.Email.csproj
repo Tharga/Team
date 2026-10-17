@@ -40,6 +40,11 @@
       organisation's own mailbox both use it; a consumer who wants neither never takes it.
     -->
     <PackageReference Include="MailKit" Version="4.18.1" />
+    <!--
+      DNS TXT lookups for the DKIM keys that verify an inbound sender; the BCL resolves addresses only. Every
+      host on MongoDB already carries it, because the driver takes it for SRV records.
+    -->
+    <PackageReference Include="DnsClient" Version="1.8.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.13" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />

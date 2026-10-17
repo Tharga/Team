@@ -109,5 +109,13 @@ public static class ThargaTeamRegistration
                 services.AddSingleton(typeof(IHostedService), checkType);
             }
         }
+
+        // Who a support mail's sender is. Needs both stores; without them support mail opens unassigned as it
+        // always did. TryAdd so a host substituting its own wins.
+        if (o._userEntity != null && o._teamEntity != null && o._teamMemberModel != null)
+        {
+            var directoryType = typeof(MongoSupportSenderDirectory<,,>).MakeGenericType(o._userEntity, o._teamEntity, o._teamMemberModel);
+            services.TryAddScoped(typeof(ISupportSenderDirectory), directoryType);
+        }
     }
 }
