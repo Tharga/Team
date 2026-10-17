@@ -12,7 +12,7 @@
     [Authorize] the page that embeds this component.
 *@
 
-<RadzenTabs @bind-SelectedIndex="_selectedTab">
+<RadzenTabs SelectedIndex="@_selectedTab" SelectedIndexChanged="@OnTabChangedAsync">
     <Tabs>
         <RadzenTabsItem Text="@_text[UsersViewText.UsersTab]">
             <UsersListView TMember="TMember" ActionsTemplate="ActionsTemplate" ActionItems="ActionItems" ActionInvoked="ActionInvoked"
@@ -81,8 +81,28 @@
     /// </summary>
     [Parameter] public bool ShowAuditLogButton { get; set; }
 
+    /// <summary>
+    /// The open tab. Two-way bindable, so a host can open the view on a tab from a link and keep its own
+    /// address in step, for example a <c>?tab=teams</c> query parameter. Defaults to
+    /// <see cref="UsersViewTab.Users"/>; <see cref="UsersViewTab.Directory"/> falls back to Users when that
+    /// tab is not shown.
+    /// </summary>
+    [Parameter] public UsersViewTab SelectedTab { get; set; }
+
+    /// <summary>Raised when the open tab changes, by the user or by following a team or member link.</summary>
+    [Parameter] public EventCallback<UsersViewTab> SelectedTabChanged { get; set; }
+
+    /// <summary>A team to expand on the Teams tab when the view opens, for a link to one team.</summary>
+    [Parameter] public string FocusTeamKey { get; set; }
+
+    /// <summary>A user to expand on the Users tab when the view opens, for a link to one user.</summary>
+    [Parameter] public string FocusUserKey { get; set; }
+
     private const int UsersTab = 0;
     private const int TeamsTab = 1;
+    private UsersViewTab? _appliedTab;
+    private string _appliedFocusTeamKey;
+    private string _appliedFocusUserKey;
 
     // Resolved once in OnInitializedAsync; read synchronously in markup. See TextSet.
     private TextSet _text = TextSet.Empty;
@@ -98,16 +118,45 @@
     private Task ShowTeamAsync(string teamKey)
     {
         _focusTeamKey = teamKey;
-        _selectedTab = TeamsTab;
-        return Task.CompletedTask;
+        return OnTabChangedAsync(TeamsTab);
     }
 
     /// <summary>Follows a member link from a team's member list, in the opposite direction.</summary>
     private Task ShowUserAsync(string userKey)
     {
         _focusUserKey = userKey;
-        _selectedTab = UsersTab;
-        return Task.CompletedTask;
+        return OnTabChangedAsync(UsersTab);
+    }
+
+    private async Task OnTabChangedAsync(int index)
+    {
+        _selectedTab = index;
+        var tab = UsersViewTabs.FromIndex(index, _showDirectoryTab);
+        _appliedTab = tab;
+        await SelectedTabChanged.InvokeAsync(tab);
+    }
+
+    // Applies the host's parameters only when they change, so a host that does not bind SelectedTab
+    // still lets the user switch tabs, and a re-render with the same values does not undo a click.
+    protected override void OnParametersSet()
+    {
+        if (_appliedTab != SelectedTab)
+        {
+            _appliedTab = SelectedTab;
+            _selectedTab = UsersViewTabs.ToIndex(SelectedTab, _showDirectoryTab);
+        }
+
+        if (!string.Equals(_appliedFocusTeamKey, FocusTeamKey, StringComparison.Ordinal))
+        {
+            _appliedFocusTeamKey = FocusTeamKey;
+            if (!string.IsNullOrEmpty(FocusTeamKey)) _focusTeamKey = FocusTeamKey;
+        }
+
+        if (!string.Equals(_appliedFocusUserKey, FocusUserKey, StringComparison.Ordinal))
+        {
+            _appliedFocusUserKey = FocusUserKey;
+            if (!string.IsNullOrEmpty(FocusUserKey)) _focusUserKey = FocusUserKey;
+        }
     }
 
     protected override async Task OnInitializedAsync()
@@ -118,6 +167,9 @@
         _showDirectoryTab = UserAdminGate.ShowDirectoryFeatures(hasUsersManage, directoryRegistered);
 
         _text = await TextProvider.ResolveAsync(UsersViewText.All);
+
+        // The Directory tab's presence is only known now, so map the requested tab again.
+        _selectedTab = UsersViewTabs.ToIndex(SelectedTab, _showDirectoryTab);
 
         await base.OnInitializedAsync();
     }
