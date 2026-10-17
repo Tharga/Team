@@ -9,7 +9,12 @@ Branch: `feature/member-last-seen-on-activity` (from `master` at cf90c6d, after 
   the filter and update.
   - `$set Members.$.LastSeen` with a filter on key, `DeletedAt: null` and `Members $elemMatch Key`. A stamp on
     a deleted team, or one whose team vanished, is now a no-op rather than a null reference.
-    `TeamRepositoryLastSeenTests` (3).
+    `TeamRepositoryLastSeenTests` (4).
+  - Found in the browser test against a real database: Tharga.MongoDB's default `UpdateOneAsync` mode finds the
+    document and then updates it by id, so the server rejected the positional `$` ("The positional operator
+    did not find the match needed from the query"). The page carried on as designed and logged a warning.
+    `OneOption.FirstOrDefault` sends filter and update as one `findAndModify`; a test pins the mode. Rendering
+    the update alone had looked right.
 - [x] 2. `TeamServiceBase`: throttle `SetMemberLastSeenAsync` per (team, user) per process;
   `LastSeenStampInterval`. Tests.
   - A static dictionary, like `UserServiceBase`, since the service is scoped. The explicit stamp on selection
@@ -32,9 +37,9 @@ Branch: `feature/member-last-seen-on-activity` (from `master` at cf90c6d, after 
 
 ## Last session
 
-2026-10-18: steps 0–5 done and pushed for testing. Next: the user tests in the sample (with the default 15-minute
-interval a fresh stamp is visible on the team page after a reload once the previous one is older than 15
-minutes; the sample can lower it with an override for the test). Then close-out.
+2026-10-18: steps 0–5 done. Browser test (driven for the user) first caught the positional-update failure above;
+after the fix: the selected team's row went from "48 minutes ago" to "2 seconds ago" with no team switch, the
+other team stayed at "68 days ago", two page loads made one team update, and the log was clean. Next: close-out.
 
 ## README / docs changes needed at close
 
