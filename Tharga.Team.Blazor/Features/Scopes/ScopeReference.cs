@@ -88,6 +88,26 @@ public static class ScopeReference
     }
 
     /// <summary>
+    /// The rows for scopes that apply to the team: every row whose scope the team's
+    /// <see cref="ITeamScopeVisibilityProvider"/> does not hide. All of them when nothing is hidden.
+    /// </summary>
+    /// <param name="rows">The rows from <see cref="BuildForRoles"/>.</param>
+    /// <param name="hidden">The scopes hidden for the team, or null.</param>
+    /// <remarks>
+    /// <b>Unlike role visibility, which <c>ScopeView</c> deliberately ignores</b> (Tharga/Team#292). A hidden
+    /// role can still be granting access, and leaving it off the page would understate what a member holds. A
+    /// hidden scope belongs to a feature that is switched off for the team, so it doesn't apply there
+    /// (Tharga/Team#334). That holds only while the host also refuses the scope at runtime when the feature
+    /// is off; the page trusts it to.
+    /// </remarks>
+    public static IReadOnlyList<ScopeRow> WithoutHidden(IReadOnlyList<ScopeRow> rows, IReadOnlySet<string> hidden)
+    {
+        if (rows == null) return Array.Empty<ScopeRow>();
+        if (hidden is not { Count: > 0 }) return rows;
+        return rows.Where(r => !hidden.Contains(r.Name)).ToList();
+    }
+
+    /// <summary>
     /// The member's own role assignments, narrowed to those the page knows about — what the role bar shows
     /// as already selected.
     /// </summary>

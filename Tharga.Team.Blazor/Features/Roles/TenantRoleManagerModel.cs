@@ -1,4 +1,5 @@
 using Tharga.Team;
+using Tharga.Team.Blazor.Framework;
 
 namespace Tharga.Team.Blazor.Features.Roles;
 
@@ -7,22 +8,41 @@ namespace Tharga.Team.Blazor.Features.Roles;
 /// </summary>
 public sealed class EditableTenantRole
 {
+    private readonly IReadOnlyList<string> _heldScopes = [];
+    private readonly IReadOnlySet<string> _hiddenScopes;
+
     public string Name { get; set; } = "";
     public string Description { get; set; }
+
+    /// <summary>The scopes the editor shows and changes: the role's scopes, minus any hidden for the team.</summary>
     public List<string> Scopes { get; set; } = [];
 
     public EditableTenantRole() { }
 
-    public EditableTenantRole(TenantRoleDefinition role)
+    public EditableTenantRole(TenantRoleDefinition role) : this(role, null) { }
+
+    /// <param name="role">The stored role.</param>
+    /// <param name="hiddenScopes">
+    /// The scopes the team's <see cref="ITeamScopeVisibilityProvider"/> hides right now. They are left out of
+    /// <see cref="Scopes"/>, so the picker never shows them, and the ones the role holds are kept on save.
+    /// </param>
+    public EditableTenantRole(TenantRoleDefinition role, IReadOnlySet<string> hiddenScopes)
     {
         Name = role.Name;
         Description = role.Description;
-        Scopes = role.Scopes?.ToList() ?? [];
+        _heldScopes = role.Scopes?.ToList() ?? [];
+        _hiddenScopes = hiddenScopes;
+        Scopes = _heldScopes.Where(x => hiddenScopes == null || !hiddenScopes.Contains(x)).ToList();
     }
 
+    /// <remarks>
+    /// <b>A hidden scope the role held is written back.</b> The editor could neither see nor remove it, so
+    /// switching a feature off for a team must not strip that feature's scopes from the team's roles; switching
+    /// it on again finds them still there.
+    /// </remarks>
     public TenantRoleDefinition ToDefinition() => new(
         Name?.Trim() ?? "",
-        Scopes?.ToArray() ?? [],
+        ScopeVisibility.Persist(Scopes, inherited: [], _heldScopes, _hiddenScopes),
         string.IsNullOrWhiteSpace(Description) ? null : Description.Trim());
 }
 
@@ -36,7 +56,11 @@ public sealed class TenantRoleManagerModel
     public List<EditableTenantRole> Roles { get; private set; } = [];
 
     public void Load(IEnumerable<TenantRoleDefinition> roles)
-        => Roles = (roles ?? []).Select(r => new EditableTenantRole(r)).ToList();
+        => Load(roles, null);
+
+    /// <summary>Loads the roles for editing, leaving <paramref name="hiddenScopes"/> out of the editor and keeping them on save.</summary>
+    public void Load(IEnumerable<TenantRoleDefinition> roles, IReadOnlySet<string> hiddenScopes)
+        => Roles = (roles ?? []).Select(r => new EditableTenantRole(r, hiddenScopes)).ToList();
 
     public EditableTenantRole AddNew()
     {

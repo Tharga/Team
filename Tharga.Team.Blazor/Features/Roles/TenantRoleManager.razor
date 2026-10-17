@@ -109,6 +109,8 @@ else
     private string _manageScope = TeamScopes.Manage;
     private bool _canManage;
     private string[] _allScopeNames = [];
+    // Scopes the team's ITeamScopeVisibilityProvider hides: left out of the picker, kept on a role that holds them.
+    private IReadOnlySet<string> _hiddenScopes = new HashSet<string>();
     private IReadOnlyList<string> _codeRoleNames = [];
     private IReadOnlyList<string> _errors = [];
     private bool _saving;
@@ -122,10 +124,6 @@ else
         _teamService = ServiceProvider.GetService<ITeamManagementService>();
         _teamStateService = ServiceProvider.GetService<ITeamStateService>();
 
-        // Grant-only scopes are excluded to match SetTeamCustomRolesAsync, which rejects them: offering one
-        // here would produce a save that always throws.
-        if (_scopeRegistry != null)
-            _allScopeNames = _scopeRegistry.All.Where(s => !s.GrantOnly).Select(s => s.Name).OrderBy(s => s, StringComparer.Ordinal).ToArray();
         _codeRoleNames = _roleRegistry?.All.Select(r => r.Name).ToList() ?? (IReadOnlyList<string>)[];
 
         _manageScope = ServiceProvider.GetService<DynamicTenantRoleOptions>()?.ManageScope ?? TeamScopes.Manage;
@@ -136,6 +134,18 @@ else
         var team = _teamStateService != null ? await _teamStateService.GetSelectedTeamAsync() : null;
         _teamKey = team?.Key;
 
+        // The same visibility the member and API-key pickers apply: a feature switched off for this team is
+        // not offered when the team builds a role (Tharga/Team#334).
+        _hiddenScopes = await ScopeVisibility.HiddenAsync(ServiceProvider.GetService<ITeamScopeVisibilityProvider>(), _teamKey,
+            _scopeRegistry?.All.Select(s => s.Name) ?? []);
+
+        // Grant-only scopes are excluded to match SetTeamCustomRolesAsync, which rejects them: offering one
+        // here would produce a save that always throws.
+        if (_scopeRegistry != null)
+            _allScopeNames = _scopeRegistry.All
+                .Where(s => !s.GrantOnly && !_hiddenScopes.Contains(s.Name))
+                .Select(s => s.Name).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+
         await ReloadAsync();
     }
 
@@ -145,7 +155,7 @@ else
         if (string.IsNullOrEmpty(_teamKey) || _teamService == null) return;
 
         var roles = await _teamService.GetTeamCustomRolesAsync(_teamKey);
-        _model.Load(roles);
+        _model.Load(roles, _hiddenScopes);
         if (_grid != null) await _grid.Reload();
     }
 

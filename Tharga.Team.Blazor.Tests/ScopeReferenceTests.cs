@@ -386,4 +386,37 @@ public class ScopeReferenceTests
         Assert.NotEmpty(rows);
         Assert.All(rows, r => Assert.Empty(r.Roles));
     }
+
+    /// <summary>A scope hidden for the team belongs to a feature it has switched off, so the access page leaves it out (Tharga/Team#334).</summary>
+    [Fact]
+    public void WithoutHidden_LeavesOutTheTeamsHiddenScopes()
+    {
+        var (scopes, roles) = BuildRegistries();
+        var rows = ScopeReference.BuildForRoles(scopes, roles.All);
+
+        var visible = ScopeReference.WithoutHidden(rows, new HashSet<string> { "orders:refund" });
+
+        Assert.Equal(["orders:read", "orders:write"], visible.Select(r => r.Name));
+    }
+
+    /// <summary>The roles keep crediting the scopes that are still shown; hiding a scope doesn't touch a row's role list.</summary>
+    [Fact]
+    public void WithoutHidden_KeepsTheRolesOnTheRowsThatRemain()
+    {
+        var (scopes, roles) = BuildRegistries();
+
+        var visible = ScopeReference.WithoutHidden(ScopeReference.BuildForRoles(scopes, roles.All), new HashSet<string> { "orders:refund" });
+
+        Assert.Equal(["Editor"], Row(visible, "orders:write").Roles);
+    }
+
+    [Fact]
+    public void WithoutHidden_WithNothingHidden_KeepsEveryRow()
+    {
+        var (scopes, roles) = BuildRegistries();
+        var rows = ScopeReference.BuildForRoles(scopes, roles.All);
+
+        Assert.Same(rows, ScopeReference.WithoutHidden(rows, null));
+        Assert.Same(rows, ScopeReference.WithoutHidden(rows, new HashSet<string>()));
+    }
 }
