@@ -103,6 +103,40 @@ public class TeamMembershipClaimsBuilderTests
     }
 
     /// <summary>
+    /// A member whose access level was never set gets nothing — no scopes, no team key, and above all no
+    /// <c>AccessLevel</c> claim, which would otherwise be emitted empty. Before 4.0 this member was an Owner.
+    /// </summary>
+    [Fact]
+    public async Task AMemberWithNoAccessLevel_GetsNothing()
+    {
+        _teamService.Setup(t => t.GetTeamMemberAsync(TeamKey, UserKey))
+            .ReturnsAsync(Mock.Of<ITeamMember>(m => m.Key == UserKey && m.State == MembershipState.Member && m.AccessLevel == null));
+        _scopeRegistry.Setup(s => s.GetEffectiveScopes(It.IsAny<AccessLevel?>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>()))
+            .Returns(new[] { "team:read", "member:manage" });
+
+        var claims = await CreateSut().BuildAsync(PrincipalWithRoles("Support"), TeamKey);
+
+        Assert.Empty(claims);
+    }
+
+    /// <summary>
+    /// Nor does a member with no level reach the team through a consented role: they are a member, and
+    /// membership is the more specific answer — the same rule as for a suspended member.
+    /// </summary>
+    [Fact]
+    public async Task AMemberWithNoAccessLevel_DoesNotFallThroughToConsent()
+    {
+        _teamService.Setup(t => t.GetTeamMemberAsync(TeamKey, UserKey))
+            .ReturnsAsync(Mock.Of<ITeamMember>(m => m.Key == UserKey && m.State == MembershipState.Member && m.AccessLevel == null));
+        _teamService.Setup(t => t.GetConsentedTeamsAsync(It.IsAny<string[]>()))
+            .Returns(Async(Mock.Of<ITeam>(t => t.Key == TeamKey && t.ConsentedRoles == new[] { "Support" } && t.ConsentAccessLevel == AccessLevel.Viewer)));
+
+        var claims = await CreateSut().BuildAsync(PrincipalWithRoles("Support"), TeamKey);
+
+        Assert.Empty(claims);
+    }
+
+    /// <summary>
     /// <b>No <c>TeamKey</c> claim either.</b> Filtering only the scopes would leave the member looking
     /// like they are "in" the team to every service-layer check that reads that claim — a subtler and
     /// worse state than either being in or out.

@@ -7,6 +7,7 @@ public abstract class TeamServiceBase : ITeamService
 {
     private const string OwnerCannotLeaveMessage = "The owner cannot leave the team. Transfer ownership first.";
     private const string LastAdministratorCannotLeaveMessage = "Cannot leave the team as the last administrator.";
+    internal const string MissingInviteAccessLevelMessage = "An invitation must name the access level the invitee joins at. InviteUserModel.AccessLevel was not set.";
     private const string NotAMemberMessage = "User '{0}' is not a member of team '{1}'.";
     private const string NoOutstandingInvitationMessage = "No outstanding invitation matches that code on team '{0}'.";
 
@@ -458,6 +459,10 @@ public abstract class TeamServiceBase : ITeamService
     /// </remarks>
     public async Task AddMemberAsync(string teamKey, InviteUserModel model)
     {
+        // An invitation that names no level is a bug in the caller, not a Viewer — and before 4.0 it was an Owner.
+        if (model?.AccessLevel is not { } level)
+            throw new ArgumentException(MissingInviteAccessLevelMessage, nameof(model));
+
         var outstanding = string.IsNullOrWhiteSpace(model?.Email)
             ? null
             : await GetMembersAsync(teamKey).FirstOrDefaultAsync(x =>
@@ -466,8 +471,8 @@ public abstract class TeamServiceBase : ITeamService
 
         if (outstanding != null)
         {
-            if (outstanding.AccessLevel != model.AccessLevel)
-                await SetTeamMemberRoleAsync(teamKey, outstanding.Key, model.AccessLevel);
+            if (outstanding.AccessLevel != level)
+                await SetTeamMemberRoleAsync(teamKey, outstanding.Key, level);
 
             if (!string.IsNullOrWhiteSpace(model.Name) && !string.Equals(model.Name, outstanding.Name, StringComparison.Ordinal))
                 await SetTeamMemberNameAsync(teamKey, outstanding.Key, model.Name);
@@ -544,7 +549,9 @@ public abstract class TeamServiceBase : ITeamService
             x.Key != member.Key &&
             x.State == MembershipState.Member &&
             x.SuspendedAt == null &&
-            x.AccessLevel <= AccessLevel.Administrator);
+            // Pattern rather than a lifted <=, so a member with no level is visibly not counted: they hold no
+            // scopes either, so they cannot be the one left holding member:manage.
+            x.AccessLevel is { } level && level <= AccessLevel.Administrator);
         if (otherAdminsOrOwners == 0)
             throw new InvalidOperationException(LastAdministratorCannotLeaveMessage);
     }

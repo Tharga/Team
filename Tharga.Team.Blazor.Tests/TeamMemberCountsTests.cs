@@ -18,7 +18,7 @@ public class TeamMemberCountsTests
         public string Name => null;
         public Invitation Invitation => null;
         public DateTime? LastSeen => null;
-        public AccessLevel AccessLevel => AccessLevel.User;
+        public AccessLevel? AccessLevel => Tharga.Team.AccessLevel.User;
         public string[] TenantRoles => [];
         public string[] ScopeOverrides => [];
     }

@@ -68,15 +68,13 @@ public record ThargaTeamOptions
     public TimeSpan SupportEventLedgerRetention { get; set; } = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// Whether to report, at startup, stored team members that carry no access level and are therefore
-    /// being treated as <see cref="AccessLevel.Owner"/>. Default <c>true</c>.
+    /// Whether to report, at startup, stored team members that carry no access level and therefore, since
+    /// 4.0, have no access to their team. Default <c>true</c>.
     /// </summary>
     /// <remarks>
-    /// <b>On by default because the condition it finds is a silent privilege grant.</b> A member with no
-    /// stored level is an Owner, with nothing in the logs and nothing visible in the UI to say so — and
-    /// since <c>Owner</c> is the enum's zero value, no check above the store can distinguish it from a
-    /// member deliberately made one. Silence about that should be something a host chooses, not something
-    /// it gets by default.
+    /// <b>On by default because the condition it finds changed meaning in 4.0.</b> Before it, a member with no
+    /// stored level was silently an Owner; since then they are silently refused. That is the safe direction,
+    /// but it can lock out a team's original owner on upgrade, and nothing else in the logs says why.
     /// <para>
     /// The cost of leaving it on is one count query per start, which returns immediately on a deployment
     /// with nothing to report. Set <c>false</c> once the data is corrected, or if the startup query is

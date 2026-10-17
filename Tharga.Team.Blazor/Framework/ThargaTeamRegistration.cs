@@ -30,8 +30,8 @@ public static class ThargaTeamRegistration
     }
 
     /// <summary>
-    /// Registration against an already-configured options instance, so the obsolete
-    /// <c>AddThargaPlatform</c> entry point runs exactly this logic rather than a copy of it.
+    /// Registration against an already-configured options instance. It was split out so the obsolete
+    /// <c>AddThargaPlatform</c> alias ran this exact logic; the alias was removed in 4.0.
     /// </summary>
     internal static void AddThargaTeamCore(WebApplicationBuilder builder, ThargaTeamOptions options)
     {

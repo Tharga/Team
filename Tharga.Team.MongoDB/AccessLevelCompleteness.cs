@@ -3,16 +3,15 @@ using MongoDB.Driver;
 namespace Tharga.Team.MongoDB;
 
 /// <summary>
-/// Finds stored team members that carry no access level, and so are being treated as
-/// <see cref="AccessLevel.Owner"/>.
+/// Finds stored team members that carry no access level. Since 4.0 they read as null and are granted nothing
+/// until someone sets a level; before 4.0 they were treated as <see cref="AccessLevel.Owner"/>.
 /// </summary>
 /// <remarks>
-/// <b>Why this is a store-level query and not a check over <see cref="ITeamMember"/>.</b>
-/// <see cref="AccessLevel"/> declares <see cref="AccessLevel.Owner"/> first, so it is the zero value — and a
-/// document with no such field therefore deserializes to <c>Owner</c>, exactly like a member deliberately
-/// stored as one. After deserialization the two are the same value and no amount of C# can separate them.
-/// The distinction survives only in the stored document, as the presence or absence of a field, which is
-/// where this looks.
+/// <b>Why this is a store-level query and not a check over <see cref="ITeamMember"/>.</b> Before 4.0 a
+/// document with no such field deserialized to <c>Owner</c>, the enum's zero value, exactly like a member
+/// deliberately stored as one, so only the stored document could tell them apart. Since 4.0 the level is
+/// nullable and they deserialize apart, but the store query stays: one count finds them without loading every
+/// team.
 /// <para>
 /// <b>This reports; it does not repair.</b> Choosing a level for an ambiguous member is a decision about
 /// authorization: the cautious-looking guess (<see cref="AccessLevel.Viewer"/>) silently demotes anyone who
@@ -20,9 +19,9 @@ namespace Tharga.Team.MongoDB;
 /// investigated. Only the host knows which, so the toolkit names the teams and leaves the write alone.
 /// </para>
 /// <para>
-/// <b>It changes no behaviour.</b> An affected member keeps being treated as <c>Owner</c> exactly as before.
-/// The fix — an <c>AccessLevel?</c> whose absence grants nothing — is a breaking change queued for 4.0; this
-/// exists so a host can find and correct its data before that release starts refusing those members.
+/// <b>It changes no behaviour.</b> Since 4.0 an affected member is already refused, by the nullable level
+/// itself. This exists so a host notices who lost access on upgrade — typically a team's original owner,
+/// stored before the field existed — and restores them deliberately.
 /// </para>
 /// </remarks>
 internal static class AccessLevelCompleteness

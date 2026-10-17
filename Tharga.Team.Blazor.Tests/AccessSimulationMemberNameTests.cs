@@ -38,7 +38,7 @@ public class AccessSimulationMemberNameTests
     private sealed record FakeMember(string Key) : ITeamMember
     {
         public string Name { get; init; }
-        public AccessLevel AccessLevel => AccessLevel.Viewer;
+        public AccessLevel? AccessLevel => Tharga.Team.AccessLevel.Viewer;
         public string[] TenantRoles => [];
         public string[] ScopeOverrides => [];
         public Invitation Invitation => null;

@@ -30,8 +30,11 @@ public class TenantRoleService : ITenantRoleService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<string>> GetEffectiveScopesAsync(string teamKey, AccessLevel accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
+    public async Task<IReadOnlyList<string>> GetEffectiveScopesAsync(string teamKey, AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
     {
+        // An unset level grants nothing; custom roles must not rescue it any more than code roles do.
+        if (accessLevel is null) return [];
+
         var roleNameList = roleNames?.ToArray() ?? [];
         // Materialised once: scopeOverrides is passed to GetEffectiveScopes and
         // then enumerated again by the fallback, which would walk a lazy sequence

@@ -864,25 +864,31 @@ only the base, since a record otherwise re-synthesizes `ToString()` in every dec
 
 ### Members with no access level
 
-`AccessLevel` is declared `Owner, Administrator, User, Viewer, Custom`, so **`Owner` is the enum's zero
-value**. A stored member document with no `AccessLevel` field therefore reads back as an **Owner** — and once
-loaded it is indistinguishable from a member deliberately made one, because they are the same value.
+**Since 4.0 a member with no access level has no access to their team.** `ITeamMember.AccessLevel` is
+`AccessLevel?`, and a null level grants nothing: no scopes, no team claims, no tenant-role or override scopes,
+and no fall-through to consent. The member is refused exactly like a suspended one. The member grid shows them
+as **"No access level"**, and an administrator restores them by picking a level.
+
+Before 4.0 the property was not nullable, and `Owner` is the enum's zero value. A stored member with no
+`AccessLevel` field therefore read back as an **Owner**, and could not be told apart from a member deliberately
+made one.
 
 Two things produce such a document: it was written before the field existed, or a `CreateTeamMember` override
-returned a member without copying the invited level.
+returned a member without copying the invited level. Since 4.0 the second one can no longer happen: the invite
+fails instead (see *Migrating to 4.0* below).
 
-**From 3.14.x the toolkit tells you.** When a team repository is registered, a startup check counts members
-with no stored level and logs a warning naming the affected teams:
+**The toolkit tells you.** When a team repository is registered, a startup check counts members with no stored
+level and logs a warning naming the affected teams:
 
 ```
 3 team(s) contain members with no stored AccessLevel: 'acme', 'globex', 'initech'.
-Those members are being treated as Owner, because Owner is the enum's zero value and an
-absent field cannot be told from a stored one after loading. …
+Since 4.0 those members have no access to their team until a level is set - before 4.0 they
+were treated as Owner, so a team's original owner may be among them. …
 ```
 
-It **warns and never throws** — the condition is pre-existing data, not a wiring mistake, and refusing to
-start would turn a long-standing silent grant into an outage. A healthy deployment costs one count query per
-start. Turn it off once your data is clean:
+It **warns and never throws**. The condition is pre-existing data, not a wiring mistake, and refusing to start
+would lock out every team rather than just the affected members. A healthy deployment costs one count query
+per start. Turn it off once your data is clean:
 
 ```csharp
 builder.Services.AddThargaTeamRepository(o =>
@@ -910,8 +916,8 @@ db.Team.aggregate([
 ])
 ```
 
-Then set an explicit level on each. **Decide it deliberately — do not bulk-assign.** These members have been
-acting as owners, so some of them may genuinely be owners; a blanket `Viewer` would silently demote whoever
+Then set an explicit level on each, here or from the member grid. **Decide it deliberately — do not
+bulk-assign.** Before 4.0 these members acted as owners, so some of them may genuinely be owners; a blanket `Viewer` would silently demote whoever
 really was one, and a blanket `Owner` preserves exactly the grant you are investigating. That is why the
 toolkit reports rather than repairs.
 
@@ -926,9 +932,42 @@ db.Team.updateOne(
 Store the level **by name** (`"User"`), not as a number — every access level in this toolkit is persisted as
 a string.
 
-> **This is migration work, not optional hygiene.** A future major release makes an unset level grant
-> **nothing** instead of granting Owner. Any member you leave unfixed keeps working until then and is
-> **refused** afterwards, so correcting the data now is what makes that upgrade uneventful.
+> **Fix the data before upgrading to 4.0, not after.** On 3.x the unfixed members still work, as owners.
+> On 4.0 they are refused until someone sets a level, and if a team's only owner is among them, nobody in
+> that team can set one. Run the query above first.
+
+### Migrating to 4.0
+
+4.0 makes an unset access level grant nothing, and removes the members 3.x kept only for compatibility. Work
+through the list in order:
+
+1. **Members with no stored level.** On 3.x, run the query in *Members with no access level* above and give
+   each member an explicit level. A 3.x startup log that has no "no stored AccessLevel" warning means there is
+   nothing to do.
+2. **`AccessLevel` is nullable.** `ITeamMember.AccessLevel`, `TeamMemberBase.AccessLevel`,
+   `InviteUserModel.AccessLevel`, `TeamMemberInfo.AccessLevel` and `UserTeamInfo.AccessLevel` are
+   `AccessLevel?`. Code that compares or switches on a level now has to decide what null means. Treat it as
+   "no access": `if (member.AccessLevel is not { } level) return false;`. A test fake that implements
+   `ITeamMember` changes its property type to match. `IScopeRegistry.GetScopesForAccessLevel`,
+   `IScopeRegistry.GetEffectiveScopes` and `ITenantRoleService.GetEffectiveScopesAsync` accept `AccessLevel?`
+   and return nothing for null.
+3. **An invitation must name a level.** `AddMemberAsync` throws `ArgumentException` when
+   `InviteUserModel.AccessLevel` is null. `InviteUserDialog` always sets one. Code that builds an
+   `InviteUserModel` itself sets it explicitly.
+4. **`CreateTeamMember` must copy the level.** If an override returns a member with no level, the invite throws
+   `InvalidOperationException` naming the override, and nothing is stored. Add
+   `AccessLevel = model.AccessLevel` to the member it builds.
+5. **The `Developer` role no longer oversees private API keys.** Only the `apikeys:oversee` system scope does.
+   If developers relied on it, map it:
+   `o.ConfigureSystemRoles = roles => roles.Map("Developer", SystemApiKeyScopes.Oversee);`.
+6. **`ITeamEmailSender` has one member,** `SendInviteAsync(TeamInviteMail mail)`. Delete the four-string
+   overload from your sender. A sender that implemented only that overload moves its body into the new one;
+   `mail.RecipientEmail`, `mail.RecipientName`, `mail.InviteLink` and `mail.TeamName` carry the same values.
+7. **The Tharga.Platform aliases are gone.** `ThargaPlatformOptions`, `ThargaPlatformRegistration`,
+   `builder.AddThargaPlatform(...)` and `app.UseThargaPlatform()` were obsolete forwarders kept from the
+   rename. Use `ThargaTeamOptions`, `builder.AddThargaTeam(...)` and `app.UseThargaTeam()`. Also removed:
+   `services.AddThargaTeam()` in the core `Tharga.Team` package, which never registered anything. Call
+   `builder.AddThargaTeam()` from `Tharga.Team.Blazor` instead.
 
 ### Implementing the required types
 
@@ -1030,7 +1069,7 @@ public class MyTeamService : TeamServiceRepositoryBase<TeamEntity, TeamMember>
         {
             Key = null,                           // assigned when the user accepts the invite
             Name = model.Name,
-            AccessLevel = model.AccessLevel
+            AccessLevel = model.AccessLevel     // required: since 4.0 the invite fails without it
         });
     }
 }
@@ -1348,7 +1387,7 @@ By default every team key is visible to all team admins and any Owner can recycl
 - **Mint** — server-side via `IApiKeyAdministrationService.CreateKeyAsync(..., ownerMemberKey: currentMember.Key)`, or from the UI via the "Private (only me)" toggle (which calls `IApiKeyManagementService.CreateKeyAsync(ownerScoped: true)`; the service forces the owner to the *caller's own* member key — a caller can't mint a key owned by someone else).
 - **Visibility / mutation** are enforced in `ApiKeyManagementService` from the authenticated principal (a `MemberKey` claim, added by the claims transformation):
   - **Owner** sees and manages their own private keys.
-  - **Oversight** — a caller holding the `apikeys:oversee` system scope (`SystemApiKeyScopes.Oversee`) sees and manages all (audit/incident escape). Map it to a role like any other system scope: `o.ConfigureSystemRoles = roles => roles.Map("Administrator", SystemApiKeyScopes.Oversee);`. A *team* scope with the same name does not count. The legacy `Developer` role still grants oversight until 4.0; map the scope explicitly if you rely on it.
+  - **Oversight** — a caller holding the `apikeys:oversee` system scope (`SystemApiKeyScopes.Oversee`) sees and manages all (audit/incident escape). Map it to a role like any other system scope: `o.ConfigureSystemRoles = roles => roles.Map("Administrator", SystemApiKeyScopes.Oversee);`. A *team* scope with the same name does not count. Since 4.0 the `Developer` role grants nothing here by itself; map the scope to it if developers need oversight.
   - **Privileged access levels** (Administrator/Owner) can *see* private keys **only when the host opts in** — and remain **view-only** (they cannot recycle/lock/delete others').
 - **`ApiKeyView` parameters** — `ShowPrivateKeys` (`None` default / `Mine` / `All`) and `AllowPrivilegedAccess` (default false; only meaningful with `All`). The actual visibility is always intersected with the caller's identity server-side, so the flags can never reveal a key the caller isn't entitled to.
 - Existing keys have a null `OwnerMemberKey` (team-wide) — behaviour is unchanged unless you opt in. Not to be confused with **system keys** (team-less infra keys via `SystemApiKeyView`); private keys are still team-scoped.
@@ -1699,7 +1738,7 @@ somebody guessed and the log should not hand candidate codes to everyone who can
 
 ### Sending the invitation email
 
-`ITeamEmailSender` has one job, `SendInviteAsync` (two overloads, see below), so configuring email here is a decision about
+`ITeamEmailSender` has one member, `SendInviteAsync(TeamInviteMail)`, so configuring email here is a decision about
 invitation delivery — not about handing the toolkit your mail pipeline. (The only other mail the toolkit sends
 is support mail, configured separately in **Tharga.Team.Support**. Both obey the same rules outside production;
 see *Mail outside production* below. Receiving mail into a team's own mailbox is in
@@ -1788,7 +1827,7 @@ decision:
 ```csharp
 public class MyEmailSender(IOutboundMailPolicy policy, IMyMailQueue queue, ITeamLanguages languages) : ITeamEmailSender
 {
-    // The overload the toolkit calls. It carries the team key, so per-team choices need no ambient state.
+    // The mail carries the team key, so per-team choices need no ambient state.
     public async Task SendInviteAsync(TeamInviteMail mail)
     {
         var decision = policy.Decide(mail.RecipientEmail, $"Join {mail.TeamName}");
@@ -1797,17 +1836,13 @@ public class MyEmailSender(IOutboundMailPolicy policy, IMyMailQueue queue, ITeam
         var language = await languages.GetAsync(mail.TeamKey);
         await queue.EnqueueAsync(decision.Recipient, decision.Subject, mail.InviteLink, language);
     }
-
-    // Still required until 4.0. Nothing in the toolkit calls it once the overload above is implemented.
-    public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
-        => throw new NotSupportedException("Invitations are sent through SendInviteAsync(TeamInviteMail).");
 }
 ```
 
-**Implement `SendInviteAsync(TeamInviteMail)` when the mail depends on the team** (3.24, Tharga/Team#289).
-Language, branding and sender address are per-team choices. A display name is neither unique nor stable,
-and the selected team is right only while every invitation is raised from a page. A sender that implements
-only the four-string overload keeps working unchanged, because the new member defaults to calling it.
+**Use `mail.TeamKey` when the mail depends on the team** (Tharga/Team#289). Language, branding and sender
+address are per-team choices. A display name is neither unique nor stable, and the selected team is right only
+while every invitation is raised from a page. The four-string overload that preceded it (before 3.24) was
+removed in 4.0; see *Migrating to 4.0*.
 
 A host that sends mail outside the toolkit altogether can call `services.AddOutboundMailPolicy()` itself to get
 the same policy, configuration and startup report.
@@ -2438,7 +2473,7 @@ Service methods gate uniformly with `[RequireScope("…")]` regardless of whethe
 
 A scope name may legitimately appear in both. `audit:read` is registered at `AccessLevel.Administrator` *and* commonly mapped to a system role: the team grant opens that team's audit log, the system grant opens the cross-team view. Because the claim types differ, a team administrator can no longer satisfy a system-wide check — which, while both were emitted as `Scope`, meant any team administrator could read every team's audit log.
 
-> **Breaking in 4.0.** Code reading `TeamClaimTypes.Scope` directly to detect a *system* grant must read `TeamClaimTypes.SystemScope` instead. Anything gating through `[RequireScope]`, `TeamScopeGate` or the authorization decorators needs no change.
+> **Changed in 3.10.** Code reading `TeamClaimTypes.Scope` directly to detect a *system* grant must read `TeamClaimTypes.SystemScope` instead. Anything gating through `[RequireScope]`, `TeamScopeGate` or the authorization decorators needs no change.
 
 > **Tip:** drop the `<ScopeView />` component (Tharga.Team.Blazor) on a page to explore the configured **team** scopes interactively. Pick an access level and roles and the scopes a member would have light up while the rest grey out; it defaults to the signed-in member's own access level, roles, and overrides (overrides are highlighted). It builds itself from `IScopeRegistry` and the roles in force for the selected team — the team's own custom roles merged with the code-registered ones — so it always matches the running configuration, including roles a team defined at runtime through `<TenantRoleManager />`. Pass `Roles` to supply that list yourself. When the signed-in user holds any **system** scopes, a separate **System scopes** table appears listing them (it's hidden entirely when they hold none; set `ShowSystemScopes="false"` to disable it) — so you can tell at a glance which of your scopes are team vs system.
 

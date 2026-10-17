@@ -177,7 +177,7 @@ public class ResilientMemberLookupTests
         public Invitation Invitation => null;
         public DateTime? LastSeen => null;
         public MembershipState? State => null;
-        public AccessLevel AccessLevel => AccessLevel.User;
+        public AccessLevel? AccessLevel => Tharga.Team.AccessLevel.User;
         public string[] TenantRoles => null;
         public string[] ScopeOverrides => null;
     }

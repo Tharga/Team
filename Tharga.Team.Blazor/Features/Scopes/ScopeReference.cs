@@ -126,10 +126,11 @@ public static class ScopeReference
     /// <summary>
     /// Maps an actual access level to the value selectable in the access-level bar: Owner collapses to
     /// Administrator (they grant identical scopes), and Custom maps to null (no base scopes — its effective
-    /// scopes come solely from roles and overrides).
+    /// scopes come solely from roles and overrides). An unset level maps to null as well: it grants no base scopes.
     /// </summary>
-    public static AccessLevel? ToSelectableLevel(AccessLevel actual) => actual switch
+    public static AccessLevel? ToSelectableLevel(AccessLevel? actual) => actual switch
     {
+        null => null,
         AccessLevel.Owner => AccessLevel.Administrator,
         AccessLevel.Custom => null,
         _ => actual,

@@ -13,8 +13,8 @@ public static class SystemApiKeyScopes
     /// </summary>
     /// <remarks>
     /// Replaces the hard-coded <c>Developer</c> role, which granted the same oversight without the host
-    /// being able to grant it to anyone else (Tharga/Team#323). The role still works in 3.x and is removed
-    /// in 4.0, so map this scope to <c>Developer</c> if that role should keep it.
+    /// being able to grant it to anyone else (Tharga/Team#323). Since 4.0 the role grants nothing by itself:
+    /// map this scope to <c>Developer</c> if that role should keep it.
     /// </remarks>
     public const string Oversee = "apikeys:oversee";
 }

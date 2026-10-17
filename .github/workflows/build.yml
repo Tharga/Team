@@ -25,7 +25,7 @@ env:
   #
   # 3.29: invitation email moved to Tharga.Team.Email; a host that sends invitations must call
   # AddThargaEmailInvitations, since setting the Email options alone no longer registers a sender.
-  MAJOR_MINOR: '3.29'
+  MAJOR_MINOR: '4.0'
 
 permissions:
   contents: write

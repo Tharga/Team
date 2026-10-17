@@ -150,7 +150,7 @@ public class EmailRegistrationTests
 
     private class FakeEmailSender : ITeamEmailSender
     {
-        public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
+        public Task SendInviteAsync(TeamInviteMail mail)
             => Task.CompletedTask;
     }
 }

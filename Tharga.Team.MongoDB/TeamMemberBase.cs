@@ -13,8 +13,13 @@ public abstract record TeamMemberBase : ITeamMember
     [BsonRepresentation(BsonType.String)]
     public MembershipState? State { get; init; }
 
+    /// <summary>
+    /// Null when no level was ever stored, and then grants nothing. Ignored when null, like <see cref="State"/>, so a
+    /// missing field round-trips as missing rather than being written back as a value nobody chose.
+    /// </summary>
     [BsonRepresentation(BsonType.String)]
-    public AccessLevel AccessLevel { get; init; }
+    [BsonIgnoreIfNull]
+    public AccessLevel? AccessLevel { get; init; }
 
     [BsonIgnoreIfNull]
     public string[] TenantRoles { get; init; }

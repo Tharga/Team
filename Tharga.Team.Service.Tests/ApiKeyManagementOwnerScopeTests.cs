@@ -22,9 +22,9 @@ public class ApiKeyManagementOwnerScopeTests
         await Task.CompletedTask;
     }
 
-    // Builds a management service whose principal has the given member key / access level / developer flag.
+    // Builds a management service whose principal has the given member key / access level / oversight scope.
     private static (ApiKeyManagementService sut, IApiKeyAdministrationService inner) Build(
-        string memberKey = null, string accessLevel = null, bool developer = false, params IApiKey[] keys)
+        string memberKey = null, string accessLevel = null, bool overseer = false, params IApiKey[] keys)
     {
         var inner = Substitute.For<IApiKeyAdministrationService>();
         inner.GetKeysAsync(Team).Returns(_ => ToAsyncEnumerable(keys));
@@ -32,7 +32,7 @@ public class ApiKeyManagementOwnerScopeTests
         var claims = new List<Claim>();
         if (memberKey != null) claims.Add(new Claim(TeamClaimTypes.MemberKey, memberKey));
         if (accessLevel != null) claims.Add(new Claim(TeamClaimTypes.AccessLevel, accessLevel));
-        if (developer) claims.Add(new Claim(ClaimTypes.Role, "Developer"));
+        if (overseer) claims.Add(new Claim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee));
 
         var accessor = Substitute.For<IHttpContextAccessor>();
         accessor.HttpContext.Returns(new DefaultHttpContext
@@ -103,9 +103,9 @@ public class ApiKeyManagementOwnerScopeTests
     }
 
     [Fact]
-    public async Task Developer_Sees_All_Private_Keys()
+    public async Task Overseer_Sees_All_Private_Keys()
     {
-        var (sut, _) = Build(memberKey: "m1", developer: true, keys: [Key("mine", "m1"), Key("theirs", "m2")]);
+        var (sut, _) = Build(memberKey: "m1", overseer: true, keys: [Key("mine", "m1"), Key("theirs", "m2")]);
 
         var ids = await KeyIds(sut.GetKeysAsync(Team, PrivateKeyScope.All));
 
@@ -113,7 +113,7 @@ public class ApiKeyManagementOwnerScopeTests
     }
 
     [Fact]
-    public async Task Mutation_Rejected_For_NonOwner_NonDeveloper()
+    public async Task Mutation_Rejected_For_NonOwner_NonOverseer()
     {
         var (sut, inner) = Build(memberKey: "m1", accessLevel: "Administrator", keys: [Key("theirs", "m2")]);
 
@@ -132,9 +132,9 @@ public class ApiKeyManagementOwnerScopeTests
     }
 
     [Fact]
-    public async Task Mutation_Allowed_For_Developer()
+    public async Task Mutation_Allowed_For_Overseer()
     {
-        var (sut, inner) = Build(memberKey: "m1", developer: true, keys: [Key("theirs", "m2")]);
+        var (sut, inner) = Build(memberKey: "m1", overseer: true, keys: [Key("theirs", "m2")]);
 
         await sut.LockKeyAsync(Team, "theirs");
 

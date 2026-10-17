@@ -130,7 +130,7 @@ public class DirectTeamScopeTests
         public string Name => "Alice";
         public Invitation Invitation => null;
         public DateTime? LastSeen => null;
-        public AccessLevel AccessLevel => AccessLevel.Administrator;
+        public AccessLevel? AccessLevel => Tharga.Team.AccessLevel.Administrator;
         public MembershipState? State => MembershipState.Member;
         public string[] TenantRoles => [];
         public string[] ScopeOverrides => [];

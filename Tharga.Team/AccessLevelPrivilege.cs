@@ -15,13 +15,18 @@ namespace Tharga.Team;
 /// Owner/Administrator all-scopes rule. Treating it as rank 4 happens to give the right answer for the
 /// floor and the wrong reason for it, so it is handled explicitly.
 /// </para>
+/// <para>
+/// <b>Null — no level set — is the floor</b>, strictly below <see cref="AccessLevel.Custom"/>: it grants nothing
+/// at all, where Custom still lets roles and overrides through. Before 4.0 an unset level was the zero value,
+/// <see cref="AccessLevel.Owner"/>, the top of the ladder.
+/// </para>
 /// </remarks>
 internal static class AccessLevelPrivilege
 {
     /// <summary>
     /// Whether <paramref name="candidate"/> grants no more privilege than <paramref name="actual"/>.
     /// </summary>
-    public static bool IsNoMorePrivilegedThan(AccessLevel candidate, AccessLevel actual)
+    public static bool IsNoMorePrivilegedThan(AccessLevel? candidate, AccessLevel? actual)
         => candidate == actual || Rank(candidate) > Rank(actual);
 
     /// <summary>
@@ -44,8 +49,12 @@ internal static class AccessLevelPrivilege
     /// cannot be tested directly.
     /// </para>
     /// </remarks>
-    private static int Rank(AccessLevel level)
-        => level == AccessLevel.Custom ? int.MaxValue : (int)level;
+    private static int Rank(AccessLevel? level) => level switch
+    {
+        null => int.MaxValue,
+        AccessLevel.Custom => int.MaxValue - 1,
+        { } ranked => (int)ranked
+    };
 
     /// <summary>
     /// The level a simulation may present: <paramref name="candidate"/> when it is a de-escalation, and
@@ -57,5 +66,12 @@ internal static class AccessLevelPrivilege
     /// broken session.
     /// </remarks>
     public static AccessLevel Clamp(AccessLevel candidate, AccessLevel actual)
+        => IsNoMorePrivilegedThan(candidate, actual) ? candidate : actual;
+
+    /// <summary>
+    /// <see cref="Clamp(AccessLevel, AccessLevel)"/> where either side may be unset. An unset
+    /// <paramref name="actual"/> clamps everything to null: nothing can be presented above no access.
+    /// </summary>
+    public static AccessLevel? Clamp(AccessLevel? candidate, AccessLevel? actual)
         => IsNoMorePrivilegedThan(candidate, actual) ? candidate : actual;
 }
