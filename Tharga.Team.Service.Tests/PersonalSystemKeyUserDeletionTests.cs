@@ -64,6 +64,18 @@ public class PersonalSystemKeyUserDeletionTests
         await _apiKeys.DidNotReceiveWithAnyArgs().DeleteSystemKeyAsync(default);
     }
 
+    /// <summary>The user is already gone when cleanup runs, so a key store fault must not report the deletion as failed.</summary>
+    [Fact]
+    public async Task AKeyStoreFault_DoesNotFailTheDeletion()
+    {
+        _apiKeys.DeleteSystemKeyAsync("mine").Returns(Task.FromException(new TimeoutException("store down")));
+
+        var result = await Build(PrivateKeyOwnerRemovedAction.Delete).DeleteUserAsync("u1");
+
+        Assert.NotNull(result);
+        await _userService.Received(1).DeleteUserAsync("u1");
+    }
+
     [Fact]
     public async Task WithoutApiKeys_DeletionStillWorks()
     {
