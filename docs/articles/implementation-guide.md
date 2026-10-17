@@ -398,20 +398,22 @@ still rendering English.
 `TeamsListView`)**, `DirectoryOnlyUsersView`, **`DeleteUserDialog`**, **`InviteUserDialog`**,
 **`TeamInviteView`**, `UserIconDialog`, `TeamIconDialog`, `TeamDialog`, `AssignOwnerDialog`,
 `SuspendedTeamNotice`, `AccessSimulationCard`, **`AccessSimulationBar`**, **`AccessSimulationDialog`**,
-**`AccessSimulationIndicator`**, `RoleEditor` and `ScopeOverrideEditor`.
+**`AccessSimulationIndicator`**, `RoleEditor`, `ScopeOverrideEditor`, and, as of 4.1, **`ApiKeyView`**,
+**`SystemApiKeyView`** and `ApiKeyRevealDialog` (`team.apiKeys.*`, `team.systemApiKeys.*`,
+`team.apiKeyReveal.*`; the system view reuses the team view's keys wherever the two say the same thing).
 
 > **`UsersView` now means the whole page.** It is a wrapper around a tab strip, and an earlier version of
 > this note said it "resolves every string it renders" while `UsersListView` and `TeamsListView` held 80
 > literals between them — true of the wrapper, misleading about the page. Both tabs are migrated as of
 > 3.13, so the claim is now true of what you actually see.
 
-**Still literal**, largest first: `ApiKeyView` 44, `SystemApiKeyView` 35, `ScopeView` 14,
-`UserProfileView` 13, `TenantRoleManager` 11, `ApiKeyRevealDialog` 2 — **119 strings across 6 components.**
+**Still literal**, largest first: `ScopeView` 14, `UserProfileView` 13, `TenantRoleManager` 11 — **38 strings
+across 3 components.**
 
 > **Access simulation is now translatable end to end.** The "View as another user" dialog was the last part
 > still in English; it resolves through `team.simulation.dialog.*` from this release.
 
-**None of those are on the surfaces #204 names.** They are API-key, scope and profile surfaces, which that
+**None of those are on the surfaces #204 names.** They are scope, profile and role surfaces, which that
 issue does not cover.
 
 ### Plurals, and what a translator can and cannot do
@@ -1380,19 +1382,43 @@ builder.AddThargaTeam(o =>
 - **Security** — the token is handed only to in-process handlers you registered; it is still never persisted or logged by the platform. You own whatever you capture (encrypt it at rest).
 - Multiple handlers can be registered; all are invoked.
 
-### Private (owner-scoped) keys
+### Personal (owner-scoped) keys
 
-By default every team key is visible to all team admins and any Owner can recycle/lock/delete it. For keys that gate *personal* data, mint an **owner-scoped ("private")** key — bound to a team member, hidden from others, and mutable only by its owner.
+By default every team key is visible to all team admins and any Owner can recycle/lock/delete it, and every system key to everyone who manages system keys. For keys that gate *personal* data, create a **personal** key — bound to the person who created it, hidden from others, and mutable only by its owner. In code these are owner-scoped ("private") keys: `PrivateKeyScope`, `ownerScoped`, `IApiKey.OwnerMemberKey`. Both team keys and system keys can be personal; system keys since 4.1.
 
-- **Mint** — server-side via `IApiKeyAdministrationService.CreateKeyAsync(..., ownerMemberKey: currentMember.Key)`, or from the UI via the "Private (only me)" toggle (which calls `IApiKeyManagementService.CreateKeyAsync(ownerScoped: true)`; the service forces the owner to the *caller's own* member key — a caller can't mint a key owned by someone else).
-- **Visibility / mutation** are enforced in `ApiKeyManagementService` from the authenticated principal (a `MemberKey` claim, added by the claims transformation):
-  - **Owner** sees and manages their own private keys.
-  - **Oversight** — a caller holding the `apikeys:oversee` system scope (`SystemApiKeyScopes.Oversee`) sees and manages all (audit/incident escape). Map it to a role like any other system scope: `o.ConfigureSystemRoles = roles => roles.Map("Administrator", SystemApiKeyScopes.Oversee);`. A *team* scope with the same name does not count. Since 4.0 the `Developer` role grants nothing here by itself; map the scope to it if developers need oversight.
-  - **Privileged access levels** (Administrator/Owner) can *see* private keys **only when the host opts in** — and remain **view-only** (they cannot recycle/lock/delete others').
-- **`ApiKeyView` parameters** — `ShowPrivateKeys` (`None` default / `Mine` / `All`) and `AllowPrivilegedAccess` (default false; only meaningful with `All`). The actual visibility is always intersected with the caller's identity server-side, so the flags can never reveal a key the caller isn't entitled to.
-- Existing keys have a null `OwnerMemberKey` (team-wide) — behaviour is unchanged unless you opt in. Not to be confused with **system keys** (team-less infra keys via `SystemApiKeyView`); private keys are still team-scoped.
+#### Which kinds people can create
 
-#### A private key ends with its owner
+Each key kind has its own option, both defaulting to `ApiKeyOwnership.Both`:
+
+```csharp
+o.ApiKey.TeamKeys = ApiKeyOwnership.Both;      // default: the create card offers a Personal checkbox
+o.ApiKey.SystemKeys = ApiKeyOwnership.Shared;  // e.g. keep every system key shared
+```
+
+- **`Both`** (default) — the create card shows a **Personal** checkbox; unticked, the key is shared.
+- **`Shared`** — no checkbox, and a request for a personal key (`ownerScoped: true` / `personal: true`) throws `InvalidOperationException` rather than quietly creating a shared key its creator meant to keep to themselves.
+- **`Personal`** — no checkbox, and every key created through the management services is personal, whatever the caller asked for.
+
+The option is enforced by `IApiKeyManagementService` and `ISystemApiKeyManagementService`, not only by the views. It governs creation only: existing keys are not changed when it changes, and stay listed and manageable. Simple mode's auto-created team keys have no creator, so they are always shared.
+
+#### Creating, seeing and managing personal keys
+
+- **Create** — from the UI with the **Personal** checkbox, or in code:
+  - team: `IApiKeyManagementService.CreateKeyAsync(..., ownerScoped: true)`, or server-side `IApiKeyAdministrationService.CreateKeyAsync(..., ownerMemberKey: currentMember.Key)`;
+  - system: `ISystemApiKeyManagementService.CreateSystemKeyAsync(..., personal: true)`, or server-side `IApiKeyAdministrationService.CreatePersonalSystemKeyAsync(name, scopes, ownerUserKey)`.
+
+  The management services force the owner to the *caller* — a caller can't create a key owned by someone else. A system key's owner is the user's key, which is the same value as their member key in any team; a caller authenticated by an API key is not a person and can't own one.
+- **Visibility / mutation** are enforced in the management services from the authenticated principal:
+  - **Owner** sees and manages their own personal keys.
+  - **Oversight** — a caller holding the `apikeys:oversee` system scope (`SystemApiKeyScopes.Oversee`) sees and manages all (audit/incident escape), team and system alike. Map it to a role like any other system scope: `o.ConfigureSystemRoles = roles => roles.Map("Administrator", SystemApiKeyScopes.Oversee);`. A *team* scope with the same name does not count. Since 4.0 the `Developer` role grants nothing here by itself; map the scope to it if developers need oversight.
+  - **Privileged access levels** (Administrator/Owner) can *see* personal team keys **only when the host opts in** — and remain **view-only** (they cannot recycle/lock/delete others').
+- **View parameters** — `ShowPrivateKeys` on both `ApiKeyView` and `SystemApiKeyView`: `Mine` (default) lists the caller's own personal keys, `All` everything the caller is entitled to see, `None` none. Any value but `None` also shows the Personal checkbox when the option allows both kinds. `ApiKeyView` adds `AllowPrivilegedAccess` (default false; only meaningful with `All`). The actual visibility is always intersected with the caller's identity server-side, so the parameters can never reveal a key the caller isn't entitled to. The list marks a personal key with a **Personal** badge.
+- **Service defaults** — `GetKeysAsync` and `GetSystemKeysAsync` list shared keys only unless asked for personal ones, as before personal keys existed.
+- **A custom key store** keeps compiling: `CreatePersonalSystemKeyAsync` has a default implementation that throws `NotSupportedException`. Implement it, and keep `OwnerMemberKey` across `RefreshSystemKeyAsync`, to support personal system keys.
+
+*Changed in 4.1 (Tharga/Team#314): `ShowPrivateKeys` defaulted to `None`, which hid the option, so a page that set nothing could not create a personal key at all. A page that relied on that now shows the checkbox; set `ShowPrivateKeys="PrivateKeyScope.None"` to hide it on that page, or `o.ApiKey.TeamKeys = ApiKeyOwnership.Shared` to turn personal team keys off for the site. The UI said "Private (only me)"; it now says "Personal".*
+
+#### A personal key ends with its owner
 
 A private key acts *on behalf of* its owner, so on every request the authentication handler checks the owner as well as the key:
 
@@ -1401,7 +1427,9 @@ A private key acts *on behalf of* its owner, so on every request the authenticat
 - **Never more than the owner** — the key's effective scopes are its own scopes **intersected** with what the owner holds now (role, tenant roles, scope overrides), and its `AccessLevel` claim is the less privileged of the key's and the owner's. Demoting the owner narrows the key on the next request.
 - **`ApiKeyOwner` claim** (`TeamClaimTypes.ApiKeyOwner`) carries the owner's user key, so an API can tell who a request acts for. It is deliberately not a `MemberKey` claim: the key is not itself a member.
 
-Team-wide keys are unaffected and never trigger an owner lookup.
+A **personal system key** is checked the same way, as far as a system key can be: it is refused when its owner's user is deleted or disabled, refused when the owner can't be looked up, and carries the `ApiKeyOwner` claim. What can't be checked is the owner's system role — system scopes come from application roles on the sign-in token, which no store holds — so the key keeps the scopes it was created with after its owner loses the role, until someone disables or deletes it. A shared system key has the same property.
+
+Shared keys are unaffected and never trigger an owner lookup.
 
 #### Cleanup when the owner leaves
 
@@ -1410,6 +1438,8 @@ When someone stops being a member — `RemoveMemberAsync`, `LeaveTeamAsync`, or 
 ```csharp
 o.ApiKey.OwnerRemovedAction = PrivateKeyOwnerRemovedAction.Disable;
 ```
+
+Deleting a user also cleans up their **personal system keys**, following the same setting.
 
 Cleanup goes through `IApiKeyAdministrationService`, so it covers a custom key store and notifies registered `IApiKeyLifecycleHandler`s. It runs after the removal succeeds and never fails it; authentication is the guarantee, cleanup is housekeeping.
 
@@ -2789,8 +2819,8 @@ the built-ins. This is only about the two the toolkit renders.
 | `<TeamNotificationMenu>` | none — optional top-bar bell; the badge counts [access requests](access-requests.md) awaiting the caller's decision |
 | `<TeamAccessRequestButton>` | `TeamKey` (required), `ButtonStyle`, `Size`, `Changed` — places *Request access* / *Withdraw* anywhere; renders nothing for a caller who cannot ask |
 | `<TeamComponent>` | `ShowScopeTooltip` (default true), `ShowScopeOverrides`, `ShowRoles`, `CreateTeamRequested` (intercept the "Create new Team" button), plus the member-row hooks below |
-| `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton` |
-| `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton` |
+| `<ApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides`, `ShowRoles`, `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowTags` (`bool?`, null=auto), `ChipTagKeys`, `ShowAuditLogButton`, `ShowPrivateKeys` (`Mine`), `AllowPrivilegedAccess` |
+| `<SystemApiKeyView>` | `ShowScopeTooltip` (true), `ShowScopeOverrides` (true), `ShowLastUsed` (true), `ShowExpiryDatePicker`, `ShowAuditLogButton`, `ShowPrivateKeys` (`Mine`) |
 
 ### Extending the member grid
 

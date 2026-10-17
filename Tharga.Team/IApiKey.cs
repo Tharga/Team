@@ -24,9 +24,11 @@ public interface IApiKey
     string CreatedBy { get; }
 
     /// <summary>
-    /// Owning team member (<see cref="ITeamMember.Key"/>) for an owner-scoped ("private") key, or null
-    /// for a normal team-wide key. Private keys are hidden from other members in the UI and can only be
-    /// recycled/locked/deleted by their owner (a Developer-role caller may still manage them for audit).
+    /// Owner of an owner-scoped ("private", shown as "Personal") key, or null for a shared key. On a team key
+    /// this is the owning team member (<see cref="ITeamMember.Key"/>); on a system key it is the owning user's
+    /// key — the same value, since a member key is the user key. Private keys are hidden from others in the
+    /// UI and can only be recycled/locked/disabled/deleted by their owner (a caller holding the
+    /// <see cref="SystemApiKeyScopes.Oversee"/> system scope may still manage them, for audit).
     /// </summary>
     string OwnerMemberKey { get; }
 

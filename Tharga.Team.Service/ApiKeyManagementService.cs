@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using Tharga.Team;
 
 namespace Tharga.Team.Service;
@@ -13,11 +14,13 @@ public class ApiKeyManagementService : IApiKeyManagementService
 {
     private readonly IApiKeyAdministrationService _inner;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ApiKeyOwnership _ownership;
 
-    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null)
+    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null)
     {
         _inner = inner;
         _httpContextAccessor = httpContextAccessor;
+        _ownership = options?.Value?.TeamKeys ?? ApiKeyOwnership.Both;
     }
 
     public async IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false)
@@ -51,6 +54,8 @@ public class ApiKeyManagementService : IApiKeyManagementService
 
     public Task<IApiKey> CreateKeyAsync(string teamKey, string name, AccessLevel accessLevel, string[] roles = null, string[] scopeOverrides = null, DateTime? expiryDate = null, IReadOnlyList<Tag> tags = null, bool ownerScoped = false)
     {
+        ownerScoped = ApplyOwnership(_ownership, ownerScoped, "team");
+
         string ownerMemberKey = null;
         if (ownerScoped)
         {
@@ -117,6 +122,25 @@ public class ApiKeyManagementService : IApiKeyManagementService
         if (isOwner || CanOversee()) return;
 
         throw new UnauthorizedAccessException("This API key is private to another member and can only be managed by its owner.");
+    }
+
+    /// <summary>
+    /// Whether a new key is personal, once the host's <see cref="ApiKeyOwnership"/> has had its say.
+    /// </summary>
+    /// <remarks>
+    /// <b>Asymmetric on purpose; both directions fail safe.</b> Under <see cref="ApiKeyOwnership.Personal"/> a
+    /// shared request becomes personal, which can only hide the key from others. Under
+    /// <see cref="ApiKeyOwnership.Shared"/> a personal request is refused rather than quietly made shared,
+    /// which would show the key to everyone its creator meant to keep it from.
+    /// </remarks>
+    internal static bool ApplyOwnership(ApiKeyOwnership ownership, bool personal, string kind)
+    {
+        return ownership switch
+        {
+            ApiKeyOwnership.Personal => true,
+            ApiKeyOwnership.Shared when personal => throw new InvalidOperationException($"Personal {kind} API keys are turned off on this site."),
+            _ => personal,
+        };
     }
 
     private string GetCallerMemberKey()

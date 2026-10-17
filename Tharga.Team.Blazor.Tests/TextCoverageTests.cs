@@ -65,6 +65,9 @@ public class TextCoverageTests
         "Features/Team/TeamAccessRequestPanel.razor",
         "Features/Team/TeamAccessRequestDialog.razor",
         "Features/Team/TeamNotificationMenu.razor",
+        "Features/Api/ApiKeyView.razor",
+        "Features/Api/SystemApiKeyView.razor",
+        "Features/Api/ApiKeyRevealDialog.razor",
 
         // Written against the catalogue from the start rather than migrated into it, which is the point of
         // recording them here: a component that never had literal strings must not acquire its first one.
@@ -89,9 +92,6 @@ public class TextCoverageTests
     /// </remarks>
     private static readonly Dictionary<string, int> Pending = new()
     {
-        ["Features/Api/ApiKeyRevealDialog.razor"] = 2,
-        ["Features/Api/ApiKeyView.razor"] = 44,
-        ["Features/Api/SystemApiKeyView.razor"] = 35,
         ["Features/Roles/TenantRoleManager.razor"] = 11,
         ["Features/Scopes/ScopeView.razor"] = 14,
         ["Features/User/UserProfileView.razor"] = 13,

@@ -44,6 +44,37 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     }
 
     /// <summary>
+    /// Why a personal system key must be refused, or null when its owner still stands behind it.
+    /// </summary>
+    /// <remarks>
+    /// The system-key half of <see cref="ResolveOwnerAsync"/>: a personal key is its owner's credential, so it
+    /// stops working when they are deleted or disabled, and a store fault refuses it rather than letting it
+    /// through.
+    /// <para>
+    /// <b>What this cannot check is the owner's system role.</b> System scopes come from application roles on
+    /// the sign-in token, which no store holds, so the key keeps the scopes it was created with after its owner
+    /// loses the role, until someone disables or deletes it. A shared system key has the same property.
+    /// </para>
+    /// </remarks>
+    private async Task<string> ResolveSystemOwnerAsync(IApiKey key)
+    {
+        if (_userService == null) return "The owner of this personal API key cannot be verified.";
+
+        try
+        {
+            var user = await _userService.GetUserByKeyAsync(key.OwnerMemberKey);
+            if (user == null) return "The owner of this personal API key no longer exists.";
+            if (user.DisabledAt != null) return "The owner of this personal API key is disabled.";
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not verify the owner of a personal system API key. Refusing the key.");
+            return "The owner of this personal API key could not be verified.";
+        }
+    }
+
+    /// <summary>
     /// What a private key's owner may currently do in the key's team, or why the key must be refused.
     /// </summary>
     /// <remarks>
@@ -188,6 +219,16 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             }
         }
 
+        if (key.TeamKey == null && !string.IsNullOrEmpty(key.OwnerMemberKey))
+        {
+            var refusal = await ResolveSystemOwnerAsync(key);
+            if (refusal != null)
+            {
+                LogAuthEvent(key.Name ?? "system", null, key.Key, false, refusal);
+                return AuthenticateResult.Fail(refusal);
+            }
+        }
+
         var claims = new List<Claim>
         {
             new(ClaimTypes.Name, key.Name ?? key.TeamKey ?? "system"),
@@ -203,6 +244,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             // System key: explicit scopes, no team claim. These are system grants, so they carry the
             // system claim type — a system key must not satisfy a check that asks for a scope on a team.
             claims.Add(new Claim(TeamClaimTypes.IsSystemKey, "true"));
+            if (!string.IsNullOrEmpty(key.OwnerMemberKey))
+                claims.Add(new Claim(TeamClaimTypes.ApiKeyOwner, key.OwnerMemberKey));
             foreach (var scope in key.SystemScopes ?? Array.Empty<string>())
             {
                 claims.Add(new Claim(TeamClaimTypes.SystemScope, scope));
