@@ -9,13 +9,14 @@
 @inject DialogService DialogService
 @inject NotificationService NotificationService
 @inject ContextMenuService ContextMenuService
+@inject IThargaTextProvider TextProvider
 
 <AuthorizeView Roles="@Roles.Developer" Context="authState">
     <Authorized>
         @if (_apiKeyServiceMissing)
         {
             <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
-                API key management is not configured. Register <code>ISystemApiKeyManagementService</code> in Program.cs to enable this view.
+                @_text.Format(ApiKeyViewText.NotConfigured, nameof(ISystemApiKeyManagementService))
             </RadzenAlert>
         }
         else if (_keys == null)
@@ -30,27 +31,32 @@
                             FilterMode="FilterMode.Simple"
                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive">
                 <Columns>
-                    <RadzenDataGridColumn Title="Name" Property="@nameof(SystemApiKeyModel.Name)" Width="180px" SortOrder="SortOrder.Ascending">
+                    <RadzenDataGridColumn Title="@_text[ApiKeyViewText.Name]" Property="@nameof(SystemApiKeyModel.Name)" Width="180px" SortOrder="SortOrder.Ascending">
                         <Template>
                             @context.Name
+                            @if (context.IsPrivate)
+                            {
+                                <RadzenBadge Text="@_text[ApiKeyViewText.Personal]" BadgeStyle="BadgeStyle.Info" class="rz-ml-2"
+                                             title="@_text[ApiKeyViewText.PersonalBadgeHelp]" />
+                            }
                             @* A badge, not the red text used for expiry — disabled is a decision somebody
                                made and can undo, expiry is a date passing. *@
                             @if (context.IsDisabled)
                             {
-                                <RadzenBadge Text="Disabled" BadgeStyle="BadgeStyle.Danger" class="rz-ml-2"
+                                <RadzenBadge Text="@_text[ApiKeyViewText.Disabled]" BadgeStyle="BadgeStyle.Danger" class="rz-ml-2"
                                              title="@GetDisabledText(context)" />
                             }
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn Title="Key" Property="@nameof(SystemApiKeyModel.VisibleKey)" Sortable="false" Filterable="false" />
-                    <RadzenDataGridColumn Title="Scopes" Width="80px" Visible="@ShowScopeTooltip">
+                    <RadzenDataGridColumn Title="@_text[ApiKeyViewText.Key]" Property="@nameof(SystemApiKeyModel.VisibleKey)" Sortable="false" Filterable="false" />
+                    <RadzenDataGridColumn Title="@_text[ApiKeyViewText.Scopes]" Width="80px" Visible="@ShowScopeTooltip">
                         <Template>
                             <span title="@GetKeyScopesText(context)">
                                 <RadzenIcon Icon="info" Style="cursor: help;" />
                             </span>
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn Title="Last used" Width="150px" Visible="@ShowLastUsed" SortProperty="@nameof(SystemApiKeyModel.LastUsedAt)" Filterable="false">
+                    <RadzenDataGridColumn Title="@_text[ApiKeyViewText.LastUsed]" Width="150px" Visible="@ShowLastUsed" SortProperty="@nameof(SystemApiKeyModel.LastUsedAt)" Filterable="false">
                         <Template>
                             <span title="@GetKeyDatesText(context)">
                                 @if (context.LastUsedAt.HasValue)
@@ -59,20 +65,20 @@
                                 }
                                 else
                                 {
-                                    <RadzenText>Never</RadzenText>
+                                    <RadzenText>@_text[ApiKeyViewText.Never]</RadzenText>
                                 }
                             </span>
                             @if (IsExpiringSoon(context))
                             {
                                 <RadzenIcon Icon="warning" Style="color: var(--rz-warning); margin-left: .25rem; cursor: help;"
-                                            title="@($"Expires {context.ExpiryDate:yyyy-MM-dd} — within 60 days")" />
+                                            title="@_text.Format(ApiKeyViewText.ExpiresSoon, context.ExpiryDate?.ToString("yyyy-MM-dd"))" />
                             }
                         </Template>
                     </RadzenDataGridColumn>
                     <RadzenDataGridColumn Width="56px" TextAlign="TextAlign.Right">
                         <Template>
                             <RadzenButton Icon="more_vert" Variant="Variant.Flat" ButtonStyle="ButtonStyle.Base"
-                                          Click="@(args => OpenRowMenu(args, context))" title="Actions" />
+                                          Click="@(args => OpenRowMenu(args, context))" title="@_text[ApiKeyViewText.Actions]" />
                         </Template>
                     </RadzenDataGridColumn>
                 </Columns>
@@ -81,13 +87,13 @@
             <RadzenCard class="rz-mt-4">
                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.End" Gap="1rem" Wrap="FlexWrap.Wrap">
                     <RadzenStack Gap="0.25rem">
-                        <RadzenLabel Text="Name" />
-                        <RadzenTextBox Value="@_newName" @oninput="@(e => _newName = e.Value?.ToString() ?? "")" Placeholder="Key name" />
+                        <RadzenLabel Text="@_text[ApiKeyViewText.Name]" />
+                        <RadzenTextBox Value="@_newName" @oninput="@(e => _newName = e.Value?.ToString() ?? "")" Placeholder="@_text[ApiKeyViewText.KeyNamePlaceholder]" />
                     </RadzenStack>
                     @if (ShowScopeOverrides)
                     {
                         <RadzenStack Gap="0.25rem" Style="min-width: 260px">
-                            <RadzenLabel Text="Scopes" />
+                            <RadzenLabel Text="@_text[ApiKeyViewText.Scopes]" />
                             <RadzenDropDown TValue="IEnumerable<string>"
                                             @bind-Value="_newScopes"
                                             Data="@_allScopes"
@@ -95,7 +101,7 @@
                                             AllowClear="true"
                                             AllowFiltering="true"
                                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                                            Placeholder="Select scopes...">
+                                            Placeholder="@_text[SystemApiKeyViewText.SelectScopes]">
                                 <Template>
                                     <span title="@(_scopeDescriptions.TryGetValue((string)context, out var d) ? d : null)">@context</span>
                                 </Template>
@@ -105,20 +111,29 @@
                     @if (ShowExpiryDatePicker)
                     {
                         <RadzenStack Gap="0.25rem">
-                            <RadzenLabel Text="Expiry Date" />
+                            <RadzenLabel Text="@_text[ApiKeyViewText.ExpiryDate]" />
                             <RadzenDatePicker @bind-Value="_newExpiryDate" DateFormat="yyyy-MM-dd"
                                               AllowClear="true"
                                               Min="@DateTime.UtcNow.Date" />
                         </RadzenStack>
                     }
-                    <RadzenButton Text="Create" Icon="add" Click="@CreateAsync"
+                    @if (ShowPersonalCheckbox)
+                    {
+                        @* No heading above it, as on the team view: the checkbox's own label says everything. *@
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem"
+                                     Style="height: var(--rz-input-height, 2.5rem);" title="@_text[ApiKeyViewText.PersonalHelp]">
+                            <RadzenCheckBox TValue="bool" @bind-Value="_newPersonal" Name="newPersonalSystemKey" />
+                            <RadzenLabel Text="@_text[ApiKeyViewText.Personal]" Component="newPersonalSystemKey" />
+                        </RadzenStack>
+                    }
+                    <RadzenButton Text="@_text[ApiKeyViewText.Create]" Icon="add" Click="@CreateAsync"
                                   Disabled="@string.IsNullOrWhiteSpace(_newName)" />
                 </RadzenStack>
             </RadzenCard>
         }
     </Authorized>
     <NotAuthorized>
-        <RadzenText>Access denied. The Developer role is required to manage system API keys.</RadzenText>
+        <RadzenText>@_text[SystemApiKeyViewText.AccessDenied]</RadzenText>
     </NotAuthorized>
 </AuthorizeView>
 
@@ -147,20 +162,29 @@
     /// <summary>Shows the expiry-date picker on the create card. When hidden, new keys use the default expiry (capped by <c>ApiKeyOptions.MaxExpiryDays</c>). Default false.</summary>
     [Parameter] public bool ShowExpiryDatePicker { get; set; }
 
-    private static string GetKeyScopesText(SystemApiKeyModel context)
+    /// <summary>
+    /// Which personal system keys to include alongside shared ones. <c>Mine</c> (default) shows the caller's
+    /// own; <c>All</c> also shows everyone else's to a caller holding the <c>apikeys:oversee</c> system scope;
+    /// <c>None</c> shows none. Any value but <c>None</c> also puts a Personal checkbox on the create card, when
+    /// <see cref="ApiKeyOptions.SystemKeys"/> allows both kinds. The same parameter as on <c>ApiKeyView</c>.
+    /// </summary>
+    [Parameter] public PrivateKeyScope ShowPrivateKeys { get; set; } = PrivateKeyScope.Mine;
+
+    private string GetKeyScopesText(SystemApiKeyModel context)
         => string.Join("\n", (context.SystemScopes ?? Array.Empty<string>()).OrderBy(s => s, StringComparer.Ordinal));
 
-    private static string GetKeyDatesText(SystemApiKeyModel context)
+    private string GetKeyDatesText(SystemApiKeyModel context)
     {
         var created = context.CreatedAt.HasValue ? context.CreatedAt.Value.ToString("yyyy-MM-dd") : "—";
-        var expires = context.ExpiryDate.HasValue ? context.ExpiryDate.Value.ToString("yyyy-MM-dd") : "No expiry";
-        var by = string.IsNullOrWhiteSpace(context.CreatedBy) ? "System" : context.CreatedBy;
-        return $"Created: {created}\nExpires: {expires}\nCreated by: {by}";
+        var expires = context.ExpiryDate.HasValue ? context.ExpiryDate.Value.ToString("yyyy-MM-dd") : _text[ApiKeyViewText.NoExpiry];
+        var by = string.IsNullOrWhiteSpace(context.CreatedBy) ? _text[ApiKeyViewText.CreatedBySystem] : context.CreatedBy;
+        return _text.Format(ApiKeyViewText.Dates, created, expires, by);
     }
 
     private static bool IsExpiringSoon(SystemApiKeyModel context)
         => context.ExpiryDate.HasValue && context.ExpiryDate.Value <= DateTime.UtcNow.AddDays(60);
 
+    private TextSet _text = TextSet.Empty;
     private bool _apiKeyServiceMissing;
     private ISystemApiKeyManagementService _apiKeyManagementService;
     private ISystemScopeRegistry _systemScopeRegistry;
@@ -172,9 +196,15 @@
     private string _newName = "";
     private IEnumerable<string> _newScopes = Array.Empty<string>();
     private DateTime? _newExpiryDate;
+    private bool _newPersonal;
+
+    private ApiKeyOwnership Ownership => ApiKeyOptionsAccessor.Value?.SystemKeys ?? ApiKeyOwnership.Both;
+    private bool ShowPersonalCheckbox => PersonalKeyChoice.ShowCheckbox(Ownership, ShowPrivateKeys);
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync([.. ApiKeyViewText.All, .. SystemApiKeyViewText.All]);
+
         _apiKeyManagementService = ServiceProvider.GetService<ISystemApiKeyManagementService>();
         _apiKeyServiceMissing = _apiKeyManagementService == null;
         if (_apiKeyServiceMissing) { await base.OnInitializedAsync(); return; }
@@ -189,7 +219,7 @@
 
     private async Task ReloadData()
     {
-        var keys = await _apiKeyManagementService.GetSystemKeysAsync().ToArrayAsync();
+        var keys = await _apiKeyManagementService.GetSystemKeysAsync(PersonalKeyChoice.Listed(Ownership, ShowPrivateKeys)).ToArrayAsync();
         _keys = keys
             .Select(x => new SystemApiKeyModel
             {
@@ -202,6 +232,7 @@
                 CreatedAt = x.CreatedAt,
                 LastUsedAt = x.LastUsedAt,
                 CreatedBy = x.CreatedBy,
+                OwnerMemberKey = x.OwnerMemberKey,
                 DisabledAt = x.DisabledAt,
                 DisabledBy = x.DisabledBy,
             }).ToArray();
@@ -213,23 +244,25 @@
     {
         try
         {
-            var created = await _apiKeyManagementService.CreateSystemKeyAsync(_newName, _newScopes?.ToArray() ?? [], _newExpiryDate);
+            var personal = PersonalKeyChoice.IsPersonal(Ownership, ShowPersonalCheckbox && _newPersonal);
+            var created = await _apiKeyManagementService.CreateSystemKeyAsync(_newName, _newScopes?.ToArray() ?? [], _newExpiryDate, personal);
             _newName = "";
             _newScopes = Array.Empty<string>();
             _newExpiryDate = null;
+            _newPersonal = false;
             await ReloadData();
             await ShowKeyDialogAsync(created);
-            NotificationService.Notify(NotificationSeverity.Success, "System API key created");
+            NotificationService.Notify(NotificationSeverity.Success, _text[SystemApiKeyViewText.Created]);
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Failed to create key", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[ApiKeyViewText.CreateFailed], ex.Message);
         }
     }
 
     private async Task RefreshAsync(SystemApiKeyModel context)
     {
-        var result = await DialogService.Confirm($"The {context.Name} key will be regenerated.", "Confirm regenerate API key");
+        var result = await DialogService.Confirm(_text.Format(ApiKeyViewText.ConfirmRegenerate, context.Name), _text[ApiKeyViewText.ConfirmRegenerateTitle]);
         if (result != true) return;
 
         var refreshed = await _apiKeyManagementService.RefreshSystemKeyAsync(context.Key);
@@ -243,7 +276,7 @@
     {
         if (key == null || string.IsNullOrEmpty(key.ApiKey)) return;
         await DialogService.OpenAsync<ApiKeyRevealDialog>(
-            $"System API key — {key.Name}",
+            _text.Format(SystemApiKeyViewText.RevealTitle, key.Name),
             new Dictionary<string, object>
             {
                 [nameof(ApiKeyRevealDialog.ApiKey)] = key.ApiKey,
@@ -257,16 +290,16 @@
         var hasValue = !string.IsNullOrEmpty(context.ApiKey);
 
         var items = new List<ContextMenuItem>();
-        if (hasValue) items.Add(new ContextMenuItem { Text = "Copy", Icon = "content_copy", Value = "copy" });
-        if (hasValue && context.VisibleKey == _apiKeyMask) items.Add(new ContextMenuItem { Text = "Show value", Icon = "visibility", Value = "show" });
-        if (hasValue && context.VisibleKey != _apiKeyMask) items.Add(new ContextMenuItem { Text = "Hide value", Icon = "visibility_off", Value = "hide" });
-        if (ShowAuditLogButton) items.Add(new ContextMenuItem { Text = "Audit log", Icon = "manage_search", Value = "audit" });
-        if (hasValue) items.Add(new ContextMenuItem { Text = "Lock", Icon = "lock", Value = "lock" });
-        items.Add(new ContextMenuItem { Text = "Refresh", Icon = "refresh", Value = "refresh" });
+        if (hasValue) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Copy], Icon = "content_copy", Value = "copy" });
+        if (hasValue && context.VisibleKey == _apiKeyMask) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.ShowValue], Icon = "visibility", Value = "show" });
+        if (hasValue && context.VisibleKey != _apiKeyMask) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.HideValue], Icon = "visibility_off", Value = "hide" });
+        if (ShowAuditLogButton) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.AuditLog], Icon = "manage_search", Value = "audit" });
+        if (hasValue) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Lock], Icon = "lock", Value = "lock" });
+        items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Refresh], Icon = "refresh", Value = "refresh" });
         items.Add(context.IsDisabled
-            ? new ContextMenuItem { Text = "Enable", Icon = "play_circle", Value = "enable" }
-            : new ContextMenuItem { Text = "Disable", Icon = "block", IconColor = "var(--rz-danger)", Value = "disable" });
-        items.Add(new ContextMenuItem { Text = "Delete", Icon = "delete", IconColor = "var(--rz-danger)", Value = "delete" });
+            ? new ContextMenuItem { Text = _text[ApiKeyViewText.Enable], Icon = "play_circle", Value = "enable" }
+            : new ContextMenuItem { Text = _text[ApiKeyViewText.Disable], Icon = "block", IconColor = "var(--rz-danger)", Value = "disable" });
+        items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Delete], Icon = "delete", IconColor = "var(--rz-danger)", Value = "delete" });
 
         ContextMenuService.Open(args, items, async e =>
         {
@@ -298,7 +331,7 @@
         await Js.InvokeVoidAsync("clipboard.copyText", keyToCopy);
         NotificationService.Notify(new NotificationMessage
         {
-            Summary = $"The {context.Name} key has been copied to the clipboard."
+            Summary = _text.Format(ApiKeyViewText.Copied, context.Name)
         });
     }
 
@@ -308,8 +341,8 @@
         if (disabled)
         {
             var result = await DialogService.Confirm(
-                $"Disable API key '{context.Name}'? It stops working immediately, and keeps its name, scopes and history so it can be enabled again.",
-                "Confirm disable");
+                _text.Format(SystemApiKeyViewText.ConfirmDisable, context.Name),
+                _text[ApiKeyViewText.ConfirmDisableTitle]);
             if (result != true) return;
         }
 
@@ -317,17 +350,17 @@
         await ReloadData();
     }
 
-    private static string GetDisabledText(SystemApiKeyModel context)
+    private string GetDisabledText(SystemApiKeyModel context)
     {
         var when = context.DisabledAt?.ToString("yyyy-MM-dd HH:mm");
         return string.IsNullOrEmpty(context.DisabledBy)
-            ? $"Disabled {when}. This key is refused at authentication."
-            : $"Disabled {when} by {context.DisabledBy}. This key is refused at authentication.";
+            ? _text.Format(ApiKeyViewText.DisabledAt, when)
+            : _text.Format(ApiKeyViewText.DisabledAtBy, when, context.DisabledBy);
     }
 
     private async Task LockKeyAsync(SystemApiKeyModel context)
     {
-        var result = await DialogService.Confirm($"The {context.Name} key will be locked. After that, it cannot be retrieved.", "Confirm lock API key");
+        var result = await DialogService.Confirm(_text.Format(ApiKeyViewText.ConfirmLock, context.Name), _text[ApiKeyViewText.ConfirmLockTitle]);
         if (result != true) return;
 
         await _apiKeyManagementService.LockSystemKeyAsync(context.Key);
@@ -336,18 +369,18 @@
 
     private async Task DeleteAsync(SystemApiKeyModel context)
     {
-        var result = await DialogService.Confirm($"Delete system API key '{context.Name}'? This cannot be undone.", "Confirm delete");
+        var result = await DialogService.Confirm(_text.Format(SystemApiKeyViewText.ConfirmDelete, context.Name), _text[ApiKeyViewText.ConfirmDeleteTitle]);
         if (result != true) return;
 
         try
         {
             await _apiKeyManagementService.DeleteSystemKeyAsync(context.Key);
             await ReloadData();
-            NotificationService.Notify(NotificationSeverity.Success, "System API key deleted");
+            NotificationService.Notify(NotificationSeverity.Success, _text[SystemApiKeyViewText.Deleted]);
         }
         catch (Exception ex)
         {
-            NotificationService.Notify(NotificationSeverity.Error, "Failed to delete key", ex.Message);
+            NotificationService.Notify(NotificationSeverity.Error, _text[ApiKeyViewText.DeleteFailed], ex.Message);
         }
     }
 
@@ -359,7 +392,7 @@
             CallerType = Tharga.Team.Service.Audit.AuditCallerType.ApiKey,
         };
 
-        await DialogService.OpenAsync($"Audit log — {context.Name}", _ =>
+        await DialogService.OpenAsync(_text.Format(ApiKeyViewText.AuditLogTitle, context.Name), _ =>
             @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
             new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
     }

@@ -198,6 +198,24 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         }
     }
 
+    public async Task<IApiKey> CreatePersonalSystemKeyAsync(string name, string[] scopes, string ownerUserKey, DateTime? expiryDate = null, string createdBy = null)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var result = await _inner.CreatePersonalSystemKeyAsync(name, scopes, ownerUserKey, expiryDate, createdBy);
+            sw.Stop();
+            LogSystem("create", nameof(CreatePersonalSystemKeyAsync), sw.ElapsedMilliseconds, true);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            LogSystem("create", nameof(CreatePersonalSystemKeyAsync), sw.ElapsedMilliseconds, false, ex.Message);
+            throw;
+        }
+    }
+
     public async Task<IApiKey> RefreshSystemKeyAsync(string key)
     {
         var sw = Stopwatch.StartNew();

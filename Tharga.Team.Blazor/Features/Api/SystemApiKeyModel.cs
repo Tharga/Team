@@ -12,6 +12,13 @@ public record SystemApiKeyModel
     public DateTime? CreatedAt { get; init; }
     public DateTime? LastUsedAt { get; init; }
     public string CreatedBy { get; init; }
+
+    /// <summary>The owning user's key for a personal key; null for a shared one.</summary>
+    public string OwnerMemberKey { get; init; }
+
+    /// <summary>Whether the key is personal ("private" in code, shown as "Personal").</summary>
+    public bool IsPrivate => !string.IsNullOrEmpty(OwnerMemberKey);
+
     public bool IsExpired => ExpiryDate.HasValue && ExpiryDate < DateTime.UtcNow;
     public DateTime? DisabledAt { get; init; }
     public string DisabledBy { get; init; }
