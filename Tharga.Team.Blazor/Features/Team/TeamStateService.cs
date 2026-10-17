@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Blazored.LocalStorage;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.JSInterop;
 using Tharga.Team.Blazor.Features.Simulation;
@@ -39,10 +40,11 @@ internal class TeamStateService : ITeamStateService
     private readonly IJSRuntime _jSRuntime;
     private readonly AuthenticationStateProvider _authenticationStateProvider;
     private readonly ThargaBlazorOptions _options;
+    private readonly ILogger<TeamStateService> _logger;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
     private ITeam _selectedTeam;
 
-    public TeamStateService(ITeamService teamService, NavigationManager navigationManager, ILocalStorageService localStorageService, IJSRuntime jSRuntime, AuthenticationStateProvider authenticationStateProvider, IOptions<ThargaBlazorOptions> options)
+    public TeamStateService(ITeamService teamService, NavigationManager navigationManager, ILocalStorageService localStorageService, IJSRuntime jSRuntime, AuthenticationStateProvider authenticationStateProvider, IOptions<ThargaBlazorOptions> options, ILogger<TeamStateService> logger = null)
     {
         _teamService = teamService;
         _navigationManager = navigationManager;
@@ -50,6 +52,7 @@ internal class TeamStateService : ITeamStateService
         _jSRuntime = jSRuntime;
         _authenticationStateProvider = authenticationStateProvider;
         _options = options.Value;
+        _logger = logger;
 
         _teamService.TeamsListChangedEvent += (s, e) => { TeamsListChangedEvent?.Invoke(s, e); };
 
@@ -81,7 +84,33 @@ internal class TeamStateService : ITeamStateService
         // where the selection resolves to null and so never settles.
         if (notify) SelectedTeamChangedEvent?.Invoke(this, new SelectedTeamChangedEventArgs(team));
 
+        await StampActivityAsync(team);
+
         return team;
+    }
+
+    /// <summary>Records that the caller is active in <paramref name="team"/>; the team service throttles the write.</summary>
+    /// <remarks>
+    /// <b>Here, on every resolve, and not only on selection.</b> Reading the selected team is what every page in
+    /// a team does, so it is where activity shows — including for someone who never switches teams, whose
+    /// member Last Seen used to stay at the day they joined (Tharga/Team#317).
+    /// <para>
+    /// Outside the lock, so a store round trip doesn't hold up the next reader. Never throws: activity tracking
+    /// must not break a page.
+    /// </para>
+    /// </remarks>
+    private async Task StampActivityAsync(ITeam team)
+    {
+        if (string.IsNullOrEmpty(team?.Key)) return;
+
+        try
+        {
+            await _teamService.SetMemberLastSeenAsync(team.Key);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Could not record activity in team {TeamKey}.", team.Key);
+        }
     }
 
     public bool TryGetSelectedTeam(out ITeam team)

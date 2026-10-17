@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Tharga.Toolkit;
 
 namespace Tharga.Team;
@@ -10,6 +11,10 @@ public abstract class TeamServiceBase : ITeamService
     internal const string MissingInviteAccessLevelMessage = "An invitation must name the access level the invitee joins at. InviteUserModel.AccessLevel was not set.";
     private const string NotAMemberMessage = "User '{0}' is not a member of team '{1}'.";
     private const string NoOutstandingInvitationMessage = "No outstanding invitation matches that code on team '{0}'.";
+
+    // Per process, like UserServiceBase's own stamp: the service itself is scoped, so a per-instance throttle
+    // would reset on every request.
+    private static readonly ConcurrentDictionary<(string TeamKey, string UserKey), DateTime> _memberLastSeenStamped = new();
 
     private readonly IUserService _userService;
     private readonly ILogger<TeamServiceBase> _logger;
@@ -794,10 +799,30 @@ public abstract class TeamServiceBase : ITeamService
             $"'{GetType().Name}' does not implement {nameof(SetTeamMemberInvitationExpiryAsync)}. Implement " +
             $"it to support extending an invitation.");
 
+    /// <summary>
+    /// How often (at most) <see cref="ITeamMember.LastSeen"/> is written for one member of one team. Null
+    /// disables stamping; <see cref="TimeSpan.Zero"/> stamps on every call. The throttle is per process, like
+    /// the user's own stamp, so a multi-instance deployment writes at most once per interval per instance.
+    /// </summary>
+    /// <remarks>
+    /// The member is stamped on activity in the team, not only when the team is selected (Tharga/Team#317), so
+    /// without this every page that reads the selected team would write to the store.
+    /// </remarks>
+    protected virtual TimeSpan? LastSeenStampInterval => TimeSpan.FromMinutes(15);
+
     public async Task SetMemberLastSeenAsync(string teamKey)
     {
+        var interval = LastSeenStampInterval;
+        if (interval == null || string.IsNullOrEmpty(teamKey)) return;
+
         var user = await GetCurrentUserAsync();
         if (user == null) return;
+
+        var now = DateTime.UtcNow;
+        var stampKey = (teamKey, user.Key);
+        if (_memberLastSeenStamped.TryGetValue(stampKey, out var stamped) && now - stamped < interval) return;
+        _memberLastSeenStamped[stampKey] = now;
+
         await SetTeamMemberLastSeenAsync(teamKey, user.Key);
         await _cache.RemoveMemberAsync(teamKey, user.Key);
     }

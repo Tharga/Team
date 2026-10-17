@@ -121,7 +121,19 @@ internal class TestTeamService : TeamServiceBase
         return Task.FromResult(member?.Name);
     }
 
-    protected override Task SetTeamMemberLastSeenAsync(string teamKey, string userKey) => Task.CompletedTask;
+    /// <summary>The stamps that reached the store, so a test can tell "stamped" from "throttled".</summary>
+    public List<(string TeamKey, string UserKey)> LastSeenStamps { get; } = new();
+
+    /// <summary>The member stamp interval; the base default unless a test sets it.</summary>
+    public TimeSpan? StampInterval { get; init; } = TimeSpan.FromMinutes(15);
+
+    protected override TimeSpan? LastSeenStampInterval => StampInterval;
+
+    protected override Task SetTeamMemberLastSeenAsync(string teamKey, string userKey)
+    {
+        LastSeenStamps.Add((teamKey, userKey));
+        return Task.CompletedTask;
+    }
 
     public int GetTeamMembersCallCount { get; private set; }
 

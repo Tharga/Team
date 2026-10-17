@@ -5,6 +5,16 @@ public interface ITeamMember
     public string Key { get; }
     public string Name { get; }
     public Invitation Invitation { get; }
+
+    /// <summary>
+    /// When the member was last active in this team, approximately: stamped whenever the team is resolved as
+    /// the member's selected team, at most once per <c>TeamServiceBase.LastSeenStampInterval</c> (15 minutes by
+    /// default). Distinct from <see cref="IUser.LastSeen"/>, which is any authenticated activity at all.
+    /// </summary>
+    /// <remarks>
+    /// <i>Changed in 4.1 (Tharga/Team#317):</i> it was stamped only when a team was <i>selected</i>, so a member
+    /// who never switched teams kept the date they joined.
+    /// </remarks>
     public DateTime? LastSeen { get; }
     public MembershipState? State { get; }
     /// <summary>
