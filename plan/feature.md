@@ -1,64 +1,40 @@
-# Feature: Require every new team API key to be private
+# Feature: A "Private" checkbox on the API key create card, shown by default
 
-Source: [Tharga/Team#314](https://github.com/Tharga/Team/issues/314).
+Source: [Tharga/Team#314](https://github.com/Tharga/Team/issues/314), re-scoped by the user on 2026-10-17.
+The issue asked for an option that makes *every* new team key private. The user doesn't want that. They want
+to be able to choose, per key, to make it private when it's created.
 
 ## Goal
 
-A host can require that every **new** team API key is owner-scoped ("private"), so each key has exactly one
-responsible person. Use case: a bookkeeping app records the person behind a key as the actor on what it writes;
-a team-wide key has no single owner.
+Any page showing `ApiKeyView` lets the person creating a key tick **Private**, which makes the key owner-scoped
+to them. No host configuration is needed.
 
 ## Today
 
-- `ApiKeyView` shows a "Private (only me)" switch only when `ShowPrivateKeys` is not `None`, and it defaults off.
-- `ApiKeyOptions` has nothing that requires private keys.
-- `IApiKeyManagementService.CreateKeyAsync(..., ownerScoped)` can mint a private key, and the owner is always
-  the caller (anti-spoof). `IApiKeyAdministrationService.CreateKeyAsync(..., ownerMemberKey)` is the single
-  path every team key goes through. There's no REST create endpoint, MCP doesn't create keys, and system keys
-  use a separate service.
-- In simple mode (`AdvancedMode = false`), `GetKeysAsync` auto-creates `AutoKeyCount` team-wide keys with no
-  owner.
+- The create card (advanced mode only) has a "Private / only me" **switch**, but only when the page sets
+  `ShowPrivateKeys` to `Mine` or `All`. The default is `None`, which shows no switch and lists no private keys.
+- The sample's API keys page doesn't set it, so the option is invisible there.
+- The server side is complete: `IApiKeyManagementService.CreateKeyAsync(..., ownerScoped: true)` makes a key
+  owned by the caller, and only the owner (or `apikeys:oversee`) sees and manages it.
 
 ## Scope
 
-- **`ApiKeyOptions.RequirePrivateKeys`** (default `false`). This one switch covers both suggestions in the issue.
-- **Enforced at the single creation path.** `ApiKeyAdministrationService.CreateKeyAsync` refuses a team key
-  without an owner, throwing `InvalidOperationException` that names the option. The management service
-  inherits it, so a host calling either service can't get around the UI.
-- **`ApiKeyView` follows the option**, with no new parameter:
-  - The create card always creates a private key owned by the caller. The switch shows on and disabled, with
-    a caption explaining why.
-  - Private keys are always listed. When `ShowPrivateKeys` is `None`, the view behaves as `Mine`; otherwise
-    the newly created key would disappear from the list.
-- **Existing team-wide keys keep working and stay listed.** Recycle, lock, disable, delete and edit still work
-  on them. The option governs new keys only.
-- Docs: the private-keys section of the implementation guide, and the `ApiKeyOptions` row in the Service
-  README.
+- **`ApiKeyView.ShowPrivateKeys` defaults to `Mine`** (was `None`), as decided by the user. Every page shows
+  the checkbox and lists the caller's own private keys, so a new private key doesn't vanish from the list. A
+  page that sets `None` explicitly still hides both.
+- **The switch becomes a checkbox**, with the same "Private" label and "only me" caption and tooltip.
+- No service or option changes.
+- Docs: the `ShowPrivateKeys` default in the implementation guide and the Blazor README.
+- The earlier "require every key to be private" work is reverted (commit 481db00).
 
-## Out of scope
+## Upgrade note (release notes)
 
-- System keys.
-- Converting existing team-wide keys into private ones.
-
-## Decisions (to confirm)
-
-- **D1. Refuse, don't coerce.** If `ownerScoped: false` were silently coerced to `true`, a caller asking for a
-  team-wide key would get a key bound to whoever happened to call. Refusing names the problem. The UI never
-  hits the refusal because it always asks for a private key. *Recommended: refuse.*
-- **D2. Enforce at the administration layer, not only the management layer.** Host code calling
-  `IApiKeyAdministrationService` directly (seeding, integrations) is refused too, so the option means "every
-  new team key has an owner" with no exceptions. The cost: a host that wants one deliberate exception can't
-  have it while the option is on. *Recommended: administration layer.*
-- **D3. Simple mode conflicts with the option.** Auto-created keys have no owner and no caller to own them.
-  Combining `RequirePrivateKeys = true` with `AdvancedMode = false` fails at startup with an error naming
-  both options. Simple mode isn't silently left with no keys. *Recommended: fail at startup.*
+On 4.1 a page that didn't set `ShowPrivateKeys` gains the Private checkbox and lists the caller's own private
+keys. To keep the old behaviour, set `ShowPrivateKeys="PrivateKeyScope.None"`.
 
 ## Acceptance criteria
 
-- With the option on, `CreateKeyAsync` without an owner throws on both services; with an owner it succeeds.
-- With the option off, behaviour is unchanged.
-- The view's create card always produces a private key, and the new key is listed even with
-  `ShowPrivateKeys = None`.
-- Existing team-wide keys are still listed and manageable.
-- Option on with simple mode fails at startup.
-- Version 4.1 (a feature, not breaking).
+- A default `ApiKeyView` shows a Private checkbox on the create card. A key created with it ticked is private
+  to the creator and appears in the list.
+- `ShowPrivateKeys="PrivateKeyScope.None"` hides the checkbox and private keys, as before.
+- Version 4.1.
