@@ -26,7 +26,7 @@ public static class ScopeServiceCollectionExtensions
 
         configure(registry);
 
-        services.TryAddSingleton<ITeamScopeVisibilityProvider, AllScopesVisibleTeamScopeVisibilityProvider>();
+        services.TryAddSingleton<ITenantScopeVisibilityProvider, AllScopesVisibleTenantScopeVisibilityProvider>();
 
         // Order-independent linkage: if the tenant-role registry is already registered, link it now so role
         // scopes resolve. (AddThargaTenantRoles performs the same link when it runs after scopes; this handles

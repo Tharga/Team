@@ -179,6 +179,7 @@
     private static readonly ScopeGrant NotGranted = new(false, false, Array.Empty<string>(), false);
 
     private IReadOnlyList<ScopeRow> _rows = Array.Empty<ScopeRow>();
+    private IReadOnlySet<string> _hiddenScopes = new HashSet<string>();
     private IReadOnlyList<string> _allRoleNames = Array.Empty<string>();
     private IReadOnlyList<TenantRoleDefinition> _resolvedRoles = Array.Empty<TenantRoleDefinition>();
     private Dictionary<string, ScopeGrant> _grants = new();
@@ -212,6 +213,7 @@
         // The team's own roles, merged with the code-registered ones. Done here rather than inside
         // ApplyCurrentUserDefaultsAsync because that returns early under an access simulation and is skipped
         // without a principal -- and the role bar and the Roles column have to be right in both cases.
+        await ApplyHiddenScopesAsync(scopeRegistry);
         await ApplyTeamRolesAsync(scopeRegistry);
 
         // System scopes the current user holds: their Scope claims that are registered system scopes.
@@ -233,8 +235,34 @@
     {
         _resolvedRoles = Roles ?? roles ?? Array.Empty<TenantRoleDefinition>();
 
-        _rows = ScopeReference.BuildForRoles(scopeRegistry, _resolvedRoles);
+        _rows = ScopeReference.BuildForRoles(scopeRegistry, _resolvedRoles)
+            .Where(r => !_hiddenScopes.Contains(r.Name))
+            .ToList();
         _allRoleNames = _resolvedRoles.Select(r => r.Name).ToList();
+    }
+
+    /// <summary>
+    /// Leaves out the scopes <see cref="ITenantScopeVisibilityProvider"/> hides for the selected team
+    /// (Tharga/Team#318), so a team without a feature is not shown that feature's scopes as access it has
+    /// or could have.
+    /// </summary>
+    /// <remarks>
+    /// Unlike <see cref="ITenantRoleVisibilityProvider"/>, which this page deliberately ignores, a hidden
+    /// scope is one that does not apply to the team. A host that hides a scope here should also refuse it
+    /// at runtime while the feature is off — otherwise this page would understate access the member holds.
+    /// </remarks>
+    private async Task ApplyHiddenScopesAsync(IScopeRegistry scopeRegistry)
+    {
+        var provider = ServiceProvider.GetService<ITenantScopeVisibilityProvider>();
+        if (provider == null || scopeRegistry == null) return;
+
+        try
+        {
+            var team = await (ServiceProvider.GetService<ITeamStateService>()?.GetSelectedTeamAsync() ?? Task.FromResult<ITeam>(null));
+            _hiddenScopes = await ScopeVisibility.HiddenAsync(provider, team?.Key, scopeRegistry.All.Select(s => s.Name));
+            if (_hiddenScopes.Count > 0) ApplyRoles(scopeRegistry, _resolvedRoles);
+        }
+        catch { /* best-effort; every scope stays listed */ }
     }
 
     /// <summary>

@@ -52,7 +52,7 @@
     [Parameter] public string Style { get; set; } = "min-width: 220px;";
 
     /// <summary>
-    /// Scopes hidden for this team by <see cref="Tharga.Team.ITeamScopeVisibilityProvider"/>: not offered,
+    /// Scopes hidden for this team by <see cref="Tharga.Team.ITenantScopeVisibilityProvider"/>: not offered,
     /// and not shown as inherited or held. A hidden override the principal already has is kept when the
     /// picker saves, so hiding a scope never removes it.
     /// </summary>

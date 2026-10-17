@@ -13,7 +13,7 @@ namespace Tharga.Team;
 /// restores it. Refusing the scope at runtime while its feature is off is the consumer's decision,
 /// made where the feature is enforced. The default implementation shows every scope.
 /// </remarks>
-public interface ITeamScopeVisibilityProvider
+public interface ITenantScopeVisibilityProvider
 {
     /// <summary>
     /// Returns whether <paramref name="scope"/> should be offered and shown for the team identified by

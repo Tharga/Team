@@ -305,7 +305,7 @@ else
     private ITenantRoleService _tenantRoleService;
     private bool ShowRolePicker => RolePickerGate.ShowRoles(ShowRoles, _roleDefinitions);
     private IReadOnlyList<TenantRoleDefinition> _roleDefinitions = Array.Empty<TenantRoleDefinition>();
-    // Scopes the team's ITeamScopeVisibilityProvider hides. Left out of the pickers and the scope list;
+    // Scopes the team's ITenantScopeVisibilityProvider hides. Left out of the pickers and the scope list;
     // a key that already holds one keeps it.
     private IReadOnlySet<string> _hiddenScopes = new HashSet<string>();
 
@@ -345,7 +345,7 @@ else
         // The same visibility the member editor applies: a role or scope switched off for this team is not
         // offered on its keys either. RoleEditor keeps a hidden role a key already has.
         _roleDefinitions = await ScopeVisibility.VisibleRolesAsync(ServiceProvider.GetService<ITenantRoleVisibilityProvider>(), _selectedTeam?.Key, _roleDefinitions);
-        _hiddenScopes = await ScopeVisibility.HiddenAsync(ServiceProvider.GetService<ITeamScopeVisibilityProvider>(), _selectedTeam?.Key,
+        _hiddenScopes = await ScopeVisibility.HiddenAsync(ServiceProvider.GetService<ITenantScopeVisibilityProvider>(), _selectedTeam?.Key,
             _scopeRegistry?.All.Select(s => s.Name) ?? []);
         _teamLoaded = true;
         await ReloadData();

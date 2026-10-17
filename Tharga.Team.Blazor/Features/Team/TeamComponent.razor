@@ -313,7 +313,7 @@ else
     private ITenantRoleRegistry _tenantRoleRegistry;
     private ITenantRoleVisibilityProvider _roleVisibilityProvider;
     private readonly Dictionary<string, IReadOnlyList<TenantRoleDefinition>> _visibleRolesByTeam = new();
-    private ITeamScopeVisibilityProvider _scopeVisibilityProvider;
+    private ITenantScopeVisibilityProvider _scopeVisibilityProvider;
     private readonly Dictionary<string, IReadOnlySet<string>> _hiddenScopesByTeam = new();
     private static readonly IReadOnlySet<string> NoHiddenScopes = new HashSet<string>();
 
@@ -375,7 +375,7 @@ else
         _tenantRoleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
         _tenantRoleService = ServiceProvider.GetService<ITenantRoleService>();
         _roleVisibilityProvider = ServiceProvider.GetService<ITenantRoleVisibilityProvider>();
-        _scopeVisibilityProvider = ServiceProvider.GetService<ITeamScopeVisibilityProvider>();
+        _scopeVisibilityProvider = ServiceProvider.GetService<ITenantScopeVisibilityProvider>();
 
         _allowTeamCreation = BlazorOptions.Value.AllowTeamCreation;
         _createTeamPath = BlazorOptions.Value.CreateTeamPath;
@@ -1535,7 +1535,7 @@ else
         => _visibleRolesByTeam.TryGetValue(teamKey, out var roles) ? roles : _roleDefinitions;
 
     // The scope counterpart of BuildVisibleRolesAsync: per team, the registered scopes its
-    // ITeamScopeVisibilityProvider hides. The pickers leave those out and keep any already held.
+    // ITenantScopeVisibilityProvider hides. The pickers leave those out and keep any already held.
     private async Task BuildHiddenScopesAsync()
     {
         _hiddenScopesByTeam.Clear();

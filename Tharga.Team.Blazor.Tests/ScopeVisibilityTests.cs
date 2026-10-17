@@ -15,7 +15,7 @@ public class ScopeVisibilityTests
     [Fact]
     public async Task HiddenAsync_ReturnsTheScopesTheProviderHidesForTheTeam()
     {
-        var provider = new Mock<ITeamScopeVisibilityProvider>();
+        var provider = new Mock<ITenantScopeVisibilityProvider>();
         provider.Setup(x => x.IsScopeVisibleAsync("T1", It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string _, string scope, CancellationToken _) => !scope.StartsWith("atlas:"));
 
@@ -27,7 +27,7 @@ public class ScopeVisibilityTests
     [Fact]
     public async Task HiddenAsync_HidesNothing_WithoutAProviderOrATeam()
     {
-        var provider = new Mock<ITeamScopeVisibilityProvider>();
+        var provider = new Mock<ITenantScopeVisibilityProvider>();
         provider.Setup(x => x.IsScopeVisibleAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(false);
 
         Assert.Empty(await ScopeVisibility.HiddenAsync(null, "T1", ["a"]));
@@ -66,6 +66,20 @@ public class ScopeVisibilityTests
             hidden: Hidden);
 
         Assert.Equal(["issue:read", "atlas:manage"], persisted);
+    }
+
+    [Fact]
+    public void Persist_ForACustomRole_KeepsTheScopesItHadThatAreNowHidden()
+    {
+        // TenantRoleManager: a role has no inherited scopes. Editing an "Atlas operator" role's visible
+        // scopes while Atlas is off must not strip its atlas:manage.
+        var scopes = ScopeVisibility.Persist(
+            selected: ["content:read"],
+            inherited: [],
+            previousOverrides: ["content:read", "content:write", "atlas:manage"],
+            hidden: Hidden);
+
+        Assert.Equal(["content:read", "atlas:manage"], scopes);
     }
 
     [Fact]

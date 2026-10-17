@@ -100,19 +100,19 @@ builder.Services.AddSingleton<ITenantRoleVisibilityProvider, FeatureGatedRoleVis
 
 ### Per-team scope visibility
 
-The scope pickers (`TeamComponent`'s scope overrides with `ShowScopeOverrides`, and `ApiKeyView`) offer every registered scope by default. To hide the scopes of a feature that is switched off for a team, register an `ITeamScopeVisibilityProvider` (from `Tharga.Team`):
+The scope pickers (`TeamComponent`'s scope overrides with `ShowScopeOverrides`, `ApiKeyView`, and the scope list a custom role is built from in `TenantRoleManager`) and the `ScopeView` access page show every registered scope by default. To hide the scopes of a feature that is switched off for a team, register an `ITenantScopeVisibilityProvider` (from `Tharga.Team`):
 
 ```csharp
-public sealed class FeatureGatedScopeVisibility : ITeamScopeVisibilityProvider
+public sealed class FeatureGatedScopeVisibility : ITenantScopeVisibilityProvider
 {
     public async Task<bool> IsScopeVisibleAsync(string teamKey, string scope, CancellationToken ct = default)
         => await _features.IsScopeEnabledForTeamAsync(teamKey, scope, ct);
 }
 
-builder.Services.AddSingleton<ITeamScopeVisibilityProvider, FeatureGatedScopeVisibility>();
+builder.Services.AddSingleton<ITenantScopeVisibilityProvider, FeatureGatedScopeVisibility>();
 ```
 
-A hidden scope is not offered, and is left out of the inherited and held scopes the pickers and the scope tooltips show. Like a hidden role it is **UI-only**: a member or key that already holds the scope as an override keeps it — saving the picker writes it back unchanged — so switching the feature on again restores it. Whether the scope is refused at runtime while the feature is off is up to the application, where it enforces the feature. The default provider shows every scope.
+A hidden scope is not offered, and is left out of the inherited and held scopes the pickers and the scope tooltips show. Like a hidden role it is **UI-only**: a member or key that already holds the scope as an override keeps it — saving the picker writes it back unchanged — so switching the feature on again restores it. A custom role that already has a hidden scope keeps it in the same way. Whether the scope is refused at runtime while the feature is off is up to the application, where it enforces the feature. `ScopeView` leaves hidden scopes out too, since its job is to explain access: hide a scope there only if the application also refuses it while the feature is off. The default provider shows every scope.
 
 ### Dynamic (runtime-defined) tenant roles
 

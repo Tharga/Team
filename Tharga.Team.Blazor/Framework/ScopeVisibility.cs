@@ -3,7 +3,7 @@ using Tharga.Team;
 namespace Tharga.Team.Blazor.Framework;
 
 /// <summary>
-/// Applies <see cref="ITeamScopeVisibilityProvider"/> and <see cref="ITenantRoleVisibilityProvider"/>
+/// Applies <see cref="ITenantScopeVisibilityProvider"/> and <see cref="ITenantRoleVisibilityProvider"/>
 /// to the scope and role pickers, and keeps a hidden grant from being lost when a picker saves.
 /// </summary>
 internal static class ScopeVisibility
@@ -12,7 +12,7 @@ internal static class ScopeVisibility
     /// The scopes, among <paramref name="scopes"/>, that are hidden for <paramref name="teamKey"/>.
     /// Empty when there is no provider or no team: then nothing is hidden.
     /// </summary>
-    internal static async Task<IReadOnlySet<string>> HiddenAsync(ITeamScopeVisibilityProvider provider, string teamKey, IEnumerable<string> scopes)
+    internal static async Task<IReadOnlySet<string>> HiddenAsync(ITenantScopeVisibilityProvider provider, string teamKey, IEnumerable<string> scopes)
     {
         var hidden = new HashSet<string>(StringComparer.Ordinal);
         if (provider == null || string.IsNullOrEmpty(teamKey)) return hidden;

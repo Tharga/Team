@@ -57,8 +57,8 @@ else
                                     FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                                     Chips="true"
                                     Data="@_allScopeNames"
-                                    Value="@context.Scopes"
-                                    ValueChanged="@(v => context.Scopes = (v ?? Enumerable.Empty<string>()).ToList())"
+                                    Value="@context.Scopes.Where(s => !_hiddenScopes.Contains(s))"
+                                    ValueChanged="@(v => context.Scopes = ScopeVisibility.Persist(v, [], context.Scopes, _hiddenScopes).ToList())"
                                     Placeholder="Select scopes..."
                                     Style="width: 100%;" />
                 </Template>
@@ -109,6 +109,9 @@ else
     private string _manageScope = TeamScopes.Manage;
     private bool _canManage;
     private string[] _allScopeNames = [];
+    // Scopes ITenantScopeVisibilityProvider hides for the selected team: not offered for a custom role, and
+    // kept on a role that already has one, so hiding a feature never strips its scopes from the team's roles.
+    private IReadOnlySet<string> _hiddenScopes = new HashSet<string>();
     private IReadOnlyList<string> _codeRoleNames = [];
     private IReadOnlyList<string> _errors = [];
     private bool _saving;
@@ -135,6 +138,9 @@ else
 
         var team = _teamStateService != null ? await _teamStateService.GetSelectedTeamAsync() : null;
         _teamKey = team?.Key;
+
+        _hiddenScopes = await ScopeVisibility.HiddenAsync(ServiceProvider.GetService<ITenantScopeVisibilityProvider>(), _teamKey, _allScopeNames);
+        _allScopeNames = _allScopeNames.Where(s => !_hiddenScopes.Contains(s)).ToArray();
 
         await ReloadAsync();
     }
