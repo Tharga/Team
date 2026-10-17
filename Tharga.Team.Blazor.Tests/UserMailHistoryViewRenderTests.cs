@@ -105,6 +105,18 @@ public class UserMailHistoryViewRenderTests : BunitContext
     }
 
     [Fact]
+    public void ABouncedMail_SaysItWasNotDelivered_AndWhy()
+    {
+        _history.Setup(x => x.GetMineAsync(null, It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new UserMailHistoryPage { Items = [Item("1", "Hello", UserMailKind.Message, UserMailStatus.Bounced, reason: "550 5.1.1 Recipient address rejected")] });
+
+        var view = Render();
+
+        Assert.Equal("Not delivered", view.Find("[data-status]").TextContent.Trim());
+        Assert.Contains("550 5.1.1", view.Find("[data-reason]").TextContent);
+    }
+
+    [Fact]
     public async Task ShowMore_ReadsTheNextPage()
     {
         _history.Setup(x => x.GetMineAsync(null, It.IsAny<int>(), It.IsAny<CancellationToken>()))

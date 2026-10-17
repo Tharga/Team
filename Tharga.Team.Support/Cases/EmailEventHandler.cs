@@ -34,7 +34,8 @@ internal sealed class EmailEventHandler(
     ISupportSenderDirectory senderDirectory = null,
     IOptions<SupportCaseOptions> caseOptions = null,
     ISupportAttachmentStore attachmentStore = null,
-    SupportMailboxes mailboxes = null)
+    SupportMailboxes mailboxes = null,
+    IEnumerable<IMailBounceHandler> bounceHandlers = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
     /// <remarks>One source for every mailbox, so a mail that reached two of them is applied once.</remarks>
@@ -152,9 +153,10 @@ internal sealed class EmailEventHandler(
     /// </summary>
     /// <remarks>
     /// <b>Never a case.</b> A bounce that names no answer this instance sent is somebody else's — another
-    /// site sharing the mailbox, or mail sent before ids were recorded — and opening a case from it would put
-    /// a mail server's complaint in the queue as if a customer had written. The reason is kept on the entry
-    /// rather than logged, because it often quotes the recipient's address.
+    /// site sharing the mailbox, mail to users sent from this address, or mail sent before ids were recorded —
+    /// and opening a case from it would put a mail server's complaint in the queue as if a customer had
+    /// written. Such a bounce is handed to the registered <see cref="IMailBounceHandler"/>s. The reason is kept
+    /// on the entry rather than logged, because it often quotes the recipient's address.
     /// </remarks>
     private async Task<EmailHandlingOutcome> BounceAsync(InboundMail mail, CancellationToken cancellationToken)
     {
@@ -163,7 +165,9 @@ internal sealed class EmailEventHandler(
 
         if (sequence == null)
         {
-            logger?.LogDebug("Ignored a bounce for a mail that is no recorded support answer.");
+            if (await HandOverAsync(mail, cancellationToken)) return EmailHandlingOutcome.ToAnotherHandler();
+
+            logger?.LogDebug("Ignored a bounce for a mail that is no recorded support answer and that no other handler recognised.");
 
             return EmailHandlingOutcome.Ignored(supportCase == null ? "bounce for an unknown mail" : "bounce for a mail that is no answer");
         }
@@ -185,6 +189,32 @@ internal sealed class EmailEventHandler(
         logger?.LogWarning("The answer {Sequence} on support case {CaseId} bounced and is marked as not delivered.", sequence.Value, supportCase.Id);
 
         return EmailHandlingOutcome.Undelivered(supportCase.Id);
+    }
+
+    /// <summary>Offers the bounce to each registered handler in turn until one recognises the mail it names.</summary>
+    /// <remarks>A handler that fails is logged and the next one is tried, so one broken handler cannot keep a bounce from another.</remarks>
+    private async Task<bool> HandOverAsync(InboundMail mail, CancellationToken cancellationToken)
+    {
+        var bounce = new MailBounce
+        {
+            OriginalMessageId = mail.BouncedMessageId,
+            Reason = mail.BounceReason,
+            ReceivedAt = timeProvider.GetUtcNow().UtcDateTime
+        };
+
+        foreach (var handler in bounceHandlers ?? [])
+        {
+            try
+            {
+                if (await handler.HandleAsync(bounce, cancellationToken)) return true;
+            }
+            catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                logger?.LogWarning(e, "The bounce handler {Handler} could not apply a bounce; the next handler is tried.", handler.GetType().Name);
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -481,12 +511,13 @@ internal sealed class EmailEventHandler(
 /// <param name="Reason">Why it was ignored, or null when it was applied.</param>
 /// <param name="OpenedCase">True when it opened a case rather than continuing one.</param>
 /// <param name="Bounced">True when it was a bounce that marked one of the case's answers as not delivered.</param>
+/// <param name="HandedOver">True when it was a bounce for no support answer that a registered bounce handler recognised.</param>
 /// <remarks>
 /// Ignoring is the common outcome and is not a failure: a shared mailbox carries mail for other sites, for
 /// other systems and for people. It is reported rather than thrown so the poller can log a count instead of
 /// treating a busy mailbox as a series of errors.
 /// </remarks>
-internal readonly record struct EmailHandlingOutcome(bool WasApplied, string CaseId, string Reason, bool OpenedCase = false, bool Bounced = false)
+internal readonly record struct EmailHandlingOutcome(bool WasApplied, string CaseId, string Reason, bool OpenedCase = false, bool Bounced = false, bool HandedOver = false)
 {
     public static EmailHandlingOutcome Ignored(string reason) => new(false, null, reason);
 
@@ -495,4 +526,6 @@ internal readonly record struct EmailHandlingOutcome(bool WasApplied, string Cas
     public static EmailHandlingOutcome Raised(string caseId) => new(true, caseId, null, true);
 
     public static EmailHandlingOutcome Undelivered(string caseId) => new(true, caseId, null, Bounced: true);
+
+    public static EmailHandlingOutcome ToAnotherHandler() => new(false, null, "bounce for mail another handler sent", HandedOver: true);
 }

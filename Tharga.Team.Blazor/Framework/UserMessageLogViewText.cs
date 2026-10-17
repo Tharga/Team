@@ -57,6 +57,9 @@ public static class UserMessageLogViewText
     /// <summary>Names the mails given up.</summary>
     public static readonly TextKey Failed = new("team.userMessage.log.failed", "Failed");
 
+    /// <summary>Names the mails the receiving server returned as undeliverable.</summary>
+    public static readonly TextKey Bounced = new("team.userMessage.log.bounced", "Bounced");
+
     /// <summary>Heads the list of a message's recipients and what became of each mail.</summary>
     public static readonly TextKey RecipientList = new("team.userMessage.log.recipientList", "Recipients");
 
@@ -76,6 +79,6 @@ public static class UserMessageLogViewText
     public static readonly TextKey[] All =
     [
         NotPermitted, Empty, ShowMore, SentBy, Recipients, Category, To, AllTeams, Teams, Everyone, AccessLevels, Roles, Users,
-        Attachments, Queued, Sent, Skipped, Failed, RecipientList, StatusFilter, AnyStatus, NoRecipients, MoreRecipients
+        Attachments, Queued, Sent, Skipped, Failed, Bounced, RecipientList, StatusFilter, AnyStatus, NoRecipients, MoreRecipients
     ];
 }

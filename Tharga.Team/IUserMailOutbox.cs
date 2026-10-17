@@ -55,6 +55,29 @@ public interface IUserMailOutbox
     /// <exception cref="ArgumentException">The cursor was not issued by this outbox.</exception>
     Task<UserMailItemPage> ListForRecipientAsync(string userKey, string address, string cursor, int pageSize, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListForRecipientAsync)}. Implement it to show a user the mail sent to them.");
+
+    /// <summary>Records the sent mail with this <c>Message-ID</c> as bounced, with the receiving server's reason, in one conditional write, and keeps a done batch's counts true.</summary>
+    /// <remarks>Only a sent mail becomes bounced, so a second report for the same mail changes nothing and says so.</remarks>
+    Task<UserMailBounceResult> MarkBouncedAsync(string messageId, string reason, DateTime at, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(MarkBouncedAsync)}. Implement it to record mail to users that bounced.");
+}
+
+/// <summary>What a bounce report did to the mail it names.</summary>
+/// <param name="Outcome">Whether a mail was found, and whether this report changed it.</param>
+/// <param name="Id">The id of the mail it names, or null when none is known.</param>
+public sealed record UserMailBounceResult(UserMailBounceOutcome Outcome, string Id = null);
+
+/// <summary>Whether a bounce report named a mail to a user, and whether it changed it.</summary>
+public enum UserMailBounceOutcome
+{
+    /// <summary>No mail to a user was sent with that <c>Message-ID</c>.</summary>
+    Unknown,
+
+    /// <summary>The mail was sent and is now recorded as bounced.</summary>
+    Bounced,
+
+    /// <summary>The mail was already recorded as bounced, so nothing changed.</summary>
+    AlreadyBounced
 }
 
 /// <summary>One page of stored mail.</summary>
@@ -103,9 +126,12 @@ public sealed record UserMailItem
     /// <summary>When it was sent, skipped or given up, in UTC.</summary>
     public DateTime? CompletedAt { get; init; }
 
-    /// <summary>Why it was skipped or failed, or why the last attempt did not succeed.</summary>
+    /// <summary>Why it was skipped, failed or bounced, or why the last attempt did not succeed.</summary>
     public string Reason { get; init; }
 
     /// <summary>The <c>Message-ID</c> it was sent with.</summary>
     public string MessageId { get; init; }
+
+    /// <summary>When the report that it bounced was read, in UTC; null unless it bounced.</summary>
+    public DateTime? BouncedAt { get; init; }
 }

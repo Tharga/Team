@@ -136,6 +136,68 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         return counted;
     }
 
+    /// <remarks>
+    /// The mail moves from sent to bounced in one conditional write, so of two reports only one changes it. A batch
+    /// whose outcome is already recorded has its sent and bounced counts recounted and set rather than adjusted, so a
+    /// report read while the outcome was being recorded leaves the counts true whichever write lands last.
+    /// </remarks>
+    public async Task<UserMailBounceResult> MarkBouncedAsync(string messageId, string reason, DateTime at, CancellationToken cancellationToken = default)
+    {
+        var forms = MessageIdForms(messageId);
+        if (forms.Length == 0) return new UserMailBounceResult(UserMailBounceOutcome.Unknown);
+
+        var update = Builders<UserMailEntity>.Update
+            .Set(x => x.Status, UserMailStatus.Bounced)
+            .Set(x => x.Reason, reason)
+            .Set(x => x.BouncedAt, at);
+
+        var before = (await collection.UpdateOneAsync(BouncedSent(forms), update, OneOption<UserMailEntity>.FirstOrDefault))?.Before;
+        if (before != null)
+        {
+            if (before.BatchId != null) await RecountBouncesAsync(before.BatchId, cancellationToken);
+            return new UserMailBounceResult(UserMailBounceOutcome.Bounced, before.Id.ToString());
+        }
+
+        var known = await collection.GetManyAsync(Filter.In(x => x.MessageId, forms), new Options<UserMailEntity> { Limit = 1 }, cancellationToken);
+        var existing = (known?.Items ?? []).FirstOrDefault();
+
+        return existing?.Status == UserMailStatus.Bounced
+            ? new UserMailBounceResult(UserMailBounceOutcome.AlreadyBounced, existing.Id.ToString())
+            : new UserMailBounceResult(UserMailBounceOutcome.Unknown);
+    }
+
+    /// <summary>The sent mail with one of these <c>Message-ID</c> forms.</summary>
+    internal static FilterDefinition<UserMailEntity> BouncedSent(string[] messageIds)
+        => Filter.In(x => x.MessageId, messageIds) & Filter.Eq(x => x.Status, UserMailStatus.Sent);
+
+    /// <summary>The <c>Message-ID</c> as it may have been recorded: bare, and in angle brackets; empty when there is none.</summary>
+    internal static string[] MessageIdForms(string messageId)
+    {
+        var bare = messageId?.Trim().Trim('<', '>').Trim();
+
+        return string.IsNullOrEmpty(bare) ? [] : [bare, $"<{bare}>"];
+    }
+
+    /// <summary>A recorded outcome's sent and bounced counts set from the batch's mails as they now stand.</summary>
+    internal static UpdateDefinition<UserMailBatchEntity> SetBounceCounts(int sent, int bounced)
+        => Builders<UserMailBatchEntity>.Update
+            .Set(x => x.Outcome.Sent, sent)
+            .Set(x => x.Outcome.Bounced, bounced);
+
+    /// <summary>This batch, once its outcome is recorded.</summary>
+    internal static FilterDefinition<UserMailBatchEntity> WithRecordedOutcome(ObjectId batchId)
+        => Builders<UserMailBatchEntity>.Filter.Eq(x => x.Id, batchId) & Builders<UserMailBatchEntity>.Filter.Ne(x => x.Outcome, null);
+
+    private async Task RecountBouncesAsync(string batchId, CancellationToken cancellationToken)
+    {
+        if (!ObjectId.TryParse(batchId, out var objectId)) return;
+
+        var sent = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Sent), cancellationToken);
+        var bounced = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Bounced), cancellationToken);
+
+        await batches.UpdateOneAsync(WithRecordedOutcome(objectId), SetBounceCounts(sent, bounced), OneOption<UserMailBatchEntity>.FirstOrDefault);
+    }
+
     public async Task<UserMailItemPage> ListBatchAsync(string batchId, UserMailStatus? status, string cursor, int pageSize, CancellationToken cancellationToken = default)
     {
         var filter = Filter.Eq(x => x.BatchId, batchId);
@@ -219,13 +281,14 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
                 Sent = delivery.Outcomes.Sent,
                 Skipped = delivery.Outcomes.Skipped,
                 Failed = delivery.Outcomes.Failed,
+                Bounced = delivery.Outcomes.Bounced,
                 Failures = [.. delivery.Failures.Select(x => new UserMailFailureEntity { UserKey = x.UserKey, Reason = x.Reason })]
             })
             .Unset(AttachmentContentPath);
 
     /// <summary>Whether every mail of a batch is accounted for and none waits.</summary>
     internal static bool IsDone(UserMailBatchDelivery delivery, int recipientCount)
-        => delivery.Outcomes.Queued == 0 && delivery.Outcomes.Sent + delivery.Outcomes.Skipped + delivery.Outcomes.Failed >= recipientCount;
+        => delivery.Outcomes.Queued == 0 && delivery.Outcomes.Sent + delivery.Outcomes.Skipped + delivery.Outcomes.Failed + delivery.Outcomes.Bounced >= recipientCount;
 
     /// <remarks>The files' content goes with the outcome: the record of what was sent is kept, the bytes are not.</remarks>
     private async Task<bool> CompleteAsync(string id, string claimant, UserMailStatus status, string reason, string messageId, string address, DateTime at)
@@ -282,7 +345,8 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
                 Queued = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Queued), cancellationToken),
                 Sent = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Sent), cancellationToken),
                 Skipped = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Skipped), cancellationToken),
-                Failed = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Failed), cancellationToken)
+                Failed = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Failed), cancellationToken),
+                Bounced = (int)await collection.CountAsync(OfBatch(batchId, UserMailStatus.Bounced), cancellationToken)
             },
             Failures = [.. (failed?.Items ?? []).Select(x => new UserMailFailure { UserKey = x.RecipientUserKey, Reason = x.Reason ?? string.Empty })],
             CompletedAt = (last?.Items ?? []).FirstOrDefault()?.CompletedAt
@@ -299,7 +363,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
     {
         Id = entity.Id.ToString(),
         Recipients = entity.RecipientCount,
-        Outcomes = new UserMailOutcomes { Sent = entity.Outcome.Sent, Skipped = entity.Outcome.Skipped, Failed = entity.Outcome.Failed },
+        Outcomes = new UserMailOutcomes { Sent = entity.Outcome.Sent, Skipped = entity.Outcome.Skipped, Failed = entity.Outcome.Failed, Bounced = entity.Outcome.Bounced },
         Failures = [.. (entity.Outcome.Failures ?? []).Select(x => new UserMailFailure { UserKey = x.UserKey, Reason = x.Reason ?? string.Empty })],
         CompletedAt = entity.CompletedAt
     };
@@ -385,7 +449,8 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         ClaimedUntil = entity.ClaimedUntil,
         CompletedAt = entity.CompletedAt,
         Reason = entity.Reason,
-        MessageId = entity.MessageId
+        MessageId = entity.MessageId,
+        BouncedAt = entity.BouncedAt
     };
 
     private static UserMailAttachmentEntity ToAttachmentEntity(UserMailAttachment x) => new()

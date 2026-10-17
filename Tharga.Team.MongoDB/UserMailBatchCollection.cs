@@ -44,7 +44,7 @@ public record UserMailBatchEntity : EntityBase
 /// <summary>What became of the mails of a batch, recorded once every one is done.</summary>
 public record UserMailBatchOutcomeEntity
 {
-    /// <summary>How many were sent.</summary>
+    /// <summary>How many were sent and not reported bounced; recounted when a bounce is reported after the outcome was recorded.</summary>
     public int Sent { get; init; }
 
     /// <summary>How many were skipped because the recipient does not receive the category.</summary>
@@ -52,6 +52,9 @@ public record UserMailBatchOutcomeEntity
 
     /// <summary>How many were given up.</summary>
     public int Failed { get; init; }
+
+    /// <summary>How many the receiving server returned as undeliverable; zero on an outcome recorded before bounces were.</summary>
+    public int Bounced { get; init; }
 
     /// <summary>The mails given up, each with why, at most a hundred.</summary>
     public UserMailFailureEntity[] Failures { get; init; } = [];

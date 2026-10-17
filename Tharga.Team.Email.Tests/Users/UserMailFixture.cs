@@ -138,11 +138,26 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                     Queued = queued,
                     Sent = items.Count(x => x.Status == UserMailStatus.Sent),
                     Skipped = items.Count(x => x.Status == UserMailStatus.Skipped),
-                    Failed = items.Count(x => x.Status == UserMailStatus.Failed)
+                    Failed = items.Count(x => x.Status == UserMailStatus.Failed),
+                    Bounced = items.Count(x => x.Status == UserMailStatus.Bounced)
                 },
                 Failures = [.. items.Where(x => x.Status == UserMailStatus.Failed).Select(x => new UserMailFailure { UserKey = x.Mail.RecipientUserKey, Reason = x.Reason })],
                 CompletedAt = queued == 0 ? items.Max(x => x.CompletedAt) : null
             });
+        }
+    }
+
+    public Task<UserMailBounceResult> MarkBouncedAsync(string messageId, string reason, DateTime at, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var item = _items.FirstOrDefault(x => x.MessageId != null && x.MessageId.Trim('<', '>') == messageId);
+            if (item == null) return Task.FromResult(new UserMailBounceResult(UserMailBounceOutcome.Unknown));
+            if (item.Status == UserMailStatus.Bounced) return Task.FromResult(new UserMailBounceResult(UserMailBounceOutcome.AlreadyBounced, item.Id));
+            if (item.Status != UserMailStatus.Sent) return Task.FromResult(new UserMailBounceResult(UserMailBounceOutcome.Unknown));
+
+            Replace(item, item with { Status = UserMailStatus.Bounced, Reason = reason, BouncedAt = at });
+            return Task.FromResult(new UserMailBounceResult(UserMailBounceOutcome.Bounced, item.Id));
         }
     }
 

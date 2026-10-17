@@ -41,12 +41,12 @@ public class UserMessageStoreTests
         Attachments = [new UserMailAttachment { FileName = "plan.pdf", ContentType = "application/pdf", Content = [1, 2, 3], Size = 3 }]
     };
 
-    private void Counts(int queued, int sent, int skipped, int failed)
+    private void Counts(int queued, int sent, int skipped, int failed, int bounced = 0)
     {
         _mail.CountAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<CancellationToken>()).Returns(x =>
         {
             var filter = Render((FilterDefinition<UserMailEntity>)x[0]);
-            return filter.Contains("\"Queued\"") ? queued : filter.Contains("\"Sent\"") ? sent : filter.Contains("\"Skipped\"") ? skipped : failed;
+            return filter.Contains("\"Queued\"") ? queued : filter.Contains("\"Sent\"") ? sent : filter.Contains("\"Skipped\"") ? skipped : filter.Contains("\"Bounced\"") ? bounced : failed;
         });
         _mail.GetManyAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<Options<UserMailEntity>>(), Arg.Any<CancellationToken>())
             .Returns(new Result<UserMailEntity, ObjectId> { Items = [] });
@@ -147,6 +147,79 @@ public class UserMessageStoreTests
         var rendered = Render(update);
         Assert.Contains("\"Outcome\"", rendered);
         Assert.Contains("\"Attachments.$[].Content\" : 1", rendered);
+    }
+
+    [Fact]
+    public async Task ABounceReport_TurnsTheSentMailWithThatMessageIdBounced_InOneConditionalWrite()
+    {
+        var stored = MongoUserMailOutbox.ToEntity(new UserMail { RecipientUserKey = "u-1", Category = "news", Subject = "Hi", Body = "Hi" }, Now) with { Status = UserMailStatus.Sent, MessageId = "m-1@example.com" };
+        FilterDefinition<UserMailEntity> filter = null;
+        UpdateDefinition<UserMailEntity> update = null;
+        _mail.UpdateOneAsync(Arg.Do<FilterDefinition<UserMailEntity>>(x => filter = x), Arg.Do<UpdateDefinition<UserMailEntity>>(x => update = x), Arg.Any<OneOption<UserMailEntity>>(), Arg.Any<IClientSessionHandle>())
+            .Returns(Changed(stored));
+
+        var result = await Outbox.MarkBouncedAsync("<m-1@example.com>", "550 no such user", Now.AddHours(1), TestContext.Current.CancellationToken);
+
+        Assert.Equal(new UserMailBounceResult(UserMailBounceOutcome.Bounced, stored.Id.ToString()), result);
+        var rendered = Render(filter);
+        Assert.Contains("\"MessageId\" : { \"$in\" : [\"m-1@example.com\", \"<m-1@example.com>\"] }", rendered);
+        Assert.Contains("\"Status\" : \"Sent\"", rendered);
+        var written = Render(update);
+        Assert.Contains("\"Status\" : \"Bounced\"", written);
+        Assert.Contains("\"Reason\" : \"550 no such user\"", written);
+        Assert.Contains("\"BouncedAt\"", written);
+        await _batches.DidNotReceiveWithAnyArgs().UpdateOneAsync(default(FilterDefinition<UserMailBatchEntity>), default, default, default);
+    }
+
+    [Fact]
+    public async Task ABouncedMailOfADoneBatch_HasTheBatchsSentAndBouncedCountsSetFromItsMails()
+    {
+        var batch = MongoUserMailOutbox.ToBatchEntity(Batch("u-1", "u-2"), Now);
+        var stored = MongoUserMailOutbox.ToBatchItem(batch.Id.ToString(), "u-1", Batch("u-1"), Now) with { Status = UserMailStatus.Sent, MessageId = "m-1@example.com" };
+        _mail.UpdateOneAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<UpdateDefinition<UserMailEntity>>(), Arg.Any<OneOption<UserMailEntity>>(), Arg.Any<IClientSessionHandle>()).Returns(Changed(stored));
+        Counts(queued: 0, sent: 1, skipped: 0, failed: 0, bounced: 1);
+        FilterDefinition<UserMailBatchEntity> filter = null;
+        UpdateDefinition<UserMailBatchEntity> update = null;
+        await _batches.UpdateOneAsync(Arg.Do<FilterDefinition<UserMailBatchEntity>>(x => filter = x), Arg.Do<UpdateDefinition<UserMailBatchEntity>>(x => update = x), Arg.Any<OneOption<UserMailBatchEntity>>(), Arg.Any<IClientSessionHandle>());
+
+        await Outbox.MarkBouncedAsync("m-1@example.com", "550", Now, TestContext.Current.CancellationToken);
+
+        var rendered = Render(filter);
+        Assert.Contains(batch.Id.ToString(), rendered);
+        Assert.Contains("\"Outcome\" : { \"$ne\" : null }", rendered);
+        var written = Render(update);
+        Assert.Contains("\"Outcome.Sent\" : 1", written);
+        Assert.Contains("\"Outcome.Bounced\" : 1", written);
+    }
+
+    [Fact]
+    public async Task ASecondReport_FindsTheMailAlreadyBounced_AndAReportForNoKnownMail_FindsNothing()
+    {
+        var bounced = MongoUserMailOutbox.ToEntity(new UserMail { RecipientUserKey = "u-1", Category = "news", Subject = "Hi", Body = "Hi" }, Now) with { Status = UserMailStatus.Bounced, MessageId = "m-1@example.com" };
+        _mail.UpdateOneAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<UpdateDefinition<UserMailEntity>>(), Arg.Any<OneOption<UserMailEntity>>(), Arg.Any<IClientSessionHandle>())
+            .Returns((EntityChangeResult<UserMailEntity>)null);
+        _mail.GetManyAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<Options<UserMailEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new Result<UserMailEntity, ObjectId> { Items = [bounced] }, new Result<UserMailEntity, ObjectId> { Items = [] });
+
+        Assert.Equal(new UserMailBounceResult(UserMailBounceOutcome.AlreadyBounced, bounced.Id.ToString()), await Outbox.MarkBouncedAsync("m-1@example.com", "550", Now, TestContext.Current.CancellationToken));
+        Assert.Equal(UserMailBounceOutcome.Unknown, (await Outbox.MarkBouncedAsync("other@example.com", "550", Now, TestContext.Current.CancellationToken)).Outcome);
+        Assert.Equal(UserMailBounceOutcome.Unknown, (await Outbox.MarkBouncedAsync(" <> ", "550", Now, TestContext.Current.CancellationToken)).Outcome);
+    }
+
+    [Fact]
+    public async Task ABatchsCounts_IncludeItsBouncedMails_AndAreDoneWithThem()
+    {
+        var entity = MongoUserMailOutbox.ToBatchEntity(Batch("u-1", "u-2"), Now);
+        _batches.GetOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserMailBatchEntity, bool>>>(), Arg.Any<OneOption<UserMailBatchEntity>>(), Arg.Any<CancellationToken>()).Returns(entity);
+        Counts(queued: 0, sent: 1, skipped: 0, failed: 0, bounced: 1);
+        UpdateDefinition<UserMailBatchEntity> update = null;
+        await _batches.UpdateOneAsync(Arg.Any<FilterDefinition<UserMailBatchEntity>>(), Arg.Do<UpdateDefinition<UserMailBatchEntity>>(x => update = x), Arg.Any<OneOption<UserMailBatchEntity>>(), Arg.Any<IClientSessionHandle>());
+
+        var delivery = await Outbox.GetBatchDeliveryAsync(entity.Id.ToString(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(new UserMailOutcomes { Sent = 1, Bounced = 1 }, delivery.Outcomes);
+        Assert.Contains("\"Bounced\" : 1", Render(update));
+        Assert.Equal(new UserMailOutcomes { Sent = 1, Bounced = 1 }, MongoUserMailOutbox.Recorded(entity with { Outcome = new UserMailBatchOutcomeEntity { Sent = 1, Bounced = 1 } }).Outcomes);
     }
 
     [Fact]

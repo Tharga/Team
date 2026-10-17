@@ -420,6 +420,7 @@ public class UserMailStoreTests
 
         Assert.Equal(["RecipientUserKey", "_id"], indices["RecipientUserKey_Id"].Keys.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).Names);
         Assert.Equal(["RecipientAddress", "_id"], indices["RecipientAddress_Id"].Keys.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).Names);
+        Assert.True(indices["MessageId"].Options.Sparse);
     }
 
     private static UserMailBatch Batch() => new() { RecipientUserKeys = ["u"], Category = "news", Subject = "Hello", Body = "Hi" };

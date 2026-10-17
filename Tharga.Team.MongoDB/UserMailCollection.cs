@@ -80,13 +80,17 @@ public record UserMailEntity : EntityBase
     [BsonIgnoreIfNull]
     public DateTime? CompletedAt { get; init; }
 
-    /// <summary>Why it was skipped or failed, or why the last attempt did not succeed.</summary>
+    /// <summary>Why it was skipped, failed or bounced, or why the last attempt did not succeed.</summary>
     [BsonIgnoreIfNull]
     public string Reason { get; init; }
 
-    /// <summary>The <c>Message-ID</c> it was sent with.</summary>
+    /// <summary>The <c>Message-ID</c> it was sent with, which a bounce report names it by.</summary>
     [BsonIgnoreIfNull]
     public string MessageId { get; init; }
+
+    /// <summary>When the report that it bounced was read, in UTC.</summary>
+    [BsonIgnoreIfNull]
+    public DateTime? BouncedAt { get; init; }
 }
 
 /// <summary>A file kept with a queued mail; its content is removed once the mail is done.</summary>
@@ -116,7 +120,8 @@ public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
 /// <summary>Queued mail to users, default collection name <c>UserMail</c>.</summary>
 /// <remarks>
 /// Due mail is found by status and due time; a deduplication key is unique where one was given; a batch's mail by its
-/// batch and status; a user's history by their key or address, newest first; and a mail that is done expires after
+/// batch and status; a user's history by their key or address, newest first; a sent mail by the <c>Message-ID</c> a bounce
+/// report names; and a mail that is done expires after
 /// <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never does.
 /// </remarks>
 public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, IUserMailCollection
@@ -149,6 +154,8 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.RecipientUserKey).Descending(x => x.Id),
             new CreateIndexOptions { Name = "RecipientUserKey_Id" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.RecipientAddress).Descending(x => x.Id),
-            new CreateIndexOptions { Name = "RecipientAddress_Id" })
+            new CreateIndexOptions { Name = "RecipientAddress_Id" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.MessageId),
+            new CreateIndexOptions { Sparse = true, Name = "MessageId" })
     ];
 }

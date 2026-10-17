@@ -36,7 +36,7 @@ public sealed record UserMailOutcomes
     /// <summary>Waiting to be sent, or to be tried again.</summary>
     public int Queued { get; init; }
 
-    /// <summary>Accepted by the mail server.</summary>
+    /// <summary>Accepted by the mail server and not reported bounced.</summary>
     public int Sent { get; init; }
 
     /// <summary>Not sent, because the recipient does not receive the category.</summary>
@@ -44,6 +44,9 @@ public sealed record UserMailOutcomes
 
     /// <summary>Not sent and given up.</summary>
     public int Failed { get; init; }
+
+    /// <summary>Accepted by the mail server, then returned by the receiving one as undeliverable; counted here instead of in <see cref="Sent"/>.</summary>
+    public int Bounced { get; init; }
 }
 
 /// <summary>Why the mail to one recipient of a batch was given up.</summary>

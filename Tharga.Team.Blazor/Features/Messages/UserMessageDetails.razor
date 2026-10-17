@@ -150,6 +150,7 @@
         yield return ("queued", Text[UserMessageLogViewText.Queued], Shown.Outcomes.Queued);
         yield return ("skipped", Text[UserMessageLogViewText.Skipped], Shown.Outcomes.Skipped);
         yield return ("failed", Text[UserMessageLogViewText.Failed], Shown.Outcomes.Failed);
+        yield return ("bounced", Text[UserMessageLogViewText.Bounced], Shown.Outcomes.Bounced);
     }
 
     private StatusChoice[] StatusOptions()
@@ -161,13 +162,14 @@
         UserMailStatus.Sent => Text[UserMessageLogViewText.Sent],
         UserMailStatus.Skipped => Text[UserMessageLogViewText.Skipped],
         UserMailStatus.Failed => Text[UserMessageLogViewText.Failed],
+        UserMailStatus.Bounced => Text[UserMessageLogViewText.Bounced],
         _ => status.ToString()
     };
 
     private static BadgeStyle StatusStyle(UserMailStatus status) => status switch
     {
         UserMailStatus.Sent => BadgeStyle.Success,
-        UserMailStatus.Failed => BadgeStyle.Danger,
+        UserMailStatus.Failed or UserMailStatus.Bounced => BadgeStyle.Danger,
         UserMailStatus.Skipped => BadgeStyle.Light,
         _ => BadgeStyle.Info
     };

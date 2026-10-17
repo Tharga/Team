@@ -54,6 +54,9 @@ public static class UserMessageAudit
     /// <summary>Metadata holding how many mails of a message still wait.</summary>
     public const string Queued = "messages.queued";
 
+    /// <summary>Metadata holding how many mails of a message the receiving server returned as undeliverable.</summary>
+    public const string Bounced = "messages.bounced";
+
     /// <summary>The value of <see cref="Teams"/> for a message written within every team.</summary>
     public const string AllTeams = "all";
 }

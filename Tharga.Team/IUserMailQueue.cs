@@ -66,7 +66,11 @@ public enum UserMailStatus
     Skipped,
 
     /// <summary>Not sent and given up, for the reason recorded.</summary>
-    Failed
+    Failed,
+
+    /// <summary>Accepted by the mail server, then returned by the receiving one as undeliverable, for the reason it gave.</summary>
+    /// <remarks>Seen only when the delivery report reaches a mailbox the toolkit reads, which is the case when the sending address is one of the support mailboxes.</remarks>
+    Bounced
 }
 
 /// <summary>What became of one queued mail.</summary>
@@ -111,12 +115,15 @@ public sealed record UserMailDelivery
     /// <summary>When it was sent, skipped or given up, in UTC; null while queued.</summary>
     public DateTime? CompletedAt { get; init; }
 
-    /// <summary>Why it was skipped or failed, or why the last attempt did not succeed while it waits to be tried again.</summary>
+    /// <summary>Why it was skipped, failed or bounced, or why the last attempt did not succeed while it waits to be tried again.</summary>
     public string Reason { get; init; }
 
     /// <summary>The <c>Message-ID</c> it was sent with; null until it is sent.</summary>
     public string MessageId { get; init; }
 
-    /// <summary>When it last changed, in UTC: when it was queued, or when it was sent, skipped or given up.</summary>
-    public DateTime ChangedAt => CompletedAt ?? QueuedAt;
+    /// <summary>When the receiving server's report that it bounced was read, in UTC; null unless it bounced.</summary>
+    public DateTime? BouncedAt { get; init; }
+
+    /// <summary>When it last changed, in UTC: when it was queued, sent, skipped, given up or reported bounced.</summary>
+    public DateTime ChangedAt => BouncedAt ?? CompletedAt ?? QueuedAt;
 }

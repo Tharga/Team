@@ -34,6 +34,10 @@ else
                             {
                                 <RadzenBadge Text="@($"{item.Outcomes.Failed} {_text[UserMessageLogViewText.Failed]}")" BadgeStyle="BadgeStyle.Danger" data-failed="@item.Id" />
                             }
+                            @if (item.Outcomes.Bounced > 0)
+                            {
+                                <RadzenBadge Text="@($"{item.Outcomes.Bounced} {_text[UserMessageLogViewText.Bounced]}")" BadgeStyle="BadgeStyle.Danger" data-bounced="@item.Id" />
+                            }
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-sent-by="@item.Id">@_text.Format(UserMessageLogViewText.SentBy, item.SentByName)</RadzenText>
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-time="@item.Id">@Time(item.SentAt)</RadzenText>
                         </TopMenu>

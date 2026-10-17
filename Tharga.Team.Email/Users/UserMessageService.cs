@@ -128,7 +128,8 @@ internal sealed class UserMessageService(
             (UserMessageAudit.Queued, Number(sent.Outcomes.Queued)),
             (UserMessageAudit.Sent, Number(sent.Outcomes.Sent)),
             (UserMessageAudit.Skipped, Number(sent.Outcomes.Skipped)),
-            (UserMessageAudit.Failed, Number(sent.Outcomes.Failed))));
+            (UserMessageAudit.Failed, Number(sent.Outcomes.Failed)),
+            (UserMessageAudit.Bounced, Number(sent.Outcomes.Bounced))));
 
         return sent;
     }

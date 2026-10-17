@@ -68,7 +68,8 @@ internal sealed class UserMailQueue(
         NextAttemptAt = item.NextAttemptAt,
         CompletedAt = item.CompletedAt,
         Reason = item.Reason,
-        MessageId = item.MessageId
+        MessageId = item.MessageId,
+        BouncedAt = item.BouncedAt
     };
 
     private static UserMailDeliveryPage ToPage(UserMailItemPage page) => new()

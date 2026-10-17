@@ -16,7 +16,11 @@ namespace Tharga.Team.Email.Users;
 public static class UserMailRegistration
 {
     /// <summary>Registers <see cref="IUserMailPreferenceService"/>, <see cref="IUserMailHistoryService"/>, <see cref="IUserMailQueue"/> and the background sender, with the categories and settings in <paramref name="configure"/>.</summary>
-    /// <remarks>Storage comes from <c>AddThargaTeamRepository</c>, the unsubscribe route from <see cref="MapThargaMailUnsubscribe"/>, and every instance must share one persisted Data Protection key ring.</remarks>
+    /// <remarks>
+    /// Storage comes from <c>AddThargaTeamRepository</c>, the unsubscribe route from <see cref="MapThargaMailUnsubscribe"/>, and
+    /// every instance must share one persisted Data Protection key ring. A bounce handler is registered too, so mail sent
+    /// from the address of a mailbox support reads is marked bounced when the receiving server returns it.
+    /// </remarks>
     /// <exception cref="InvalidOperationException">A category is not acceptable, an optional category is registered without an absolute <see cref="UserMailOptions.BaseUrl"/>, or a limit is out of range.</exception>
     public static IServiceCollection AddThargaUserMail(this IServiceCollection services, Action<UserMailOptions> configure = null)
     {
@@ -75,6 +79,7 @@ public static class UserMailRegistration
             sp.GetService<ILogger<UserMailDispatcher>>()));
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, UserMailSender>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailBounceHandler, UserMailBounceHandler>());
 
         return services;
     }

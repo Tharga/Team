@@ -172,6 +172,23 @@ public class UserMessageLogViewRenderTests : BunitContext
     }
 
     [Fact]
+    public void BouncedMail_IsCountedInTheHeaderAndTheDetails_AndNamedOnTheRecipient()
+    {
+        var outcomes = new UserMailOutcomes { Sent = 2, Bounced = 1 };
+        _messages.Setup(x => x.GetSentMessageAsync("m-1", It.IsAny<CancellationToken>())).ReturnsAsync(Message("m-1", "Maintenance", outcomes));
+        Recipients("m-1", null, null, new UserMessageRecipientPage { Items = [Recipient("anna", "Anna", UserMailStatus.Bounced, "anna@example.org", "550 5.1.1 Recipient address rejected")] });
+        var view = Render(new SentUserMessagePage { Items = [Message("m-1", "Maintenance", outcomes)] });
+
+        Assert.Contains("1 Bounced", view.Find("[data-bounced='m-1']").TextContent);
+
+        Open(view, "m-1");
+
+        Assert.Equal("1", view.Find("[data-outcome='bounced']").TextContent.Trim()[..1]);
+        Assert.Equal("Bounced", view.Find("[data-recipient='anna'] [data-recipient-status]").TextContent.Trim());
+        Assert.Contains("550 5.1.1", view.Find("[data-recipient='anna'] [data-recipient-reason]").TextContent);
+    }
+
+    [Fact]
     public void AFilterNobodyMatches_SaysSo()
     {
         _messages.Setup(x => x.GetSentMessageAsync("m-1", It.IsAny<CancellationToken>())).ReturnsAsync(Message("m-1", "Maintenance"));

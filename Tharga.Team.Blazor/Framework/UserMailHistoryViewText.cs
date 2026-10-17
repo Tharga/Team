@@ -48,6 +48,9 @@ public static class UserMailHistoryViewText
     /// <summary>A mail that could not be sent.</summary>
     public static readonly TextKey StatusFailed = new("team.userMail.history.status.failed", "Not sent");
 
+    /// <summary>A mail the receiving server returned as undeliverable.</summary>
+    public static readonly TextKey StatusBounced = new("team.userMail.history.status.bounced", "Not delivered");
+
     /// <summary>The name of a kind of mail.</summary>
     public static TextKey For(UserMailKind kind) => kind switch
     {
@@ -63,6 +66,7 @@ public static class UserMailHistoryViewText
         UserMailStatus.Sent => StatusSent,
         UserMailStatus.Skipped => StatusSkipped,
         UserMailStatus.Failed => StatusFailed,
+        UserMailStatus.Bounced => StatusBounced,
         _ => StatusQueued
     };
 
@@ -70,6 +74,6 @@ public static class UserMailHistoryViewText
     public static readonly TextKey[] All =
     [
         Title, Explanation, Empty, ShowMore, NotPermitted, NoUser, To, KindMail, KindMessage, KindNotice, KindInvitation,
-        StatusQueued, StatusSent, StatusSkipped, StatusFailed
+        StatusQueued, StatusSent, StatusSkipped, StatusFailed, StatusBounced
     ];
 }
