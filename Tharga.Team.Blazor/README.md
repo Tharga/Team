@@ -96,7 +96,23 @@ public sealed class FeatureGatedRoleVisibility : ITenantRoleVisibilityProvider
 builder.Services.AddSingleton<ITenantRoleVisibilityProvider, FeatureGatedRoleVisibility>();
 ```
 
-`TeamComponent` filters the editor's role list per team through the provider. Hiding a role is **UI-only**: a role already assigned to a member stays assigned (it is preserved, never pruned, and reappears if the feature is re-enabled) and continues to grant its scopes at runtime. The default provider shows all roles, so this is opt-in and non-breaking.
+`TeamComponent` filters the editor's role list per team through the provider. Hiding a role is **UI-only**: a role already assigned to a member stays assigned (it is preserved, never pruned, and reappears if the feature is re-enabled) and continues to grant its scopes at runtime. The default provider shows all roles, so this is opt-in and non-breaking. `ApiKeyView` applies the same provider to a team API key's role picker.
+
+### Per-team scope visibility
+
+The scope pickers (`TeamComponent`'s scope overrides with `ShowScopeOverrides`, and `ApiKeyView`) offer every registered scope by default. To hide the scopes of a feature that is switched off for a team, register an `ITeamScopeVisibilityProvider` (from `Tharga.Team`):
+
+```csharp
+public sealed class FeatureGatedScopeVisibility : ITeamScopeVisibilityProvider
+{
+    public async Task<bool> IsScopeVisibleAsync(string teamKey, string scope, CancellationToken ct = default)
+        => await _features.IsScopeEnabledForTeamAsync(teamKey, scope, ct);
+}
+
+builder.Services.AddSingleton<ITeamScopeVisibilityProvider, FeatureGatedScopeVisibility>();
+```
+
+A hidden scope is not offered, and is left out of the inherited and held scopes the pickers and the scope tooltips show. Like a hidden role it is **UI-only**: a member or key that already holds the scope as an override keeps it — saving the picker writes it back unchanged — so switching the feature on again restores it. Whether the scope is refused at runtime while the feature is off is up to the application, where it enforces the feature. The default provider shows every scope.
 
 ### Dynamic (runtime-defined) tenant roles
 

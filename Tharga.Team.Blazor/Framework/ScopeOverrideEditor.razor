@@ -51,6 +51,13 @@
 
     [Parameter] public string Style { get; set; } = "min-width: 220px;";
 
+    /// <summary>
+    /// Scopes hidden for this team by <see cref="Tharga.Team.ITeamScopeVisibilityProvider"/>: not offered,
+    /// and not shown as inherited or held. A hidden override the principal already has is kept when the
+    /// picker saves, so hiding a scope never removes it.
+    /// </summary>
+    [Parameter] public IReadOnlySet<string> HiddenScopes { get; set; }
+
     private TextSet _text = TextSet.Empty;
     private List<ScopeOption> _options = new();
     private IEnumerable<string> _value = Array.Empty<string>();
@@ -64,23 +71,18 @@
     protected override void OnParametersSet()
     {
         var inherited = new HashSet<string>(InheritedScopes ?? Array.Empty<string>());
-        _options = (AllScopes ?? Array.Empty<string>())
-            .Concat(inherited)
-            .Concat(Overrides ?? Array.Empty<string>())
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(s => s, StringComparer.Ordinal)
+        _options = ScopeVisibility.Options(AllScopes, inherited, Overrides, HiddenScopes)
             .Select(s => new ScopeOption(s, inherited.Contains(s), GetDescription(s)))
             .ToList();
         // Inherited scopes appear checked (and disabled); current overrides are also checked.
-        _value = inherited.Concat(Overrides ?? Array.Empty<string>()).Distinct().ToList();
+        _value = ScopeVisibility.Checked(inherited, Overrides, HiddenScopes);
     }
 
     private async Task OnValueChanged(IEnumerable<string> value)
     {
-        var inherited = new HashSet<string>(InheritedScopes ?? Array.Empty<string>());
         var selected = (value ?? Enumerable.Empty<string>()).ToList();
         _value = selected;
-        var overrides = selected.Where(s => !inherited.Contains(s)).ToArray();
+        var overrides = ScopeVisibility.Persist(selected, InheritedScopes, Overrides, HiddenScopes);
         await OverridesChanged.InvokeAsync(overrides);
     }
 
