@@ -68,12 +68,19 @@ internal sealed class UserMailSender(
         return await scope.ServiceProvider.GetRequiredService<UserMailDispatcher>().RunAsync(Claimant, cancellationToken);
     }
 
-    private bool CanSend()
+    /// <summary>What sending still needs, or null when the sending address and the SMTP host are both set.</summary>
+    internal static string Missing(MailOptions mail)
     {
-        var mail = options.Value.Mail ?? new MailOptions();
-        var missing = string.IsNullOrWhiteSpace(mail.FromAddress) ? "a sending address (Mail.FromAddress)"
+        mail ??= new MailOptions();
+
+        return string.IsNullOrWhiteSpace(mail.FromAddress) ? "a sending address (Mail.FromAddress)"
             : !mail.Smtp.IsConfigured ? "an SMTP host (Mail.Smtp.Host)"
             : null;
+    }
+
+    private bool CanSend()
+    {
+        var missing = Missing(options.Value.Mail);
 
         if (missing == null) return true;
 

@@ -423,6 +423,54 @@ public class UserMailStoreTests
         Assert.True(indices["MessageId"].Options.Sparse);
     }
 
+    [Fact]
+    public async Task AMailSentAtOnce_IsInsertedAlreadyHeld_WithItsFirstAttemptCounted()
+    {
+        UserMailEntity added = null;
+        await _mail.AddAsync(Arg.Do<UserMailEntity>(x => added = x));
+        var mail = new UserMail { RecipientAddress = "bea@example.org", RecipientName = "Bea", Category = "account", Subject = "Join", Body = "Join us.", Kind = UserMailKind.Invitation };
+
+        var item = await new MongoUserMailOutbox(_mail, _batches).AddClaimedAsync(mail, Now, "inviter", TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken);
+
+        Assert.Equal(("inviter", Now.AddMinutes(5), 1, UserMailStatus.Queued), (added.ClaimedBy, added.ClaimedUntil, added.Attempts, added.Status));
+        Assert.Equal(added.Id.ToString(), item.Id);
+        Assert.Equal("inviter", item.ClaimedBy);
+        Assert.Equal(1, item.Attempts);
+    }
+
+    [Fact]
+    public async Task AMailSentAtOnce_TakesNoDeduplicationKey()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => new MongoUserMailOutbox(_mail, _batches).AddClaimedAsync(Mail("d1"), Now, "inviter", TimeSpan.FromMinutes(5), TestContext.Current.CancellationToken));
+        await _mail.DidNotReceive().AddAsync(Arg.Any<UserMailEntity>());
+    }
+
+    [Fact]
+    public void AMailToAnAddressAlone_KeepsItsAddressAndName_AndHasNoUserKey()
+    {
+        var mail = new UserMail { RecipientAddress = "bea@example.org", RecipientName = "Bea", Category = "account", Subject = "Join", Body = "Join us.", Kind = UserMailKind.Invitation };
+
+        var entity = MongoUserMailOutbox.ToEntity(mail, Now);
+        var document = entity.ToBsonDocument();
+        var item = MongoUserMailOutbox.ToItem(entity);
+
+        Assert.Equal(BsonNull.Value, document[nameof(UserMailEntity.RecipientUserKey)]);
+        Assert.Equal("bea@example.org", document[nameof(UserMailEntity.RecipientAddress)].AsString);
+        Assert.Equal("Invitation", document[nameof(UserMailEntity.Kind)].AsString);
+        Assert.Equal("bea@example.org", item.RecipientAddress);
+        Assert.Equal(("bea@example.org", "Bea"), (item.Mail.RecipientAddress, item.Mail.RecipientName));
+        Assert.Null(item.Mail.RecipientUserKey);
+    }
+
+    [Fact]
+    public void AMailToAUser_StoresNoQueuedAddressOrName_EvenWhenGivenOne()
+    {
+        var entity = MongoUserMailOutbox.ToEntity(Mail() with { RecipientAddress = "other@example.org", RecipientName = "Other" }, Now);
+
+        Assert.Null(entity.RecipientAddress);
+        Assert.Null(entity.RecipientName);
+    }
+
     private static UserMailBatch Batch() => new() { RecipientUserKeys = ["u"], Category = "news", Subject = "Hello", Body = "Hi" };
 
     private MongoUserMailPreferenceStore Store()

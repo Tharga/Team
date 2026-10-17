@@ -56,6 +56,11 @@ public interface IUserMailOutbox
     Task<UserMailItemPage> ListForRecipientAsync(string userKey, string address, string cursor, int pageSize, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListForRecipientAsync)}. Implement it to show a user the mail sent to them.");
 
+    /// <summary>Stores a mail already claimed by <paramref name="claimant"/> for <paramref name="lease"/>, its first attempt counted, so it is sent at once by the caller and by nobody else unless the lease runs out.</summary>
+    /// <exception cref="ArgumentException">The mail carries a deduplication key, which a mail sent at once does not take.</exception>
+    Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddClaimedAsync)}. Implement it to send invitations as mail to users.");
+
     /// <summary>Records the sent mail with this <c>Message-ID</c> as bounced, with the receiving server's reason, in one conditional write, and keeps a done batch's counts true.</summary>
     /// <remarks>Only a sent mail becomes bounced, so a second report for the same mail changes nothing and says so.</remarks>
     Task<UserMailBounceResult> MarkBouncedAsync(string messageId, string reason, DateTime at, CancellationToken cancellationToken = default)

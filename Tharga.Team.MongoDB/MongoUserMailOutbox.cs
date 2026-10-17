@@ -45,6 +45,19 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         }
     }
 
+    /// <remarks>Inserted already held, so no sender on any instance can claim it between the insert and the caller's attempt.</remarks>
+    public async Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mail);
+        ArgumentException.ThrowIfNullOrWhiteSpace(claimant);
+        if (mail.DeduplicationKey != null) throw new ArgumentException("A mail sent at once takes no deduplication key.", nameof(mail));
+
+        var entity = ToEntity(mail, queuedAt) with { ClaimedBy = claimant, ClaimedUntil = queuedAt + lease, Attempts = 1 };
+        await collection.AddAsync(entity);
+
+        return ToItem(entity);
+    }
+
     public async Task<UserMailItem> ClaimNextAsync(string claimant, DateTime now, TimeSpan lease, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(claimant);

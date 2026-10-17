@@ -8,7 +8,8 @@ namespace Tharga.Team.Email.Users;
 /// <summary>Sends queued mail to users, one claimed mail at a time, and records what became of each.</summary>
 /// <remarks>
 /// <b>Everything about the recipient is decided at send time</b>: whether they still receive the category, and the
-/// address on their user record. A mail they opted out of after it was queued is skipped, not failed.
+/// address on their user record. A mail they opted out of after it was queued is skipped, not failed. A mail queued to
+/// an address alone, which only a required category takes, goes to that address.
 /// <para>
 /// <b>Only a failure that may pass is retried</b> — the server refusing or being unreachable, a store that could not
 /// be read. A user with no address, a category no longer registered or a mail the non-production policy withholds
@@ -30,6 +31,7 @@ internal sealed class UserMailDispatcher(
     internal const string OptedOutReason = "The recipient does not receive this category.";
     internal const string WithheldReason = "Withheld by the non-production mail policy: set Email:Override to receive it.";
     internal const string BatchGoneReason = "The content this mail shares with others is no longer stored.";
+    internal const string AddressAloneReason = "A mail to an address alone is sent only in a required category.";
 
     private readonly Dictionary<string, UserMailBatch> _batches = new(StringComparer.Ordinal);
 
@@ -57,16 +59,31 @@ internal sealed class UserMailDispatcher(
 
         try
         {
-            return await SendAsync(item, claimant, cancellationToken);
+            return await SendAsync(item, claimant, true, cancellationToken);
         }
         catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             logger?.LogWarning(e, "User mail {Id} could not be handled.", item.Id);
-            return await RetryAsync(item, claimant, e.Message, cancellationToken);
+            return await RetryAsync(item, claimant, e.Message, true, cancellationToken);
         }
     }
 
-    private async Task<UserMailStatus> SendAsync(UserMailItem item, string claimant, CancellationToken cancellationToken)
+    /// <summary>Makes the one attempt at a mail the caller already holds, recording it sent or failed and never leaving it to be tried again.</summary>
+    /// <remarks>For a caller who reports the outcome to someone waiting for it: a mail they were told did not go must not go later.</remarks>
+    public async Task<UserMailStatus> SendNowAsync(UserMailItem item, string claimant, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await SendAsync(item, claimant, false, cancellationToken);
+        }
+        catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            logger?.LogWarning(e, "User mail {Id} could not be sent.", item.Id);
+            return await FailAsync(item, claimant, e.Message, cancellationToken);
+        }
+    }
+
+    private async Task<UserMailStatus> SendAsync(UserMailItem item, string claimant, bool retry, CancellationToken cancellationToken)
     {
         var mail = await ContentOfAsync(item, cancellationToken);
         if (mail == null) return await FailAsync(item, claimant, BatchGoneReason, cancellationToken);
@@ -76,15 +93,26 @@ internal sealed class UserMailDispatcher(
 
         if (item.Attempts > options.Value.MaxAttempts) return await FailAsync(item, claimant, GaveUp(item.Attempts - 1, item.Reason), cancellationToken);
 
-        if (!await preferences.ReceivesAsync(mail.RecipientUserKey, category, cancellationToken))
+        UserMailRecipient recipient;
+        if (mail.RecipientUserKey == null)
         {
-            await RecordAsync(outbox.MarkSkippedAsync(item.Id, claimant, OptedOutReason, Now(), cancellationToken), item);
-            return UserMailStatus.Skipped;
-        }
+            if (!category.Required) return await FailAsync(item, claimant, AddressAloneReason, cancellationToken);
+            if (string.IsNullOrWhiteSpace(mail.RecipientAddress)) return await FailAsync(item, claimant, "The mail names neither a user nor an address.", cancellationToken);
 
-        var recipient = await recipients.FindAsync(mail.RecipientUserKey, cancellationToken);
-        if (recipient == null) return await FailAsync(item, claimant, "No user has this key.", cancellationToken);
-        if (string.IsNullOrWhiteSpace(recipient.EMail)) return await FailAsync(item, claimant, "The user record holds no address.", cancellationToken);
+            recipient = new UserMailRecipient { Key = null, EMail = mail.RecipientAddress, Name = mail.RecipientName };
+        }
+        else
+        {
+            if (!await preferences.ReceivesAsync(mail.RecipientUserKey, category, cancellationToken))
+            {
+                await RecordAsync(outbox.MarkSkippedAsync(item.Id, claimant, OptedOutReason, Now(), cancellationToken), item);
+                return UserMailStatus.Skipped;
+            }
+
+            recipient = await recipients.FindAsync(mail.RecipientUserKey, cancellationToken);
+            if (recipient == null) return await FailAsync(item, claimant, "No user has this key.", cancellationToken);
+            if (string.IsNullOrWhiteSpace(recipient.EMail)) return await FailAsync(item, claimant, "The user record holds no address.", cancellationToken);
+        }
 
         var decision = policy.Decide(recipient.EMail.Trim(), mail.Subject);
         if (!decision.ShouldSend)
@@ -99,7 +127,7 @@ internal sealed class UserMailDispatcher(
         var outbound = await footer.ApplyAsync(Outbound(mail, recipient, decision), mail.RecipientUserKey, category);
         var result = await mailClient.SendAsync(outbound, cancellationToken);
 
-        if (!result.Success) return await RetryAsync(item, claimant, result.Error, cancellationToken);
+        if (!result.Success) return await RetryAsync(item, claimant, result.Error, retry, cancellationToken);
 
         await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, UserMailAddresses.Normalize(recipient.EMail), Now(), cancellationToken), item);
         return UserMailStatus.Sent;
@@ -140,9 +168,10 @@ internal sealed class UserMailDispatcher(
             BodyHtml: mail.BodyHtml);
     }
 
-    private async Task<UserMailStatus> RetryAsync(UserMailItem item, string claimant, string reason, CancellationToken cancellationToken)
+    private async Task<UserMailStatus> RetryAsync(UserMailItem item, string claimant, string reason, bool retry, CancellationToken cancellationToken)
     {
         var o = options.Value;
+        if (!retry) return await FailAsync(item, claimant, reason, cancellationToken);
         if (item.Attempts >= o.MaxAttempts) return await FailAsync(item, claimant, GaveUp(item.Attempts, reason), cancellationToken);
 
         await RecordAsync(outbox.PostponeAsync(item.Id, claimant, reason, Now() + Backoff(item.Attempts, o), cancellationToken), item);

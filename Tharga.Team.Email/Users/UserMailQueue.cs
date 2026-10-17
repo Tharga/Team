@@ -93,13 +93,18 @@ internal sealed class UserMailQueue(
         => string.IsNullOrWhiteSpace(id) ? null : await outbox.GetBatchDeliveryAsync(id, cancellationToken);
 
     /// <summary>The mail as it is stored: trimmed, sanitized, its text derived when missing and its files described.</summary>
+    /// <remarks>A mail naming no user goes to its address alone, which only a required category accepts: nobody could choose not to receive it, nor follow an unsubscribe link, so an optional one would reach a person with no way to stop it.</remarks>
     internal UserMail Accept(UserMail mail)
     {
         ArgumentNullException.ThrowIfNull(mail);
 
-        if (string.IsNullOrWhiteSpace(mail.RecipientUserKey)) throw new ArgumentException("A mail to a user names the user's key.", nameof(mail));
+        var userKey = string.IsNullOrWhiteSpace(mail.RecipientUserKey) ? null : mail.RecipientUserKey.Trim();
+        var address = userKey == null ? RecipientAddress(mail.RecipientAddress) : null;
 
         var content = AcceptContent(mail.Category, mail.Subject, mail.BodyHtml, mail.Body, mail.Attachments, nameof(mail));
+
+        if (userKey == null && !categories.Get(content.Category, nameof(mail)).Required)
+            throw new ArgumentException($"A mail to an address alone is accepted only in a required category, and '{content.Category}' can be turned off.", nameof(mail));
 
         var replyTo = string.IsNullOrWhiteSpace(mail.ReplyTo) ? null : mail.ReplyTo.Trim();
         if (replyTo != null && !MailboxAddress.TryParse(replyTo, out _)) throw new ArgumentException($"'{replyTo}' is not an address replies can be sent to.", nameof(mail));
@@ -109,7 +114,9 @@ internal sealed class UserMailQueue(
 
         return new UserMail
         {
-            RecipientUserKey = mail.RecipientUserKey.Trim(),
+            RecipientUserKey = userKey,
+            RecipientAddress = address,
+            RecipientName = userKey == null && !string.IsNullOrWhiteSpace(mail.RecipientName) ? OneLine(mail.RecipientName) : null,
             Category = content.Category,
             Subject = content.Subject,
             BodyHtml = content.BodyHtml,
@@ -176,6 +183,18 @@ internal sealed class UserMailQueue(
             Size = x.Content.Length,
             ContentId = string.IsNullOrWhiteSpace(x.ContentId) ? null : x.ContentId.Trim().Trim('<', '>')
         })];
+    }
+
+    /// <exception cref="ArgumentException">There is no address, or it is not one a mail can be sent to.</exception>
+    private static string RecipientAddress(string value)
+    {
+        var address = UserMailAddresses.Normalize(value)
+                      ?? throw new ArgumentException("A mail names the user's key, or for a required category the address it goes to.", nameof(value));
+
+        if (!MailboxAddress.TryParse(address, out var mailbox) || mailbox.Address != address || !address.Contains('@'))
+            throw new ArgumentException($"'{address}' is not an address a mail can be sent to.", nameof(value));
+
+        return address;
     }
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;

@@ -1,6 +1,6 @@
 namespace Tharga.Team;
 
-/// <summary>The keys and English defaults of the text user mail carries outside a component: the unsubscribe footer and the unsubscribe page.</summary>
+/// <summary>The keys and English defaults of the text user mail carries outside a component: the unsubscribe footer, the unsubscribe page and the invitation.</summary>
 /// <remarks>Resolved through <see cref="ITextResolver"/>, which <c>Tharga.Team.Blazor</c> answers from the host's text provider, and listed among the toolkit's text keys there.</remarks>
 public static class UserMailTexts
 {
@@ -57,4 +57,16 @@ public static class UserMailTexts
 
     /// <summary>What to do instead when the link cannot be read.</summary>
     public const string PageInvalidDetail = "It may be incomplete or out of date. You can choose which mail you receive in your profile.";
+
+    /// <summary>The key of <see cref="InvitationSubject"/>.</summary>
+    public const string InvitationSubjectKey = "team.userMail.invitation.subject";
+
+    /// <summary>The subject of an invitation sent as mail to users; <c>{0}</c> is the team's name.</summary>
+    public const string InvitationSubject = "You've been invited to join {0}";
+
+    /// <summary>The key of <see cref="InvitationBody"/>.</summary>
+    public const string InvitationBodyKey = "team.userMail.invitation.body";
+
+    /// <summary>The text of an invitation sent as mail to users; <c>{0}</c> is the invited person's name, <c>{1}</c> the team's name and <c>{2}</c> the link that accepts it.</summary>
+    public const string InvitationBody = "Hi {0},\n\nYou have been invited to join the team \"{1}\".\n\nClick the link below to accept the invitation:\n{2}\n\nIf you did not expect this invitation, you can safely ignore this email.";
 }

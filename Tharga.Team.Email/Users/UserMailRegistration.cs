@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Tharga.Team.Email.Invitations;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Service.Email;
@@ -19,7 +20,9 @@ public static class UserMailRegistration
     /// <remarks>
     /// Storage comes from <c>AddThargaTeamRepository</c>, the unsubscribe route from <see cref="MapThargaMailUnsubscribe"/>, and
     /// every instance must share one persisted Data Protection key ring. A bounce handler is registered too, so mail sent
-    /// from the address of a mailbox support reads is marked bounced when the receiving server returns it.
+    /// from the address of a mailbox support reads is marked bounced when the receiving server returns it. Invitations
+    /// are sent as mail to users, recorded and in the account category, unless the host registered its own
+    /// <see cref="ITeamEmailSender"/>.
     /// </remarks>
     /// <exception cref="InvalidOperationException">A category is not acceptable, an optional category is registered without an absolute <see cref="UserMailOptions.BaseUrl"/>, or a limit is out of range.</exception>
     public static IServiceCollection AddThargaUserMail(this IServiceCollection services, Action<UserMailOptions> configure = null)
@@ -80,8 +83,31 @@ public static class UserMailRegistration
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, UserMailSender>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailBounceHandler, UserMailBounceHandler>());
+        RegisterInvitations(services);
 
         return services;
+    }
+
+    /// <summary>Sends invitations as mail to users, in place of the plain SMTP sender, unless the host registered a sender of its own.</summary>
+    /// <remarks>Whichever order the two are registered in: the plain sender registered before is replaced, and one registered after finds this one and adds nothing.</remarks>
+    private static void RegisterInvitations(IServiceCollection services)
+    {
+        var senders = services.Where(x => x.ServiceType == typeof(ITeamEmailSender)).ToArray();
+        if (senders.Any(x => x.ImplementationType != typeof(InvitationMailSender))) return;
+
+        foreach (var sender in senders) services.Remove(sender);
+
+        services.AddScoped<ITeamEmailSender>(sp => new UserMailInvitationSender(
+            new UserMailQueue(
+                sp.GetRequiredService<UserMailCategoryRegistry>(),
+                sp.GetRequiredService<IUserMailOutbox>(),
+                sp.GetRequiredService<IOptions<UserMailOptions>>(),
+                sp.GetRequiredService<TimeProvider>()),
+            sp.GetRequiredService<IUserMailOutbox>(),
+            sp.GetRequiredService<UserMailDispatcher>(),
+            sp.GetRequiredService<UserMailText>(),
+            sp.GetRequiredService<IOptions<UserMailOptions>>(),
+            sp.GetRequiredService<TimeProvider>()));
     }
 
     /// <summary>Maps the unsubscribe link's route at <see cref="UserMailOptions.UnsubscribePath"/>: GET shows a page that asks, POST unsubscribes, both without sign-in.</summary>

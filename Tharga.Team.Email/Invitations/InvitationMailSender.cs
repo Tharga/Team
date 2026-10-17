@@ -9,8 +9,9 @@ namespace Tharga.Team.Email.Invitations;
 /// Sends the invitation email through the same mail transport as everything else, after the outbound mail policy has decided where it may go.
 /// </summary>
 /// <remarks>
-/// <b>Its own sending address.</b> An invitation usually comes from <c>noreply@</c>, while support mail must
-/// come from an address replies return to — so this reads <see cref="EmailOptions"/>, never support's settings.
+/// <b>Its own sending address</b>, read from <see cref="EmailOptions"/> and never from support's settings; set it to
+/// an address a reply reaches. Once mail to users is registered, invitations go through its outbox instead and this
+/// sender is not used.
 /// <para>
 /// <b>A failed send throws.</b> The transport reports failures as results; the invite dialog tells the inviter
 /// the mail did not go out only if this throws, so the result is turned back into an exception here.

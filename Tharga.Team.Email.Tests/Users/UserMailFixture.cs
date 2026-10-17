@@ -187,6 +187,29 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         }
     }
 
+    public Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
+    {
+        if (mail.DeduplicationKey != null) throw new ArgumentException("A mail sent at once takes no deduplication key.", nameof(mail));
+
+        lock (_gate)
+        {
+            var item = new UserMailItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Mail = mail,
+                RecipientAddress = mail.RecipientUserKey == null ? mail.RecipientAddress : null,
+                Status = UserMailStatus.Queued,
+                QueuedAt = queuedAt,
+                NextAttemptAt = queuedAt,
+                ClaimedBy = claimant,
+                ClaimedUntil = queuedAt + lease,
+                Attempts = 1
+            };
+            _items.Add(item);
+            return Task.FromResult(item);
+        }
+    }
+
     public Task<UserMailItemPage> ListBatchAsync(string batchId, UserMailStatus? status, string cursor, int pageSize, CancellationToken cancellationToken = default)
     {
         lock (_gate) return Task.FromResult(Page(_items.Where(x => x.BatchId == batchId && (status == null || x.Status == status)).ToList(), cursor, pageSize));
