@@ -22,7 +22,7 @@ public class InvitationSenderCheckTests
 
     private sealed class FakeSender : ITeamEmailSender
     {
-        public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName) => Task.CompletedTask;
+        public Task SendInviteAsync(TeamInviteMail mail) => Task.CompletedTask;
     }
 
     [Fact]

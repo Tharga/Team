@@ -5,8 +5,8 @@ namespace Tharga.Team.Service.Tests;
 
 /// <summary>
 /// Oversight of other members' private keys is the <c>apikeys:oversee</c> system scope, which a host grants
-/// to whichever roles should have it (Tharga/Team#323). The <c>Developer</c> role keeps working until 4.0, and
-/// the scope only counts as a <i>system</i> grant, never as a team scope of the same name.
+/// to whichever roles should have it (Tharga/Team#323). Since 4.0 the <c>Developer</c> role grants nothing by
+/// itself, and the scope only counts as a <i>system</i> grant, never as a team scope of the same name.
 /// </summary>
 public class ApiKeyOversightScopeTests
 {
@@ -65,13 +65,13 @@ public class ApiKeyOversightScopeTests
     }
 
     [Fact]
-    public async Task DeveloperRole_StillOversees_Until4()
+    public async Task DeveloperRole_NoLongerOversees_WithoutTheScope()
     {
         var (sut, inner) = Build(DeveloperRole);
 
-        Assert.Equal(["team-wide", "someone-elses"], await Visible(sut));
-        await sut.DeleteKeyAsync(Team, "someone-elses");
-        await inner.Received(1).DeleteKeyAsync(Team, "someone-elses");
+        Assert.Equal(["team-wide"], await Visible(sut));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.DeleteKeyAsync(Team, "someone-elses"));
+        await inner.DidNotReceiveWithAnyArgs().DeleteKeyAsync(default, default);
     }
 
     [Fact]

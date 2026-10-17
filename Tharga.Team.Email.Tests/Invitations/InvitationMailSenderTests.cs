@@ -25,7 +25,7 @@ public class InvitationMailSenderTests
 
     private sealed class FakeSender : ITeamEmailSender
     {
-        public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName) => Task.CompletedTask;
+        public Task SendInviteAsync(TeamInviteMail mail) => Task.CompletedTask;
     }
 
     private sealed class CapturingLogger : ILogger<InvitationMailSender>
@@ -68,7 +68,7 @@ public class InvitationMailSenderTests
     [Fact]
     public async Task Withheld_SendingCompletes_WithoutContactingAnyServer()
     {
-        await Sender(new OutboundMailDecision(OutboundMailAction.Withhold, Customer, "x")).SendInviteAsync(Customer, "Kund", "https://example.com/i", "Acme");
+        await Sender(new OutboundMailDecision(OutboundMailAction.Withhold, Customer, "x")).SendInviteAsync(new TeamInviteMail { RecipientEmail = Customer, RecipientName = "Kund", InviteLink = "https://example.com/i", TeamKey = "acme", TeamName = "Acme" });
     }
 
     /// <summary>An address is personal data, and logs travel further than mail does.</summary>
@@ -101,7 +101,7 @@ public class InvitationMailSenderTests
     {
         var sender = new InvitationMailSender(Options.Create(new EmailOptions()), Substitute.For<IOutboundMailPolicy>());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendInviteAsync(Customer, "Kund", "https://example.com/i", "Acme"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendInviteAsync(new TeamInviteMail { RecipientEmail = Customer, RecipientName = "Kund", InviteLink = "https://example.com/i", TeamKey = "acme", TeamName = "Acme" }));
     }
 
     /// <summary>The transport reports a failure as a result; the invite dialog learns of it only if the sender throws.</summary>
@@ -112,7 +112,7 @@ public class InvitationMailSenderTests
         var policy = Substitute.For<IOutboundMailPolicy>();
         policy.Decide(Arg.Any<string>(), Arg.Any<string>()).Returns(new OutboundMailDecision(OutboundMailAction.Deliver, Customer, "x"));
 
-        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => new InvitationMailSender(Options.Create(settings), policy).SendInviteAsync(Customer, "Kund", "https://example.com/i", "Acme"));
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => new InvitationMailSender(Options.Create(settings), policy).SendInviteAsync(new TeamInviteMail { RecipientEmail = Customer, RecipientName = "Kund", InviteLink = "https://example.com/i", TeamKey = "acme", TeamName = "Acme" }));
 
         Assert.StartsWith("The invitation could not be sent", refusal.Message);
     }

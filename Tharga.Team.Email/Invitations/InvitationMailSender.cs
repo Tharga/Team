@@ -18,12 +18,12 @@ namespace Tharga.Team.Email.Invitations;
 /// </remarks>
 internal sealed class InvitationMailSender(IOptions<EmailOptions> options, IOutboundMailPolicy policy, ILogger<InvitationMailSender> logger = null, ILogger<MailClient> clientLogger = null) : ITeamEmailSender
 {
-    public async Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
+    public async Task SendInviteAsync(TeamInviteMail invite)
     {
         var settings = options.Value;
         if (string.IsNullOrWhiteSpace(settings.SmtpHost)) throw new InvalidOperationException("SMTP host is not configured.");
 
-        var mail = CreateMail(recipientEmail, recipientName, inviteLink, teamName);
+        var mail = CreateMail(invite.RecipientEmail, invite.RecipientName, invite.InviteLink, invite.TeamName);
         if (mail == null) return;
 
         var result = await new MailClient(Options.Create(ToMailOptions(settings)), clientLogger).SendAsync(mail.Value);

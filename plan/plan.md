@@ -18,12 +18,19 @@ Branch: `feature/nullable-access-level` (from `master` at 91124c2; GitHub Action
   - `TeamServiceBase.AddMemberAsync` throws `ArgumentException` before touching the store. `TeamServiceRepositoryBase.AddTeamMemberAsync` throws `InvalidOperationException` naming `<Type>.CreateTeamMember` when the override returns no level. The invite dialog's dropdown is nullable, still seeded with `User`. Three existing tests invited without a level and now name one. New tests: `Invite_WithNoLevel_IsRejected` and `CreateTeamMemberLevelGuardTests`.
 - [x] 6. UI: the member grid shows "No access level" and the change-level action works from null. `AccessLevelCompletenessCheck` is reworded (D2).
   - The grid was done in step 3. The check's warning, its type docs, `CheckMemberAccessLevels` and the registration comment now say "no access until a level is set; before 4.0 Owner, so an original owner may be among them". Suite green: Service 1243, MongoDB 190, the rest unchanged.
-- [~] 7. Removals: the `Developer` oversight fallback, the four-string `SendInviteAsync`, and, if D3, the obsolete `AddThargaPlatform` forwarding. Update the sample and tests.
-- [ ] 8. Full test suite; commit; push for testing (no PR yet).
+- [x] 7. Removals: the `Developer` oversight fallback, the four-string `SendInviteAsync`, and, if D3, the obsolete `AddThargaPlatform` forwarding. Update the sample and tests.
+  - `CanOversee` reads only the `apikeys:oversee` system scope. The tests now assert that Developer alone no longer oversees, and the owner-scope tests use the scope. The sample already maps the scope to Developer. `ITeamEmailSender` has one abstract `SendInviteAsync(TeamInviteMail)`; `InvitationMailSender`, the fakes and `TeamInviteMailTests` were updated (that file now has a one-member guard). Deleted: `ThargaPlatformOptions`, `ThargaPlatformRegistration` (Blazor), the vestigial `Tharga.Team.ThargaTeamRegistration` (core, also marked "removed in 4.0"), and `ThargaPlatformCompatibilityTests`.
+  - Not touched: `SystemApiKeyView` still gates on the `Developer` role. That's a separate gate (system keys, not private-key oversight) and not in plan 05.
+- [x] 8. Full test suite; commit; push for testing (no PR yet).
+  - Blazor 1440, Service 1243, MongoDB 190, Support 402, Email 189, Mcp 116, Entra 58, Images 11: 3649 in all, none failed or skipped.
 
 ## Notes
 
 - 2026-10-17 (user): plan confirmed. D1 throw on a level-less `CreateTeamMember`, D2 keep and reword the completeness check, D3 also remove the obsolete `AddThargaPlatform` forwarding. All as proposed.
+
+## Last session
+
+2026-10-17: all steps are done and pushed for testing. Next: the user tests in the sample (a member with no level is refused and shows "No access level"; an invite needs a level; Developer oversight comes only through the mapped scope). Then close-out: NuGet re-check, docs (*Migrating to 4.0*), version line `4.0`, plan 05 and the backlog, archive the plan, remove `plan/`, and open the PR.
 
 ## README / docs changes needed at close
 
