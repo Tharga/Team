@@ -117,16 +117,111 @@ public class UserMessageServiceTests
     }
 
     [Fact]
-    public async Task TheChoices_ListTeamsUsersRolesAndLevels()
+    public async Task TheChoices_ListTeamsRolesAndLevels()
     {
         var choices = await new UserMessageFixture().Service.GetChoicesAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(["Alpha", "Beta"], choices.Teams.Select(x => x.Name));
-        Assert.Equal(["Anna", "Bo", "Cia", "Dan", "Eva"], choices.Users.Select(x => x.Name));
-        Assert.Equal([UserMessageFixture.Alpha, UserMessageFixture.Beta], choices.Users.Single(x => x.UserKey == "anna").TeamKeys);
         Assert.Equal(["Auditor", "Editor"], choices.Roles);
         Assert.Equal([AccessLevel.Owner, AccessLevel.Administrator, AccessLevel.User, AccessLevel.Viewer], choices.AccessLevels);
         Assert.Equal(10, choices.Limits.MaxAttachmentCount);
+    }
+
+    [Fact]
+    public async Task TheChoices_AskTheDirectoryForTeamsRolesAndLevels_AndNeverForEveryMember()
+    {
+        var fixture = new UserMessageFixture();
+        var directory = Substitute.For<IUserMessageMemberDirectory>();
+        directory.GetTeamsAsync(Arg.Any<CancellationToken>()).Returns([new UserMessageTeam { Key = "t", Name = "Team" }]);
+        directory.GetRolesAndLevelsAsync(Arg.Any<CancellationToken>()).Returns(new UserMessageRolesAndLevels { Roles = ["Editor", "Auditor", "Editor"], AccessLevels = [AccessLevel.User, AccessLevel.Owner] });
+        fixture.Members = directory;
+
+        var choices = await fixture.Service.GetChoicesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["Auditor", "Editor"], choices.Roles);
+        Assert.Equal([AccessLevel.Owner, AccessLevel.User], choices.AccessLevels);
+        await directory.DidNotReceiveWithAnyArgs().GetActiveMembersOfEveryTeamAsync(default);
+        await directory.DidNotReceiveWithAnyArgs().GetActiveMembersAsync(default, default);
+    }
+
+    [Fact]
+    public async Task AUserSearch_FindsActiveMembersOfTheChosenTeams_ByNameOrAddress_EachOnce_WithTheirTeams()
+    {
+        var fixture = new UserMessageFixture();
+
+        var byName = await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = "AN", AllTeams = true }, TestContext.Current.CancellationToken);
+        var byAddress = await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = "eva@example", AllTeams = true }, TestContext.Current.CancellationToken);
+        var withinAlpha = await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = "a", TeamKeys = [UserMessageFixture.Alpha] }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["anna", "dan"], byName.Select(x => x.UserKey));
+        Assert.Equal([UserMessageFixture.Alpha, UserMessageFixture.Beta], byName.Single(x => x.UserKey == "anna").TeamKeys);
+        Assert.Equal("anna@example.org", byName.Single(x => x.UserKey == "anna").EMail);
+        Assert.Equal(["eva"], byAddress.Select(x => x.UserKey));
+        Assert.Equal(["anna", "bo", "cia"], withinAlpha.Select(x => x.UserKey));
+        Assert.All(withinAlpha, x => Assert.Equal([UserMessageFixture.Alpha], x.TeamKeys));
+    }
+
+    [Fact]
+    public async Task AUserSearch_ReturnsAtMostItsLimit()
+    {
+        var fixture = new UserMessageFixture();
+        for (var i = 0; i < 80; i++) fixture.Member(UserMessageFixture.Alpha, $"user-{i:D2}", $"Person {i:D2}", AccessLevel.User);
+
+        var defaulted = await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = "person", AllTeams = true }, TestContext.Current.CancellationToken);
+        var three = await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = "person", AllTeams = true, Limit = 3 }, TestContext.Current.CancellationToken);
+        var capped = await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = "person", AllTeams = true, Limit = 500 }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(20, defaulted.Length);
+        Assert.Equal(3, three.Length);
+        Assert.Equal(UserMessageUserSearch.MaxLimit, capped.Length);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task AUserSearch_WithNoText_FindsNobody(string text)
+    {
+        Assert.Empty(await new UserMessageFixture().Service.SearchUsersAsync(new UserMessageUserSearch { Text = text, AllTeams = true }, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AUserSearch_InNoTeam_FindsNobody_AndDoesNotAskTheDirectory()
+    {
+        var fixture = new UserMessageFixture();
+        var directory = Substitute.For<IUserMessageMemberDirectory>();
+        fixture.Members = directory;
+
+        Assert.Empty(await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = "anna" }, TestContext.Current.CancellationToken));
+        await directory.DidNotReceiveWithAnyArgs().SearchActiveMembersAsync(default, default, default, default);
+    }
+
+    [Fact]
+    public async Task AUserSearch_AsksTheDirectoryForTheTeamsAndTheLimit_AndKeepsOnlyThoseTeams()
+    {
+        var fixture = new UserMessageFixture();
+        var directory = Substitute.For<IUserMessageMemberDirectory>();
+        directory.SearchActiveMembersAsync("bo", Arg.Is<string[]>(x => x.SequenceEqual(new[] { UserMessageFixture.Alpha })), 5, Arg.Any<CancellationToken>()).Returns(
+        [
+            new UserMessageMember { TeamKey = UserMessageFixture.Alpha, UserKey = "bo", Name = "Bo" },
+            new UserMessageMember { TeamKey = "elsewhere", UserKey = "bob", Name = "Bob" }
+        ]);
+        fixture.Members = directory;
+
+        var found = await fixture.Service.SearchUsersAsync(new UserMessageUserSearch { Text = " bo ", TeamKeys = [UserMessageFixture.Alpha, UserMessageFixture.Alpha], Limit = 5 }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(["bo"], found.Select(x => x.UserKey));
+    }
+
+    [Fact]
+    public async Task OneSentMessage_NamesTheUsersItsSelectionChose()
+    {
+        var fixture = new UserMessageFixture();
+        var sent = await fixture.Service.SendAsync(UserMessageFixture.Message(new UserMessageRecipients { TeamKeys = [UserMessageFixture.Alpha], UserKeys = ["cia", "bo"] }), TestContext.Current.CancellationToken);
+
+        var message = await fixture.Service.GetSentMessageAsync(sent.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal([("cia", "Cia"), ("bo", "Bo")], message.ChosenUsers.Select(x => (x.UserKey, x.Name)));
     }
 
     [Fact]

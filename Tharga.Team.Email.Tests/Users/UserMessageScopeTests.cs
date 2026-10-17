@@ -51,7 +51,8 @@ public class UserMessageScopeTests
         Assert.Single((await service.GetSentAsync(cancellationToken: TestContext.Current.CancellationToken)).Items);
         Assert.NotNull(await service.GetSentMessageAsync(sent.Id, TestContext.Current.CancellationToken));
         Assert.Equal(5, (await service.GetRecipientsAsync(sent.Id, cancellationToken: TestContext.Current.CancellationToken)).Items.Length);
-        Assert.NotEmpty((await service.GetChoicesAsync(TestContext.Current.CancellationToken)).Users);
+        Assert.NotEmpty((await service.GetChoicesAsync(TestContext.Current.CancellationToken)).Teams);
+        Assert.NotEmpty(await service.SearchUsersAsync(new UserMessageUserSearch { Text = "anna", AllTeams = true }, TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -143,6 +144,7 @@ public class UserMessageScopeTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetSentAsync(cancellationToken: ct));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetSentMessageAsync("any", ct));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetRecipientsAsync("any", cancellationToken: ct));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.SearchUsersAsync(new UserMessageUserSearch { Text = "anna", AllTeams = true }, ct));
     }
 
     private sealed class FixedPrincipal(ClaimsPrincipal principal) : ITeamPrincipalAccessor

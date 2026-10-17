@@ -8,9 +8,13 @@ namespace Tharga.Team;
 /// </remarks>
 public interface IUserMessageService
 {
-    /// <summary>The teams, users, roles, access levels and categories a message may be written to and in, and the limits it is held to.</summary>
+    /// <summary>The teams, roles, access levels and categories a message may be written to and in, and the limits it is held to; users are found with <see cref="SearchUsersAsync"/>.</summary>
     [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
     Task<UserMessageChoices> GetChoicesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>At most <see cref="UserMessageUserSearch.Limit"/> active members of the chosen teams, or of every team, whose name or address holds the text, each once with the teams they are active in; none for empty text.</summary>
+    [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
+    Task<UserMessageCandidate[]> SearchUsersAsync(UserMessageUserSearch search, CancellationToken cancellationToken = default);
 
     /// <summary>How many users the selection reaches and how many of them turned the category off, counts only.</summary>
     /// <exception cref="ArgumentException">The selection names no team, or the category is not one staff may write in.</exception>

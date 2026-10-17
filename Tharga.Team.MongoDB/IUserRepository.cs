@@ -50,6 +50,24 @@ public interface IUserRepository<TUserEntity> : IRepository
         return [.. found];
     }
 
+    /// <summary>The users whose name or address holds <paramref name="text"/>, ignoring case, that are not disabled, as they are read; nothing for empty text.</summary>
+    /// <remarks>
+    /// A stream, so a caller filtering further stops reading when it has enough. A default interface method that reads
+    /// every user, so a host's own repository keeps compiling and answers correctly, if slowly; the built-in one asks
+    /// the database.
+    /// </remarks>
+    async IAsyncEnumerable<TUserEntity> SearchAsync(string text)
+    {
+        var wanted = text?.Trim();
+        if (string.IsNullOrEmpty(wanted)) yield break;
+
+        await foreach (var user in GetAsync())
+        {
+            if (user.DisabledAt != null) continue;
+            if (user.Name?.Contains(wanted, StringComparison.OrdinalIgnoreCase) == true || user.EMail?.Contains(wanted, StringComparison.OrdinalIgnoreCase) == true) yield return user;
+        }
+    }
+
     Task AddAsync(TUserEntity user);
     Task SetNameAsync(string userKey, string name);
 

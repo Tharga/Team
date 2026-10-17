@@ -59,19 +59,17 @@ public sealed record UserMessagePreview
     public required int LeftOut { get; init; }
 }
 
-/// <summary>What a message may be written to and in: the teams, the users, roles and access levels within them, the categories and the limits.</summary>
+/// <summary>What a message may be written to and in: the teams, the roles and access levels within them, the categories and the limits.</summary>
+/// <remarks>Users are not listed, because a product may have tens of thousands; find them with <see cref="IUserMessageService.SearchUsersAsync"/>.</remarks>
 public sealed record UserMessageChoices
 {
     /// <summary>Every team that is not deleted.</summary>
     public UserMessageTeam[] Teams { get; init; } = [];
 
-    /// <summary>Every active member of any team, once each, with the teams they are active in.</summary>
-    public UserMessageCandidate[] Users { get; init; } = [];
-
-    /// <summary>The tenant roles active members hold.</summary>
+    /// <summary>The tenant roles members hold.</summary>
     public string[] Roles { get; init; } = [];
 
-    /// <summary>The access levels active members are at.</summary>
+    /// <summary>The access levels members are at.</summary>
     public AccessLevel[] AccessLevels { get; init; } = [];
 
     /// <summary>The categories staff may write in, in registration order.</summary>
@@ -100,8 +98,30 @@ public sealed record UserMessageCandidate
     /// <summary>The user's name as the first of their memberships has it, or null.</summary>
     public string Name { get; init; }
 
-    /// <summary>The teams the user is an active member of.</summary>
+    /// <summary>The address on the user's record, or null.</summary>
+    public string EMail { get; init; }
+
+    /// <summary>The teams the user is an active member of, among those searched.</summary>
     public string[] TeamKeys { get; init; } = [];
+}
+
+/// <summary>A search for users a message may be written to, as handed to <see cref="IUserMessageService.SearchUsersAsync"/>.</summary>
+public sealed record UserMessageUserSearch
+{
+    /// <summary>The most users a search returns.</summary>
+    public const int MaxLimit = 50;
+
+    /// <summary>What the name or the address holds, ignoring case; empty finds nobody.</summary>
+    public string Text { get; init; }
+
+    /// <summary>The teams to search among; ignored when <see cref="AllTeams"/> is set, and none finds nobody.</summary>
+    public string[] TeamKeys { get; init; } = [];
+
+    /// <summary>Whether to search among every team.</summary>
+    public bool AllTeams { get; init; }
+
+    /// <summary>The most users returned, between 1 and <see cref="MaxLimit"/>; default 20.</summary>
+    public int Limit { get; init; } = 20;
 }
 
 /// <summary>The limits a message is held to.</summary>
@@ -152,6 +172,9 @@ public sealed record SentUserMessage
 
     /// <summary>The mails given up, each with why; filled only when one message is read.</summary>
     public UserMessageFailure[] Failures { get; init; } = [];
+
+    /// <summary>The users the selection named by key, with their names as their records have them now; filled only when one message is read.</summary>
+    public UserMessageCandidate[] ChosenUsers { get; init; } = [];
 }
 
 /// <summary>Why the mail to one recipient of a message was given up.</summary>

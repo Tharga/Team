@@ -27,7 +27,8 @@ public class UserMessageLogViewRenderTests : BunitContext
         SentByName = "Sam Staff",
         SentAt = SentAt,
         RecipientCount = 3,
-        Outcomes = outcomes ?? new UserMailOutcomes { Sent = 3 }
+        Outcomes = outcomes ?? new UserMailOutcomes { Sent = 3 },
+        ChosenUsers = [new UserMessageCandidate { UserKey = "anna", Name = "Anna" }]
     };
 
     private IRenderedComponent<UserMessageLogView> Render(params SentUserMessagePage[] pages)
@@ -35,7 +36,6 @@ public class UserMessageLogViewRenderTests : BunitContext
         _messages.Setup(x => x.GetChoicesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(new UserMessageChoices
         {
             Teams = [new UserMessageTeam { Key = "alpha", Name = "Alpha" }],
-            Users = [new UserMessageCandidate { UserKey = "anna", Name = "Anna", TeamKeys = ["alpha"] }],
             Categories = [News],
             Limits = new UserMessageLimits { MaxAttachmentCount = 1, MaxAttachmentBytes = 1, MaxBodyLength = 1 }
         });

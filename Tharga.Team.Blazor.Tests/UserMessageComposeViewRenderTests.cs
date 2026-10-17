@@ -19,7 +19,6 @@ public class UserMessageComposeViewRenderTests : BunitContext
     private static UserMessageChoices Choices() => new()
     {
         Teams = [new UserMessageTeam { Key = "alpha", Name = "Alpha" }, new UserMessageTeam { Key = "beta", Name = "Beta" }],
-        Users = [new UserMessageCandidate { UserKey = "anna", Name = "Anna", TeamKeys = ["alpha"] }, new UserMessageCandidate { UserKey = "dan", Name = "Dan", TeamKeys = ["beta"] }],
         Roles = ["Editor"],
         AccessLevels = [AccessLevel.Owner, AccessLevel.User],
         Categories = [UserMailCategories.Service, News],
@@ -59,7 +58,8 @@ public class UserMessageComposeViewRenderTests : BunitContext
 
     private static async Task WriteAsync(IRenderedComponent<UserMessageComposeView> view)
     {
-        await view.InvokeAsync(() => view.FindComponent<RadzenTextBox>().Instance.ValueChanged.InvokeAsync("Planned maintenance"));
+        var subject = view.FindComponents<RadzenTextBox>().Single(x => x.Instance.Attributes?.ContainsKey("data-subject") == true);
+        await view.InvokeAsync(() => subject.Instance.ValueChanged.InvokeAsync("Planned maintenance"));
         await view.InvokeAsync(() => view.FindComponent<RichTextEditor>().Instance.ValueChanged.InvokeAsync("<p>Sunday</p>"));
     }
 
@@ -134,15 +134,115 @@ public class UserMessageComposeViewRenderTests : BunitContext
         Assert.Contains("2 of them have turned off News and will not receive it.", view.Find("[data-left-out]").TextContent);
     }
 
+    private void Matches(params UserMessageCandidate[] found)
+        => _messages.Setup(x => x.SearchUsersAsync(It.IsAny<UserMessageUserSearch>(), It.IsAny<CancellationToken>())).ReturnsAsync(found);
+
+    private static readonly UserMessageCandidate Dan = new() { UserKey = "dan", Name = "Dan", EMail = "dan@example.org", TeamKeys = ["beta"] };
+
     [Fact]
-    public async Task UsersOffered_AreThoseInTheChosenTeams()
+    public void NoUserIsListed_UntilOneIsSearchedFor()
     {
         var view = Render();
 
+        Assert.Empty(view.FindAll("[data-user-match]"));
+        _messages.Verify(x => x.SearchUsersAsync(It.IsAny<UserMessageUserSearch>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Typing_SearchesTheChosenTeams_AndShowsTheMatchesWithTheirAddress()
+    {
+        Matches(Dan);
+        var view = Render();
         await ChooseTeamsAsync(view, "beta");
 
-        var users = view.FindComponents<RadzenDropDown<IEnumerable<string>>>().Last();
-        Assert.Equal(["Dan"], ((IEnumerable<object>)users.Instance.Data).Select(x => x.GetType().GetProperty("Text")!.GetValue(x)));
+        view.Find("input[data-user-search]").Input("da");
+
+        _messages.Verify(x => x.SearchUsersAsync(It.Is<UserMessageUserSearch>(s => s.Text == "da" && !s.AllTeams && s.TeamKeys.SequenceEqual(new[] { "beta" }) && s.Limit == 20), It.IsAny<CancellationToken>()), Times.Once);
+        Assert.Equal("Dan (dan@example.org)", view.Find("[data-user-match='dan']").TextContent.Trim());
+    }
+
+    [Fact]
+    public async Task Typing_WithAllTeams_SearchesEveryTeam()
+    {
+        Matches(Dan);
+        var view = Render();
+        await SwitchAsync(view, 0, true);
+
+        view.Find("input[data-user-search]").Input("da");
+
+        _messages.Verify(x => x.SearchUsersAsync(It.Is<UserMessageUserSearch>(s => s.AllTeams && s.TeamKeys.Length == 0), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void Typing_BeforeAnyTeamIsChosen_SearchesNothing()
+    {
+        Matches(Dan);
+        var view = Render();
+
+        view.Find("input[data-user-search]").Input("da");
+
+        _messages.Verify(x => x.SearchUsersAsync(It.IsAny<UserMessageUserSearch>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(view.FindAll("[data-no-matches]"));
+    }
+
+    [Fact]
+    public async Task ASearchNobodyMatches_SaysSo()
+    {
+        Matches();
+        var view = Render();
+        await ChooseTeamsAsync(view, "beta");
+
+        view.Find("input[data-user-search]").Input("zz");
+
+        Assert.Contains(UserMessageComposeViewText.NoUserMatches.Default, view.Find("[data-no-matches]").TextContent);
+    }
+
+    [Fact]
+    public async Task ChoosingAMatch_AddsThemToTheMessage_ClearsTheSearch_AndCountsAgain()
+    {
+        Matches(Dan);
+        var view = Render();
+        await ChooseTeamsAsync(view, "beta");
+        view.Find("input[data-user-search]").Input("da");
+
+        await view.InvokeAsync(() => view.Find("[data-user-match='dan']").Click());
+
+        Assert.EndsWith("Dan", view.Find("[data-chosen-user='dan']").TextContent.Trim());
+        Assert.Equal("Remove Dan", view.Find("[data-chosen-user='dan']").GetAttribute("aria-label"));
+        Assert.Empty(view.FindAll("[data-user-match]"));
+        _messages.Verify(x => x.PreviewAsync(It.Is<UserMessageRecipients>(r => r.UserKeys.SequenceEqual(new[] { "dan" })), "service", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RemovingAChosenUser_TakesThemOffTheMessage()
+    {
+        Matches(Dan);
+        var view = Render();
+        await ChooseTeamsAsync(view, "beta");
+        view.Find("input[data-user-search]").Input("da");
+        await view.InvokeAsync(() => view.Find("[data-user-match='dan']").Click());
+
+        await view.InvokeAsync(() => view.Find("[data-chosen-user='dan']").Click());
+
+        Assert.Empty(view.FindAll("[data-chosen-user]"));
+        _messages.Verify(x => x.PreviewAsync(It.Is<UserMessageRecipients>(r => r.UserKeys.Length == 0 && r.TeamKeys.SequenceEqual(new[] { "beta" })), "service", It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ChosenUsers_AreSentWithTheMessage()
+    {
+        Matches(Dan);
+        var view = Render();
+        var dialogs = Render<RadzenDialog>();
+        await ChooseTeamsAsync(view, "beta");
+        view.Find("input[data-user-search]").Input("da");
+        await view.InvokeAsync(() => view.Find("[data-user-match='dan']").Click());
+        await WriteAsync(view);
+
+        await view.InvokeAsync(() => SendButton(view).Click());
+        await dialogs.InvokeAsync(() => dialogs.FindAll("button").First(b => b.TextContent.Trim() == "Send").Click());
+
+        _messages.Verify(x => x.SendAsync(It.Is<UserMessage>(m => m.Recipients.UserKeys.SequenceEqual(new[] { "dan" }) && !m.Recipients.EveryMember), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -150,10 +250,10 @@ public class UserMessageComposeViewRenderTests : BunitContext
     {
         var view = Render();
 
-        Assert.NotEmpty(view.FindAll("[data-users]"));
+        Assert.NotEmpty(view.FindAll("[data-user-search]"));
         await SwitchAsync(view, 1, true);
 
-        Assert.Empty(view.FindAll("[data-users]"));
+        Assert.Empty(view.FindAll("[data-user-search]"));
         Assert.Empty(view.FindAll("[data-roles]"));
     }
 

@@ -68,7 +68,7 @@
     /// <summary>The message as the log listed it; its details are read when this is first shown.</summary>
     [Parameter, EditorRequired] public SentUserMessage Message { get; set; }
 
-    /// <summary>The teams and roles a message could be written to, for naming them.</summary>
+    /// <summary>The teams a message could be written within, for naming them.</summary>
     [Parameter] public UserMessageChoices Choices { get; set; }
 
     /// <summary>The log's resolved strings.</summary>
@@ -192,7 +192,7 @@
         => Choices?.Teams.FirstOrDefault(x => x.Key == key) is { Name: { Length: > 0 } name } ? name : key;
 
     private string UserName(string key)
-        => Choices?.Users.FirstOrDefault(x => x.UserKey == key) is { Name: { Length: > 0 } name } ? name : key;
+        => (Shown.ChosenUsers ?? []).FirstOrDefault(x => x.UserKey == key) is { Name: { Length: > 0 } name } ? name : key;
 
     private RenderFragment Time(DateTime value)
         => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));

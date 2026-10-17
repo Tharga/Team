@@ -23,6 +23,23 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         return _collection.GetAsync(x => x.DeletedAt == null && x.Members.Any(y => y.Key == userKey && y.State == MembershipState.Member));
     }
 
+    public async Task<TTeamEntity[]> GetTeamsByUsersAsync(IReadOnlyCollection<string> userKeys)
+    {
+        string[] keys = [.. (userKeys ?? []).Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal)];
+        if (keys.Length == 0) return [];
+
+        return await _collection.GetAsync(MembersOf(keys)).ToArrayAsync();
+    }
+
+    /// <summary>The live teams with an accepted membership of any of these users.</summary>
+    internal static FilterDefinition<TTeamEntity> MembersOf(string[] userKeys)
+    {
+        var team = Builders<TTeamEntity>.Filter;
+        var member = Builders<TMember>.Filter;
+
+        return team.Eq(x => x.DeletedAt, null) & team.ElemMatch(x => x.Members, member.In(x => x.Key, userKeys) & member.Eq(x => x.State, MembershipState.Member));
+    }
+
     /// <summary>
     /// A live team by key. Returns null for a soft-deleted one, which is what makes a deleted team stop
     /// resolving and stop granting access everywhere at once.

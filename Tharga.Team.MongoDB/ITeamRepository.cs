@@ -7,6 +7,21 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     where TMember : TeamMemberBase
 {
     IAsyncEnumerable<TTeamEntity> GetTeamsByUserAsync(string userKey);
+
+    /// <summary>The live teams any of these users has accepted membership of, each once.</summary>
+    /// <remarks>A default interface method that asks per user, so a host's own repository keeps compiling; the built-in one asks the database once.</remarks>
+    async Task<TTeamEntity[]> GetTeamsByUsersAsync(IReadOnlyCollection<string> userKeys)
+    {
+        var found = new Dictionary<string, TTeamEntity>(StringComparer.Ordinal);
+
+        foreach (var userKey in (userKeys ?? []).Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal))
+        {
+            await foreach (var team in GetTeamsByUserAsync(userKey)) found.TryAdd(team.Key, team);
+        }
+
+        return [.. found.Values];
+    }
+
     Task<TTeamEntity> GetAsync(string teamKey);
     Task AddAsync(TTeamEntity teamEntity);
     Task DeleteAsync(string teamKey);

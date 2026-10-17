@@ -24,7 +24,7 @@ else
         <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
             <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[UserMessageComposeViewText.Teams]</RadzenText>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                <RadzenSwitch Value="@_allTeams" Change="@(value => ChangeAsync(() => _allTeams = value))" Disabled="@_busy"
+                <RadzenSwitch Value="@_allTeams" Change="@(value => ChangeTeamsAsync(() => _allTeams = value))" Disabled="@_busy"
                               aria-label="@_text[UserMessageComposeViewText.AllTeams]" data-all-teams />
                 <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMessageComposeViewText.AllTeams]</RadzenText>
             </RadzenStack>
@@ -32,7 +32,7 @@ else
             {
                 <RadzenDropDown TValue="IEnumerable<string>" Data="@_teamOptions" TextProperty="@nameof(Choice<string>.Text)" ValueProperty="@nameof(Choice<string>.Value)"
                                 Multiple="true" Chips="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                                Value="@_teamKeys" ValueChanged="@(value => ChangeAsync(() => _teamKeys = [.. value ?? []]))" Disabled="@_busy"
+                                Value="@_teamKeys" ValueChanged="@(value => ChangeTeamsAsync(() => _teamKeys = [.. value ?? []]))" Disabled="@_busy"
                                 Placeholder="@_text[UserMessageComposeViewText.ChooseTeams]" aria-label="@_text[UserMessageComposeViewText.Teams]"
                                 Style="width: 100%;" data-teams />
             }
@@ -63,11 +63,34 @@ else
                 }
 
                 <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMessageComposeViewText.Users]</RadzenText>
-                <RadzenDropDown TValue="IEnumerable<string>" Data="@UsersInScope()" TextProperty="@nameof(Choice<string>.Text)" ValueProperty="@nameof(Choice<string>.Value)"
-                                Multiple="true" Chips="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                                Value="@_userKeys" ValueChanged="@(value => ChangeAsync(() => _userKeys = [.. value ?? []]))" Disabled="@_busy"
-                                Placeholder="@_text[UserMessageComposeViewText.ChooseUsers]" aria-label="@_text[UserMessageComposeViewText.Users]"
-                                Style="width: 100%;" data-users />
+                @if (_chosenUsers.Count > 0)
+                {
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Wrap="FlexWrap.Wrap" data-chosen-users>
+                        @foreach (var user in _chosenUsers)
+                        {
+                            <RadzenButton @key="user.UserKey" Text="@NameOf(user)" Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                          Disabled="@_busy" Click="@(() => RemoveUserAsync(user.UserKey))"
+                                          aria-label="@_text.Format(UserMessageComposeViewText.RemoveUser, NameOf(user))" data-chosen-user="@user.UserKey" />
+                        }
+                    </RadzenStack>
+                }
+                <RadzenTextBox Value="@_userSearch" @oninput="@(e => SearchUsersAsync(e.Value?.ToString()))" Disabled="@_busy"
+                               Placeholder="@_text[UserMessageComposeViewText.SearchUsers]" aria-label="@_text[UserMessageComposeViewText.Users]"
+                               Style="width: 100%;" data-user-search />
+                @if (_matches.Length > 0)
+                {
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" AlignItems="AlignItems.Start" data-user-matches>
+                        @foreach (var match in _matches)
+                        {
+                            <RadzenButton @key="match.UserKey" Text="@MatchText(match)" ButtonStyle="ButtonStyle.Base" Variant="Variant.Text" Size="ButtonSize.Small"
+                                          Disabled="@(_busy || IsChosen(match.UserKey))" Click="@(() => ChooseUserAsync(match))" data-user-match="@match.UserKey" />
+                        }
+                    </RadzenStack>
+                }
+                else if (_searched)
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-no-matches>@_text[UserMessageComposeViewText.NoUserMatches]</RadzenText>
+                }
             }
         </RadzenStack>
 
@@ -114,6 +137,9 @@ else
     /// <summary>Raised with the message as the log records it once it is queued, so a host can refresh its log.</summary>
     [Parameter] public EventCallback<SentUserMessage> MessageSent { get; set; }
 
+    /// <summary>The most users one search shows, at most <see cref="UserMessageUserSearch.MaxLimit"/>.</summary>
+    [Parameter] public int UserSearchLimit { get; set; } = 20;
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
@@ -132,7 +158,11 @@ else
     private bool _everyone;
     private AccessLevel[] _levels = [];
     private string[] _roles = [];
-    private string[] _userKeys = [];
+    private List<UserMessageCandidate> _chosenUsers = [];
+    private string _userSearch;
+    private UserMessageCandidate[] _matches = [];
+    private bool _searched;
+    private int _searchVersion;
     private string _category;
     private string _subject;
     private string _bodyHtml;
@@ -184,10 +214,13 @@ else
     private string CategoryName(string key)
         => _choices?.Categories.FirstOrDefault(x => x.Key == key) is { } category ? _text[new TextKey(category.NameKey, category.Name)] : key;
 
-    private IEnumerable<Choice<string>> UsersInScope()
-        => (_choices?.Users ?? [])
-            .Where(x => _allTeams || x.TeamKeys.Any(_teamKeys.Contains))
-            .Select(x => new Choice<string>(x.UserKey, string.IsNullOrWhiteSpace(x.Name) ? x.UserKey : x.Name));
+    private static string NameOf(UserMessageCandidate user)
+        => !string.IsNullOrWhiteSpace(user.Name) ? user.Name : !string.IsNullOrWhiteSpace(user.EMail) ? user.EMail : user.UserKey;
+
+    private static string MatchText(UserMessageCandidate user)
+        => !string.IsNullOrWhiteSpace(user.Name) && !string.IsNullOrWhiteSpace(user.EMail) ? $"{user.Name} ({user.EMail})" : NameOf(user);
+
+    private bool IsChosen(string userKey) => _chosenUsers.Any(x => x.UserKey == userKey);
 
     private UserMessageRecipients Selection() => new()
     {
@@ -196,12 +229,64 @@ else
         EveryMember = _everyone,
         AccessLevels = _everyone ? [] : _levels,
         Roles = _everyone ? [] : _roles,
-        UserKeys = _everyone ? [] : _userKeys
+        UserKeys = _everyone ? [] : [.. _chosenUsers.Select(x => x.UserKey)]
     };
 
     private async Task ChangeAsync(Action change)
     {
         change();
+        await RefreshPreviewAsync();
+    }
+
+    private async Task ChangeTeamsAsync(Action change)
+    {
+        change();
+        await SearchUsersAsync(_userSearch);
+        await RefreshPreviewAsync();
+    }
+
+    /// <remarks>Each keystroke asks again; an answer to an earlier text is dropped when it arrives, so the matches always belong to the text in the box.</remarks>
+    private async Task SearchUsersAsync(string text)
+    {
+        _userSearch = text;
+        var version = ++_searchVersion;
+
+        if (string.IsNullOrWhiteSpace(text) || (!_allTeams && _teamKeys.Length == 0))
+        {
+            _matches = [];
+            _searched = false;
+            return;
+        }
+
+        try
+        {
+            var found = await Messages.SearchUsersAsync(new UserMessageUserSearch { Text = text.Trim(), AllTeams = _allTeams, TeamKeys = _allTeams ? [] : _teamKeys, Limit = UserSearchLimit });
+            if (version != _searchVersion) return;
+
+            _matches = found ?? [];
+            _searched = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+    }
+
+    private async Task ChooseUserAsync(UserMessageCandidate user)
+    {
+        if (!IsChosen(user.UserKey)) _chosenUsers.Add(user);
+
+        _searchVersion++;
+        _userSearch = null;
+        _matches = [];
+        _searched = false;
+
+        await RefreshPreviewAsync();
+    }
+
+    private async Task RemoveUserAsync(string userKey)
+    {
+        _chosenUsers.RemoveAll(x => x.UserKey == userKey);
         await RefreshPreviewAsync();
     }
 

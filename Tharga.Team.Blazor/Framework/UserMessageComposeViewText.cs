@@ -36,8 +36,14 @@ public static class UserMessageComposeViewText
     /// <summary>Names the choice of specific users.</summary>
     public static readonly TextKey Users = new("team.userMessage.compose.users", "Specific users");
 
-    /// <summary>The placeholder of the user picker.</summary>
-    public static readonly TextKey ChooseUsers = new("team.userMessage.compose.chooseUsers", "Choose users");
+    /// <summary>The placeholder of the box that searches for users.</summary>
+    public static readonly TextKey SearchUsers = new("team.userMessage.compose.searchUsers", "Search by name or address");
+
+    /// <summary>When no user in the chosen teams matches the search.</summary>
+    public static readonly TextKey NoUserMatches = new("team.userMessage.compose.noUserMatches", "No user matches.");
+
+    /// <summary>The label of the button that takes a chosen user off the message; <c>{0}</c> is their name.</summary>
+    public static readonly TextKey RemoveUser = new("team.userMessage.compose.removeUser", "Remove {0}");
 
     /// <summary>Names the category picker.</summary>
     public static readonly TextKey Category = new("team.userMessage.compose.category", "Category");
@@ -81,7 +87,7 @@ public static class UserMessageComposeViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        NotPermitted, Explanation, Teams, AllTeams, ChooseTeams, Who, Everyone, AccessLevels, Roles, ChooseRoles, Users, ChooseUsers,
+        NotPermitted, Explanation, Teams, AllTeams, ChooseTeams, Who, Everyone, AccessLevels, Roles, ChooseRoles, Users, SearchUsers, NoUserMatches, RemoveUser,
         Category, Subject, Body, NoTeams, Reaches, LeftOut, Send, ConfirmTitle, ConfirmBody, ConfirmSend, ConfirmCancel, Sent, SendFailed
     ];
 }

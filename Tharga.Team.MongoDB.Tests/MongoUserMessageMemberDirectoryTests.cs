@@ -111,6 +111,157 @@ public class MongoUserMessageMemberDirectoryTests
         await _users.Received(1).GetByKeysAsync(Arg.Any<IReadOnlyCollection<string>>());
     }
 
+    private void Found(string text, params UserEntity[] users) => _users.SearchAsync(text).Returns(_ => users.ToAsyncEnumerable());
+
+    private void TeamsOfUsers(params TeamEntity[] teams)
+        => _teams.GetTeamsByUsersAsync(Arg.Any<IReadOnlyCollection<string>>())
+            .Returns(x => teams.Where(t => (t.Members ?? []).Any(m => ((IReadOnlyCollection<string>)x[0]).Contains(m.Key))).ToArray());
+
+    private static UserEntity Person(string key, string name, string email = null, bool disabled = false)
+        => new() { Key = key, Identity = $"sub-{key}", Name = name, EMail = email, DisabledAt = disabled ? Earlier : null };
+
+    [Fact]
+    public async Task ASearch_ReadsTheMatchingUsersFirst_ThenOnlyTheirTeams_AndReturnsTheirActiveMemberships_WithTheAddress()
+    {
+        Found("ann", Person("u-1", "Anna", " anna@example.org "), Person("u-2", "Annika"));
+        TeamsOfUsers(Team("acme", Membership("u-1"), Membership("u-9")), Team("beta", Membership("u-1", AccessLevel.Owner)));
+
+        var found = await Directory.SearchActiveMembersAsync("ann", null, 20, TestContext.Current.CancellationToken);
+
+        Assert.Equal([("acme", "u-1"), ("beta", "u-1")], found.Select(x => (x.TeamKey, x.UserKey)));
+        Assert.All(found, x => Assert.Equal("anna@example.org", x.EMail));
+        Assert.Equal("u-1 in team", found[0].Name);
+        await _teams.Received(1).GetTeamsByUsersAsync(Arg.Is<IReadOnlyCollection<string>>(x => x.Order().SequenceEqual(new[] { "u-1", "u-2" })));
+        _teams.DidNotReceive().GetAllTeamsAsync();
+        await _users.DidNotReceiveWithAnyArgs().GetByKeysAsync(default);
+    }
+
+    [Fact]
+    public async Task ASearch_KeepsOnlyTheTeamsAsked()
+    {
+        Found("ann", Person("u-1", "Anna"), Person("u-2", "Annika"));
+        TeamsOfUsers(Team("acme", Membership("u-1")), Team("beta", Membership("u-1"), Membership("u-2")));
+
+        var found = await Directory.SearchActiveMembersAsync("ann", ["acme"], 20, TestContext.Current.CancellationToken);
+
+        Assert.Equal([("acme", "u-1")], found.Select(x => (x.TeamKey, x.UserKey)));
+    }
+
+    [Fact]
+    public async Task ASearch_LeavesOutDisabledUsers_AndMembershipsNotAcceptedOrSuspended_OrOfDeletedTeams()
+    {
+        Found("a", Person("u-1", "Anna", disabled: true), Person("u-2", "Alva"), Person("u-3", "Ada"), Person("u-4", "Asa"));
+        TeamsOfUsers(
+            Team("acme", Membership("u-1"), Membership("u-2", state: MembershipState.Invited), Membership("u-3") with { SuspendedAt = Earlier }),
+            Team("gone", Membership("u-4")) with { DeletedAt = Earlier });
+
+        Assert.Empty(await Directory.SearchActiveMembersAsync("a", null, 20, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ASearch_StopsReadingUsers_OnceItHasEnough()
+    {
+        var read = 0;
+        _users.SearchAsync("person").Returns(_ => Counted(Enumerable.Range(0, 500).Select(i => Person($"u-{i:D3}", $"Person {i}")), () => read++));
+        _teams.GetTeamsByUsersAsync(Arg.Any<IReadOnlyCollection<string>>())
+            .Returns(x => [Team("acme", [.. ((IReadOnlyCollection<string>)x[0]).Select(k => Membership(k))])]);
+
+        var found = await Directory.SearchActiveMembersAsync("person", null, 3, TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, found.Select(x => x.UserKey).Distinct().Count());
+        Assert.True(read <= MongoUserMessageMemberDirectory<UserEntity, TeamEntity, Member>.SearchChunkSize, $"{read} users were read for three.");
+        await _teams.Received(1).GetTeamsByUsersAsync(Arg.Any<IReadOnlyCollection<string>>());
+    }
+
+    [Fact]
+    public async Task ASearch_GivesUp_AfterTheMostUsersItReads()
+    {
+        var read = 0;
+        _users.SearchAsync("person").Returns(_ => Counted(Enumerable.Range(0, 5000).Select(i => Person($"u-{i:D4}", $"Person {i}")), () => read++));
+        _teams.GetTeamsByUsersAsync(Arg.Any<IReadOnlyCollection<string>>()).Returns([]);
+
+        var found = await Directory.SearchActiveMembersAsync("person", ["acme"], 20, TestContext.Current.CancellationToken);
+
+        Assert.Empty(found);
+        Assert.Equal(MongoUserMessageMemberDirectory<UserEntity, TeamEntity, Member>.MaxUsersScanned, read);
+    }
+
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(" ", null)]
+    [InlineData("ann", new string[0])]
+    public async Task ASearch_ForNothing_OrInNoTeam_ReadsNothing(string text, string[] teamKeys)
+    {
+        Assert.Empty(await Directory.SearchActiveMembersAsync(text, teamKeys, 20, TestContext.Current.CancellationToken));
+        _users.DidNotReceiveWithAnyArgs().SearchAsync(default);
+    }
+
+    [Fact]
+    public async Task TheRolesAndLevels_AreReadFromTheTeamsAlone()
+    {
+        Teams(
+            Team("acme", Membership("u-1", AccessLevel.Owner, MembershipState.Member, "Editor"), Membership("u-2", AccessLevel.Viewer, MembershipState.Invited, "Ghost")),
+            Team("beta", Membership("u-3", AccessLevel.User, MembershipState.Member, "Auditor", "Editor")),
+            Team("gone", Membership("u-4", AccessLevel.Administrator, MembershipState.Member, "Old")) with { DeletedAt = Earlier });
+
+        var held = await Directory.GetRolesAndLevelsAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["Auditor", "Editor"], held.Roles);
+        Assert.Equal([AccessLevel.Owner, AccessLevel.User], held.AccessLevels);
+        await _users.DidNotReceiveWithAnyArgs().GetByKeysAsync(default);
+    }
+
+    [Fact]
+    public async Task AHostRepository_SearchesUsersByNameOrAddress_IgnoringCase_AndLeavesOutTheDisabled()
+    {
+        var repository = Substitute.For<IUserRepository<UserEntity>>();
+        repository.GetAsync().Returns(_ => new[]
+        {
+            Person("u-1", "Anna Andersson"),
+            Person("u-2", "Bo", "BO.ANNERSTEN@example.org"),
+            Person("u-3", "Annika", disabled: true),
+            Person("u-4", "Cia")
+        }.ToAsyncEnumerable());
+
+        var found = await ((IUserRepository<UserEntity>)new KeyOnlyRepository(repository)).SearchAsync(" ann ").ToArrayAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(["u-1", "u-2"], found.Select(x => x.Key));
+        Assert.Empty(await ((IUserRepository<UserEntity>)new KeyOnlyRepository(repository)).SearchAsync(" ").ToArrayAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void TheBuiltInRepository_SearchesNameAndAddress_WithAnEscapedCaseInsensitivePattern()
+    {
+        var rendered = UserRepository<UserEntity>.SearchFilter("a.b+c").Render(new global::MongoDB.Driver.RenderArgs<UserEntity>(
+            global::MongoDB.Bson.Serialization.BsonSerializer.LookupSerializer<UserEntity>(), global::MongoDB.Bson.Serialization.BsonSerializer.SerializerRegistry));
+
+        var parts = rendered["$or"].AsBsonArray.Select(x => x.AsBsonDocument).ToArray();
+        var expected = new global::MongoDB.Bson.BsonRegularExpression(@"a\.b\+c", "i");
+        Assert.Equal(expected, parts[0]["Name"].AsBsonRegularExpression);
+        Assert.Equal(expected, parts[1]["EMail"].AsBsonRegularExpression);
+    }
+
+    [Fact]
+    public void TheBuiltInRepository_FindsTheLiveTeamsOfManyUsers_InOneFilter()
+    {
+        var rendered = TeamRepository<TeamEntity, Member>.MembersOf(["u-1", "u-2"]).Render(new global::MongoDB.Driver.RenderArgs<TeamEntity>(
+            global::MongoDB.Bson.Serialization.BsonSerializer.LookupSerializer<TeamEntity>(), global::MongoDB.Bson.Serialization.BsonSerializer.SerializerRegistry)).ToString();
+
+        Assert.Contains("\"DeletedAt\" : null", rendered);
+        Assert.Contains("$elemMatch", rendered);
+        Assert.Contains("\"Key\" : { \"$in\" : [\"u-1\", \"u-2\"] }", rendered);
+    }
+
+    private static async IAsyncEnumerable<UserEntity> Counted(IEnumerable<UserEntity> users, Action onRead)
+    {
+        foreach (var user in users)
+        {
+            onRead();
+            yield return user;
+            await Task.Yield();
+        }
+    }
+
     [Fact]
     public async Task AHostRepository_FindsUsersByKey_OneAtATime()
     {

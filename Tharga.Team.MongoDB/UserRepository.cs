@@ -62,6 +62,26 @@ internal class UserRepository<TUserEntity> : IUserRepository<TUserEntity>
         return await _collection.GetAsync(filter).ToArrayAsync();
     }
 
+    /// <remarks>An escaped, case-insensitive pattern on the name and the address, read as a stream so the caller stops when it has enough; a disabled user is left out as it is read.</remarks>
+    public virtual async IAsyncEnumerable<TUserEntity> SearchAsync(string text)
+    {
+        var wanted = text?.Trim();
+        if (string.IsNullOrEmpty(wanted)) yield break;
+
+        await foreach (var user in _collection.GetAsync(SearchFilter(wanted)))
+        {
+            if (user.DisabledAt == null) yield return user;
+        }
+    }
+
+    internal static FilterDefinition<TUserEntity> SearchFilter(string text)
+    {
+        var pattern = new BsonRegularExpression(Regex.Escape(text), "i");
+        var builder = new FilterDefinitionBuilder<TUserEntity>();
+
+        return builder.Or(builder.Regex(x => x.Name, pattern), builder.Regex(x => x.EMail, pattern));
+    }
+
     internal static BsonRegularExpression EMailPattern(string email)
         => new($@"^\s*{Regex.Escape(email)}\s*$", "i");
 

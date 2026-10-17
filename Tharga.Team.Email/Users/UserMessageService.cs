@@ -31,28 +31,45 @@ internal sealed class UserMessageService(
 {
     private const int MaxPageSize = 100;
 
+    /// <remarks>Reads the teams and the roles and levels their members hold, never the users: a product with tens of thousands of them is searched instead.</remarks>
     public async Task<UserMessageChoices> GetChoicesAsync(CancellationToken cancellationToken = default)
     {
         var teams = await members.GetTeamsAsync(cancellationToken) ?? [];
-        var memberships = await members.GetActiveMembersOfEveryTeamAsync(cancellationToken) ?? [];
+        var held = await members.GetRolesAndLevelsAsync(cancellationToken) ?? new UserMessageRolesAndLevels();
 
         return new UserMessageChoices
         {
             Teams = [.. teams.OrderBy(x => x.Name ?? x.Key, StringComparer.CurrentCultureIgnoreCase)],
-            Users = [.. memberships
-                .GroupBy(x => x.UserKey, StringComparer.Ordinal)
-                .Select(x => new UserMessageCandidate
-                {
-                    UserKey = x.Key,
-                    Name = x.Select(y => y.Name).FirstOrDefault(y => !string.IsNullOrWhiteSpace(y)),
-                    TeamKeys = [.. x.Select(y => y.TeamKey).Distinct(StringComparer.Ordinal)]
-                })
-                .OrderBy(x => x.Name ?? x.UserKey, StringComparer.CurrentCultureIgnoreCase)],
-            Roles = [.. memberships.SelectMany(x => x.Roles ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
-            AccessLevels = [.. memberships.Select(x => x.AccessLevel).Distinct().Order()],
+            Roles = [.. (held.Roles ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
+            AccessLevels = [.. (held.AccessLevels ?? []).Distinct().Order()],
             Categories = [.. StaffCategories()],
             Limits = Limits()
         };
+    }
+
+    public async Task<UserMessageCandidate[]> SearchUsersAsync(UserMessageUserSearch search, CancellationToken cancellationToken = default)
+    {
+        var text = search?.Text?.Trim();
+        if (string.IsNullOrEmpty(text)) return [];
+
+        string[] teams = search.AllTeams ? null : [.. (search.TeamKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.Ordinal)];
+        if (teams is { Length: 0 }) return [];
+
+        var limit = Math.Clamp(search.Limit, 1, UserMessageUserSearch.MaxLimit);
+        var found = await members.SearchActiveMembersAsync(text, teams, limit, cancellationToken) ?? [];
+
+        return [.. found
+            .Where(x => x != null && !string.IsNullOrWhiteSpace(x.UserKey) && (teams == null || teams.Contains(x.TeamKey, StringComparer.Ordinal)))
+            .GroupBy(x => x.UserKey, StringComparer.Ordinal)
+            .Take(limit)
+            .Select(x => new UserMessageCandidate
+            {
+                UserKey = x.Key,
+                Name = x.Select(y => y.Name).FirstOrDefault(y => !string.IsNullOrWhiteSpace(y)),
+                EMail = x.Select(y => y.EMail).FirstOrDefault(y => !string.IsNullOrWhiteSpace(y)),
+                TeamKeys = [.. x.Select(y => y.TeamKey).Distinct(StringComparer.Ordinal)]
+            })
+            .OrderBy(x => x.Name ?? x.EMail ?? x.UserKey, StringComparer.CurrentCultureIgnoreCase)];
     }
 
     public async Task<UserMessagePreview> PreviewAsync(UserMessageRecipients recipients, string category, CancellationToken cancellationToken = default)
@@ -117,9 +134,12 @@ internal sealed class UserMessageService(
         if (entry == null) return null;
 
         var delivery = await queue.GetBatchAsync(entry.Id, cancellationToken);
+        var chosen = entry.Recipients?.UserKeys ?? [];
+        var names = await NamesAsync(chosen, cancellationToken);
         var sent = ToSent(entry, delivery?.Outcomes ?? new UserMailOutcomes()) with
         {
-            Failures = [.. await NamedAsync(delivery?.Failures ?? [], cancellationToken)]
+            Failures = [.. await NamedAsync(delivery?.Failures ?? [], cancellationToken)],
+            ChosenUsers = [.. chosen.Select(x => new UserMessageCandidate { UserKey = x, Name = names.GetValueOrDefault(x) })]
         };
 
         Audit(AuditEventType.ServiceCall, UserMessageAudit.OpenAction, nameof(GetSentMessageAsync), sw.ElapsedMilliseconds, true, null, Meta(

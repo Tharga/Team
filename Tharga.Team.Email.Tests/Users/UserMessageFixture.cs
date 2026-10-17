@@ -38,6 +38,7 @@ internal sealed class UserMessageFixture
     public UserMailFixture Mail { get; }
     public UserMessageOptions Options { get; } = new() { StaffMessageCategories = [UserMailCategories.ServiceKey, UserMailFixture.News, UserMailFixture.Digest] };
     public InMemoryMessageMemberDirectory Directory { get; } = new();
+    public IUserMessageMemberDirectory Members { get; set; }
     public InMemoryUserMessageLog Log { get; } = new();
     public IUserService Users { get; } = Substitute.For<IUserService>();
     public ClaimsPrincipal Principal { get; set; } = Staff();
@@ -46,7 +47,7 @@ internal sealed class UserMessageFixture
         Mail.Categories,
         Microsoft.Extensions.Options.Options.Create(Options),
         Mail.Wrapped,
-        Directory,
+        Members ?? Directory,
         Mail.Store,
         Mail.Queue,
         Log,
@@ -62,7 +63,7 @@ internal sealed class UserMessageFixture
 
     public void Member(string teamKey, string userKey, string name, AccessLevel level, params string[] roles)
     {
-        Directory.Members.Add(new UserMessageMember { TeamKey = teamKey, UserKey = userKey, Name = name, AccessLevel = level, Roles = roles });
+        Directory.Members.Add(new UserMessageMember { TeamKey = teamKey, UserKey = userKey, Name = name, EMail = $"{userKey}@example.org", AccessLevel = level, Roles = roles });
         Mail.Recipients.Add(new UserMailRecipient { Key = userKey, EMail = $"{userKey}@example.org", Name = name });
     }
 
