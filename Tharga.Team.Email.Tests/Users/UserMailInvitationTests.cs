@@ -19,7 +19,7 @@ public class UserMailInvitationTests
     private readonly UserMailFixture _fixture = new();
 
     private UserMailInvitationSender Sender(ITextResolver texts = null)
-        => new(_fixture.Queue, _fixture.Outbox, _fixture.Dispatcher(texts), new UserMailText(texts), _fixture.Wrapped, _fixture.Time);
+        => new(new UserMailQueue(_fixture.Categories, _fixture.Outbox, _fixture.Wrapped, _fixture.Time, _fixture.Dispatcher(texts)), new UserMailText(texts), _fixture.Wrapped);
 
     private static TeamInviteMail Invite(string name = "Bea Berg") => new()
     {

@@ -14,7 +14,8 @@ internal sealed class UserMailQueue(
     UserMailCategoryRegistry categories,
     IUserMailOutbox outbox,
     IOptions<UserMailOptions> options,
-    TimeProvider timeProvider) : IUserMailQueue
+    TimeProvider timeProvider,
+    UserMailDispatcher dispatcher = null) : IUserMailQueue
 {
     private const string OctetStream = "application/octet-stream";
     private const int MaxDeduplicationKeyLength = 200;
@@ -25,6 +26,18 @@ internal sealed class UserMailQueue(
         var accepted = Accept(mail);
 
         return await outbox.AddAsync(accepted, Now(), cancellationToken);
+    }
+
+    public async Task<UserMailDelivery> SendNowAsync(UserMail mail, CancellationToken cancellationToken = default)
+    {
+        if (dispatcher == null) throw new InvalidOperationException("Sending at once needs the user mail dispatcher, which this queue was built without.");
+
+        var accepted = Accept(mail);
+        var claimant = $"{Environment.MachineName}:{Environment.ProcessId}:now:{Guid.NewGuid():N}";
+        var item = await outbox.AddClaimedAsync(accepted, Now(), claimant, options.Value.Lease, cancellationToken);
+        await dispatcher.SendNowAsync(item, claimant, cancellationToken);
+
+        return ToDelivery(await outbox.GetAsync(item.Id, cancellationToken) ?? item);
     }
 
     public async Task<UserMailDelivery> GetAsync(string id, CancellationToken cancellationToken = default)

@@ -11,11 +11,8 @@ namespace Tharga.Team.Email.Users;
 /// </remarks>
 internal sealed class UserMailInvitationSender(
     UserMailQueue queue,
-    IUserMailOutbox outbox,
-    UserMailDispatcher dispatcher,
     UserMailText text,
-    IOptions<UserMailOptions> options,
-    TimeProvider timeProvider) : ITeamEmailSender
+    IOptions<UserMailOptions> options) : ITeamEmailSender
 {
     public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
         => SendInviteAsync(new TeamInviteMail { RecipientEmail = recipientEmail, RecipientName = recipientName, InviteLink = inviteLink, TeamKey = null, TeamName = teamName });
@@ -30,7 +27,7 @@ internal sealed class UserMailInvitationSender(
         if (missing != null) throw new InvalidOperationException($"The invitation could not be sent: {missing} is not configured for mail to users.");
 
         var name = string.IsNullOrWhiteSpace(invite.RecipientName) ? invite.RecipientEmail?.Trim() : invite.RecipientName.Trim();
-        var mail = queue.Accept(new UserMail
+        var sent = await queue.SendNowAsync(new UserMail
         {
             RecipientAddress = invite.RecipientEmail,
             RecipientName = invite.RecipientName,
@@ -40,12 +37,8 @@ internal sealed class UserMailInvitationSender(
             Kind = UserMailKind.Invitation
         });
 
-        var claimant = $"{Environment.MachineName}:{Environment.ProcessId}:invitation:{Guid.NewGuid():N}";
-        var item = await outbox.AddClaimedAsync(mail, timeProvider.GetUtcNow().UtcDateTime, claimant, options.Value.Lease);
+        if (sent.Status == UserMailStatus.Sent) return;
 
-        if (await dispatcher.SendNowAsync(item, claimant, CancellationToken.None) == UserMailStatus.Sent) return;
-
-        var reason = (await outbox.GetAsync(item.Id))?.Reason;
-        throw new InvalidOperationException($"The invitation could not be sent: {reason}");
+        throw new InvalidOperationException($"The invitation could not be sent: {sent.Reason}");
     }
 }

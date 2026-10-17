@@ -22,6 +22,11 @@ public interface IUserMailQueue
     /// <summary>What became of a queued mail, or null when there is none with this id.</summary>
     Task<UserMailDelivery> GetAsync(string id, CancellationToken cancellationToken = default);
 
+    /// <summary>Records the mail and makes one attempt at once, never retried, so whoever is waiting learns whether it went; for mail such as an invitation.</summary>
+    /// <exception cref="ArgumentException">The category is not registered, the mail has no subject or body, or it exceeds the configured limits.</exception>
+    Task<UserMailDelivery> SendNowAsync(UserMail mail, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SendNowAsync)}.");
+
     /// <summary>Validates, sanitizes and stores the content once, then queues one mail per distinct recipient that each name it.</summary>
     /// <exception cref="ArgumentException">The batch names no recipient, the category is not registered, it has no subject or body, or it exceeds the configured limits.</exception>
     Task<UserMailBatchQueued> QueueBatchAsync(UserMailBatch batch, CancellationToken cancellationToken = default);

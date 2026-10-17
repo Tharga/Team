@@ -59,7 +59,8 @@ public static class UserMailRegistration
             sp.GetRequiredService<UserMailCategoryRegistry>(),
             sp.GetRequiredService<IUserMailOutbox>(),
             sp.GetRequiredService<IOptions<UserMailOptions>>(),
-            sp.GetRequiredService<TimeProvider>()));
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetRequiredService<UserMailDispatcher>()));
 
         services.TryAddScoped<IUserMailHistoryService>(sp => new UserMailHistoryService(
             sp.GetRequiredService<IUserMailQueue>(),
@@ -102,12 +103,10 @@ public static class UserMailRegistration
                 sp.GetRequiredService<UserMailCategoryRegistry>(),
                 sp.GetRequiredService<IUserMailOutbox>(),
                 sp.GetRequiredService<IOptions<UserMailOptions>>(),
-                sp.GetRequiredService<TimeProvider>()),
-            sp.GetRequiredService<IUserMailOutbox>(),
-            sp.GetRequiredService<UserMailDispatcher>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<UserMailDispatcher>()),
             sp.GetRequiredService<UserMailText>(),
-            sp.GetRequiredService<IOptions<UserMailOptions>>(),
-            sp.GetRequiredService<TimeProvider>()));
+            sp.GetRequiredService<IOptions<UserMailOptions>>()));
     }
 
     /// <summary>Maps the unsubscribe link's route at <see cref="UserMailOptions.UnsubscribePath"/>: GET shows a page that asks, POST unsubscribes, both without sign-in.</summary>
