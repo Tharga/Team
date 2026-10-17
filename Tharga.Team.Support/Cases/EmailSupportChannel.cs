@@ -58,19 +58,48 @@ internal sealed class EmailSupportChannel(
         // reads the subject line even though their mail client threads on the headers. One read by binding
         // is the same lookup the inbound path already does.
         var supportCase = await store.GetCaseByBindingAsync(SupportChannelType.Email, binding.ExternalId, cancellationToken);
+        var thread = ThreadOf(supportCase, binding);
+        var earlier = supportCase == null ? [] : await EarlierAsync(supportCase, message, cancellationToken);
 
         var result = await mailClient.SendAsync(
             new OutboundMail(
                 To: binding.Address,
                 Subject: Subject(supportCase),
-                Body: Body(message),
-                InReplyTo: binding.ExternalId,
-                References: [binding.ExternalId],
+                Body: Body(message, earlier),
+                InReplyTo: thread[^1],
+                References: thread,
                 ReplyTo: ReplyToFor(supportCase?.Id)),
             cancellationToken);
 
+        // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case.
+        if (result.Success && supportCase != null && !string.IsNullOrWhiteSpace(result.MessageId))
+        {
+            await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = result.MessageId, Address = binding.Address }, cancellationToken);
+        }
+
         return result.Success;
     }
+
+    /// <summary>Every message id the case's mail thread has carried, oldest first: the opening mail, then each reply and answer.</summary>
+    internal static IReadOnlyList<string> ThreadOf(SupportCase supportCase, SupportChannelBinding binding)
+    {
+        var ids = (supportCase?.Bindings ?? [])
+            .Where(x => x.ChannelType == SupportChannelType.Email && !string.IsNullOrWhiteSpace(x.ExternalId))
+            .Select(x => x.ExternalId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        return ids.Count == 0 ? [binding.ExternalId] : ids;
+    }
+
+    private async Task<IReadOnlyList<SupportMessage>> EarlierAsync(SupportCase supportCase, SupportMessage message, CancellationToken cancellationToken)
+    {
+        var page = await store.GetMessagesAsync(supportCase.TeamKey, supportCase.Id, null, MaxQuoted * 4, cancellationToken);
+
+        return [.. (page?.Items ?? []).Where(x => x.Sequence < message.Sequence && x.Kind != SupportMessageKind.System).OrderByDescending(x => x.Sequence).Take(MaxQuoted)];
+    }
+
+    private const int MaxQuoted = 10;
 
     private static string Subject(SupportCase supportCase)
         => string.IsNullOrWhiteSpace(supportCase?.Subject) ? "Re: your support case" : $"Re: {supportCase.Subject}";
@@ -79,8 +108,16 @@ internal sealed class EmailSupportChannel(
     /// A system entry is the toolkit speaking — a closure note — so attributing it to a person would be a
     /// lie in front of a customer.
     /// </remarks>
-    private static string Body(SupportMessage message)
-        => message.Kind == SupportMessageKind.System ? message.Body : $"{message.AuthorName}:\n\n{message.Body}";
+    internal static string Body(SupportMessage message, IReadOnlyList<SupportMessage> earlier)
+    {
+        var text = message.Kind == SupportMessageKind.System ? message.Body : $"{message.AuthorName}:\n\n{message.Body}";
+
+        return earlier.Count == 0 ? text : text + "\n\n" + string.Join("\n\n", earlier.Select(Quoted));
+    }
+
+    // The conversation so far, newest first, quoted the way mail clients quote, so the answer reads on its own.
+    private static string Quoted(SupportMessage message)
+        => $"{message.SentAt:yyyy-MM-dd HH:mm} UTC, {message.AuthorName}:\n" + string.Join("\n", (message.Body ?? "").Split('\n').Select(x => "> " + x.TrimEnd('\r')));
 
     /// <summary>
     /// The per-case reply address, when the host has confirmed its mail server accepts plus-addressing.

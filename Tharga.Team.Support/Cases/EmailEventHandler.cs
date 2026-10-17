@@ -27,7 +27,8 @@ internal sealed class EmailEventHandler(
     IOptions<MailOptions> options,
     TimeProvider timeProvider,
     ISupportCaseNotifier notifier = null,
-    ILogger<EmailEventHandler> logger = null)
+    ILogger<EmailEventHandler> logger = null,
+    Tharga.Team.Service.Email.IOutboundMailPolicy policy = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
     internal const string Source = "email";
@@ -105,6 +106,9 @@ internal sealed class EmailEventHandler(
             Delivery = SupportMessageDelivery.Sent,
             Source = SupportChannelType.Email
         }, cancellationToken);
+
+        // The reply's own id joins the thread, so an answer to it, and a reply to that, find the case exactly.
+        await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = mail.MessageId, Address = binding.Address }, cancellationToken);
 
         notifier?.Notify(new SupportCaseUpdatedEventArgs
         {
@@ -234,10 +238,17 @@ internal sealed class EmailEventHandler(
         }
     }
 
-    private static bool Corresponds(SupportChannelBinding binding, string sender)
-        => !string.IsNullOrWhiteSpace(binding?.Address) &&
-           !string.IsNullOrWhiteSpace(sender) &&
-           string.Equals(binding.Address.Trim(), sender.Trim(), StringComparison.OrdinalIgnoreCase);
+    private bool Corresponds(SupportChannelBinding binding, string sender) => Corresponds(binding, sender, policy);
+
+    // Outside production the answer went to the policy's override address instead, so a reply from there is the correspondent's own.
+    internal static bool Corresponds(SupportChannelBinding binding, string sender, Tharga.Team.Service.Email.IOutboundMailPolicy policy)
+    {
+        if (string.IsNullOrWhiteSpace(binding?.Address) || string.IsNullOrWhiteSpace(sender)) return false;
+        if (string.Equals(binding.Address.Trim(), sender.Trim(), StringComparison.OrdinalIgnoreCase)) return true;
+
+        var decision = policy?.Decide(binding.Address, string.Empty);
+        return decision is { Action: Tharga.Team.Service.Email.OutboundMailAction.Redirect } && string.Equals(decision.Recipient?.Trim(), sender.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <remarks>
     /// <b>Over-long mail is trimmed, not refused.</b> The service throws past
