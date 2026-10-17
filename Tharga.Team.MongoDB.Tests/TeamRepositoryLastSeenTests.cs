@@ -1,6 +1,7 @@
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using Tharga.MongoDB;
 
 namespace Tharga.Team.MongoDB.Tests;
 
@@ -48,12 +49,29 @@ public class TeamRepositoryLastSeenTests
         await collection.DidNotReceiveWithAnyArgs().GetOneAsync(default(FilterDefinition<TestTeamEntity>));
     }
 
+    /// <summary>
+    /// The mode that sends the filter with the update. Tharga.MongoDB's other modes find the document and then
+    /// update it by id, which the server rejects for a positional update — found against a real database,
+    /// since rendering the update alone looked right.
+    /// </summary>
+    [Fact]
+    public async Task TheStamp_IsOneFindAndModify()
+    {
+        OneOption<TestTeamEntity> options = null;
+        var collection = Substitute.For<ITeamRepositoryCollection<TestTeamEntity, TestMember>>();
+        _ = collection.UpdateOneAsync(Arg.Any<FilterDefinition<TestTeamEntity>>(), Arg.Any<UpdateDefinition<TestTeamEntity>>(), Arg.Do<OneOption<TestTeamEntity>>(o => options = o), Arg.Any<IClientSessionHandle>());
+
+        await new TeamRepository<TestTeamEntity, TestMember>(collection).SetLastSeenAsync("T1", "u1", Now);
+
+        Assert.Equal(EMode.FirstOrDefault, options?.Mode);
+    }
+
     private static async Task<(BsonDocument Filter, BsonDocument Update, ITeamRepositoryCollection<TestTeamEntity, TestMember> Collection)> StampAsync()
     {
         FilterDefinition<TestTeamEntity> filter = null;
         UpdateDefinition<TestTeamEntity> update = null;
         var collection = Substitute.For<ITeamRepositoryCollection<TestTeamEntity, TestMember>>();
-        _ = collection.UpdateOneAsync(Arg.Do<FilterDefinition<TestTeamEntity>>(f => filter = f), Arg.Do<UpdateDefinition<TestTeamEntity>>(u => update = u));
+        _ = collection.UpdateOneAsync(Arg.Do<FilterDefinition<TestTeamEntity>>(f => filter = f), Arg.Do<UpdateDefinition<TestTeamEntity>>(u => update = u), Arg.Any<OneOption<TestTeamEntity>>(), Arg.Any<IClientSessionHandle>());
 
         await new TeamRepository<TestTeamEntity, TestMember>(collection).SetLastSeenAsync("T1", "u1", Now);
 

@@ -57,6 +57,13 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
     /// team document — every active member, every stamp interval (Tharga/Team#317). It used to read the team
     /// and replace the whole document, so a stamp landing between an administrator's read and write could put
     /// back a member they had just removed, suspended or demoted, or undo a rename.
+    /// <para>
+    /// <b><see cref="EMode.FirstOrDefault"/> is required, not a preference.</b> The positional <c>$</c> needs
+    /// the array match from the query that performs the update. In its other modes Tharga.MongoDB finds the
+    /// document first and then updates it by id, so the server rejects the update ("The positional operator
+    /// did not find the match needed from the query"). <c>FirstOrDefault</c> sends the filter and the update
+    /// together as one <c>findAndModify</c>.
+    /// </para>
     /// </remarks>
     public Task SetLastSeenAsync(string teamKey, string userKey, DateTime utcNow)
     {
@@ -64,7 +71,7 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         var update = new UpdateDefinitionBuilder<TTeamEntity>()
             .Set(x => x.Members.FirstMatchingElement().LastSeen, utcNow);
 
-        return _collection.UpdateOneAsync(filter, update);
+        return _collection.UpdateOneAsync(filter, update, OneOption<TTeamEntity>.FirstOrDefault);
     }
 
     /// <summary>The team, live, with a member of that key; the positional update writes the first such member.</summary>
