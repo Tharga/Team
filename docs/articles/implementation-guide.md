@@ -1715,7 +1715,7 @@ o.AddEmailService<MyEmailSender>();          // any ITeamEmailSender
 o.Email = new EmailOptions
 {
     SmtpHost = "smtp.example.com",
-    FromAddress = "no-reply@example.com",
+    FromAddress = "hello@example.com",   // an address a reply reaches
     // FromName falls back to the application Title when unset.
 };
 builder.Services.AddThargaEmailInvitations();

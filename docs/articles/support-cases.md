@@ -706,9 +706,10 @@ customer sent and never ask again.
 ### Invitation mail is separate, deliberately
 
 `ThargaTeamOptions.Email` configures invitation delivery and nothing else. It is not a fallback for support
-mail and support mail is not a fallback for it: an invitation is usually sent from `noreply@`, while support
-mail must come from an address replies return to. Inheriting one for the other would send support mail from a
-no-reply address and lose every reply. Bind both from the same configuration section if you want one mailbox.
+mail and support mail is not a fallback for it: each sends from the address it is configured with, and every one
+of them should be an address a reply reaches, because a no-reply address loses every reply. Bind both from the
+same configuration section if you want one mailbox. With mail to users registered, invitations go through its
+outbox and its address instead.
 
 ## An assistant answering first
 

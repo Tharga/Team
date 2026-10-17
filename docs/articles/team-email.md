@@ -179,7 +179,7 @@ A reader without the grant sees a refusal, never the data. Texts are in `Postmas
 builder.Services.AddThargaEmailInvitations(o =>
 {
     o.SmtpHost = "smtp.example.com";
-    o.FromAddress = "no-reply@example.com";
+    o.FromAddress = "hello@example.com";   // an address a reply reaches
 });
 ```
 

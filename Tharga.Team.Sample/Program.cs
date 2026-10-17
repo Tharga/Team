@@ -276,8 +276,7 @@ builder.Services.AddThargaSupportCases(o =>
     o.Email.Smtp.UserName = builder.Configuration["Support:Mail:Smtp:UserName"];
     o.Email.Smtp.Password = builder.Configuration["Support:Mail:Smtp:Password"];
 
-    // The address replies come back to. Not the invitation sender's noreply@ address: support mail has to
-    // come from somewhere a customer can answer, which is why the two configurations stay separate.
+    // The address replies come back to, and where bounces of mail to users sent from it are read.
     o.Email.FromAddress = builder.Configuration["Support:Mail:FromAddress"];
 
     // One mailbox can serve two sites. Each instance takes only the mail addressed to its own domain, and
