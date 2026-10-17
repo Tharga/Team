@@ -21,6 +21,19 @@ Branch: `feature/scope-visibility-role-manager-and-scope-view` (from `master` at
   note), core README line.
 - [x] 4. Full test suite; commit; push for testing (no PR yet).
   - Blazor 1461, Service 1246, MongoDB 190, Support 402, Email 189, Mcp 116, Entra 58, Images 11: 3673, all green.
+- [x] 5. The user asked for #318, #331 and #334 all to be completed. Gaps against the older two:
+  - #318 "anything derived from it (role bar counts...)": `ScopeReference.WithVisibleScopes` drops a role whose
+    every scope is hidden from `ScopeView`'s role bar and pre-selection. A role with no scopes is kept. 2 tests.
+  - #331 "filter their role lists through `ITenantRoleVisibilityProvider`": done for `ApiKeyView` in #332.
+    Not applied to `TenantRoleManager`'s grid, which lists the team's own custom roles for editing: hiding one
+    would make it uneditable (and `SetTeamCustomRolesAsync` replaces the whole set). Documented. #334, written
+    later by the same reporter, also scopes TenantRoleManager's remaining work to the scope list.
+  - #331 "kept and still shown on the key or role": #113's `RoleEditor` keeps a hidden role without showing
+    it, and #332 did the same for scopes; custom roles now match. Treated as met.
+  - #318's `ScopeFilter` parameter: served by the per-team provider, which the reporter accepted ("either works").
+  - Sample: `SampleFeatureScopeVisibility` hides `billing:manage` / `case:read` unless the team's name contains
+    "Billing" / "Case". `MAJOR_MINOR` set to 4.1 here too, so the branch can't ship as 4.0 if it merges before #335.
+  - All 3675 tests green.
 
 ## Notes
 
@@ -29,9 +42,10 @@ Branch: `feature/scope-visibility-role-manager-and-scope-view` (from `master` at
 
 ## Last session
 
-2026-10-17: steps 0–4 done and pushed for testing. Next: the user tests (a provider hiding a feature's scopes:
-the custom role picker leaves them out, saving a role keeps them, the access page lists no rows for them).
-Then close-out. The guide says "Added in 4.1", so this ships after, or with, PR #335 (which sets 4.1).
+2026-10-17: steps 0–5 done and pushed for testing. Next: the user tests in the sample (team name without
+"Billing"/"Case": no `billing:manage` in the pickers or on /scopes, no `case:read` row and no CaseOfficer on
+the role bar; a custom role holding a hidden scope keeps it when saved; rename the team to switch a feature on).
+Then close-out: one PR closing #318, #331 and #334.
 
 ## README / docs changes needed at close
 
