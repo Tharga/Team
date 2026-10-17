@@ -45,7 +45,7 @@ public class ApiKeyOwnerBindingTests
         public Invitation Invitation { get; init; }
         public DateTime? LastSeen { get; init; }
         public MembershipState? State { get; init; } = MembershipState.Member;
-        public AccessLevel AccessLevel { get; init; } = AccessLevel.User;
+        public AccessLevel? AccessLevel { get; init; } = Tharga.Team.AccessLevel.User;
         public string[] TenantRoles { get; init; } = [];
         public string[] ScopeOverrides { get; init; } = [];
         public DateTime? SuspendedAt { get; init; }
@@ -115,7 +115,7 @@ public class ApiKeyOwnerBindingTests
 
     // ---- The owner can no longer act: the key is refused ----
 
-    public static TheoryData<string> RefusalCases => ["gone", "invited", "rejected", "suspended", "disabled", "deleted"];
+    public static TheoryData<string> RefusalCases => ["gone", "invited", "rejected", "suspended", "no-level", "disabled", "deleted"];
 
     [Theory]
     [MemberData(nameof(RefusalCases))]
@@ -129,6 +129,7 @@ public class ApiKeyOwnerBindingTests
             case "invited": GivenOwner(new Member { State = MembershipState.Invited }); break;
             case "rejected": GivenOwner(new Member { State = MembershipState.Rejected }); break;
             case "suspended": GivenOwner(new Member { SuspendedAt = DateTime.UtcNow }); break;
+            case "no-level": GivenOwner(new Member { AccessLevel = null }); break;
             case "disabled": GivenOwner(user: new User { DisabledAt = DateTime.UtcNow }); break;
             case "deleted": _userService.GetUserByKeyAsync(OwnerKey).Returns((IUser)null); break;
         }

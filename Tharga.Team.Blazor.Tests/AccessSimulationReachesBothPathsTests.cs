@@ -40,7 +40,7 @@ public class AccessSimulationReachesBothPathsTests
 
     // --- shared fakes ---
 
-    private sealed record FakeMember(string Key, AccessLevel AccessLevel) : ITeamMember
+    private sealed record FakeMember(string Key, AccessLevel? AccessLevel) : ITeamMember
     {
         public string Name => "Alice";
         public Invitation Invitation => null;

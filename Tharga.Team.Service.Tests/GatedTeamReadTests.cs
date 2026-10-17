@@ -21,7 +21,7 @@ namespace Tharga.Team.Service.Tests;
 /// </remarks>
 public class GatedTeamReadTests
 {
-    private sealed record FakeMember(string Key, AccessLevel AccessLevel) : ITeamMember
+    private sealed record FakeMember(string Key, AccessLevel? AccessLevel) : ITeamMember
     {
         public string Name => null;
         public string[] TenantRoles => null;

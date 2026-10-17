@@ -9,16 +9,17 @@ namespace Tharga.Team.MongoDB.Tests;
 /// What an <see cref="AccessLevel"/> means when nobody chose one.
 /// </summary>
 /// <remarks>
-/// These tests document current behaviour rather than desired behaviour. They exist to prove the exposure
-/// is real before changing anything, and to fail loudly if the fix is ever reverted.
+/// Before 4.0 these tests documented the exposure: an unset level was <see cref="AccessLevel.Owner"/>, the
+/// enum's zero value. Since 4.0 a member's level is <c>AccessLevel?</c> and an unset one is null, which
+/// grants nothing. They now pin the fix, and fail loudly if it is ever reverted.
 /// </remarks>
 public class AccessLevelDefaultTests
 {
     private sealed record TestMember : TeamMemberBase;
 
     /// <summary>
-    /// The root of it: <c>Owner</c> is the zero value, so "not set" and "the most powerful level" are the
-    /// same bit pattern and cannot be told apart.
+    /// The root of it, still true: <c>Owner</c> is the enum's zero value. That is why the member's level is
+    /// nullable rather than defaulted, and why no sentinel was added at ordinal zero.
     /// </summary>
     [Fact]
     public void TheDefaultAccessLevel_IsOwner()
@@ -29,10 +30,10 @@ public class AccessLevelDefaultTests
 
     /// <summary>
     /// A stored member document with no <c>AccessLevel</c> field — written before the field existed, or by
-    /// any writer that omitted it — comes back as an Owner.
+    /// any writer that omitted it — comes back with no level, not as an Owner.
     /// </summary>
     [Fact]
-    public void AStoredMemberMissingTheField_DeserializesAsOwner()
+    public void AStoredMemberMissingTheField_DeserializesAsNull()
     {
         var document = new BsonDocument
         {
@@ -42,7 +43,7 @@ public class AccessLevelDefaultTests
 
         var member = BsonSerializer.Deserialize<TestMember>(document);
 
-        Assert.Equal(AccessLevel.Owner, member.AccessLevel);
+        Assert.Null(member.AccessLevel);
     }
 
     /// <summary>
@@ -61,15 +62,27 @@ public class AccessLevelDefaultTests
 
     /// <summary>
     /// The path a host actually hits. <c>CreateTeamMember</c> is abstract, so an override that forgets to
-    /// copy <c>AccessLevel</c> from the invite does not fail to compile and does not throw — it produces
-    /// an Owner.
+    /// copy <c>AccessLevel</c> from the invite still compiles — but now produces a member with no level,
+    /// which the invite path rejects, rather than an Owner.
     /// </summary>
     [Fact]
-    public void AMemberBuiltWithoutChoosingALevel_IsAnOwner()
+    public void AMemberBuiltWithoutChoosingALevel_HasNoLevel()
     {
         var invited = new TestMember { Key = "member-1", Name = "Invited as a Viewer" };
 
-        Assert.Equal(AccessLevel.Owner, invited.AccessLevel);
+        Assert.Null(invited.AccessLevel);
+    }
+
+    /// <summary>
+    /// A member with no level is written without the field, like <c>State</c>, so saving it does not invent
+    /// a value and the startup check still finds it.
+    /// </summary>
+    [Fact]
+    public void AMemberWithNoLevel_IsStoredWithoutTheField()
+    {
+        var document = new TestMember { Key = "member-1" }.ToBsonDocument();
+
+        Assert.False(document.Contains("AccessLevel"));
     }
 
     /// <summary>

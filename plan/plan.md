@@ -5,11 +5,16 @@ Branch: `feature/nullable-access-level` (from `master` at 91124c2; GitHub Action
 ## Steps
 
 - [x] 0. NuGet updates: `dotnet outdated` on the whole solution found nothing outdated (2026-10-17), so there's no deps commit.
-- [~] 1. The contract: `ITeamMember.AccessLevel` and `TeamMemberBase.AccessLevel` become `AccessLevel?` (Bson string and ignore-if-null). Rewrite `AccessLevelDefaultTests` to assert null.
-- [ ] 2. The registry and privilege: `GetScopesForAccessLevel` and `GetEffectiveScopes` take `AccessLevel?` and return empty for null first. `AccessLevelPrivilege` treats null as the floor. Tests, including the `EveryAccessLevelIsAccountedFor` trip-wire.
-- [ ] 3. Compile-driven pass over every read site: grant resolver, `CallerTeamAccess`, the ordering sites (last-administrator count, `HasAccessLevel`), simulation, MCP, the API-key owner check, and the test fakes. Tests assert that each ordering site fails closed.
-- [ ] 4. Claims: omit the `AccessLevel` claim when null (`TeamMembershipClaimsBuilder`, `TeamClaimsAuthenticationStateProvider`). Tests.
-- [ ] 5. The invite boundary: `InviteUserModel.AccessLevel` becomes `AccessLevel?` and null is rejected. The post-`CreateTeamMember` guard (D1). Tests.
+- [x] 1. The contract: `ITeamMember.AccessLevel` and `TeamMemberBase.AccessLevel` become `AccessLevel?` (Bson string and ignore-if-null). Rewrite `AccessLevelDefaultTests` to assert null.
+  - `AccessLevelDefaultTests` and `AccessLevelCompletenessTests` now pin null, and a new test checks that a level-less member is stored without the field.
+- [x] 2. The registry and privilege: `GetScopesForAccessLevel` and `GetEffectiveScopes` take `AccessLevel?` and return empty for null first. `AccessLevelPrivilege` treats null as the floor. Tests, including the `EveryAccessLevelIsAccountedFor` trip-wire.
+  - `ITenantRoleService.GetEffectiveScopesAsync` takes `AccessLevel?` too and returns empty for null; custom roles don't rescue it either. `AccessLevelPrivilege`: null ranks below Custom, and a nullable `Clamp` overload was added. The trip-wire didn't fire, because the enum itself is unchanged.
+- [x] 3. Compile-driven pass over every read site: grant resolver, `CallerTeamAccess`, the ordering sites (last-administrator count, `HasAccessLevel`), simulation, MCP, the API-key owner check, and the test fakes. Tests assert that each ordering site fails closed.
+  - `TeamGrantResolver.ResolveFromMemberAsync` returns null for a level-less member, like a suspended one, so `TeamGrant.AccessLevel` stays non-null and the claims builder, MCP, the API-key owner check and `TeamContextResolver` need no change. The last-administrator count and `HasAccessLevel` use explicit patterns. In the grid, a null level shows "No access level", with a nullable dropdown and no clearing back to null. `ScopeReference.ToSelectableLevel(null)` returns null. The view models are nullable. No test fake relied on the old default of Owner.
+  - `TeamComponent.HasAccessLevel` lives in razor with no bUnit, so it isn't unit-tested; the explicit pattern is the guard.
+- [x] 4. Claims: omit the `AccessLevel` claim when null (`TeamMembershipClaimsBuilder`, `TeamClaimsAuthenticationStateProvider`). Tests.
+  - The builder is covered through the resolver: no claims, and no fall-through to consent. The legacy `TeamClaimsAuthenticationStateProvider` emits nothing for a null level. The API-key owner refusal theory gained a `no-level` case. New `UnsetAccessLevelTests` has 11 cases. Suite: Blazor 1444, Service 1242, MongoDB 189, Mcp 116, Support 402, Email 189, Entra 58, Images 11, all green. (`dotnet test` reports zero tests on this SDK, so the test executables were run directly, per shared-instructions.)
+- [~] 5. The invite boundary: `InviteUserModel.AccessLevel` becomes `AccessLevel?` and null is rejected. The post-`CreateTeamMember` guard (D1). Tests.
 - [ ] 6. UI: the member grid shows "No access level" and the change-level action works from null. `AccessLevelCompletenessCheck` is reworded (D2).
 - [ ] 7. Removals: the `Developer` oversight fallback, the four-string `SendInviteAsync`, and, if D3, the obsolete `AddThargaPlatform` forwarding. Update the sample and tests.
 - [ ] 8. Full test suite; commit; push for testing (no PR yet).

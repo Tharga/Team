@@ -789,17 +789,21 @@ else
                             <Template>
                                 @if (_user.Key == context.Key || context.AccessLevel == AccessLevel.Owner) //Cannot change self or owner.
                                 {
-                                    <RadzenText>@context.AccessLevel</RadzenText>
+                                    <RadzenText>@(context.AccessLevel?.ToString() ?? _text[TeamComponentText.NoAccessLevel])</RadzenText>
                                 }
                                 else if (CanManageMembers(team))
                                 {
                                     // Custom hidden until #76 adds member scope/role editing (see InviteUserDialog).
+                                    // Nullable so a member with no level shows the placeholder and can be given one;
+                                    // there is no clearing back to null, which would be a way to strip access silently.
                                     var accessLevels = _memberAccessLevels;
-                                    <RadzenDropDown TValue="AccessLevel" Value="@context.AccessLevel" ValueChanged="@(x => ChangeRole(team, context.Key, x))" Data="@accessLevels"/>
+                                    <RadzenDropDown TValue="AccessLevel?" Value="@context.AccessLevel" Data="@accessLevels"
+                                                    Placeholder="@_text[TeamComponentText.NoAccessLevel]"
+                                                    ValueChanged="@(async x => { if (x is { } level) await ChangeRole(team, context.Key, level); })" />
                                 }
                                 else
                                 {
-                                    <RadzenText>@context.AccessLevel</RadzenText>
+                                    <RadzenText>@(context.AccessLevel?.ToString() ?? _text[TeamComponentText.NoAccessLevel])</RadzenText>
                                 }
                             </Template>
                         </RadzenDataGridColumn>
@@ -1120,8 +1124,10 @@ else
     private bool HasAccessLevel(ITeam<TMember> team, AccessLevel accessLevel)
     {
         var member = team.Members.PickOneOrDefault(x => x.Key == _user.Key, Logger, team.Key, _user.Key);
-        if (member == null) return false;
-        return member.AccessLevel <= accessLevel;
+        // Explicit rather than left to the lifted <=, which is false for null by accident: an unset level is
+        // below every level, and before 4.0 it read as Owner.
+        if (member?.AccessLevel is not { } level) return false;
+        return level <= accessLevel;
     }
 
     private void OnMemberRowRender(RowRenderEventArgs<TMember> args)

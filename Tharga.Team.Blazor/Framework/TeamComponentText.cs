@@ -99,6 +99,12 @@ public static class TeamComponentText
     public static readonly TextKey ConsentTooltip = new("team.component.consentTooltip",
         "What this team has consented to grant. Select the team to change it.");
     public static readonly TextKey NoAccess = new("team.component.noAccess", "No access");
+
+    /// <summary>
+    /// A member whose access level was never set. Such a member is granted nothing until an administrator picks a
+    /// level — the grid says so rather than showing a blank cell.
+    /// </summary>
+    public static readonly TextKey NoAccessLevel = new("team.component.noAccessLevel", "No access level");
     public static readonly TextKey HideNoAccessTeams = new("team.component.hideNoAccessTeams", "Hide teams I have no access to");
 
     /// <summary>Label above the consent picker. <c>{0}</c> is the comma-separated list of consent roles.</summary>
@@ -152,7 +158,7 @@ public static class TeamComponentText
         MemberNotFoundDetail, NoEligibleMembers, NoEligibleMembersDetail, TransferOwnershipTitle, Transfer,
         Cancel, OwnershipTransferred, ColumnEmail, ColumnName, ClearNameOverride, NameOverrideTooltip,
         EditDisplayName, ColumnAccessLevel, ColumnRoles, ColumnScopeOverrides, ColumnScopes, ColumnStatus,
-        InvitedAt, Suspended, ColumnLastSeen, NotAMember, NotAMemberTooltip, ConsentTooltip, NoAccess,
+        InvitedAt, Suspended, ColumnLastSeen, NotAMember, NotAMemberTooltip, ConsentTooltip, NoAccess, NoAccessLevel,
         ConsentAccessFor, ConfirmDeleteTeam, ConfirmSuspendTitle, ConfirmSuspendDetail, CouldNotSuspend,
         CouldNotRestore, SuspendedTooltip, SuspendedByTooltip, ActionCopyInviteLink, ActionAuditLog,
         ActionRestoreAccess, ActionSuspendAccess, ActionRemoveMember, ActionInviteUser, ActionSetIcon,

@@ -22,7 +22,7 @@ public class InviteCodeResolutionTests
     private const string Token = "84Fb6G_8BbXE";
     private const string EMail = "invitee@example.com";
 
-    private sealed record FakeMember(string Key, AccessLevel AccessLevel, Invitation Invitation) : ITeamMember
+    private sealed record FakeMember(string Key, AccessLevel? AccessLevel, Invitation Invitation) : ITeamMember
     {
         public string Name => null;
         public string[] TenantRoles => null;

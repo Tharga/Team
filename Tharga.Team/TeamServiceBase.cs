@@ -544,7 +544,9 @@ public abstract class TeamServiceBase : ITeamService
             x.Key != member.Key &&
             x.State == MembershipState.Member &&
             x.SuspendedAt == null &&
-            x.AccessLevel <= AccessLevel.Administrator);
+            // Pattern rather than a lifted <=, so a member with no level is visibly not counted: they hold no
+            // scopes either, so they cannot be the one left holding member:manage.
+            x.AccessLevel is { } level && level <= AccessLevel.Administrator);
         if (otherAdminsOrOwners == 0)
             throw new InvalidOperationException(LastAdministratorCannotLeaveMessage);
     }

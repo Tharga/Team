@@ -122,7 +122,7 @@ internal class StubMember : ITeamMember
     public Invitation Invitation { get; init; }
     public DateTime? LastSeen { get; init; }
     public MembershipState? State { get; init; }
-    public AccessLevel AccessLevel { get; init; }
+    public AccessLevel? AccessLevel { get; init; }
     public string[] TenantRoles { get; init; }
     public string[] ScopeOverrides { get; init; }
 }
