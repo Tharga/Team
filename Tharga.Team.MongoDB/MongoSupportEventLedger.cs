@@ -17,6 +17,9 @@ internal sealed class MongoSupportEventLedger(ISupportEventLedgerCollection coll
     {
         if (string.IsNullOrEmpty(eventId)) return true;
 
+        // Seeing an event again is ordinary, so it is answered by a read; the insert below still decides the race between instances.
+        if (await collection.CountAsync(Builders<SupportEventLedgerEntity>.Filter.Where(x => x.Source == source && x.EventId == eventId)) > 0) return false;
+
         try
         {
             await collection.AddAsync(new SupportEventLedgerEntity
