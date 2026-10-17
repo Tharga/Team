@@ -14,9 +14,11 @@ Branch: `feature/nullable-access-level` (from `master` at 91124c2; GitHub Action
   - `TeamComponent.HasAccessLevel` lives in razor with no bUnit, so it isn't unit-tested; the explicit pattern is the guard.
 - [x] 4. Claims: omit the `AccessLevel` claim when null (`TeamMembershipClaimsBuilder`, `TeamClaimsAuthenticationStateProvider`). Tests.
   - The builder is covered through the resolver: no claims, and no fall-through to consent. The legacy `TeamClaimsAuthenticationStateProvider` emits nothing for a null level. The API-key owner refusal theory gained a `no-level` case. New `UnsetAccessLevelTests` has 11 cases. Suite: Blazor 1444, Service 1242, MongoDB 189, Mcp 116, Support 402, Email 189, Entra 58, Images 11, all green. (`dotnet test` reports zero tests on this SDK, so the test executables were run directly, per shared-instructions.)
-- [~] 5. The invite boundary: `InviteUserModel.AccessLevel` becomes `AccessLevel?` and null is rejected. The post-`CreateTeamMember` guard (D1). Tests.
-- [ ] 6. UI: the member grid shows "No access level" and the change-level action works from null. `AccessLevelCompletenessCheck` is reworded (D2).
-- [ ] 7. Removals: the `Developer` oversight fallback, the four-string `SendInviteAsync`, and, if D3, the obsolete `AddThargaPlatform` forwarding. Update the sample and tests.
+- [x] 5. The invite boundary: `InviteUserModel.AccessLevel` becomes `AccessLevel?` and null is rejected. The post-`CreateTeamMember` guard (D1). Tests.
+  - `TeamServiceBase.AddMemberAsync` throws `ArgumentException` before touching the store. `TeamServiceRepositoryBase.AddTeamMemberAsync` throws `InvalidOperationException` naming `<Type>.CreateTeamMember` when the override returns no level. The invite dialog's dropdown is nullable, still seeded with `User`. Three existing tests invited without a level and now name one. New tests: `Invite_WithNoLevel_IsRejected` and `CreateTeamMemberLevelGuardTests`.
+- [x] 6. UI: the member grid shows "No access level" and the change-level action works from null. `AccessLevelCompletenessCheck` is reworded (D2).
+  - The grid was done in step 3. The check's warning, its type docs, `CheckMemberAccessLevels` and the registration comment now say "no access until a level is set; before 4.0 Owner, so an original owner may be among them". Suite green: Service 1243, MongoDB 190, the rest unchanged.
+- [~] 7. Removals: the `Developer` oversight fallback, the four-string `SendInviteAsync`, and, if D3, the obsolete `AddThargaPlatform` forwarding. Update the sample and tests.
 - [ ] 8. Full test suite; commit; push for testing (no PR yet).
 
 ## Notes

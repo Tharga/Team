@@ -77,6 +77,21 @@ public class UnsetAccessLevelTests
         Assert.Null(AccessLevelPrivilege.Clamp((AccessLevel?)null, candidate));
     }
 
+    // ---- The invite boundary ----
+
+    [Fact]
+    public async Task Invite_WithNoLevel_IsRejected()
+    {
+        var sut = new TestTeamService(Substitute.For<IUserService>());
+        sut.AddTeam(Team, "Test Team");
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(
+            () => sut.AddMemberAsync(Team, new InviteUserModel { Email = "new@example.com" }));
+
+        Assert.Contains("access level", ex.Message);
+        Assert.Empty(await sut.GetMembersAsync(Team).ToArrayAsync());
+    }
+
     // ---- The last-administrator guard ----
 
     [Fact]

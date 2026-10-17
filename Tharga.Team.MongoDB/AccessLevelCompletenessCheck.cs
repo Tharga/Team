@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging;
 namespace Tharga.Team.MongoDB;
 
 /// <summary>
-/// Reports, at startup, any stored team member carrying no access level — and therefore being treated as
-/// <see cref="AccessLevel.Owner"/>.
+/// Reports, at startup, any stored team member carrying no access level — and therefore, since 4.0, granted
+/// nothing.
 /// </summary>
 /// <remarks>
 /// <b>Warns rather than throwing, and unconditionally so.</b> The incomplete-service checks offer a
@@ -57,11 +57,10 @@ internal sealed class AccessLevelCompletenessCheck<TTeamEntity, TMember>(
 
             logger?.LogWarning(
                 "{Count} team(s) contain members with no stored AccessLevel: {Teams}{Remainder}. " +
-                "Those members are being treated as Owner, because Owner is the enum's zero value and an " +
-                "absent field cannot be told from a stored one after loading. Nothing has changed - they " +
-                "were already Owner - but a future major release will refuse them instead of granting " +
-                "Owner, so set an explicit level on each. See the implementation guide, 'Members with no " +
-                "access level', for the query that lists and fixes them.",
+                "Since 4.0 those members have no access to their team until a level is set - before 4.0 " +
+                "they were treated as Owner, so a team's original owner may be among them. Set an explicit " +
+                "level on each. See the implementation guide, 'Members with no access level', for the query " +
+                "that lists and fixes them.",
                 affected, named, remainder);
         }
         catch (Exception ex)

@@ -101,7 +101,7 @@ public static class ThargaTeamRegistration
             // Reports a replacement repository that cannot resolve short invitation links (Tharga/Team#286).
             services.AddSingleton(typeof(IHostedService), typeof(InvitationRepositoryCheck<,>).MakeGenericType(teamEntityType, teamMemberModelType));
 
-            // Reports members stored with no access level, which are silently being treated as Owner.
+            // Reports members stored with no access level, who since 4.0 have no access until a level is set.
             // Registered only alongside a team repository, because without one there is nothing to read.
             if (o.CheckMemberAccessLevels)
             {

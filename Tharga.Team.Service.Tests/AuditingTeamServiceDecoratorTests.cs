@@ -63,7 +63,7 @@ public class AuditingTeamServiceDecoratorTests
     [Fact]
     public async Task AddMemberAsync_LogsAuditEntry()
     {
-        await _sut.AddMemberAsync("team-1", new InviteUserModel { Email = "new@test.com" });
+        await _sut.AddMemberAsync("team-1", new InviteUserModel { Email = "new@test.com", AccessLevel = AccessLevel.User });
 
         var entry = Assert.Single(_backend.Entries);
         Assert.Equal("invite", entry.Action);
@@ -191,7 +191,7 @@ public class AuditingTeamServiceDecoratorTests
     public async Task AllEntries_HaveServiceCallEventType()
     {
         await _sut.CreateTeamAsync("Test");
-        await _sut.AddMemberAsync("team-1", new InviteUserModel { Email = "x@x.com" });
+        await _sut.AddMemberAsync("team-1", new InviteUserModel { Email = "x@x.com", AccessLevel = AccessLevel.User });
 
         Assert.All(_backend.Entries, e => Assert.Equal(AuditEventType.ServiceCall, e.EventType));
     }

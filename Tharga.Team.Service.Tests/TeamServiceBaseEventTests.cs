@@ -24,7 +24,7 @@ public class TeamServiceBaseEventTests
         var fired = false;
         _sut.TeamsListChangedEvent += (_, _) => fired = true;
 
-        await _sut.AddMemberAsync("team-1", new InviteUserModel { Email = "new@example.com" });
+        await _sut.AddMemberAsync("team-1", new InviteUserModel { Email = "new@example.com", AccessLevel = AccessLevel.User });
 
         Assert.True(fired);
     }
