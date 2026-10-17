@@ -29,6 +29,16 @@ public class TeamAvatarShapeTests : BunitContext
         Assert.Contains(NoShrink, StyleDeclarations(avatar.Find("span")));
     }
 
+    // A dark theme keeps the primary colour dark and its lighter tint faint, so the initials must sit on the primary itself.
+    [Fact]
+    public void TheInitialsAreReadableInADarkThemeToo()
+    {
+        var style = StyleDeclarations(RenderAvatar(resolvedImage: null).Find("span"));
+
+        Assert.Contains("background:var(--rz-primary,#3730a3)", style);
+        Assert.Contains("color:var(--rz-on-primary,#ffffff)", style);
+    }
+
     [Fact]
     public void ThePictureDoesNotShrink()
     {
