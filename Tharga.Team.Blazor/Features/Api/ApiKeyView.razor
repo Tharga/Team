@@ -181,6 +181,7 @@ else
                                              Descriptions="_scopeDescriptions"
                                              InheritedScopes="@_scopeRegistry.GetEffectiveScopes(_newAccessLevel, _newRoles, null)"
                                              Overrides="_newScopeOverrides"
+                                             HiddenScopes="_hiddenScopes"
                                              OverridesChanged="@(o => _newScopeOverrides = o.ToList())" />
                     </RadzenStack>
                 }
@@ -313,6 +314,9 @@ else
     private ITenantRoleService _tenantRoleService;
     private bool ShowRolePicker => RolePickerGate.ShowRoles(ShowRoles, _roleDefinitions);
     private IReadOnlyList<TenantRoleDefinition> _roleDefinitions = Array.Empty<TenantRoleDefinition>();
+    // Scopes the team's ITeamScopeVisibilityProvider hides. Left out of the pickers and the scope list;
+    // a key that already holds one keeps it.
+    private IReadOnlySet<string> _hiddenScopes = new HashSet<string>();
 
     private ApiKeyOwnership Ownership => _options?.TeamKeys ?? ApiKeyOwnership.Both;
     private bool ShowPersonalCheckbox => PersonalKeyChoice.ShowCheckbox(Ownership, ShowPrivateKeys);
@@ -352,6 +356,11 @@ else
             ? DateTime.UtcNow.AddDays(_options.MaxExpiryDays.Value).Date
             : null;
         _roleDefinitions = await ApiKeyRolePicker.ResolveAsync(_tenantRoleService, _tenantRoleRegistry, _selectedTeam?.Key);
+        // The same visibility the member editor applies: a role or scope switched off for this team is not
+        // offered on its keys either. RoleEditor keeps a hidden role a key already has.
+        _roleDefinitions = await ScopeVisibility.VisibleRolesAsync(ServiceProvider.GetService<ITenantRoleVisibilityProvider>(), _selectedTeam?.Key, _roleDefinitions);
+        _hiddenScopes = await ScopeVisibility.HiddenAsync(ServiceProvider.GetService<ITeamScopeVisibilityProvider>(), _selectedTeam?.Key,
+            _scopeRegistry?.All.Select(s => s.Name) ?? []);
         _teamLoaded = true;
         await ReloadData();
         await base.OnInitializedAsync();
@@ -447,7 +456,8 @@ else
 
         var accessLevelScopes = _scopeRegistry.GetScopesForAccessLevel(context.AccessLevel);
         var overrides = context.ScopeOverrides ?? Array.Empty<string>();
-        var allScopes = _scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.Roles, context.ScopeOverrides);
+        var allScopes = _scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.Roles, context.ScopeOverrides)
+            .Where(s => !_hiddenScopes.Contains(s));
 
         var lines = new List<string>();
         foreach (var scope in allScopes.OrderBy(s => s, StringComparer.Ordinal))
@@ -628,6 +638,7 @@ else
                                          Descriptions="_scopeDescriptions"
                                          InheritedScopes="@_scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.Roles, null)"
                                          Overrides="@(context.ScopeOverrides ?? Array.Empty<string>())"
+                                         HiddenScopes="_hiddenScopes"
                                          OverridesChanged="@(o => selectedScopes = o.ToList())"
                                          Style="width: 100%;" />
                 }
