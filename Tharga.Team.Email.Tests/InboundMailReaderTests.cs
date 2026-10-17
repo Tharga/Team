@@ -191,6 +191,26 @@ public class InboundMailReaderTests
             m.Body = new TextPart("html") { Text = "<p>Any <b>news</b>?</p><p>Thanks</p>" }));
 
         Assert.Equal("Any news?\n\nThanks", mail.Body);
+        Assert.Equal("<p>Any <b>news</b>?</p><p>Thanks</p>", mail.BodyHtml);
+    }
+
+    [Fact]
+    public void AMailWithTextAndHtml_KeepsTheTextAsItsBody_AndTheHtmlAsWritten()
+    {
+        var mail = InboundMailReader.Read(Message(customize: m => m.Body = new MultipartAlternative
+        {
+            new TextPart("plain") { Text = "Any news?" },
+            new TextPart("html") { Text = "<p onclick=\"x()\">Any <b>news</b>?</p>" }
+        }));
+
+        Assert.Equal("Any news?", mail.Body);
+        Assert.Equal("<p onclick=\"x()\">Any <b>news</b>?</p>", mail.BodyHtml);
+    }
+
+    [Fact]
+    public void APlainTextMail_HasNoHtml()
+    {
+        Assert.Null(InboundMailReader.Read(Message()).BodyHtml);
     }
 
     [Fact]

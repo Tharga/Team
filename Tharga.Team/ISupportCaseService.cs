@@ -46,6 +46,9 @@ public interface ISupportCaseService
     /// <summary>Appends a reply carrying files to an open case, authorized exactly as a reply without files.</summary>
     Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
 
+    /// <summary>Appends a formatted reply with any files, authorized as a plain reply: <paramref name="bodyHtml"/> is sanitized, its images become their alt text, the text is derived from it, and <paramref name="body"/> is used only when it holds nothing readable.</summary>
+    Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Answers a case from the support side. The answer counts as support's whoever writes it, so it takes the
     /// case out of the waiting count and is unread for the person who raised it until they open it.
@@ -59,6 +62,9 @@ public interface ISupportCaseService
 
     /// <summary>Answers a case from the support side with files, authorized exactly as an answer without files.</summary>
     Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
+    /// <summary>Answers a case from the support side with formatted text and any files, authorized as a plain answer and sanitized and derived as the formatted reply is.</summary>
+    Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
 
     /// <summary>Opens a file carried by one entry of a case, authorized exactly as reading its transcript, or returns null when that entry carries no attachment with this id; the caller disposes it and serves it as <see cref="SupportAttachmentContentTypes.ServedAs"/> says.</summary>
     Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default);

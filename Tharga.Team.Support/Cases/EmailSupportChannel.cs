@@ -1,5 +1,8 @@
+using System.Net;
+using System.Text;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Email;
+using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -81,7 +84,8 @@ internal sealed class EmailSupportChannel(
                 InReplyTo: thread[^1],
                 References: thread,
                 ReplyTo: ReplyToFor(supportCase?.Id),
-                Attachments: files),
+                Attachments: files,
+                BodyHtml: Html(message, earlier)),
             cancellationToken);
 
         // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case,
@@ -123,7 +127,7 @@ internal sealed class EmailSupportChannel(
 
             using var buffer = new MemoryStream();
             await opened.Content.CopyToAsync(buffer, cancellationToken);
-            files.Add(new MailAttachment(attachment.FileName, attachment.ContentType, buffer.ToArray()));
+            files.Add(new MailAttachment(attachment.FileName, attachment.ContentType, buffer.ToArray(), attachment.ContentId));
         }
 
         return (files, null);
@@ -166,7 +170,46 @@ internal sealed class EmailSupportChannel(
 
     // The conversation so far, newest first, quoted the way mail clients quote, so the answer reads on its own.
     private static string Quoted(SupportMessage message)
-        => $"{message.SentAt:yyyy-MM-dd HH:mm} UTC, {message.AuthorName}:\n" + string.Join("\n", (message.Body ?? "").Split('\n').Select(x => "> " + x.TrimEnd('\r')));
+        => $"{Attribution(message)}:\n" + string.Join("\n", (message.Body ?? "").Split('\n').Select(x => "> " + x.TrimEnd('\r')));
+
+    private static string Attribution(SupportMessage message) => $"{message.SentAt:yyyy-MM-dd HH:mm} UTC, {message.AuthorName}";
+
+    /// <summary>
+    /// The HTML version of <see cref="Body"/>, for an entry written with formatting; null for a plain entry, which is
+    /// mailed as text alone as it always was.
+    /// </summary>
+    /// <remarks>
+    /// Each earlier message is quoted in a <c>blockquote</c>, as its own formatting when it had some and as its
+    /// escaped text otherwise. Everything is sanitized again on the way out. An image keeps its <c>cid:</c>
+    /// reference only when this entry carries that file, so it travels beside the HTML; an earlier message's images
+    /// are named rather than sent again.
+    /// </remarks>
+    internal static string Html(SupportMessage message, IReadOnlyList<SupportMessage> earlier)
+    {
+        var own = SafeHtml.Sanitize(message.BodyHtml, contentId => Carries(message, contentId) ? HtmlImage.Keep : HtmlImage.Described(NameOf(message, contentId)));
+        if (own == null) return null;
+
+        var html = new StringBuilder();
+
+        if (message.Kind != SupportMessageKind.System) html.Append("<p>").Append(WebUtility.HtmlEncode(message.AuthorName)).Append(":</p>");
+        html.Append(own);
+
+        foreach (var quoted in earlier)
+        {
+            var body = SafeHtml.Sanitize(quoted.BodyHtml, contentId => HtmlImage.Described(NameOf(quoted, contentId))) ?? SafeHtml.FromPlainText(quoted.Body);
+
+            html.Append("<p>").Append(WebUtility.HtmlEncode(Attribution(quoted))).Append(":</p>");
+            html.Append("<blockquote>").Append(body).Append("</blockquote>");
+        }
+
+        return html.ToString();
+    }
+
+    private static bool Carries(SupportMessage message, string contentId)
+        => (message.Attachments ?? []).Any(x => string.Equals(x.ContentId, contentId, StringComparison.Ordinal));
+
+    private static string NameOf(SupportMessage message, string contentId)
+        => (message.Attachments ?? []).FirstOrDefault(x => string.Equals(x.ContentId, contentId, StringComparison.Ordinal))?.FileName;
 
     /// <summary>
     /// The per-case reply address, when the host has confirmed its mail server accepts plus-addressing.

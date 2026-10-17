@@ -45,6 +45,12 @@
       host on MongoDB already carries it, because the driver takes it for SRV records.
     -->
     <PackageReference Include="DnsClient" Version="1.8.0" />
+    <!--
+      Parses mail HTML for its plain-text rendering, for where a reply's quoted history begins, and for the images
+      an HTML body names. Referenced here rather than taken through the sanitizer's dependency, because the
+      transport uses it on its own account and has to keep doing so if it is lifted out.
+    -->
+    <PackageReference Include="AngleSharp" Version="1.8.1" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.13" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />

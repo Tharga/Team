@@ -68,16 +68,11 @@ else
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {
-                                @* oninput as well as the value binding: Radzen binds on change, so the
-                                   Answer button would stay disabled until the box lost focus. *@
-                                <RadzenTextArea Value="@_answer" ValueChanged="@(v => _answer = v)"
-                                                @oninput="@(e => _answer = e.Value?.ToString())"
-                                                Placeholder="@_text[SupportQueueViewText.AnswerLabel]"
-                                                Rows="3" Style="width: 100%;" aria-label="@_text[SupportQueueViewText.AnswerLabel]" />
+                                <RichTextEditor @bind-Value="_answer" Label="@_text[SupportQueueViewText.AnswerLabel]" Disabled="_busy" Height="8rem" />
                                 <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                     <RadzenButton Text="@_text[SupportQueueViewText.AnswerLabel]" Click="AnswerAsync"
-                                                  Disabled="@((string.IsNullOrWhiteSpace(_answer) && _files.Count == 0) || _busy)" />
+                                                  Disabled="@(NothingToSend || _busy)" data-answer="@_selected.Id" />
                                     <RadzenButton Text="@_text[SupportQueueViewText.Close]" ButtonStyle="ButtonStyle.Light"
                                                   Click="CloseAsync" Disabled="_busy" />
                                 </RadzenStack>
@@ -150,17 +145,19 @@ else
                 ? _text[SupportQueueViewText.ClosedForInactivity]
                 : _text[SupportQueueViewText.Closed];
 
+    private bool NothingToSend => RichTextEditor.IsEmpty(_answer) && _files.Count == 0;
+
+    /// <remarks>The editor's HTML goes as it is; the service sanitizes it and derives the text.</remarks>
     private async Task AnswerAsync()
     {
-        if ((string.IsNullOrWhiteSpace(_answer) && _files.Count == 0) || _selected == null) return;
+        if (NothingToSend || _selected == null) return;
 
         _busy = true;
         try
         {
             var files = SupportAttachmentPicker.Rewound(_files);
 
-            if (files.Count == 0) await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, _answer);
-            else await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, _answer ?? string.Empty, files);
+            await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, string.Empty, _answer ?? string.Empty, files);
 
             _answer = null;
             _files = [];

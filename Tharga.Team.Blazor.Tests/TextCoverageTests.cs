@@ -78,6 +78,8 @@ public class TextCoverageTests
         "Features/Support/SupportUnassignedView.razor",
         "Features/Support/SupportUnassignedConversation.razor",
         "Features/Support/SupportAttachmentPicker.razor",
+        "Framework/RichTextEditor.razor",
+        "Framework/RichTextView.razor",
         "Features/Mailbox/PostmasterView.razor",
         "Features/Mailbox/TeamMailAddressView.razor",
     ];
@@ -253,6 +255,7 @@ public class TextCoverageTests
         Assert.All(SupportUnassignedViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportCaseFilterText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportAttachmentText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(RichTextEditorText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()

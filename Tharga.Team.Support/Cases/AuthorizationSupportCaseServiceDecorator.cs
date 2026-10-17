@@ -76,6 +76,14 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.ReplyToCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
     }
 
+    /// <remarks>Authorized exactly as a plain reply: the formatting is part of what is written.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "reply to", CaseAccessKind.Write);
+
+        await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
+    }
+
     /// <remarks>
     /// A support grant and nothing else: authorship lets a member reply to their own case, never answer it as
     /// support, or anybody could clear their own case from the queue by answering it.
@@ -93,6 +101,14 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await RequireSupportAnswerAsync(teamKey, caseId);
 
         await inner.AnswerCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
+    }
+
+    /// <remarks>Authorized exactly as a plain answer.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        await inner.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
     }
 
     /// <remarks>

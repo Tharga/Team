@@ -61,7 +61,8 @@ internal static class InboundMailReader
             Cc: [.. message.Cc.Mailboxes.Select(x => Normalize(x.Address)).Where(x => x.Length > 0)],
             BouncedMessageId: bounce?.MessageId,
             BounceReason: bounce?.Reason,
-            Attachments: attachments);
+            Attachments: attachments,
+            BodyHtml: bounce == null && !string.IsNullOrWhiteSpace(message.HtmlBody) ? message.HtmlBody : null);
     }
 
     /// <summary>

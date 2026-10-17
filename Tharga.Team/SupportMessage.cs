@@ -26,7 +26,11 @@ public record SupportMessage
     /// <summary>The author's display name as it was when the message was written.</summary>
     public string AuthorName { get; init; }
 
+    /// <summary>The entry as plain text, which every reader can use; with <see cref="BodyHtml"/> set it is that HTML's plain-text rendering, or a received mail's own text part.</summary>
     public required string Body { get; init; }
+
+    /// <summary>The entry's formatting as sanitized HTML beside <see cref="Body"/>, or null for a plain entry; show it only through the sanitizer again.</summary>
+    public string BodyHtml { get; init; }
 
     public required DateTime SentAt { get; init; }
 

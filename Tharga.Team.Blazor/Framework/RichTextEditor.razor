@@ -1,0 +1,65 @@
+@using Tharga.Team.Service.Html
+@namespace Tharga.Team.Blazor.Framework
+
+@* No image tool: files travel through an attach control, and whatever is pasted is sanitized as it arrives. *@
+
+<div class="tharga-rich-text-editor" data-rich-text-editor>
+    <RadzenHtmlEditor Value="@Value" ValueChanged="ChangedAsync" Input="ChangedAsync" Paste="Paste" Disabled="@Disabled"
+                      Placeholder="@Label" aria-label="@Label" Style="@($"width: 100%; height: {Height};")">
+        <RadzenHtmlEditorUndo Title="@_text[RichTextEditorText.Undo]" />
+        <RadzenHtmlEditorRedo Title="@_text[RichTextEditorText.Redo]" />
+        <RadzenHtmlEditorSeparator />
+        <RadzenHtmlEditorBold Title="@_text[RichTextEditorText.Bold]" />
+        <RadzenHtmlEditorItalic Title="@_text[RichTextEditorText.Italic]" />
+        <RadzenHtmlEditorUnderline Title="@_text[RichTextEditorText.Underline]" />
+        <RadzenHtmlEditorSeparator />
+        <RadzenHtmlEditorUnorderedList Title="@_text[RichTextEditorText.BulletedList]" />
+        <RadzenHtmlEditorOrderedList Title="@_text[RichTextEditorText.NumberedList]" />
+        <RadzenHtmlEditorSeparator />
+        <RadzenHtmlEditorLink Title="@_text[RichTextEditorText.Link]" UrlText="@_text[RichTextEditorText.LinkAddress]"
+                              LinkText="@_text[RichTextEditorText.LinkText]" OpenInNewWindowText="@_text[RichTextEditorText.LinkNewWindow]"
+                              OkText="@_text[RichTextEditorText.LinkOk]" CancelText="@_text[RichTextEditorText.LinkCancel]" />
+        <RadzenHtmlEditorRemoveFormat Title="@_text[RichTextEditorText.RemoveFormatting]" />
+    </RadzenHtmlEditor>
+</div>
+
+@code {
+    /// <summary>The HTML being written, as the editor holds it; sanitize it before keeping it, as the support service does.</summary>
+    [Parameter] public string Value { get; set; }
+
+    /// <summary>Raised with the HTML on every change, as it is typed, so a send button can follow whether anything is written.</summary>
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    /// <summary>Whether writing is off, as while the text is being sent.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>What the editor is for, shown while it is empty and read out by assistive technology.</summary>
+    [Parameter] public string Label { get; set; }
+
+    /// <summary>The editor's height as a CSS length.</summary>
+    [Parameter] public string Height { get; set; } = "10rem";
+
+    /// <summary>Whether HTML from this editor holds nothing readable, as when only empty paragraphs remain.</summary>
+    public static bool IsEmpty(string html) => SafeHtml.IsEmpty(html);
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(RichTextEditorText.All);
+    }
+
+    private async Task ChangedAsync(string html)
+    {
+        if (html == Value) return;
+
+        Value = html;
+        await ValueChanged.InvokeAsync(html);
+    }
+
+    /// <remarks>Images go with the rest of what may not be kept: a pasted file would otherwise arrive as data inside the text.</remarks>
+    private static void Paste(HtmlEditorPasteEventArgs args)
+        => args.Html = SafeHtml.Sanitize(args.Html, _ => null) ?? string.Empty;
+}

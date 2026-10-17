@@ -331,10 +331,10 @@ public class SupportUnassignedViewRenderTests : BunitContext
         var view = RenderView(out var cases);
 
         Open(view, Case.Id);
-        view.Find("[data-conversation='case-1'] textarea").Input("Which organisation are you with?");
+        view.TypeRichText("<p>Which organisation are you with?</p>");
         view.Find("[data-answer='case-1']").Click();
 
-        cases.Verify(x => x.AnswerCaseAsync(null, Case.Id, "Which organisation are you with?", default), Times.Once);
+        cases.Verify(x => x.AnswerCaseAsync(null, Case.Id, string.Empty, "<p>Which organisation are you with?</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), default), Times.Once);
     }
 
     [Fact]
@@ -369,7 +369,7 @@ public class SupportUnassignedViewRenderTests : BunitContext
         var view = RenderView(out var cases);
 
         Open(view, Case.Id);
-        view.Find("[data-conversation='case-1'] textarea").Input("On it.");
+        view.TypeRichText("On it.");
         view.Find("[data-answer='case-1']").Click();
 
         cases.Verify(x => x.GetMessagesAsync(null, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase, default), Times.Exactly(2));

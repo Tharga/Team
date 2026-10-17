@@ -44,6 +44,12 @@
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
     <PackageReference Include="Tharga.MongoDB" Version="2.18.2" />
+    <!--
+      The one HTML sanitizer: formatted text is kept and shown only as its allow-listed output, on every way in
+      and at every render. A maintained library rather than hand-rolled parsing, because a sanitizer is only as
+      good as its parser's agreement with the browser's, and AngleSharp parses as HTML5 does.
+    -->
+    <PackageReference Include="HtmlSanitizer" Version="9.2.1039" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team\Tharga.Team.csproj" />

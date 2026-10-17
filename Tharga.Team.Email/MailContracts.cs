@@ -18,6 +18,7 @@ namespace Tharga.Team.Email;
 /// <c>support+{caseId}@…</c>. Null uses the configured sending address.
 /// </param>
 /// <param name="Attachments">Files to send with the mail, in order; null or empty sends the body alone.</param>
+/// <param name="BodyHtml">The same message as HTML the caller has sanitized, sent as <c>multipart/alternative</c> with <paramref name="Body"/> as its text and any file it names by <c>cid:</c> inline beside it; null sends the text alone.</param>
 public readonly record struct OutboundMail(
     string To,
     string Subject,
@@ -25,7 +26,8 @@ public readonly record struct OutboundMail(
     string InReplyTo = null,
     IReadOnlyList<string> References = null,
     string ReplyTo = null,
-    IReadOnlyList<MailAttachment> Attachments = null);
+    IReadOnlyList<MailAttachment> Attachments = null,
+    string BodyHtml = null);
 
 /// <summary>
 /// A file sent with a mail.
@@ -33,7 +35,8 @@ public readonly record struct OutboundMail(
 /// <param name="FileName">The name the recipient sees.</param>
 /// <param name="ContentType">The declared content type; one that does not parse is sent as <c>application/octet-stream</c>.</param>
 /// <param name="Content">The file's bytes.</param>
-public readonly record struct MailAttachment(string FileName, string ContentType, byte[] Content);
+/// <param name="ContentId">The Content-ID an HTML body names the file by as <c>cid:</c>, without angle brackets; null for a plain attachment.</param>
+public readonly record struct MailAttachment(string FileName, string ContentType, byte[] Content, string ContentId = null);
 
 /// <summary>
 /// A file that arrived with a mail: an attachment, an image shown inside its body, or a forwarded message.
@@ -146,6 +149,7 @@ public readonly record struct MailFetchResult(
 /// </param>
 /// <param name="SenderDomain">The signing domain that vouches for the sender when <paramref name="SenderVerified"/>; otherwise null.</param>
 /// <param name="Attachments">The files that came with the mail in the order they appear — attachments, images shown inside the body and forwarded messages as <c>.eml</c> files — or null when the source did not read them.</param>
+/// <param name="BodyHtml">The HTML body exactly as the sender wrote it and <b>not sanitized</b>, quoted history included, or null when the mail had none.</param>
 /// <remarks>
 /// <b>Verified vouches for the domain's mail system, not for a person.</b> A large provider signs only what its
 /// own account holder sent, so there it amounts to the address; a company domain signs whatever its servers
@@ -171,4 +175,5 @@ public readonly record struct InboundMail(
     string BounceReason = null,
     bool SenderVerified = false,
     string SenderDomain = null,
-    IReadOnlyList<InboundAttachment> Attachments = null);
+    IReadOnlyList<InboundAttachment> Attachments = null,
+    string BodyHtml = null);

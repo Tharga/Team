@@ -1,6 +1,8 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Email;
+using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -88,12 +90,13 @@ internal sealed class EmailEventHandler(
             return EmailHandlingOutcome.Ignored("sender does not correspond with the case");
         }
 
-        var text = QuotedText.Trim(mail.Body);
+        var text = QuotedText.Trim(mail.Body, out var textCut);
 
         if (IsEmpty(mail, text)) return EmailHandlingOutcome.Ignored("empty body");
 
         var files = await StoreFilesAsync(supportCase.Id, mail, cancellationToken);
         var body = Body(text, files.Notes);
+        var html = Html(mail.BodyHtml, textCut, files.Notes);
 
         await store.AppendMessageAsync(supportCase.TeamKey, supportCase.Id, new SupportMessage
         {
@@ -106,6 +109,7 @@ internal sealed class EmailEventHandler(
             AuthorIdentity = supportCase.AuthorIdentity,
             AuthorName = mail.From,
             Body = body,
+            BodyHtml = html,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
 
             // It came from the channel, so it is already there. Posting it back would echo it into the
@@ -198,7 +202,7 @@ internal sealed class EmailEventHandler(
     /// </remarks>
     private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, CancellationToken cancellationToken)
     {
-        var text = QuotedText.Trim(mail.Body);
+        var text = QuotedText.Trim(mail.Body, out var textCut);
 
         if (IsEmpty(mail, text)) return EmailHandlingOutcome.Ignored("empty body");
 
@@ -213,6 +217,7 @@ internal sealed class EmailEventHandler(
         // Stored under the new case's id before the case exists, so its first message can name them.
         var files = await StoreFilesAsync(caseId, mail, cancellationToken);
         var body = Body(text, files.Notes);
+        var html = Html(mail.BodyHtml, textCut, files.Notes);
 
         var supportCase = new SupportCase
         {
@@ -246,6 +251,7 @@ internal sealed class EmailEventHandler(
             AuthorIdentity = authorIdentity,
             AuthorName = authorName,
             Body = body,
+            BodyHtml = html,
             SentAt = now,
 
             // It arrived through the channel, so it is already delivered. Marking it Pending would have the
@@ -372,6 +378,32 @@ internal sealed class EmailEventHandler(
         const string marker = "\n\n[trimmed]";
 
         return string.Concat(text.AsSpan(0, SupportCaseLimits.MaxMessageLength - marker.Length), marker);
+    }
+
+    /// <summary>
+    /// The mail's formatting to keep beside its text: its HTML with the quoted thread cut off, sanitized, and the
+    /// notes about files not kept added; null when there is none worth keeping.
+    /// </summary>
+    /// <remarks>
+    /// <b>Dropped whenever it would show more than the text does.</b> When the text lost a quoted thread and no quote
+    /// was found in the HTML, the HTML still carries that thread in some shape not recognised, and a transcript
+    /// showing every earlier message again under each reply is the failure the text trimming exists to prevent.
+    /// HTML with no formatting beyond paragraphs and line breaks, or too long to keep, is dropped too; the text is
+    /// always there.
+    /// </remarks>
+    private static string Html(string mailHtml, bool textCut, IReadOnlyList<string> notes)
+    {
+        if (string.IsNullOrWhiteSpace(mailHtml)) return null;
+
+        var (reply, htmlCut) = QuotedHtml.Trim(mailHtml);
+        if (textCut && !htmlCut) return null;
+
+        var html = SafeHtml.Sanitize(reply);
+        if (html == null || !SafeHtml.IsFormatted(html)) return null;
+
+        if (notes.Count > 0) html += $"<p>{string.Join("<br>", notes.Select(WebUtility.HtmlEncode))}</p>";
+
+        return html.Length <= SupportCaseLimits.MaxMessageHtmlLength ? html : null;
     }
 
     /// <summary>What a case opened without a subject is named after: its text, or its files when it has none.</summary>

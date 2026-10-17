@@ -247,7 +247,7 @@ public class SupportAttachmentRenderTests : BunitContext
         view.FindComponent<InputFile>().UploadFiles(InputFileContent.CreateFromBinary([1, 2], "log.zip", contentType: "application/zip"));
         view.Find($"[data-answer='{CaseId}']").Click();
 
-        _cases.Verify(x => x.AnswerCaseAsync(null, CaseId, string.Empty,
+        _cases.Verify(x => x.AnswerCaseAsync(null, CaseId, string.Empty, string.Empty,
             It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "log.zip"),
             It.IsAny<CancellationToken>()), Times.Once);
         _cases.Verify(x => x.AnswerCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
@@ -280,10 +280,10 @@ public class SupportAttachmentRenderTests : BunitContext
         view.FindAll("button").First(x => x.TextContent.Contains(label) && !x.HasAttribute("disabled")).Click();
 
         if (asStaff)
-            _cases.Verify(x => x.AnswerCaseAsync(TeamKey, CaseId, string.Empty,
+            _cases.Verify(x => x.AnswerCaseAsync(TeamKey, CaseId, string.Empty, string.Empty,
                 It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "screenshot.png"), It.IsAny<CancellationToken>()), Times.Once);
         else
-            _cases.Verify(x => x.ReplyToCaseAsync(TeamKey, CaseId, string.Empty,
+            _cases.Verify(x => x.ReplyToCaseAsync(TeamKey, CaseId, string.Empty, string.Empty,
                 It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "screenshot.png"), It.IsAny<CancellationToken>()), Times.Once);
     }
 

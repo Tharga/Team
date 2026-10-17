@@ -105,6 +105,22 @@ public class SupportCaseAuditTests
         Assert.DoesNotContain(entry.Metadata.Values, x => x.Contains("salaries", StringComparison.Ordinal));
     }
 
+    /// <summary>A formatted reply is the same fact as a plain one, and neither its text nor its formatting is recorded.</summary>
+    [Fact]
+    public async Task AFormattedReply_IsAuditedAsAReply_AndNeverItsContent()
+    {
+        var (service, sink) = Build(TeamA, Alice);
+        var raised = await service.RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        await service.ReplyToCaseAsync(TeamA, raised.Id, null, "<p>My password is <b>hunter2</b></p>", []);
+
+        var entry = sink.Entries.Last();
+        Assert.Equal("reply", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal("0", entry.Metadata[SupportAuditMetadataKeys.AttachmentCount]);
+        Assert.DoesNotContain(entry.Metadata.Values, x => x != null && x.Contains("hunter2", StringComparison.Ordinal));
+    }
+
     private static (ISupportCaseService Service, CollectingAuditLogger Sink) Build(string memberOfTeam, string subject)
     {
         var claims = new List<Claim>

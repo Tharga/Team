@@ -1,6 +1,7 @@
 using System.Globalization;
 using Tharga.Team.Email;
 using Tharga.Team.Service;
+using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -165,16 +166,22 @@ internal sealed class SupportCaseService(
     }
 
     public Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, [], asSupport: false, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, null, [], asSupport: false, cancellationToken);
 
     public Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, attachments, asSupport: false, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, null, attachments, asSupport: false, cancellationToken);
+
+    public Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: false, cancellationToken);
 
     public Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, [], asSupport: true, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, null, [], asSupport: true, cancellationToken);
 
     public Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, attachments, asSupport: true, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, null, attachments, asSupport: true, cancellationToken);
+
+    public Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: true, cancellationToken);
 
     /// <remarks>
     /// The entry is read by its sequence and the attachment found on it, so an id belonging to another entry or
@@ -221,8 +228,9 @@ internal sealed class SupportCaseService(
         return string.IsNullOrEmpty(subject) ? [] : await store.GetUnreadByCaseAsync(teamKey, subject, cancellationToken);
     }
 
-    private async Task WriteAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken)
+    private async Task WriteAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken)
     {
+        (body, bodyHtml) = Content(body, bodyHtml);
         RequireWithinLength(body);
 
         var uploads = (attachments ?? []).Where(x => x != null).ToArray();
@@ -257,6 +265,7 @@ internal sealed class SupportCaseService(
             AuthorIdentity = await authorizer.GetSubjectAsync(),
             AuthorName = await DisplayNameAsync(),
             Body = body ?? string.Empty,
+            BodyHtml = bodyHtml,
             SentAt = now,
             AsSupport = asSupport,
             Attachments = stored
@@ -289,6 +298,26 @@ internal sealed class SupportCaseService(
         }
 
         Notify(teamKey, caseId, SupportCaseChange.Replied);
+    }
+
+    /// <summary>
+    /// The entry's text and formatting from what the caller wrote: HTML sanitized here whatever the caller did, and
+    /// the text derived from it, so the two can never say different things.
+    /// </summary>
+    /// <remarks>
+    /// Images go: a file written on the site travels as an attachment, so a <c>cid:</c> reference here could only
+    /// point at nothing. HTML with no formatting beyond paragraphs and line breaks, or longer than
+    /// <see cref="SupportCaseLimits.MaxMessageHtmlLength"/>, is kept as its text alone; HTML with nothing readable
+    /// leaves <paramref name="body"/> as written.
+    /// </remarks>
+    internal static (string Body, string BodyHtml) Content(string body, string bodyHtml)
+    {
+        var html = SafeHtml.Sanitize(bodyHtml, _ => null);
+        if (html == null) return (body, null);
+
+        var text = HtmlText.ToPlainText(html);
+
+        return SafeHtml.IsFormatted(html) && html.Length <= SupportCaseLimits.MaxMessageHtmlLength ? (text, html) : (text, null);
     }
 
     /// <summary>Refuses files the limits or a missing store rule out, before anything is written.</summary>

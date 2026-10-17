@@ -49,32 +49,62 @@ internal static class MailMessageFactory
     }
 
     /// <summary>
-    /// The text alone, or <c>multipart/mixed</c> with the text first and each file after it in order.
+    /// The text alone, or with HTML as <c>multipart/alternative</c>; inside <c>multipart/mixed</c> with each file
+    /// after it in order when there are files.
     /// </summary>
     /// <remarks>
-    /// Every file goes base64 as an attachment under its declared type, so nothing in it is read as part of the
-    /// message; a type that does not parse goes as <c>application/octet-stream</c>.
+    /// Every file goes base64 under its declared type, so nothing in it is read as part of the message; a type that
+    /// does not parse goes as <c>application/octet-stream</c>. A file the HTML names by <c>cid:</c> goes inline in
+    /// <c>multipart/related</c> beside the HTML, so a mail client shows it in place rather than listing it.
     /// </remarks>
     private static MimeEntity Body(OutboundMail mail)
     {
-        var text = new TextPart("plain") { Text = mail.Body ?? string.Empty };
+        var named = string.IsNullOrWhiteSpace(mail.BodyHtml) ? [] : HtmlContentIds.Of(mail.BodyHtml);
+        var inline = new List<MailAttachment>();
+        var attached = new List<MailAttachment>();
 
-        if (mail.Attachments is not { Count: > 0 } attachments) return text;
-
-        var mixed = new Multipart("mixed") { text };
-
-        foreach (var attachment in attachments)
+        foreach (var attachment in mail.Attachments ?? [])
         {
-            mixed.Add(new MimePart(ContentType.TryParse(attachment.ContentType ?? string.Empty, out var parsed) ? parsed : new ContentType("application", "octet-stream"))
-            {
-                Content = new MimeContent(new MemoryStream(attachment.Content ?? [], false)),
-                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
-                ContentTransferEncoding = ContentEncoding.Base64,
-                FileName = AttachmentFileName.Sanitize(attachment.FileName, attachment.ContentType)
-            });
+            var isNamed = !string.IsNullOrWhiteSpace(attachment.ContentId) && named.Contains(attachment.ContentId.Trim('<', '>'));
+            (isNamed ? inline : attached).Add(attachment);
         }
 
+        MimeEntity body = new TextPart("plain") { Text = mail.Body ?? string.Empty };
+
+        if (!string.IsNullOrWhiteSpace(mail.BodyHtml)) body = new MultipartAlternative { body, Html(mail.BodyHtml, inline) };
+
+        if (attached.Count == 0) return body;
+
+        var mixed = new Multipart("mixed") { body };
+        foreach (var attachment in attached) mixed.Add(Part(attachment, ContentDisposition.Attachment));
+
         return mixed;
+    }
+
+    private static MimeEntity Html(string html, IReadOnlyList<MailAttachment> inline)
+    {
+        var part = new TextPart("html") { Text = html };
+        if (inline.Count == 0) return part;
+
+        var related = new MultipartRelated { part };
+        foreach (var image in inline) related.Add(Part(image, ContentDisposition.Inline));
+
+        return related;
+    }
+
+    private static MimePart Part(MailAttachment attachment, string disposition)
+    {
+        var part = new MimePart(ContentType.TryParse(attachment.ContentType ?? string.Empty, out var parsed) ? parsed : new ContentType("application", "octet-stream"))
+        {
+            Content = new MimeContent(new MemoryStream(attachment.Content ?? [], false)),
+            ContentDisposition = new ContentDisposition(disposition),
+            ContentTransferEncoding = ContentEncoding.Base64,
+            FileName = AttachmentFileName.Sanitize(attachment.FileName, attachment.ContentType)
+        };
+
+        if (disposition == ContentDisposition.Inline) part.ContentId = attachment.ContentId.Trim('<', '>');
+
+        return part;
     }
 
     /// <summary>

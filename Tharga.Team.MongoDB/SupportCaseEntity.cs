@@ -162,6 +162,10 @@ public record SupportMessageEntity
 
     public required string Body { get; init; }
 
+    /// <summary>The entry's sanitized HTML; absent on a plain entry, as on every entry written before formatting was kept.</summary>
+    [BsonIgnoreIfNull]
+    public string BodyHtml { get; init; }
+
     public required DateTime SentAt { get; init; }
 
     [BsonRepresentation(BsonType.String)]

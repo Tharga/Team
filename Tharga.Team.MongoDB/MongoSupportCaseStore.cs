@@ -599,6 +599,11 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             throw new InvalidOperationException(
                 $"A support message is {message.Body.Length} characters, which exceeds the limit of " +
                 $"{SupportCaseLimits.MaxMessageLength}. Attach or link long content instead of pasting it.");
+
+        if (message.BodyHtml != null && message.BodyHtml.Length > SupportCaseLimits.MaxMessageHtmlLength)
+            throw new InvalidOperationException(
+                $"A support message's formatting is {message.BodyHtml.Length} characters, which exceeds the limit of " +
+                $"{SupportCaseLimits.MaxMessageHtmlLength}. Keep it as plain text instead.");
     }
 
     private static int ParseSequence(string cursor) =>
@@ -659,6 +664,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorIdentity = entity.AuthorIdentity,
         AuthorName = entity.AuthorName,
         Body = entity.Body,
+        BodyHtml = entity.BodyHtml,
         SentAt = entity.SentAt,
         Delivery = entity.Delivery,
         DeliveryError = entity.Delivery == SupportMessageDelivery.Failed ? entity.DeliveryError : null,
@@ -674,6 +680,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AuthorIdentity = message.AuthorIdentity,
         AuthorName = message.AuthorName,
         Body = message.Body,
+        BodyHtml = message.BodyHtml,
         SentAt = message.SentAt,
         Delivery = message.Delivery,
         DeliveryError = message.Delivery == SupportMessageDelivery.Failed ? message.DeliveryError : null,
