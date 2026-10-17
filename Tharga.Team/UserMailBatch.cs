@@ -20,6 +20,9 @@ public sealed record UserMailBatch
 
     /// <summary>Files sent with every mail of the batch, stored once and within the configured limits.</summary>
     public UserMailAttachment[] Attachments { get; init; } = [];
+
+    /// <summary>Which kind of mail every mail of the batch is, shown in each recipient's history; default <see cref="UserMailKind.Message"/>.</summary>
+    public UserMailKind Kind { get; init; } = UserMailKind.Message;
 }
 
 /// <summary>The outcome of <see cref="IUserMailQueue.QueueBatchAsync"/>.</summary>

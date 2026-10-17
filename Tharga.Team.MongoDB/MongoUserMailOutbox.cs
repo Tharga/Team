@@ -18,6 +18,7 @@ namespace Tharga.Team.MongoDB;
 internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserMailBatchCollection batches) : IUserMailOutbox
 {
     private const string AttachmentContentPath = "Attachments.$[].Content";
+    private const string AttachmentContentField = "Attachments.Content";
 
     private static readonly FilterDefinitionBuilder<UserMailEntity> Filter = Builders<UserMailEntity>.Filter;
 
@@ -65,14 +66,14 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         return before == null ? null : ToItem(before with { ClaimedBy = claimant, ClaimedUntil = until, Attempts = before.Attempts + 1 });
     }
 
-    public Task<bool> MarkSentAsync(string id, string claimant, string messageId, DateTime at, CancellationToken cancellationToken = default)
-        => CompleteAsync(id, claimant, UserMailStatus.Sent, null, messageId, at);
+    public Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, DateTime at, CancellationToken cancellationToken = default)
+        => CompleteAsync(id, claimant, UserMailStatus.Sent, null, messageId, address, at);
 
     public Task<bool> MarkSkippedAsync(string id, string claimant, string reason, DateTime at, CancellationToken cancellationToken = default)
-        => CompleteAsync(id, claimant, UserMailStatus.Skipped, reason, null, at);
+        => CompleteAsync(id, claimant, UserMailStatus.Skipped, reason, null, null, at);
 
     public Task<bool> MarkFailedAsync(string id, string claimant, string reason, DateTime at, CancellationToken cancellationToken = default)
-        => CompleteAsync(id, claimant, UserMailStatus.Failed, reason, null, at);
+        => CompleteAsync(id, claimant, UserMailStatus.Failed, reason, null, null, at);
 
     public async Task<bool> PostponeAsync(string id, string claimant, string reason, DateTime nextAttemptAt, CancellationToken cancellationToken = default)
     {
@@ -135,6 +136,58 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         return counted;
     }
 
+    public async Task<UserMailItemPage> ListBatchAsync(string batchId, UserMailStatus? status, string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var filter = Filter.Eq(x => x.BatchId, batchId);
+        if (status != null) filter &= Filter.Eq(x => x.Status, status.Value);
+        if (cursor != null) filter &= Filter.Gt(x => x.Id, CursorId(cursor));
+
+        return await PageAsync(filter, Builders<UserMailEntity>.Sort.Ascending(x => x.Id), pageSize, cancellationToken);
+    }
+
+    public async Task<UserMailItemPage> ListForRecipientAsync(string userKey, string address, string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var filter = ForRecipient(userKey, address);
+        if (cursor != null) filter &= Filter.Lt(x => x.Id, CursorId(cursor));
+
+        return await PageAsync(filter, Builders<UserMailEntity>.Sort.Descending(x => x.Id), pageSize, cancellationToken);
+    }
+
+    /// <summary>The mails queued for this user's key, and those queued to this address with no user key; nothing when both are missing.</summary>
+    internal static FilterDefinition<UserMailEntity> ForRecipient(string userKey, string address)
+    {
+        var parts = new List<FilterDefinition<UserMailEntity>>();
+        if (!string.IsNullOrEmpty(userKey)) parts.Add(Filter.Eq(x => x.RecipientUserKey, userKey));
+        if (!string.IsNullOrEmpty(address)) parts.Add(Filter.Eq(x => x.RecipientUserKey, null) & Filter.Eq(x => x.RecipientAddress, address));
+
+        return parts.Count == 0 ? Filter.Eq(x => x.Id, ObjectId.Empty) : Filter.Or(parts);
+    }
+
+    /// <exception cref="ArgumentException">The cursor was not issued by this outbox.</exception>
+    internal static ObjectId CursorId(string cursor)
+        => ObjectId.TryParse(cursor, out var id) ? id : throw new ArgumentException($"'{cursor}' is not a cursor this outbox issued.", nameof(cursor));
+
+    /// <remarks>The files' bytes are left on the server: a page describes mail, it does not resend it.</remarks>
+    private async Task<UserMailItemPage> PageAsync(FilterDefinition<UserMailEntity> filter, SortDefinition<UserMailEntity> sort, int pageSize, CancellationToken cancellationToken)
+    {
+        var size = Math.Clamp(pageSize, 1, 500);
+        var found = await collection.GetManyAsync(filter, new Options<UserMailEntity>
+        {
+            Sort = sort,
+            Limit = size + 1,
+            Projection = Builders<UserMailEntity>.Projection.Exclude(AttachmentContentField)
+        }, cancellationToken);
+
+        var items = (found?.Items ?? []).ToArray();
+        var page = items.Take(size).ToArray();
+
+        return new UserMailItemPage
+        {
+            Items = [.. page.Select(ToItem)],
+            NextCursor = items.Length > size ? page[^1].Id.ToString() : null
+        };
+    }
+
     /// <summary>Queued, due, and either never claimed or held by a lease that has run out.</summary>
     internal static FilterDefinition<UserMailEntity> Claimable(DateTime now)
         => Filter.Eq(x => x.Status, UserMailStatus.Queued)
@@ -175,7 +228,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         => delivery.Outcomes.Queued == 0 && delivery.Outcomes.Sent + delivery.Outcomes.Skipped + delivery.Outcomes.Failed >= recipientCount;
 
     /// <remarks>The files' content goes with the outcome: the record of what was sent is kept, the bytes are not.</remarks>
-    private async Task<bool> CompleteAsync(string id, string claimant, UserMailStatus status, string reason, string messageId, DateTime at)
+    private async Task<bool> CompleteAsync(string id, string claimant, UserMailStatus status, string reason, string messageId, string address, DateTime at)
     {
         if (!ObjectId.TryParse(id, out var objectId)) return false;
 
@@ -188,6 +241,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
 
         update = reason == null ? update : update.Set(x => x.Reason, reason);
         update = messageId == null ? update : update.Set(x => x.MessageId, messageId);
+        update = address == null ? update : update.Set(x => x.RecipientAddress, address);
 
         var before = (await collection.UpdateOneAsync(HeldBy(objectId, claimant), update, OneOption<UserMailEntity>.FirstOrDefault))?.Before;
         if (before == null) return false;
@@ -268,6 +322,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         RecipientUserKey = recipientUserKey,
         Category = batch.Category,
         Subject = batch.Subject,
+        Kind = batch.Kind,
         BatchId = batchId,
         Status = UserMailStatus.Queued,
         QueuedAt = queuedAt,
@@ -288,8 +343,11 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
     {
         Id = ObjectId.GenerateNewId(),
         RecipientUserKey = mail.RecipientUserKey,
+        RecipientAddress = mail.RecipientUserKey == null ? mail.RecipientAddress : null,
+        RecipientName = mail.RecipientUserKey == null ? mail.RecipientName : null,
         Category = mail.Category,
         Subject = mail.Subject,
+        Kind = mail.Kind,
         BodyHtml = mail.BodyHtml,
         Body = mail.Body,
         Attachments = [.. (mail.Attachments ?? []).Select(ToAttachmentEntity)],
@@ -306,15 +364,19 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         Mail = new UserMail
         {
             RecipientUserKey = entity.RecipientUserKey,
+            RecipientAddress = entity.RecipientUserKey == null ? entity.RecipientAddress : null,
+            RecipientName = entity.RecipientUserKey == null ? entity.RecipientName : null,
             Category = entity.Category,
             Subject = entity.Subject,
             BodyHtml = entity.BodyHtml,
             Body = entity.Body,
             Attachments = [.. (entity.Attachments ?? []).Select(ToAttachment)],
             ReplyTo = entity.ReplyTo,
-            DeduplicationKey = entity.DeduplicationKey
+            DeduplicationKey = entity.DeduplicationKey,
+            Kind = entity.Kind ?? (entity.BatchId != null ? UserMailKind.Message : UserMailKind.Mail)
         },
         BatchId = entity.BatchId,
+        RecipientAddress = entity.RecipientAddress,
         Status = entity.Status,
         Attempts = entity.Attempts,
         QueuedAt = entity.QueuedAt,

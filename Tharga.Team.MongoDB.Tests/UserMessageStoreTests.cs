@@ -167,7 +167,7 @@ public class UserMessageStoreTests
         _mail.GetManyAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<Options<UserMailEntity>>(), Arg.Any<CancellationToken>())
             .Returns(new Result<UserMailEntity, ObjectId> { Items = [stored] });
 
-        Assert.True(await Outbox.MarkSentAsync(stored.Id.ToString(), "me", "<m@x>", Now, TestContext.Current.CancellationToken));
+        Assert.True(await Outbox.MarkSentAsync(stored.Id.ToString(), "me", "<m@x>", "u-1@example.org", Now, TestContext.Current.CancellationToken));
 
         await _batches.DidNotReceive().GetOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserMailBatchEntity, bool>>>(), Arg.Any<OneOption<UserMailBatchEntity>>(), Arg.Any<CancellationToken>());
         await _mail.DidNotReceive().CountAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<CancellationToken>());
@@ -182,7 +182,7 @@ public class UserMessageStoreTests
         _batches.GetOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserMailBatchEntity, bool>>>(), Arg.Any<OneOption<UserMailBatchEntity>>(), Arg.Any<CancellationToken>()).Returns(batch);
         Counts(queued: 0, sent: 1, skipped: 0, failed: 0);
 
-        await Outbox.MarkSentAsync(stored.Id.ToString(), "me", "<m@x>", Now, TestContext.Current.CancellationToken);
+        await Outbox.MarkSentAsync(stored.Id.ToString(), "me", "<m@x>", "u-1@example.org", Now, TestContext.Current.CancellationToken);
 
         await _batches.Received(1).UpdateOneAsync(Arg.Any<FilterDefinition<UserMailBatchEntity>>(), Arg.Any<UpdateDefinition<UserMailBatchEntity>>(), Arg.Any<OneOption<UserMailBatchEntity>>(), Arg.Any<IClientSessionHandle>());
     }

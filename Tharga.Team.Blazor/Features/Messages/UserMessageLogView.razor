@@ -38,7 +38,7 @@ else
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-time="@item.Id">@Time(item.SentAt)</RadzenText>
                         </TopMenu>
                         <ChildContent>
-                            <UserMessageDetails Message="item" Choices="_choices" Text="_text" />
+                            <UserMessageDetails Message="item" Choices="_choices" Text="_text" TimeTemplate="TimeTemplate" />
                         </ChildContent>
                     </ExpandableCard>
                 </div>

@@ -2,13 +2,21 @@ namespace Tharga.Team;
 
 /// <summary>A mail to one user, in one category, as it is handed to <see cref="IUserMailQueue"/>.</summary>
 /// <remarks>
-/// The recipient is named by user key, never by address: the address is read from the user record when the mail is
-/// sent, as is whether the user still receives the category, so a change made after queuing is honoured.
+/// <b>A user is named by key, not by address:</b> the address is read from the user record when the mail is sent, as
+/// is whether the user still receives the category, so a change made after queuing is honoured. Only a mail in a
+/// required category may name an address alone, for someone who has no user record yet, such as a person invited to
+/// a team.
 /// </remarks>
 public sealed record UserMail
 {
-    /// <summary>The key of the user the mail is for.</summary>
-    public required string RecipientUserKey { get; init; }
+    /// <summary>The key of the user the mail is for; null only for a mail to <see cref="RecipientAddress"/> alone.</summary>
+    public string RecipientUserKey { get; init; }
+
+    /// <summary>The address a mail with no user key goes to, accepted only in a required category; ignored when a user key is given.</summary>
+    public string RecipientAddress { get; init; }
+
+    /// <summary>The name a mail with no user key is addressed to, or null.</summary>
+    public string RecipientName { get; init; }
 
     /// <summary>The key of a registered category; an unknown key is refused when the mail is queued.</summary>
     public required string Category { get; init; }
@@ -30,6 +38,9 @@ public sealed record UserMail
 
     /// <summary>A key that makes queuing idempotent: a second mail with the same key is not queued again.</summary>
     public string DeduplicationKey { get; init; }
+
+    /// <summary>Which kind of mail it is, shown in the recipient's history; default <see cref="UserMailKind.Mail"/>.</summary>
+    public UserMailKind Kind { get; init; } = UserMailKind.Mail;
 }
 
 /// <summary>A file sent with a <see cref="UserMail"/>.</summary>

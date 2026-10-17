@@ -151,7 +151,7 @@ public class UserMailStoreTests
         var stored = MongoUserMailOutbox.ToEntity(Mail(), Now);
         CaptureUpdate(stored);
 
-        var written = await new MongoUserMailOutbox(_mail, _batches).MarkSentAsync(stored.Id.ToString(), "instance-a", "<m1@example.com>", Now);
+        var written = await new MongoUserMailOutbox(_mail, _batches).MarkSentAsync(stored.Id.ToString(), "instance-a", "<m1@example.com>", "anna@example.org", Now);
 
         Assert.True(written);
         Assert.Equal(EMode.FirstOrDefault, _options.Mode);
@@ -164,6 +164,7 @@ public class UserMailStoreTests
         var update = Render(_update);
         Assert.Contains("\"Status\" : \"Sent\"", update);
         Assert.Contains("\"MessageId\" : \"<m1@example.com>\"", update);
+        Assert.Contains("\"RecipientAddress\" : \"anna@example.org\"", update);
         Assert.Contains("\"Attachments.$[].Content\" : 1", update);
         Assert.Contains("\"ClaimedBy\" : 1", update);
     }
@@ -178,7 +179,7 @@ public class UserMailStoreTests
         Assert.False(await outbox.MarkFailedAsync(id, "instance-a", "late", Now));
         Assert.False(await outbox.MarkSkippedAsync(id, "instance-a", "late", Now));
         Assert.False(await outbox.PostponeAsync(id, "instance-a", "late", Now));
-        Assert.False(await outbox.MarkSentAsync("not-an-id", "instance-a", "m", Now));
+        Assert.False(await outbox.MarkSentAsync("not-an-id", "instance-a", "m", "a@example.org", Now));
     }
 
     [Fact]
@@ -288,6 +289,140 @@ public class UserMailStoreTests
         Assert.Null(await directory.FindAsync("user-2"));
         Assert.Null(await directory.FindAsync(" "));
     }
+
+    [Fact]
+    public async Task ManyRecipients_AreReadFromTheUserRecords_InOneRead()
+    {
+        var users = Substitute.For<IUserRepository<MongoSupportSenderDirectoryTests.UserEntity>>();
+        users.GetByKeysAsync(Arg.Any<IReadOnlyCollection<string>>()).Returns(
+        [
+            new MongoSupportSenderDirectoryTests.UserEntity { Key = "user-1", EMail = "anna@example.org", Name = "Anna" },
+            new MongoSupportSenderDirectoryTests.UserEntity { Key = "user-2", Name = " " }
+        ]);
+        var directory = new MongoUserMailRecipientDirectory<MongoSupportSenderDirectoryTests.UserEntity>(users);
+
+        var found = await directory.FindManyAsync(["user-1", "user-2", "user-1", " "]);
+
+        Assert.Equal(["user-1", "user-2"], found.Select(x => x.Key));
+        Assert.Null(found[1].Name);
+        await users.Received(1).GetByKeysAsync(Arg.Is<IReadOnlyCollection<string>>(x => x.SequenceEqual(new[] { "user-1", "user-2" })));
+        await users.DidNotReceive().GetByKeyAsync(Arg.Any<string>());
+    }
+
+    private static string Render(SortDefinition<UserMailEntity> sort)
+        => sort.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).ToString();
+
+    private static string Render(ProjectionDefinition<UserMailEntity> projection)
+        => projection.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).ToString();
+
+    [Fact]
+    public async Task ABatchsMails_AreListedInTheOrderQueued_ByStatus_AfterTheCursor_WithoutTheirFilesBytes()
+    {
+        FilterDefinition<UserMailEntity> filter = null;
+        Options<UserMailEntity> options = null;
+        var stored = Enumerable.Range(0, 3).Select(_ => MongoUserMailOutbox.ToBatchItem("batch-1", "u", Batch(), Now)).ToArray();
+        _mail.GetManyAsync(Arg.Do<FilterDefinition<UserMailEntity>>(x => filter = x), Arg.Do<Options<UserMailEntity>>(x => options = x), Arg.Any<CancellationToken>())
+            .Returns(new Result<UserMailEntity, ObjectId> { Items = stored });
+        var after = ObjectId.GenerateNewId().ToString();
+
+        var page = await new MongoUserMailOutbox(_mail, _batches).ListBatchAsync("batch-1", UserMailStatus.Failed, after, 2, TestContext.Current.CancellationToken);
+
+        var rendered = Render(filter);
+        Assert.Contains("\"BatchId\" : \"batch-1\"", rendered);
+        Assert.Contains("\"Status\" : \"Failed\"", rendered);
+        Assert.Contains($"\"_id\" : {{ \"$gt\" : {{ \"$oid\" : \"{after}\" }} }}", rendered);
+        Assert.Equal("{ \"_id\" : 1 }", Render(options.Sort));
+        Assert.Equal(3, options.Limit);
+        Assert.Equal("{ \"Attachments.Content\" : 0 }", Render(options.Projection));
+        Assert.Equal(2, page.Items.Length);
+        Assert.Equal(stored[1].Id.ToString(), page.NextCursor);
+    }
+
+    [Fact]
+    public async Task ABatchsLastPage_HasNoCursor()
+    {
+        _mail.GetManyAsync(Arg.Any<FilterDefinition<UserMailEntity>>(), Arg.Any<Options<UserMailEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new Result<UserMailEntity, ObjectId> { Items = [MongoUserMailOutbox.ToBatchItem("batch-1", "u", Batch(), Now)] });
+
+        var page = await new MongoUserMailOutbox(_mail, _batches).ListBatchAsync("batch-1", null, null, 2, TestContext.Current.CancellationToken);
+
+        Assert.Single(page.Items);
+        Assert.Null(page.NextCursor);
+    }
+
+    [Fact]
+    public async Task AUsersMail_IsTheirKeysAndTheirAddressAlones_NewestFirst_BeforeTheCursor()
+    {
+        FilterDefinition<UserMailEntity> filter = null;
+        Options<UserMailEntity> options = null;
+        _mail.GetManyAsync(Arg.Do<FilterDefinition<UserMailEntity>>(x => filter = x), Arg.Do<Options<UserMailEntity>>(x => options = x), Arg.Any<CancellationToken>())
+            .Returns(new Result<UserMailEntity, ObjectId> { Items = [] });
+        var before = ObjectId.GenerateNewId().ToString();
+
+        await new MongoUserMailOutbox(_mail, _batches).ListForRecipientAsync("user-1", "anna@example.org", before, 20, TestContext.Current.CancellationToken);
+
+        var rendered = Render(filter);
+        Assert.Contains("\"RecipientUserKey\" : \"user-1\"", rendered);
+        Assert.Contains("\"RecipientUserKey\" : null, \"RecipientAddress\" : \"anna@example.org\"", rendered);
+        Assert.Contains("$or", rendered);
+        Assert.Contains($"\"_id\" : {{ \"$lt\" : {{ \"$oid\" : \"{before}\" }} }}", rendered);
+        Assert.Equal("{ \"_id\" : -1 }", Render(options.Sort));
+        Assert.Equal("{ \"Attachments.Content\" : 0 }", Render(options.Projection));
+    }
+
+    [Fact]
+    public void AUserWithNoAddress_IsFoundByKeyAlone_AndNeitherFindsNothing()
+    {
+        var byKey = Render(MongoUserMailOutbox.ForRecipient("user-1", null));
+        Assert.Contains("\"RecipientUserKey\" : \"user-1\"", byKey);
+        Assert.DoesNotContain("RecipientAddress", byKey);
+        Assert.Contains("\"_id\" : { \"$oid\" : \"000000000000000000000000\" }", Render(MongoUserMailOutbox.ForRecipient(null, null)));
+    }
+
+    [Fact]
+    public async Task ACursorNotIssuedByTheOutbox_IsRefused()
+    {
+        var outbox = new MongoUserMailOutbox(_mail, _batches);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => outbox.ListBatchAsync("batch-1", null, "not-a-cursor", 10, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<ArgumentException>(() => outbox.ListForRecipientAsync("user-1", null, "not-a-cursor", 10, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public void TheKind_IsStoredByName_AndAMailStoredBeforeKindsWere_IsReadFromWhetherItNamesABatch()
+    {
+        var notice = MongoUserMailOutbox.ToEntity(Mail() with { Kind = UserMailKind.Notice }, Now);
+        Assert.Equal("Notice", notice.ToBsonDocument()[nameof(UserMailEntity.Kind)].AsString);
+        Assert.Equal(UserMailKind.Notice, MongoUserMailOutbox.ToItem(notice).Mail.Kind);
+
+        Assert.Equal(UserMailKind.Message, MongoUserMailOutbox.ToItem(MongoUserMailOutbox.ToBatchItem("batch-1", "u", Batch(), Now) with { Kind = null }).Mail.Kind);
+        Assert.Equal(UserMailKind.Mail, MongoUserMailOutbox.ToItem(MongoUserMailOutbox.ToEntity(Mail(), Now) with { Kind = null }).Mail.Kind);
+        Assert.Equal(UserMailKind.Message, MongoUserMailOutbox.ToItem(MongoUserMailOutbox.ToBatchItem("batch-1", "u", Batch(), Now)).Mail.Kind);
+    }
+
+    [Fact]
+    public void TheAddressSentTo_IsReadBack_AndIsNotTakenForTheAddressOfAMailToAUser()
+    {
+        var sent = MongoUserMailOutbox.ToEntity(Mail(), Now) with { RecipientAddress = "anna@example.org" };
+
+        var item = MongoUserMailOutbox.ToItem(sent);
+
+        Assert.Equal("anna@example.org", item.RecipientAddress);
+        Assert.Null(item.Mail.RecipientAddress);
+    }
+
+    [Fact]
+    public void TheHistory_IsIndexedByKeyAndByAddress_NewestFirst()
+    {
+        var collection = (UserMailCollection)RuntimeHelpers.GetUninitializedObject(typeof(UserMailCollection));
+        typeof(UserMailCollection).GetField("_retention", BindingFlags.NonPublic | BindingFlags.Instance)!.SetValue(collection, TimeSpan.FromDays(30));
+        var indices = collection.Indices.ToDictionary(x => x.Options.Name);
+
+        Assert.Equal(["RecipientUserKey", "_id"], indices["RecipientUserKey_Id"].Keys.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).Names);
+        Assert.Equal(["RecipientAddress", "_id"], indices["RecipientAddress_Id"].Keys.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).Names);
+    }
+
+    private static UserMailBatch Batch() => new() { RecipientUserKeys = ["u"], Category = "news", Subject = "Hello", Body = "Hi" };
 
     private MongoUserMailPreferenceStore Store()
     {

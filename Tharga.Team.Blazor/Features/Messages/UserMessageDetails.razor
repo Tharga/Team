@@ -1,7 +1,7 @@
 @inject IUserMessageService Messages
 
-@* One sent message opened in the log: who it was written to, how many of its mails stand where, and why any was not
-   sent. Read when it is first shown, so a closed card costs nothing. *@
+@* One sent message opened in the log: who it was written to, how many of its mails stand where, and each recipient
+   with the address it went to and what became of it. Read when it is first shown, so a closed card costs nothing. *@
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-message-details="@Message.Id">
     <RadzenStack Orientation="Orientation.Vertical" Gap="0">
@@ -26,31 +26,70 @@
         }
     </RadzenStack>
 
-    @if (Shown.Failures.Length > 0)
-    {
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-failures>
-            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@Text[UserMessageLogViewText.Failures]</RadzenText>
-            @foreach (var failure in Shown.Failures)
-            {
-                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-failure="@failure.UserKey">
-                    <strong>@(string.IsNullOrWhiteSpace(failure.Name) ? failure.UserKey : failure.Name)</strong>: @failure.Reason
-                </RadzenText>
-            }
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-recipient-list>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@Text[UserMessageLogViewText.RecipientList]</RadzenText>
+            <RadzenDropDown TValue="string" Data="@StatusOptions()" TextProperty="@nameof(StatusChoice.Text)" ValueProperty="@nameof(StatusChoice.Value)"
+                            Value="@_statusFilter" ValueChanged="@((string value) => FilterAsync(value))" Disabled="@_busy"
+                            aria-label="@Text[UserMessageLogViewText.StatusFilter]" Style="min-width: 10rem;" data-status-filter />
         </RadzenStack>
-    }
+
+        @if (_recipients.Count == 0 && _recipientsRead)
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-recipients>@Text[UserMessageLogViewText.NoRecipients]</RadzenText>
+        }
+
+        @foreach (var recipient in _recipients)
+        {
+            <RadzenStack @key="recipient.UserKey" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem" Wrap="FlexWrap.Wrap" data-recipient="@recipient.UserKey">
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@(string.IsNullOrWhiteSpace(recipient.Name) ? recipient.UserKey : recipient.Name)</strong></RadzenText>
+                @if (!string.IsNullOrWhiteSpace(recipient.Address))
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-recipient-address>@recipient.Address</RadzenText>
+                }
+                <RadzenBadge Text="@StatusName(recipient.Status)" BadgeStyle="@StatusStyle(recipient.Status)" data-recipient-status="@recipient.Status" />
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-recipient-time>@Time(recipient.ChangedAt)</RadzenText>
+                @if (!string.IsNullOrWhiteSpace(recipient.Reason))
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-recipient-reason>@recipient.Reason</RadzenText>
+                }
+            </RadzenStack>
+        }
+
+        @if (_nextCursor != null)
+        {
+            <RadzenButton Text="@Text[UserMessageLogViewText.MoreRecipients]" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                          Disabled="@_busy" Click="MoreAsync" data-more-recipients />
+        }
+    </RadzenStack>
 </RadzenStack>
 
 @code {
     /// <summary>The message as the log listed it; its details are read when this is first shown.</summary>
     [Parameter, EditorRequired] public SentUserMessage Message { get; set; }
 
-    /// <summary>The teams, users and roles a message could be written to, for naming them.</summary>
+    /// <summary>The teams and roles a message could be written to, for naming them.</summary>
     [Parameter] public UserMessageChoices Choices { get; set; }
 
     /// <summary>The log's resolved strings.</summary>
     [Parameter] public TextSet Text { get; set; } = TextSet.Empty;
 
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>How many recipients one page reads.</summary>
+    [Parameter] public int RecipientPageSize { get; set; } = 20;
+
+    private const string AnyStatus = "";
+
     private SentUserMessage _details;
+    private List<UserMessageRecipient> _recipients = [];
+    private string _nextCursor;
+    private string _statusFilter = AnyStatus;
+    private bool _recipientsRead;
+    private bool _busy;
+
+    private sealed record StatusChoice(string Value, string Text);
 
     private SentUserMessage Shown => _details ?? Message;
 
@@ -59,11 +98,50 @@
         try
         {
             _details = await Messages.GetSentMessageAsync(Message.Id);
+            await ReadRecipientsAsync(null);
         }
         catch (UnauthorizedAccessException)
         {
             _details = null;
         }
+    }
+
+    private async Task FilterAsync(string value)
+    {
+        _statusFilter = value ?? AnyStatus;
+        _recipients = [];
+        _nextCursor = null;
+
+        await GuardedAsync(() => ReadRecipientsAsync(null));
+    }
+
+    private Task MoreAsync() => GuardedAsync(() => ReadRecipientsAsync(_nextCursor));
+
+    private async Task GuardedAsync(Func<Task> read)
+    {
+        _busy = true;
+        try
+        {
+            await read();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _nextCursor = null;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReadRecipientsAsync(string cursor)
+    {
+        UserMailStatus? status = Enum.TryParse<UserMailStatus>(_statusFilter, out var parsed) ? parsed : null;
+        var page = await Messages.GetRecipientsAsync(Message.Id, status, cursor, RecipientPageSize);
+
+        _recipients.AddRange((page?.Items ?? []).Where(x => _recipients.All(y => y.UserKey != x.UserKey)));
+        _nextCursor = page?.NextCursor;
+        _recipientsRead = true;
     }
 
     private IEnumerable<(string Key, string Label, int Count)> Outcomes()
@@ -73,6 +151,26 @@
         yield return ("skipped", Text[UserMessageLogViewText.Skipped], Shown.Outcomes.Skipped);
         yield return ("failed", Text[UserMessageLogViewText.Failed], Shown.Outcomes.Failed);
     }
+
+    private StatusChoice[] StatusOptions()
+        => [new StatusChoice(AnyStatus, Text[UserMessageLogViewText.AnyStatus]), .. Enum.GetValues<UserMailStatus>().Select(x => new StatusChoice(x.ToString(), StatusName(x)))];
+
+    private string StatusName(UserMailStatus status) => status switch
+    {
+        UserMailStatus.Queued => Text[UserMessageLogViewText.Queued],
+        UserMailStatus.Sent => Text[UserMessageLogViewText.Sent],
+        UserMailStatus.Skipped => Text[UserMessageLogViewText.Skipped],
+        UserMailStatus.Failed => Text[UserMessageLogViewText.Failed],
+        _ => status.ToString()
+    };
+
+    private static BadgeStyle StatusStyle(UserMailStatus status) => status switch
+    {
+        UserMailStatus.Sent => BadgeStyle.Success,
+        UserMailStatus.Failed => BadgeStyle.Danger,
+        UserMailStatus.Skipped => BadgeStyle.Light,
+        _ => BadgeStyle.Info
+    };
 
     private IEnumerable<string> Selection()
     {
@@ -93,6 +191,9 @@
 
     private string UserName(string key)
         => Choices?.Users.FirstOrDefault(x => x.UserKey == key) is { Name: { Length: > 0 } name } ? name : key;
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
 
     private static string Join(IEnumerable<string> values) => string.Join(", ", values);
 }

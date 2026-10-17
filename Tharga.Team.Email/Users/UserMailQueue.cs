@@ -18,6 +18,7 @@ internal sealed class UserMailQueue(
 {
     private const string OctetStream = "application/octet-stream";
     private const int MaxDeduplicationKeyLength = 200;
+    private const int MaxPageSize = 100;
 
     public async Task<UserMailQueued> QueueAsync(UserMail mail, CancellationToken cancellationToken = default)
     {
@@ -32,23 +33,51 @@ internal sealed class UserMailQueue(
 
         var item = await outbox.GetAsync(id, cancellationToken);
 
-        return item == null ? null : new UserMailDelivery
-        {
-            Id = item.Id,
-            RecipientUserKey = item.Mail.RecipientUserKey,
-            Category = item.Mail.Category,
-            Subject = item.Mail.Subject,
-            DeduplicationKey = item.Mail.DeduplicationKey,
-            BatchId = item.BatchId,
-            Status = item.Status,
-            Attempts = item.Attempts,
-            QueuedAt = item.QueuedAt,
-            NextAttemptAt = item.NextAttemptAt,
-            CompletedAt = item.CompletedAt,
-            Reason = item.Reason,
-            MessageId = item.MessageId
-        };
+        return item == null ? null : ToDelivery(item);
     }
+
+    public async Task<UserMailDeliveryPage> ListBatchAsync(string batchId, UserMailStatus? status = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(batchId)) return new UserMailDeliveryPage();
+
+        return ToPage(await outbox.ListBatchAsync(batchId.Trim(), status, Cursor(cursor), Math.Clamp(pageSize, 1, MaxPageSize), cancellationToken));
+    }
+
+    public async Task<UserMailDeliveryPage> ListForRecipientAsync(string userKey, string address, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
+    {
+        var key = string.IsNullOrWhiteSpace(userKey) ? null : userKey.Trim();
+        var normalized = UserMailAddresses.Normalize(address);
+        if (key == null && normalized == null) return new UserMailDeliveryPage();
+
+        return ToPage(await outbox.ListForRecipientAsync(key, normalized, Cursor(cursor), Math.Clamp(pageSize, 1, MaxPageSize), cancellationToken));
+    }
+
+    internal static UserMailDelivery ToDelivery(UserMailItem item) => new()
+    {
+        Id = item.Id,
+        RecipientUserKey = item.Mail.RecipientUserKey,
+        RecipientAddress = item.RecipientAddress,
+        Category = item.Mail.Category,
+        Subject = item.Mail.Subject,
+        Kind = item.Mail.Kind,
+        DeduplicationKey = item.Mail.DeduplicationKey,
+        BatchId = item.BatchId,
+        Status = item.Status,
+        Attempts = item.Attempts,
+        QueuedAt = item.QueuedAt,
+        NextAttemptAt = item.NextAttemptAt,
+        CompletedAt = item.CompletedAt,
+        Reason = item.Reason,
+        MessageId = item.MessageId
+    };
+
+    private static UserMailDeliveryPage ToPage(UserMailItemPage page) => new()
+    {
+        Items = [.. (page?.Items ?? []).Where(x => x != null).Select(ToDelivery)],
+        NextCursor = page?.NextCursor
+    };
+
+    private static string Cursor(string cursor) => string.IsNullOrWhiteSpace(cursor) ? null : cursor.Trim();
 
     public async Task<UserMailBatchQueued> QueueBatchAsync(UserMailBatch batch, CancellationToken cancellationToken = default)
     {
@@ -86,7 +115,8 @@ internal sealed class UserMailQueue(
             Body = content.Body,
             Attachments = content.Attachments,
             ReplyTo = replyTo,
-            DeduplicationKey = deduplicationKey
+            DeduplicationKey = deduplicationKey,
+            Kind = mail.Kind
         };
     }
 
@@ -100,7 +130,7 @@ internal sealed class UserMailQueue(
 
         var content = AcceptContent(batch.Category, batch.Subject, batch.BodyHtml, batch.Body, batch.Attachments, nameof(batch));
 
-        return content with { RecipientUserKeys = recipients };
+        return content with { RecipientUserKeys = recipients, Kind = batch.Kind };
     }
 
     private UserMailBatch AcceptContent(string categoryKey, string subjectLine, string bodyHtml, string bodyText, UserMailAttachment[] attachments, string parameterName)

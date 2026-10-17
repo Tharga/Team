@@ -15,7 +15,7 @@ namespace Tharga.Team.Email.Users;
 /// <summary>Registers mail to users: categories, each user's choices, unsubscribe links, and a persisted queue sent in the background.</summary>
 public static class UserMailRegistration
 {
-    /// <summary>Registers <see cref="IUserMailPreferenceService"/>, <see cref="IUserMailQueue"/> and the background sender, with the categories and settings in <paramref name="configure"/>.</summary>
+    /// <summary>Registers <see cref="IUserMailPreferenceService"/>, <see cref="IUserMailHistoryService"/>, <see cref="IUserMailQueue"/> and the background sender, with the categories and settings in <paramref name="configure"/>.</summary>
     /// <remarks>Storage comes from <c>AddThargaTeamRepository</c>, the unsubscribe route from <see cref="MapThargaMailUnsubscribe"/>, and every instance must share one persisted Data Protection key ring.</remarks>
     /// <exception cref="InvalidOperationException">A category is not acceptable, an optional category is registered without an absolute <see cref="UserMailOptions.BaseUrl"/>, or a limit is out of range.</exception>
     public static IServiceCollection AddThargaUserMail(this IServiceCollection services, Action<UserMailOptions> configure = null)
@@ -53,6 +53,14 @@ public static class UserMailRegistration
             sp.GetRequiredService<IUserMailOutbox>(),
             sp.GetRequiredService<IOptions<UserMailOptions>>(),
             sp.GetRequiredService<TimeProvider>()));
+
+        services.TryAddScoped<IUserMailHistoryService>(sp => new UserMailHistoryService(
+            sp.GetRequiredService<IUserMailQueue>(),
+            sp.GetRequiredService<IUserMailRecipientDirectory>(),
+            sp.GetRequiredService<TeamAuthorizer>(),
+            sp.GetRequiredService<IUserService>(),
+            sp.GetService<CompositeAuditLogger>(),
+            sp.GetService<IAuditEntryFactory>()));
 
         services.TryAddScoped(sp => new UserMailDispatcher(
             sp.GetRequiredService<IUserMailOutbox>(),

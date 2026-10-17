@@ -1,0 +1,153 @@
+@using Tharga.Team.Blazor.Framework
+@inject IUserMailHistoryService History
+@inject IUserMailPreferenceService Preferences
+@inject IUserService UserService
+
+@* The mail sent to one user, newest first: what kind it was, its category and subject, and what became of it. The
+   signed-in user's own when no user is named; another user's only for a reader the service lets read it. *@
+
+<RadzenCard>
+    @if (!_ready)
+    {
+        <Loading />
+    }
+    else if (_noUser)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            @_text[UserMailHistoryViewText.NoUser]
+        </RadzenAlert>
+    }
+    else if (!_permitted)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            @_text[UserMailHistoryViewText.NotPermitted]
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-mail-history>
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserMailHistoryViewText.Title]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMailHistoryViewText.Explanation]</RadzenText>
+
+            @if (_items.Count == 0)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-empty>@_text[UserMailHistoryViewText.Empty]</RadzenText>
+            }
+
+            @foreach (var item in _items)
+            {
+                <RadzenStack @key="item.Id" Orientation="Orientation.Vertical" Gap="0" data-history-item="@item.Id">
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                        <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@item.Subject</strong></RadzenText>
+                        <RadzenBadge Text="@_text[UserMailHistoryViewText.For(item.Kind)]" BadgeStyle="BadgeStyle.Light" data-kind="@item.Kind" />
+                        <RadzenBadge Text="@_text[UserMailHistoryViewText.For(item.Status)]" BadgeStyle="@StatusStyle(item.Status)" data-status="@item.Status" />
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem" Wrap="FlexWrap.Wrap">
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-category="@item.Category">@CategoryName(item.Category)</RadzenText>
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-time>@Time(item.ChangedAt)</RadzenText>
+                        @if (!string.IsNullOrWhiteSpace(item.Address))
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-address>@_text.Format(UserMailHistoryViewText.To, item.Address)</RadzenText>
+                        }
+                    </RadzenStack>
+                    @if (!string.IsNullOrWhiteSpace(item.Reason))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-reason>@item.Reason</RadzenText>
+                    }
+                </RadzenStack>
+            }
+
+            @if (_nextCursor != null)
+            {
+                <RadzenButton Text="@_text[UserMailHistoryViewText.ShowMore]" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Disabled="@_busy" Click="MoreAsync" data-show-more />
+            }
+        </RadzenStack>
+    }
+</RadzenCard>
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    /// <summary>Whose mail is shown; the signed-in user's when not set, and another user's only for a reader holding <c>users:manage</c>.</summary>
+    [Parameter] public string UserKey { get; set; }
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>How many mails one page reads.</summary>
+    [Parameter] public int PageSize { get; set; } = 20;
+
+    private TextSet _text = TextSet.Empty;
+    private IReadOnlyList<UserMailCategory> _categories = [];
+    private List<UserMailHistoryItem> _items = [];
+    private string _nextCursor;
+    private string _loadedFor;
+    private bool _ready;
+    private bool _noUser;
+    private bool _permitted = true;
+    private bool _busy;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_ready && _loadedFor == UserKey) return;
+
+        _loadedFor = UserKey;
+        _ready = false;
+        _permitted = true;
+        _noUser = false;
+        _items = [];
+        _nextCursor = null;
+
+        _categories = Preferences.GetCategories() ?? [];
+        _noUser = string.IsNullOrWhiteSpace(UserKey) && await UserService.GetCurrentUserAsync() == null;
+        if (!_noUser) await ReadAsync(null);
+
+        _text = await TextProvider.ResolveAsync([.. UserMailHistoryViewText.All, .. _categories.Select(x => new TextKey(x.NameKey, x.Name))]);
+        _ready = true;
+    }
+
+    private async Task MoreAsync()
+    {
+        _busy = true;
+        try
+        {
+            await ReadAsync(_nextCursor);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReadAsync(string cursor)
+    {
+        try
+        {
+            var page = string.IsNullOrWhiteSpace(UserKey)
+                ? await History.GetMineAsync(cursor, PageSize)
+                : await History.GetForUserAsync(UserKey, cursor, PageSize);
+
+            _items.AddRange(page.Items.Where(x => _items.All(y => y.Id != x.Id)));
+            _nextCursor = page.NextCursor;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+            _nextCursor = null;
+        }
+    }
+
+    private string CategoryName(string key)
+        => _categories.FirstOrDefault(x => x.Key == key) is { } category ? _text[new TextKey(category.NameKey, category.Name)] : key;
+
+    private static BadgeStyle StatusStyle(UserMailStatus status) => status switch
+    {
+        UserMailStatus.Sent => BadgeStyle.Success,
+        UserMailStatus.Failed => BadgeStyle.Danger,
+        UserMailStatus.Skipped => BadgeStyle.Light,
+        _ => BadgeStyle.Info
+    };
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
+}

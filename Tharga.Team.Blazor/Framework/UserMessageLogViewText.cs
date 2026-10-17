@@ -57,13 +57,25 @@ public static class UserMessageLogViewText
     /// <summary>Names the mails given up.</summary>
     public static readonly TextKey Failed = new("team.userMessage.log.failed", "Failed");
 
-    /// <summary>Heads the list of mails given up and why.</summary>
-    public static readonly TextKey Failures = new("team.userMessage.log.failures", "Not sent, and why");
+    /// <summary>Heads the list of a message's recipients and what became of each mail.</summary>
+    public static readonly TextKey RecipientList = new("team.userMessage.log.recipientList", "Recipients");
+
+    /// <summary>Names the choice of which recipients are listed.</summary>
+    public static readonly TextKey StatusFilter = new("team.userMessage.log.statusFilter", "Show recipients");
+
+    /// <summary>The choice that lists every recipient, whatever became of their mail.</summary>
+    public static readonly TextKey AnyStatus = new("team.userMessage.log.anyStatus", "All");
+
+    /// <summary>When no recipient matches the choice.</summary>
+    public static readonly TextKey NoRecipients = new("team.userMessage.log.noRecipients", "No recipient matches.");
+
+    /// <summary>The button that reads the next page of recipients.</summary>
+    public static readonly TextKey MoreRecipients = new("team.userMessage.log.moreRecipients", "Show more recipients");
 
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         NotPermitted, Empty, ShowMore, SentBy, Recipients, Category, To, AllTeams, Teams, Everyone, AccessLevels, Roles, Users,
-        Attachments, Queued, Sent, Skipped, Failed, Failures
+        Attachments, Queued, Sent, Skipped, Failed, RecipientList, StatusFilter, AnyStatus, NoRecipients, MoreRecipients
     ];
 }

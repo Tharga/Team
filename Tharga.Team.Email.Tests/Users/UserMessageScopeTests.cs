@@ -50,6 +50,7 @@ public class UserMessageScopeTests
         Assert.Equal(5, (await service.PreviewAsync(Everyone, UserMailFixture.News, TestContext.Current.CancellationToken)).Recipients);
         Assert.Single((await service.GetSentAsync(cancellationToken: TestContext.Current.CancellationToken)).Items);
         Assert.NotNull(await service.GetSentMessageAsync(sent.Id, TestContext.Current.CancellationToken));
+        Assert.Equal(5, (await service.GetRecipientsAsync(sent.Id, cancellationToken: TestContext.Current.CancellationToken)).Items.Length);
         Assert.NotEmpty((await service.GetChoicesAsync(TestContext.Current.CancellationToken)).Users);
     }
 
@@ -141,6 +142,7 @@ public class UserMessageScopeTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.SendAsync(UserMessageFixture.Message(Everyone), ct));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetSentAsync(cancellationToken: ct));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetSentMessageAsync("any", ct));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetRecipientsAsync("any", cancellationToken: ct));
     }
 
     private sealed class FixedPrincipal(ClaimsPrincipal principal) : ITeamPrincipalAccessor

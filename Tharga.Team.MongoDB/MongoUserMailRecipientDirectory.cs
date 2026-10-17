@@ -13,11 +13,22 @@ internal sealed class MongoUserMailRecipientDirectory<TUserEntity>(IUserReposito
 
         var user = await users.GetByKeyAsync(userKey);
 
-        return user == null ? null : new UserMailRecipient
-        {
-            Key = user.Key,
-            EMail = string.IsNullOrWhiteSpace(user.EMail) ? null : user.EMail.Trim(),
-            Name = string.IsNullOrWhiteSpace(user.Name) ? null : user.Name
-        };
+        return user == null ? null : ToRecipient(user);
     }
+
+    /// <remarks>One read for every key, rather than one per key.</remarks>
+    public async Task<UserMailRecipient[]> FindManyAsync(IReadOnlyCollection<string> userKeys, CancellationToken cancellationToken = default)
+    {
+        string[] keys = [.. (userKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)];
+        if (keys.Length == 0) return [];
+
+        return [.. (await users.GetByKeysAsync(keys) ?? []).Where(x => x != null).DistinctBy(x => x.Key, StringComparer.Ordinal).Select(ToRecipient)];
+    }
+
+    private static UserMailRecipient ToRecipient(TUserEntity user) => new()
+    {
+        Key = user.Key,
+        EMail = string.IsNullOrWhiteSpace(user.EMail) ? null : user.EMail.Trim(),
+        Name = string.IsNullOrWhiteSpace(user.Name) ? null : user.Name
+    };
 }

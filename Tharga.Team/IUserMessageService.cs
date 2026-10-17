@@ -29,4 +29,9 @@ public interface IUserMessageService
     /// <summary>One sent message with its outcome counts and why each mail given up was, or null when there is none with this id.</summary>
     [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
     Task<SentUserMessage> GetSentMessageAsync(string messageId, CancellationToken cancellationToken = default);
+
+    /// <summary>One page of a sent message's recipients in the order they were queued, each with the address it went to and what became of it, only those in <paramref name="status"/> when one is given; null when there is no message with this id.</summary>
+    /// <exception cref="ArgumentException">The cursor was not issued for this list.</exception>
+    [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
+    Task<UserMessageRecipientPage> GetRecipientsAsync(string messageId, UserMailStatus? status = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default);
 }

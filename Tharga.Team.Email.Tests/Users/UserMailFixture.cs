@@ -99,7 +99,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                 _items.Add(new UserMailItem
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject },
+                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind },
                     BatchId = id,
                     Status = UserMailStatus.Queued,
                     QueuedAt = queuedAt,
@@ -158,10 +158,51 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
             var existing = mail.DeduplicationKey == null ? null : _items.FirstOrDefault(x => x.Mail.DeduplicationKey == mail.DeduplicationKey);
             if (existing != null) return Task.FromResult(new UserMailQueued(existing.Id, true));
 
-            var item = new UserMailItem { Id = Guid.NewGuid().ToString("N"), Mail = mail, Status = UserMailStatus.Queued, QueuedAt = queuedAt, NextAttemptAt = queuedAt };
+            var item = new UserMailItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Mail = mail,
+                RecipientAddress = mail.RecipientUserKey == null ? mail.RecipientAddress : null,
+                Status = UserMailStatus.Queued,
+                QueuedAt = queuedAt,
+                NextAttemptAt = queuedAt
+            };
             _items.Add(item);
             return Task.FromResult(new UserMailQueued(item.Id, false));
         }
+    }
+
+    public Task<UserMailItemPage> ListBatchAsync(string batchId, UserMailStatus? status, string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        lock (_gate) return Task.FromResult(Page(_items.Where(x => x.BatchId == batchId && (status == null || x.Status == status)).ToList(), cursor, pageSize));
+    }
+
+    public Task<UserMailItemPage> ListForRecipientAsync(string userKey, string address, string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            var mine = _items
+                .Where(x => (userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address))
+                .Reverse()
+                .ToList();
+
+            return Task.FromResult(Page(mine, cursor, pageSize));
+        }
+    }
+
+    private static UserMailItemPage Page(List<UserMailItem> ordered, string cursor, int pageSize)
+    {
+        var start = 0;
+        if (cursor != null)
+        {
+            var at = ordered.FindIndex(x => x.Id == cursor);
+            if (at < 0) throw new ArgumentException($"'{cursor}' is not a cursor this outbox issued.", nameof(cursor));
+            start = at + 1;
+        }
+
+        var page = ordered.Skip(start).Take(pageSize).Select(x => x with { Mail = x.Mail with { Attachments = [.. (x.Mail.Attachments ?? []).Select(a => a with { Content = null })] } }).ToArray();
+
+        return new UserMailItemPage { Items = page, NextCursor = start + pageSize < ordered.Count ? page[^1].Id : null };
     }
 
     public Task<UserMailItem> ClaimNextAsync(string claimant, DateTime now, TimeSpan lease, CancellationToken cancellationToken = default)
@@ -180,8 +221,8 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         }
     }
 
-    public Task<bool> MarkSentAsync(string id, string claimant, string messageId, DateTime at, CancellationToken cancellationToken = default)
-        => Write(id, claimant, x => Done(x, UserMailStatus.Sent, at) with { MessageId = messageId });
+    public Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, DateTime at, CancellationToken cancellationToken = default)
+        => Write(id, claimant, x => Done(x, UserMailStatus.Sent, at) with { MessageId = messageId, RecipientAddress = address ?? x.RecipientAddress });
 
     public Task<bool> MarkSkippedAsync(string id, string claimant, string reason, DateTime at, CancellationToken cancellationToken = default)
         => Write(id, claimant, x => Done(x, UserMailStatus.Skipped, at) with { Reason = reason });

@@ -124,6 +124,7 @@ public class UserNoticeDeliveryTests
         await AdvanceAndRunAsync(TimeSpan.FromSeconds(30));
 
         var mail = Assert.Single(_fixture.Queued).Mail;
+        Assert.Equal(UserMailKind.Notice, mail.Kind);
         Assert.Equal("A case is assigned to me (3)", mail.Subject);
         Assert.Contains("https://app.example.com/cases/1", mail.BodyHtml);
         Assert.Contains("Case 3 was assigned to you", mail.BodyHtml);

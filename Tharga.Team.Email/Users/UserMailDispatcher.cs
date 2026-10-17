@@ -101,7 +101,7 @@ internal sealed class UserMailDispatcher(
 
         if (!result.Success) return await RetryAsync(item, claimant, result.Error, cancellationToken);
 
-        await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, Now(), cancellationToken), item);
+        await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, UserMailAddresses.Normalize(recipient.EMail), Now(), cancellationToken), item);
         return UserMailStatus.Sent;
     }
 

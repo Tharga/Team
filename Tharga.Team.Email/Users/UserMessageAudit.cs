@@ -15,6 +15,12 @@ public static class UserMessageAudit
     /// <summary>The action of one sent message read with its outcomes.</summary>
     public const string OpenAction = "open";
 
+    /// <summary>The action of a page of one sent message's recipients read.</summary>
+    public const string RecipientsAction = "recipients";
+
+    /// <summary>Metadata naming the status a page of recipients was limited to.</summary>
+    public const string Status = "messages.status";
+
     /// <summary>Metadata naming the message.</summary>
     public const string MessageId = "messages.id";
 

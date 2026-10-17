@@ -28,6 +28,24 @@ public interface IUserMailQueue
 
     /// <summary>What became of the mails of a queued batch, or null when there is none with this id.</summary>
     Task<UserMailBatchDelivery> GetBatchAsync(string id, CancellationToken cancellationToken = default);
+
+    /// <summary>One page of what became of each mail of a batch, in the order they were queued, only those in <paramref name="status"/> when one is given.</summary>
+    /// <exception cref="ArgumentException">The cursor was not issued for this list.</exception>
+    Task<UserMailDeliveryPage> ListBatchAsync(string batchId, UserMailStatus? status = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default);
+
+    /// <summary>One page of the mail sent to one user, newest first: every mail queued for their key, and every mail queued to <paramref name="address"/> alone.</summary>
+    /// <exception cref="ArgumentException">The cursor was not issued for this list.</exception>
+    Task<UserMailDeliveryPage> ListForRecipientAsync(string userKey, string address, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
+}
+
+/// <summary>One page of queued mail and what became of each.</summary>
+public sealed record UserMailDeliveryPage
+{
+    /// <summary>The mails on this page.</summary>
+    public UserMailDelivery[] Items { get; init; } = [];
+
+    /// <summary>The cursor of the next page, or null when this is the last.</summary>
+    public string NextCursor { get; init; }
 }
 
 /// <summary>The outcome of <see cref="IUserMailQueue.QueueAsync"/>.</summary>
@@ -57,14 +75,20 @@ public sealed record UserMailDelivery
     /// <summary>The mail's id.</summary>
     public required string Id { get; init; }
 
-    /// <summary>The key of the user the mail is for.</summary>
-    public required string RecipientUserKey { get; init; }
+    /// <summary>The key of the user the mail is for; null for a mail queued to an address alone.</summary>
+    public string RecipientUserKey { get; init; }
+
+    /// <summary>The address the mail was addressed to: the one it was queued with, or for a mail to a user the one on their record when it was sent; null until then.</summary>
+    public string RecipientAddress { get; init; }
 
     /// <summary>The category's key.</summary>
     public required string Category { get; init; }
 
     /// <summary>The subject line.</summary>
     public required string Subject { get; init; }
+
+    /// <summary>Which kind of mail it is.</summary>
+    public UserMailKind Kind { get; init; }
 
     /// <summary>The deduplication key it was queued with, if any.</summary>
     public string DeduplicationKey { get; init; }
@@ -92,4 +116,7 @@ public sealed record UserMailDelivery
 
     /// <summary>The <c>Message-ID</c> it was sent with; null until it is sent.</summary>
     public string MessageId { get; init; }
+
+    /// <summary>When it last changed, in UTC: when it was queued, or when it was sent, skipped or given up.</summary>
+    public DateTime ChangedAt => CompletedAt ?? QueuedAt;
 }

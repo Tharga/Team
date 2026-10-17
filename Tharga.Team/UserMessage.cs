@@ -167,6 +167,41 @@ public sealed record UserMessageFailure
     public required string Reason { get; init; }
 }
 
+/// <summary>One recipient of a sent message and what became of the mail to them.</summary>
+public sealed record UserMessageRecipient
+{
+    /// <summary>The key of the user the mail was for.</summary>
+    public required string UserKey { get; init; }
+
+    /// <summary>The user's name, or null when they have none or no longer exist.</summary>
+    public string Name { get; init; }
+
+    /// <summary>The address the mail went to, as the user record had it when it was sent; null until then.</summary>
+    public string Address { get; init; }
+
+    /// <summary>Where the mail stands.</summary>
+    public required UserMailStatus Status { get; init; }
+
+    /// <summary>Why it was skipped or failed, or why the last attempt did not succeed while it waits to be tried again.</summary>
+    public string Reason { get; init; }
+
+    /// <summary>When it last changed, in UTC.</summary>
+    public required DateTime ChangedAt { get; init; }
+
+    /// <summary>The <c>Message-ID</c> it was sent with; null until it is sent.</summary>
+    public string MessageId { get; init; }
+}
+
+/// <summary>One page of a sent message's recipients.</summary>
+public sealed record UserMessageRecipientPage
+{
+    /// <summary>The recipients on this page, in the order they were queued.</summary>
+    public UserMessageRecipient[] Items { get; init; } = [];
+
+    /// <summary>The cursor of the next page, or null when this is the last.</summary>
+    public string NextCursor { get; init; }
+}
+
 /// <summary>One page of the sent log, newest first.</summary>
 public sealed record SentUserMessagePage
 {

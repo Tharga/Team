@@ -133,6 +133,48 @@ internal sealed class UserMessageService(
         return sent;
     }
 
+    public async Task<UserMessageRecipientPage> GetRecipientsAsync(string messageId, UserMailStatus? status = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(messageId)) return null;
+
+        var sw = Stopwatch.StartNew();
+        var entry = await log.GetAsync(messageId.Trim(), cancellationToken);
+        if (entry == null) return null;
+
+        var page = await queue.ListBatchAsync(entry.Id, status, cursor, Math.Clamp(pageSize, 1, MaxPageSize), cancellationToken) ?? new UserMailDeliveryPage();
+        var names = await NamesAsync(page.Items.Select(x => x.RecipientUserKey), cancellationToken);
+
+        UserMessageRecipient[] items = [.. page.Items.Select(x => new UserMessageRecipient
+        {
+            UserKey = x.RecipientUserKey,
+            Name = x.RecipientUserKey != null && names.TryGetValue(x.RecipientUserKey, out var name) ? name : null,
+            Address = x.RecipientAddress,
+            Status = x.Status,
+            Reason = x.Reason,
+            ChangedAt = x.ChangedAt,
+            MessageId = x.MessageId
+        })];
+
+        Audit(AuditEventType.ServiceCall, UserMessageAudit.RecipientsAction, nameof(GetRecipientsAsync), sw.ElapsedMilliseconds, true, null, Meta(
+            (UserMessageAudit.MessageId, entry.Id),
+            (UserMessageAudit.Status, status?.ToString()),
+            (UserMessageAudit.Count, Number(items.Length))));
+
+        return new UserMessageRecipientPage { Items = items, NextCursor = page.NextCursor };
+    }
+
+    private async Task<Dictionary<string, string>> NamesAsync(IEnumerable<string> userKeys, CancellationToken cancellationToken)
+    {
+        string[] keys = [.. userKeys.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)];
+        if (keys.Length == 0) return new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var found = await recipients.FindManyAsync(keys, cancellationToken) ?? [];
+
+        return found.Where(x => x != null && !string.IsNullOrWhiteSpace(x.Name))
+            .GroupBy(x => x.Key, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First().Name, StringComparer.Ordinal);
+    }
+
     /// <remarks>Queued before it is recorded, so a message that cannot be queued leaves no record; one that cannot then be recorded is still sent, and that is logged with its id.</remarks>
     private async Task<SentUserMessage> QueueAndRecordAsync(UserMessage message, CancellationToken cancellationToken)
     {
@@ -223,15 +265,9 @@ internal sealed class UserMessageService(
 
     private async Task<IEnumerable<UserMessageFailure>> NamedAsync(UserMailFailure[] failures, CancellationToken cancellationToken)
     {
-        var named = new List<UserMessageFailure>();
+        var names = await NamesAsync(failures.Select(x => x.UserKey), cancellationToken);
 
-        foreach (var failure in failures)
-        {
-            var recipient = await recipients.FindAsync(failure.UserKey, cancellationToken);
-            named.Add(new UserMessageFailure { UserKey = failure.UserKey, Name = recipient?.Name, Reason = failure.Reason });
-        }
-
-        return named;
+        return failures.Select(x => new UserMessageFailure { UserKey = x.UserKey, Name = x.UserKey != null ? names.GetValueOrDefault(x.UserKey) : null, Reason = x.Reason });
     }
 
     private static SentUserMessage ToSent(UserMessageLogEntry entry, UserMailOutcomes outcomes) => new()

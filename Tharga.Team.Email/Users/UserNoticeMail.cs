@@ -137,7 +137,8 @@ internal sealed class UserNoticeMail(UserNoticeRegistry notices, UserMailText te
         RecipientUserKey = userKey,
         Category = category,
         Subject = string.IsNullOrWhiteSpace(subject) ? category : subject,
-        BodyHtml = bodyHtml
+        BodyHtml = bodyHtml,
+        Kind = UserMailKind.Notice
     };
 
     /// <summary>The key a mail is queued under so a claimant taking over queues it once: per day for a summary, per mail otherwise.</summary>

@@ -9,6 +9,20 @@ public interface IUserMailRecipientDirectory
 {
     /// <summary>The user with this key and the address on their record, or null when there is no such user.</summary>
     Task<UserMailRecipient> FindAsync(string userKey, CancellationToken cancellationToken = default);
+
+    /// <summary>The users with these keys, each once, leaving out a key no user has; by default asked one key at a time, which a host's own directory may answer in one read.</summary>
+    async Task<UserMailRecipient[]> FindManyAsync(IReadOnlyCollection<string> userKeys, CancellationToken cancellationToken = default)
+    {
+        var found = new List<UserMailRecipient>();
+
+        foreach (var userKey in (userKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal))
+        {
+            var recipient = await FindAsync(userKey, cancellationToken);
+            if (recipient != null) found.Add(recipient);
+        }
+
+        return [.. found];
+    }
 }
 
 /// <summary>Who a user mail goes to, as the user record says when it is sent.</summary>

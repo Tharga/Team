@@ -11,11 +11,24 @@ namespace Tharga.Team.MongoDB;
 /// <summary>One queued mail to a user and where it stands.</summary>
 public record UserMailEntity : EntityBase
 {
-    /// <summary>The key of the user the mail is for.</summary>
-    public required string RecipientUserKey { get; init; }
+    /// <summary>The key of the user the mail is for; null for a mail queued to an address alone.</summary>
+    public string RecipientUserKey { get; init; }
+
+    /// <summary>The address the mail is or was addressed to: the one it was queued with, or for a mail to a user the one on their record when it was sent, in lower case.</summary>
+    [BsonIgnoreIfNull]
+    public string RecipientAddress { get; init; }
+
+    /// <summary>The name a mail queued to an address alone is addressed to.</summary>
+    [BsonIgnoreIfNull]
+    public string RecipientName { get; init; }
 
     /// <summary>The category's key.</summary>
     public required string Category { get; init; }
+
+    /// <summary>Which kind of mail it is, stored by name; null on a mail stored before kinds were, read as a message when it names a batch and as a mail otherwise.</summary>
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.String)]
+    public UserMailKind? Kind { get; init; }
 
     /// <summary>The subject line.</summary>
     public required string Subject { get; init; }
@@ -103,8 +116,8 @@ public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
 /// <summary>Queued mail to users, default collection name <c>UserMail</c>.</summary>
 /// <remarks>
 /// Due mail is found by status and due time; a deduplication key is unique where one was given; a batch's mail by its
-/// batch and status; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a
-/// queued one never does.
+/// batch and status; a user's history by their key or address, newest first; and a mail that is done expires after
+/// <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never does.
 /// </remarks>
 public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, IUserMailCollection
 {
@@ -132,6 +145,10 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.CompletedAt),
             new CreateIndexOptions { ExpireAfter = _retention, Name = "CompletedAt_ttl" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.BatchId).Ascending(x => x.Status),
-            new CreateIndexOptions { Name = "BatchId_Status" })
+            new CreateIndexOptions { Name = "BatchId_Status" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.RecipientUserKey).Descending(x => x.Id),
+            new CreateIndexOptions { Name = "RecipientUserKey_Id" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.RecipientAddress).Descending(x => x.Id),
+            new CreateIndexOptions { Name = "RecipientAddress_Id" })
     ];
 }
