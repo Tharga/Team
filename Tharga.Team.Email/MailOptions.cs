@@ -73,6 +73,14 @@ public class MailOptions
     /// </remarks>
     public string[] Recipients { get; set; } = [];
 
+    /// <summary>Where a mailbox with no read position starts: only mail delivered on or after this date. Unset reads everything.</summary>
+    /// <remarks>
+    /// <b>Set it when connecting a mailbox that already holds mail</b>, or the first reads turn every message it
+    /// has ever received into work. It applies whenever reading starts from the beginning, which includes the
+    /// server announcing a new UID generation.
+    /// </remarks>
+    public DateTime? FirstReadSince { get; set; }
+
     /// <summary>The largest file one mail may carry in or out, in bytes. Default 25 MB.</summary>
     public long MaxAttachmentBytes { get; set; } = 25L * 1024 * 1024;
 

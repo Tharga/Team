@@ -88,7 +88,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
             var rescanned = position.IsInvalidatedBy(folder.UidValidity);
             var from = rescanned ? 0 : position.LastUid;
 
-            var uids = Newer(await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(new UniqueId(from + 1), UniqueId.MaxValue)), cancellationToken), from);
+            var uids = Newer(await folder.SearchAsync(SearchFor(from, _options.FirstReadSince), cancellationToken), from);
 
             var mails = new List<InboundMail>();
             var highest = from;
@@ -132,6 +132,14 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
     /// The UIDs above the read position. IMAP reads <c>n:*</c> as "n up to the highest UID", so when nothing
     /// newer exists the server still answers with the highest one, which would be read again on every poll.
     /// </summary>
+    // IMAP's SINCE compares the date alone, so the time of day is dropped rather than half-honoured.
+    internal static SearchQuery SearchFor(uint from, DateTime? firstReadSince)
+    {
+        var newer = SearchQuery.Uids(new UniqueIdRange(new UniqueId(from + 1), UniqueId.MaxValue));
+
+        return from == 0 && firstReadSince.HasValue ? newer.And(SearchQuery.DeliveredAfter(firstReadSince.Value.Date)) : newer;
+    }
+
     internal static IReadOnlyList<UniqueId> Newer(IEnumerable<UniqueId> uids, uint lastUid) => [.. uids.Where(x => x.Id > lastUid).OrderBy(x => x.Id)];
 
     internal async Task<string> CheckReadAsync(CancellationToken cancellationToken)
