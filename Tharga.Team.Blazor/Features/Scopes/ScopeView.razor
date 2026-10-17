@@ -246,7 +246,9 @@
     /// </summary>
     private void ApplyRoles(IScopeRegistry scopeRegistry, IReadOnlyList<TenantRoleDefinition> roles)
     {
-        _resolvedRoles = Roles ?? roles ?? Array.Empty<TenantRoleDefinition>();
+        // A role granting only hidden scopes is dropped before anything is built from the list, so it is
+        // neither in the role bar nor pre-selected from the member's assignments.
+        _resolvedRoles = ScopeReference.WithVisibleScopes(Roles ?? roles ?? Array.Empty<TenantRoleDefinition>(), _hiddenScopes);
 
         _rows = ScopeReference.WithoutHidden(ScopeReference.BuildForRoles(scopeRegistry, _resolvedRoles), _hiddenScopes);
         _allRoleNames = _resolvedRoles.Select(r => r.Name).ToList();

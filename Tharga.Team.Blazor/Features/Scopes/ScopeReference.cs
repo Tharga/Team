@@ -108,6 +108,26 @@ public static class ScopeReference
     }
 
     /// <summary>
+    /// The roles that grant at least one scope the team can see — what the role bar offers. A role whose
+    /// every scope is hidden for the team is left out; a role with no scopes at all is kept, since nothing
+    /// hides it.
+    /// </summary>
+    /// <param name="roles">The roles resolved for the team.</param>
+    /// <param name="hidden">The scopes hidden for the team, or null.</param>
+    /// <remarks>
+    /// <b>Derived from the scopes, not from role visibility.</b> <c>ScopeView</c> ignores
+    /// <see cref="ITenantRoleVisibilityProvider"/> on purpose (Tharga/Team#292). A role left out here grants
+    /// nothing that applies to the team, so listing it would only advertise a switched-off feature — the
+    /// "role bar" half of "a hidden scope is not counted anywhere" (Tharga/Team#318).
+    /// </remarks>
+    public static IReadOnlyList<TenantRoleDefinition> WithVisibleScopes(IReadOnlyList<TenantRoleDefinition> roles, IReadOnlySet<string> hidden)
+    {
+        if (roles == null) return Array.Empty<TenantRoleDefinition>();
+        if (hidden is not { Count: > 0 }) return roles;
+        return roles.Where(r => r.Scopes is not { Count: > 0 } || r.Scopes.Any(s => !hidden.Contains(s))).ToList();
+    }
+
+    /// <summary>
     /// The member's own role assignments, narrowed to those the page knows about — what the role bar shows
     /// as already selected.
     /// </summary>

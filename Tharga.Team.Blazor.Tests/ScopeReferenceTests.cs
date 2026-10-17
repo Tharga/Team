@@ -410,6 +410,31 @@ public class ScopeReferenceTests
         Assert.Equal(["Editor"], Row(visible, "orders:write").Roles);
     }
 
+    /// <summary>A role that grants only hidden scopes has nothing to show on the role bar (Tharga/Team#318).</summary>
+    [Fact]
+    public void WithVisibleScopes_LeavesOutARoleWhoseEveryScopeIsHidden()
+    {
+        TenantRoleDefinition[] roles =
+        [
+            new("CaseOfficer", ["case:read"]),
+            new("Editor", ["orders:write", "case:read"]),
+            new("Empty", []),
+        ];
+
+        var visible = ScopeReference.WithVisibleScopes(roles, new HashSet<string> { "case:read" });
+
+        Assert.Equal(["Editor", "Empty"], visible.Select(r => r.Name));
+    }
+
+    [Fact]
+    public void WithVisibleScopes_WithNothingHidden_KeepsEveryRole()
+    {
+        TenantRoleDefinition[] roles = [new("CaseOfficer", ["case:read"])];
+
+        Assert.Same(roles, ScopeReference.WithVisibleScopes(roles, null));
+        Assert.Empty(ScopeReference.WithVisibleScopes(null, null));
+    }
+
     [Fact]
     public void WithoutHidden_WithNothingHidden_KeepsEveryRow()
     {
