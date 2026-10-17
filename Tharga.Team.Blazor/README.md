@@ -217,6 +217,31 @@ badges for empty and ownerless teams. Both tabs show the record key with a copy 
 row and cross-link between a user and their teams. `<UsersView ShowAuditLogButton="true" />` adds an
 opt-in per-row audit log, pinned to that team or user.
 
+To link straight to a tab, or to one team or user, bind `SelectedTab` (`Users`, `Teams`, `Directory`) and
+set `FocusTeamKey` / `FocusUserKey`. The view stays out of routing, so the host maps them to its own
+address:
+
+```razor
+@page "/admin/users"
+@inject NavigationManager Navigation
+
+<UsersView TMember="TeamMember" SelectedTab="@CurrentTab" SelectedTabChanged="@OnTabChanged" FocusTeamKey="@Team" />
+
+@code {
+    [SupplyParameterFromQuery(Name = "tab")] public string Tab { get; set; }
+    [SupplyParameterFromQuery(Name = "team")] public string Team { get; set; }
+
+    private UsersViewTab CurrentTab => Enum.TryParse<UsersViewTab>(Tab, true, out var t) ? t : UsersViewTab.Users;
+
+    private void OnTabChanged(UsersViewTab tab) =>
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("tab", tab == UsersViewTab.Users ? null : tab.ToString().ToLowerInvariant()), replace: true);
+}
+```
+
+`/admin/users?tab=teams&team=<key>` then opens the Teams tab with that team expanded. Asking for
+`Directory` when that tab is not shown opens Users. Following a team or member link inside the view
+raises `SelectedTabChanged` too, so the address stays in step.
+
 With an `IUserIdentityDirectory` registered (the Entra directory registers one), the Users tab also shows
 a **Sign-in** column: how each user signs in, as chips, read for the visible page in one directory call.
 Name your identity providers with `o.Blazor.SignInMethods.Add(identity => ... ? new SignInMethod("e-ID") : null)`.
