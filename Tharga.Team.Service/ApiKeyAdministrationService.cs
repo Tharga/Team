@@ -92,6 +92,10 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
 
         if (_options.AdvancedMode) yield break;
 
+        // Auto-created keys have no owner. The combination fails at startup (RequirePrivateKeysCheck); this
+        // keeps the promise even where no host runs that check, such as a service constructed directly.
+        if (_options.RequirePrivateKeys) yield break;
+
         for (var i = count; i < _options.AutoKeyCount; i++)
         {
             var name = IntegerExtensions.GetNameForNumber(i + 1);
@@ -112,6 +116,8 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
     /// <inheritdoc />
     public async Task<IApiKey> CreateKeyAsync(string teamKey, string name, AccessLevel accessLevel, string[] roles = null, string[] scopeOverrides = null, DateTime? expiryDate = null, IReadOnlyList<Tag> tags = null, string createdBy = null, string ownerMemberKey = null)
     {
+        PrivateKeyRequirement.Ensure(_options, !string.IsNullOrEmpty(ownerMemberKey));
+
         expiryDate ??= GetDefaultExpiryDate();
 
         if (_options.MaxExpiryDays.HasValue && expiryDate.HasValue)

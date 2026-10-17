@@ -193,12 +193,14 @@ else
                                           Max="@(_options.MaxExpiryDays.HasValue ? DateTime.UtcNow.AddDays(_options.MaxExpiryDays.Value).Date : DateTime.MaxValue)" />
                     </RadzenStack>
                 }
-                @if (ShowPrivateKeys != PrivateKeyScope.None)
+                @if (Tharga.Team.Blazor.Framework.ApiKeyPrivacy.ShowSwitch(ShowPrivateKeys, _options.RequirePrivateKeys))
                 {
                     <RadzenStack Gap="0.25rem">
                         <RadzenLabel Text="Private" />
                         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                            <RadzenSwitch @bind-Value="_newPrivate" />
+                            <RadzenSwitch Value="@Tharga.Team.Blazor.Framework.ApiKeyPrivacy.CreatesPrivate(_newPrivate, _options.RequirePrivateKeys)"
+                                          ValueChanged="@((bool value) => _newPrivate = value)"
+                                          Disabled="@_options.RequirePrivateKeys" />
                             <RadzenText TextStyle="TextStyle.Caption" title="Only you can see and manage this key.">only me</RadzenText>
                         </RadzenStack>
                     </RadzenStack>
@@ -259,13 +261,15 @@ else
     /// no private keys; <c>Mine</c> shows the caller's own; <c>All</c> shows every private key the caller is
     /// entitled to see. Setting this to a non-None value also surfaces a "Private (only me)" toggle on the
     /// create card. The actual visibility is always intersected with the caller's identity server-side.
+    /// With <see cref="ApiKeyOptions.RequirePrivateKeys"/> on, <c>None</c> behaves as <c>Mine</c> (so a key just
+    /// created is listed) and the toggle is shown on and locked.
     /// </summary>
     [Parameter] public PrivateKeyScope ShowPrivateKeys { get; set; } = PrivateKeyScope.None;
 
     /// <summary>
     /// When true (and <see cref="ShowPrivateKeys"/> is <c>All</c>), privileged access levels
     /// (Administrator / Owner) may <b>see</b> other members' private keys. They remain view-only — only the
-    /// owner (or a Developer-role caller) can recycle / lock / delete a private key. Default false.
+    /// owner (or a caller holding the <c>apikeys:oversee</c> system scope) can recycle / lock / delete a private key. Default false.
     /// </summary>
     [Parameter] public bool AllowPrivilegedAccess { get; set; }
 
@@ -347,7 +351,8 @@ else
     {
         if (_selectedTeam?.Key == null) return;
 
-        var keys = await _apiKeyManagementService.GetKeysAsync(_selectedTeam.Key, ShowPrivateKeys, AllowPrivilegedAccess).ToArrayAsync();
+        var listed = Tharga.Team.Blazor.Framework.ApiKeyPrivacy.Listed(ShowPrivateKeys, _options.RequirePrivateKeys);
+        var keys = await _apiKeyManagementService.GetKeysAsync(_selectedTeam.Key, listed, AllowPrivilegedAccess).ToArrayAsync();
         _keys = keys
             .Select(x =>
             {
@@ -380,7 +385,8 @@ else
         {
             var scopes = _newScopeOverrides.Count > 0 ? _newScopeOverrides.ToArray() : null;
             var roles = _newRoles.Count > 0 ? _newRoles.ToArray() : null;
-            var created = await _apiKeyManagementService.CreateKeyAsync(_selectedTeam.Key, _newName, _newAccessLevel, roles: roles, scopeOverrides: scopes, expiryDate: _newExpiryDate, ownerScoped: _newPrivate);
+            var created = await _apiKeyManagementService.CreateKeyAsync(_selectedTeam.Key, _newName, _newAccessLevel, roles: roles, scopeOverrides: scopes, expiryDate: _newExpiryDate,
+                ownerScoped: Tharga.Team.Blazor.Framework.ApiKeyPrivacy.CreatesPrivate(_newPrivate, _options.RequirePrivateKeys));
             _newName = "";
             _newAccessLevel = AccessLevel.User;
             _newPrivate = false;

@@ -87,6 +87,10 @@ builder.AddThargaTeam(o =>
     // Advanced mode unlocks the full API key UI (access level, roles, scope overrides, tags).
     o.ApiKey.AdvancedMode = true;
 
+    // Uncomment to require every new team key to be private (owner-scoped): the create card locks "Private"
+    // on, and the sample's own tagged-key buttons are refused, since they make team-wide keys.
+    // o.ApiKey.RequirePrivateKeys = true;
+
     // Register scopes so the scope-override picker and Custom (no-base-scope) keys have something to grant.
     o.ConfigureScopes = scopes =>
     {

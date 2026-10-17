@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
 using Tharga.Team;
 using Tharga.Team.Service.Audit;
 
@@ -32,6 +34,9 @@ public static class ApiKeyRegistration
 
         builder.AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(
             ApiKeyConstants.SchemeName, "API Key", null);
+
+        // RequirePrivateKeys cannot hold in simple mode; say so at startup, not as an empty key page.
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RequirePrivateKeysCheck>());
 
         builder.Services.AddAuthorization(options =>
         {
