@@ -83,7 +83,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
             var rescanned = position.IsInvalidatedBy(folder.UidValidity);
             var from = rescanned ? 0 : position.LastUid;
 
-            var uids = await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(new UniqueId(from + 1), UniqueId.MaxValue)), cancellationToken);
+            var uids = Newer(await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(new UniqueId(from + 1), UniqueId.MaxValue)), cancellationToken), from);
 
             var mails = new List<InboundMail>();
             var highest = from;
@@ -123,6 +123,12 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
     }
 
     /// <summary>Connects to the IMAP server and opens the folder read-only; null when that worked, otherwise why not.</summary>
+    /// <summary>
+    /// The UIDs above the read position. IMAP reads <c>n:*</c> as "n up to the highest UID", so when nothing
+    /// newer exists the server still answers with the highest one, which would be read again on every poll.
+    /// </summary>
+    internal static IReadOnlyList<UniqueId> Newer(IEnumerable<UniqueId> uids, uint lastUid) => [.. uids.Where(x => x.Id > lastUid).OrderBy(x => x.Id)];
+
     internal async Task<string> CheckReadAsync(CancellationToken cancellationToken)
     {
         if (!CanRead) return "No IMAP server is configured.";

@@ -79,7 +79,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Visibility = supportCase.Visibility,
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
-            Bindings = [],
+            Bindings = [.. (supportCase.Bindings ?? []).Select(x => new SupportChannelBindingEntity { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })],
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
