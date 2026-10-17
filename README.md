@@ -145,7 +145,7 @@ builder.AddThargaTeam(o =>
 });
 ```
 
-The `<UsersView />` admin component picks it all up automatically. Its two tabs show each record's key with a copy control, the signed-in user's own row highlighted, and — on the Teams tab — owner, last used, a pending-invitation split, avatars and an empty-team badge. Two host opt-ins: grant the `teams:delete` **system** scope through `o.ConfigureSystemRoles` to offer team deletion, and set `<UsersView ShowAuditLogButton="true" />` for a per-row audit-history dialog. See [User management & directory](docs/articles/user-management.md).
+The `<UsersView />` admin component picks it all up automatically. Its two tabs show each record's key with a copy control, the signed-in user's own row highlighted, and — on the Teams tab — owner, last used, a pending-invitation split, avatars and an empty-team badge. Two host opt-ins: grant the `teams:delete` **system** scope through `o.ConfigureSystemRoles` to offer team deletion, and set `<UsersView ShowAuditLogButton="true" />` for a per-row audit-history dialog. With a directory that can read sign-in identities (Entra), the Users tab also shows how each user signs in, with provider names you map through `o.Blazor.SignInMethods`. See [User management & directory](docs/articles/user-management.md).
 
 ## Which claim identifies a user
 

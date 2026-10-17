@@ -25,14 +25,16 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     private readonly ITeamService _inner;
     private readonly TeamAuthorizer _authorizer;
     private readonly TeamPurgeCascade _purgeCascade;
+    private readonly TeamMemberRemovalCascade _memberRemovalCascade;
     private readonly TeamLifecycleOptions _lifecycle;
     private readonly IScopeRegistry _scopeRegistry;
     private readonly ITenantRoleRegistry _tenantRoleRegistry;
     private readonly string _customRoleManageScope;
     private readonly ConsentOptions _consent;
 
-    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null, TeamPurgeCascade purgeCascade = null, ConsentOptions consentOptions = null)
+    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null, TeamPurgeCascade purgeCascade = null, ConsentOptions consentOptions = null, TeamMemberRemovalCascade memberRemovalCascade = null)
     {
+        _memberRemovalCascade = memberRemovalCascade;
         _consent = consentOptions ?? new ConsentOptions();
         _inner = inner;
         _authorizer = authorizer;
@@ -247,6 +249,7 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
         await _inner.RemoveMemberAsync(teamKey, userKey);
+        if (_memberRemovalCascade != null) await _memberRemovalCascade.RunAsync(teamKey, userKey);
     }
 
     /// <summary>
@@ -268,7 +271,11 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     /// first, and the last administrator of an ownerless team stays.
     /// </para>
     /// </remarks>
-    public Task LeaveTeamAsync(string teamKey) => _inner.LeaveTeamAsync(teamKey);
+    public async Task LeaveTeamAsync(string teamKey)
+    {
+        await _inner.LeaveTeamAsync(teamKey);
+        if (_memberRemovalCascade != null) await _memberRemovalCascade.RunForCurrentUserAsync(teamKey);
+    }
 
     public async Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
     {
@@ -310,7 +317,12 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     public async Task<int> RemoveUserFromAllTeamsAsync(string userKey)
     {
         await RequireUsersManageAsync();
-        return await _inner.RemoveUserFromAllTeamsAsync(userKey);
+
+        // Read before removing: afterwards the user is in no team, so there is nothing left to clean up by.
+        var teamKeys = _memberRemovalCascade != null ? await _memberRemovalCascade.GetTeamKeysAsync(_inner, userKey) : [];
+        var removed = await _inner.RemoveUserFromAllTeamsAsync(userKey);
+        if (_memberRemovalCascade != null) await _memberRemovalCascade.RunAsync(teamKeys, userKey);
+        return removed;
     }
 
     // Team icon (team:manage on the team, or the teams:manage system grant).

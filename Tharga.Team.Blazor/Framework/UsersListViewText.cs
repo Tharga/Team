@@ -127,9 +127,25 @@ public static class UsersListViewText
     public static readonly TextKey RemovedFromManyTeamsAndDirectory = new("team.usersList.removedFromManyTeamsAndDirectory",
         "Removed from {0} teams and the directory.");
 
+    /// <summary>The sign-in methods column, and the states a row's methods can be in.</summary>
+    public static readonly TextKey ColumnSignIn = new("team.usersList.columnSignIn", "Sign-in");
+    public static readonly TextKey SignInNotLinked = new("team.usersList.signInNotLinked", "Not linked");
+    public static readonly TextKey SignInNotLinkedHint = new("team.usersList.signInNotLinkedHint",
+        "This user is not linked to a directory account yet, so the directory cannot say how they sign in. Verify the user to link them.");
+    public static readonly TextKey SignInNone = new("team.usersList.signInNone", "None");
+    public static readonly TextKey SignInFailed = new("team.usersList.signInFailed", "Unavailable");
+    public static readonly TextKey SignInFailedHint = new("team.usersList.signInFailedHint", "The directory could not be read: {0}");
+
+    /// <summary>Labels for identities no host mapping names.</summary>
+    public static readonly TextKey SignInEmail = new("team.usersList.signInEmail", "Email");
+    public static readonly TextKey SignInUserName = new("team.usersList.signInUserName", "Username");
+    public static readonly TextKey SignInPrincipalName = new("team.usersList.signInPrincipalName", "Account");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
+        ColumnSignIn, SignInNotLinked, SignInNotLinkedHint, SignInNone, SignInFailed, SignInFailedHint,
+        SignInEmail, SignInUserName, SignInPrincipalName,
         VerifyAll, ColumnName, ColumnEmail, ColumnTeams, ColumnLastSeen, BadgeDisabled, ActionView,
         ActionVerify, ActionRename, ActionSetIcon, ActionAuditLog, ActionEnable, ActionDisable, ActionDelete,
         ActionDisableSelf, ActionDeleteSelf, UserKey, CopyUserKey, Identity, CopyIdentity, DirectoryId,

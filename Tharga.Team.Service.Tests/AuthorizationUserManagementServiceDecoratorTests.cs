@@ -96,4 +96,32 @@ public class AuthorizationUserManagementServiceDecoratorTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(async () => await sut.GetDirectoryOnlyUsersAsync().ToListAsync());
         _ = inner.DidNotReceiveWithAnyArgs().GetDirectoryOnlyUsersAsync(default);
     }
+
+    [Fact]
+    public async Task SignInIdentities_WithScope_Delegates()
+    {
+        var (sut, inner) = Build(WithScopes(SystemUserScopes.Manage));
+        var expected = new[] { new UserSignInIdentities("u-1", []) };
+        inner.GetSignInIdentitiesAsync(Arg.Any<IEnumerable<string>>(), Arg.Any<CancellationToken>()).Returns(expected);
+
+        var result = await sut.GetSignInIdentitiesAsync(["u-1"]);
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task SignInIdentities_WithoutScope_Throws()
+    {
+        var (sut, inner) = Build(WithScopes(SystemTeamScopes.Read));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.GetSignInIdentitiesAsync(["u-1"]));
+        await inner.DidNotReceiveWithAnyArgs().GetSignInIdentitiesAsync(default, default);
+    }
+
+    [Fact]
+    public async Task SignInIdentities_Anonymous_Throws()
+    {
+        var (sut, inner) = Build(Anonymous());
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.GetSignInIdentitiesAsync(["u-1"]));
+        await inner.DidNotReceiveWithAnyArgs().GetSignInIdentitiesAsync(default, default);
+    }
 }

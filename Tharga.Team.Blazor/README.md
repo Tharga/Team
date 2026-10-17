@@ -201,6 +201,11 @@ badges for empty and ownerless teams. Both tabs show the record key with a copy 
 row and cross-link between a user and their teams. `<UsersView ShowAuditLogButton="true" />` adds an
 opt-in per-row audit log, pinned to that team or user.
 
+With an `IUserIdentityDirectory` registered (the Entra directory registers one), the Users tab also shows
+a **Sign-in** column: how each user signs in, as chips, read for the visible page in one directory call.
+Name your identity providers with `o.Blazor.SignInMethods.Add(identity => ... ? new SignInMethod("e-ID") : null)`.
+Unmapped federated identities show their issuer's host name.
+
 Deleting a team from `UsersView` → Teams is a separate, stronger privilege: the `teams:delete` system
 scope, which **no consent option grants**. Consent decides what a team exposes inbound; it does not
 decide who may destroy it. Map it explicitly to the roles that should have it:

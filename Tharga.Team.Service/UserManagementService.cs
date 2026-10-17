@@ -15,6 +15,7 @@ public class UserManagementService : IUserManagementService
     private readonly ITeamService _teamService;
     private readonly IUserDirectoryService _directoryService;
     private readonly bool _writeNameToDirectory;
+    private readonly IUserIdentityDirectory _identityDirectory;
 
     /// <param name="userService">The user store.</param>
     /// <param name="teamService">The team store, used to remove memberships and to find owned teams.</param>
@@ -24,12 +25,37 @@ public class UserManagementService : IUserManagementService
     /// side owns display names is a per-host decision, and a host federating from a corporate directory
     /// wants the directory authoritative.
     /// </param>
-    public UserManagementService(IUserService userService, ITeamService teamService, IUserDirectoryService directoryService = null, bool writeNameToDirectory = false)
+    /// <param name="identityDirectory">The directory's sign-in identity reader, when one is registered.</param>
+    public UserManagementService(IUserService userService, ITeamService teamService, IUserDirectoryService directoryService = null, bool writeNameToDirectory = false, IUserIdentityDirectory identityDirectory = null)
     {
         _userService = userService;
         _teamService = teamService;
         _directoryService = directoryService;
         _writeNameToDirectory = writeNameToDirectory;
+        _identityDirectory = identityDirectory;
+    }
+
+    public async Task<UserSignInIdentities[]> GetSignInIdentitiesAsync(IEnumerable<string> userKeys, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(userKeys);
+        if (_identityDirectory == null) return [];
+
+        // Directory id back to user key. Unlinked users are not asked about: an empty directory id is not a
+        // user the directory can answer for, and "not linked" is already known to the caller.
+        var userKeysByDirectoryId = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var userKey in userKeys.Where(x => !string.IsNullOrEmpty(x)).Distinct(StringComparer.Ordinal))
+        {
+            var user = await _userService.GetUserByKeyAsync(userKey);
+            if (!string.IsNullOrEmpty(user?.DirectoryId)) userKeysByDirectoryId.TryAdd(user.DirectoryId, user.Key);
+        }
+
+        if (userKeysByDirectoryId.Count == 0) return [];
+
+        var identities = await _identityDirectory.GetIdentitiesByIdsAsync(userKeysByDirectoryId.Keys, cancellationToken);
+        return identities
+            .Where(x => userKeysByDirectoryId.ContainsKey(x.DirectoryId))
+            .Select(x => new UserSignInIdentities(userKeysByDirectoryId[x.DirectoryId], x.Identities))
+            .ToArray();
     }
 
     public async Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default)

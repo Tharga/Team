@@ -93,4 +93,20 @@ public interface IUserManagementService
     /// </summary>
     [RequireScope(SystemUserScopes.Manage)]
     IAsyncEnumerable<DirectoryUser> GetDirectoryOnlyUsersAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// How each of the given users signs in, read from the directory in one batch. One entry per user that
+    /// is linked to a directory account the directory still knows; unknown and unlinked users are left out.
+    /// </summary>
+    /// <remarks>
+    /// Requires a registered <see cref="IUserIdentityDirectory"/>; without one the result is empty. Meant
+    /// for a list surface reading the rows it shows, so pass a page of keys rather than every user.
+    /// <para>
+    /// The default implementation returns nothing, so a host's own implementation of this interface keeps
+    /// compiling; such a host shows no sign-in methods until it implements this.
+    /// </para>
+    /// </remarks>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task<UserSignInIdentities[]> GetSignInIdentitiesAsync(IEnumerable<string> userKeys, CancellationToken cancellationToken = default)
+        => Task.FromResult(Array.Empty<UserSignInIdentities>());
 }

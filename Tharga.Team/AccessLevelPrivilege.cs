@@ -1,6 +1,6 @@
-﻿using Tharga.Team;
 
-namespace Tharga.Team.Blazor.Features.Simulation;
+
+namespace Tharga.Team;
 
 /// <summary>
 /// Compares two access levels by privilege, which is not the same as comparing them by value.

@@ -32,6 +32,17 @@ public static class TeamClaimTypes
     public const string MemberKey = "MemberKey";
 
     /// <summary>
+    /// Claim type carrying the user key of the person a private API key belongs to, on a principal
+    /// authenticated by that key. Use it to attribute what the key does to a person.
+    /// </summary>
+    /// <remarks>
+    /// <b>Deliberately not <see cref="MemberKey"/>.</b> That claim is issued only from a membership and is
+    /// read as "this caller is a member, at its own level" (see <c>TeamScopePolicy</c>). A key acts
+    /// <i>for</i> its owner, at no more than the owner's access, but it is not the owner's session.
+    /// </remarks>
+    public const string ApiKeyOwner = "ApiKeyOwner";
+
+    /// <summary>
     /// Claim type for scopes granted by the caller's access level, roles or overrides <b>on the selected
     /// team</b>. Multiple scope claims may be present.
     /// </summary>

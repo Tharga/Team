@@ -89,6 +89,13 @@ public record ThargaBlazorOptions : BlazorOptions
     public IconSettings IconSettings { get; internal set; } = new();
 
     /// <summary>
+    /// How <c>UsersView</c> names the ways each user signs in, e.g.
+    /// <c>o.SignInMethods.Add(x =&gt; x.Issuer == "https://broker.example/" ? new SignInMethod("e-ID") : null)</c>.
+    /// The column appears only when an <see cref="IUserIdentityDirectory"/> is registered.
+    /// </summary>
+    public SignInMethodOptions SignInMethods { get; set; } = new();
+
+    /// <summary>
     /// Replace the icon <b>storage</b> backend (<see cref="IIconStore"/> — where icon bytes live). When
     /// not set, the built-in <c>MongoIconStore</c> (from <c>AddThargaTeamRepository</c>) is used.
     /// </summary>

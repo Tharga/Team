@@ -1,4 +1,4 @@
-﻿name: CI
+name: CI
 
 on:
   push:
@@ -22,7 +22,10 @@ env:
   # 3.25: ISupportCaseService gained members (an implementer must add them); a conversation the assistant
   # is answering is no longer awaiting support or unread; a closed case's visibility can change; and the
   # support components' text catalogues lost keys for parts that no longer exist.
-  MAJOR_MINOR: '3.27'
+  #
+  # 3.29: invitation email moved to Tharga.Team.Email; a host that sends invitations must call
+  # AddThargaEmailInvitations, since setting the Email options alone no longer registers a sender.
+  MAJOR_MINOR: '3.29'
 
 permissions:
   contents: write

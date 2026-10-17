@@ -5,7 +5,7 @@ MIME handling both need. Three things use it:
 
 - **Support cases by email**, in `Tharga.Team.Support`, which now depends on this package.
 - **Team mailboxes** — an address per team that receives real mail, described below.
-- **Invitation email**, which moved here from `Tharga.Team.Service` in 3.27.
+- **Invitation email**, which moved here from `Tharga.Team.Service` in 3.29.
 
 The package exists so that MailKit reaches only hosts that use mail. `Tharga.Team.Blazor` never references it:
 the views below depend on contracts in `Tharga.Team` alone.
@@ -187,7 +187,7 @@ It sends through the same transport as everything else, obeys the outbound mail 
 refuses, so the invite dialog can tell the inviter. A sender the host registered itself — `AddEmailService<T>()` —
 still wins, whichever is registered first.
 
-## Moving to 3.27
+## Moving to 3.29
 
 > [!IMPORTANT]
 > **The built-in SMTP invitation sender moved to `Tharga.Team.Email`.** Setting `o.Email` no longer registers a

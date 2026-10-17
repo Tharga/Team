@@ -67,6 +67,12 @@ public static class ThargaBlazorRegistration
         // lifetime and a startup failure to lose.
         services.TryAddScoped<TeamPurgeCascade>();
 
+        // The same shape for someone leaving a team: removal, leaving, and user deletion each run the
+        // participants afterwards. Private API keys are the first; they are cleaned up through
+        // IApiKeyAdministrationService, so this covers a host's own key store too (Tharga/Team#323).
+        services.TryAddScoped<TeamMemberRemovalCascade>();
+        services.TryAddEnumerable(ServiceDescriptor.Transient<ITeamMemberRemovalParticipant, ApiKeyOwnerRemovalParticipant>());
+
         if (o._teamService != null)
         {
             services.AddScoped<ITeamStateService, TeamStateService>();
@@ -255,6 +261,7 @@ public static class ThargaBlazorRegistration
                 scopes.Register(SystemTeamScopes.Purge, "Permanently remove a soft-deleted team and drop its storage. Irreversible, and the only team operation needing the database privilege to drop data.");
                 scopes.Register(SystemUserScopes.Manage, "Administer users (cross-team): verify against the external directory, list directory-only users, and delete users.");
                 scopes.Register(SystemTeamScopes.Manage, "Rename any team and set its icon (cross-team). Does not grant consent or custom-role changes.");
+                scopes.Register(SystemApiKeyScopes.Oversee, "See and manage other members' private API keys in any team, to investigate an incident or retire a departed person's keys.");
                 // Demo mode. A system grant because the operation drops system scopes and application
                 // roles -- inert for a caller holding none, which is every customer's own team owner. The
                 // run-as half stays a team scope at Administrator (Tharga/Team#223).
@@ -266,7 +273,8 @@ public static class ThargaBlazorRegistration
                 sp.GetRequiredService<IUserService>(),
                 sp.GetRequiredService<ITeamService>(),
                 sp.GetService<IUserDirectoryService>(),
-                o.WriteNameToDirectory));
+                o.WriteNameToDirectory,
+                sp.GetService<IUserIdentityDirectory>()));
 
             // Server-side claims enrichment — always registered, reads selected_team_id cookie.
             // The membership/consent claim computation is shared with the in-circuit revalidator below.
@@ -354,6 +362,7 @@ public static class ThargaBlazorRegistration
         }
 
         RegisterIcons(services, o);
+        services.AddSingleton(o.SignInMethods ?? new SignInMethodOptions());
         RegisterEmail(services, o);
 
         services.AddSingleton(Options.Create(o));
@@ -514,7 +523,8 @@ public static class ThargaBlazorRegistration
             var dynamicRoleOptions = sp.GetService<DynamicTenantRoleOptions>();
             var purgeCascade = sp.GetService<TeamPurgeCascade>();
             var consentOptions = sp.GetService<IOptions<ConsentOptions>>()?.Value;
-            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade, consentOptions);
+            var memberRemovalCascade = sp.GetService<TeamMemberRemovalCascade>();
+            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade, consentOptions, memberRemovalCascade);
         });
     }
 

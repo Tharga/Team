@@ -40,7 +40,7 @@ else if (_loaded)
             <RadzenButton Text="@_text[UsersListViewText.VerifyAll]" Icon="how_to_reg" ButtonStyle="ButtonStyle.Light" Click="@VerifyAllAsync" Disabled="@_verifying" />
         </RadzenStack>
     }
-    <RadzenDataGrid Data="@_allUsers" TItem="UserViewModel" AllowSorting="true" AllowPaging="true" PageSize="10"
+    <RadzenDataGrid @ref="_grid" Data="@_allUsers" TItem="UserViewModel" AllowSorting="true" AllowPaging="true" PageSize="10"
                     AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                     RowRender="@OnUserRowRender">
         <Columns>
@@ -64,6 +64,50 @@ else if (_loaded)
                     }
                 </Template>
             </RadzenDataGridColumn>
+            @if (_showSignIn)
+            {
+                @* Read for the visible page only, after it renders (see LoadVisibleSignInMethodsAsync), so a
+                   cell can still be loading. "Not linked" is said rather than left blank: an empty cell
+                   would read as "has no way to sign in", which is a different and alarming claim. *@
+                <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnSignIn]" Sortable="false" Filterable="false">
+                    <Template>
+                        @if (string.IsNullOrEmpty(context.DirectoryId))
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" title="@_text[UsersListViewText.SignInNotLinkedHint]">
+                                <em>@_text[UsersListViewText.SignInNotLinked]</em>
+                            </RadzenText>
+                        }
+                        else if (context.SignInError != null)
+                        {
+                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[UsersListViewText.SignInFailed]"
+                                         title="@_text.Format(UsersListViewText.SignInFailedHint, context.SignInError)" />
+                        }
+                        else if (context.SignInMethods == null)
+                        {
+                            <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.ExtraSmall" />
+                        }
+                        else if (context.SignInMethods.Length == 0)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption"><em>@_text[UsersListViewText.SignInNone]</em></RadzenText>
+                        }
+                        else
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" Wrap="FlexWrap.Wrap" Gap="0.25rem">
+                                @foreach (var method in context.SignInMethods)
+                                {
+                                    <RadzenBadge BadgeStyle="BadgeStyle.Light" Variant="Variant.Flat">
+                                        @if (!string.IsNullOrEmpty(method.IconUrl))
+                                        {
+                                            <img src="@method.IconUrl" alt="" style="height: 1em; vertical-align: middle; margin-right: 0.25em;" />
+                                        }
+                                        @method.Label
+                                    </RadzenBadge>
+                                }
+                            </RadzenStack>
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            }
             <RadzenDataGridColumn Title="" Width="200px" Sortable="false" Filterable="false">
                 <Template>
                     @{
@@ -244,6 +288,12 @@ else
     private bool _showDirectory;
     private bool _showAdminUpload;
     private bool _verifying;
+    private bool _showSignIn;
+    private bool _loadingSignIn;
+    private SignInMethodOptions _signInMethodOptions;
+    private SignInFallbackLabels _signInLabels;
+    private readonly Dictionary<string, SignInMethod[]> _signInCache = new();
+    private RadzenDataGrid<UserViewModel> _grid;
     private IUser[] _users;
     private ITeam<TMember>[] _teams;
     private bool _canSeeAllTeams;
@@ -271,6 +321,14 @@ else
         _showDirectory = UserAdminGate.ShowDirectoryFeatures(hasUsersManage, directoryRegistered);
         _showAdminUpload = hasUsersManage && IconSettings.AllowAdminUpload && ServiceProvider.GetService<IIconStore>() != null;
 
+        // Asked of the container rather than resolved: the column only needs to know a directory can read
+        // identities. The reads themselves go through IUserManagementService, which enforces users:manage.
+        var identityDirectoryRegistered = ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(IUserIdentityDirectory)) == true;
+        _showSignIn = UserAdminGate.ShowSignInMethods(_showDirectory, identityDirectoryRegistered);
+        _signInMethodOptions = ServiceProvider.GetService<SignInMethodOptions>() ?? new SignInMethodOptions();
+        _signInLabels = new SignInFallbackLabels(_text[UsersListViewText.SignInEmail], _text[UsersListViewText.SignInUserName],
+            _text[UsersListViewText.SignInPrincipalName]);
+
         if (_canAdminister)
         {
             _currentUserKey = (await UserService.GetCurrentUserAsync())?.Key;
@@ -292,6 +350,52 @@ else
 
         var focused = _allUsers.FirstOrDefault(u => u.Key == FocusUserKey);
         if (focused != null) _selectedUser = focused;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await LoadVisibleSignInMethodsAsync();
+        await base.OnAfterRenderAsync(firstRender);
+    }
+
+    /// <summary>
+    /// Reads the sign-in methods of the rows on the page the grid is showing, in one call. Runs after every
+    /// render, so paging, sorting, filtering and a reload are all covered without hooking each event; rows
+    /// already read (or failed) are skipped, so a render with nothing new makes no call.
+    /// </summary>
+    private async Task LoadVisibleSignInMethodsAsync()
+    {
+        if (!_showSignIn || _loadingSignIn || _grid == null) return;
+
+        var pending = UserAdminGate.PendingSignInRows(_grid.PagedView);
+        if (pending.Length == 0) return;
+
+        _loadingSignIn = true;
+        try
+        {
+            var result = await UserManagementService.GetSignInIdentitiesAsync(pending.Select(x => x.Key).ToArray());
+            var byUser = result.ToDictionary(x => x.UserKey, x => x.Identities);
+            foreach (var row in pending)
+            {
+                // Linked, but the directory no longer knows the account: nothing to show, which is "None".
+                var methods = byUser.TryGetValue(row.Key, out var identities)
+                    ? SignInMethodResolver.Resolve(identities, _signInMethodOptions, _signInLabels)
+                    : [];
+                row.SignInMethods = methods;
+                _signInCache[row.Key] = methods;
+            }
+        }
+        catch (Exception ex)
+        {
+            // The column degrades, the grid does not: every other column on these rows is still correct.
+            foreach (var row in pending) row.SignInError = ex.Message;
+        }
+        finally
+        {
+            _loadingSignIn = false;
+        }
+
+        StateHasChanged();
     }
 
     private void OnUserRowRender(RowRenderEventArgs<UserViewModel> args)
@@ -337,6 +441,8 @@ else
             LastSeen = u.LastSeen,
             DisabledAt = u.DisabledAt,
             DisabledBy = u.DisabledBy,
+            // Kept across reloads (a rename or a disable rebuilds every row) so they are not read again.
+            SignInMethods = _signInCache.GetValueOrDefault(u.Key),
             TeamCount = teamLookup[u.Key].Count(),
             Teams = teamLookup[u.Key].Select(x => new UserTeamInfo
             {

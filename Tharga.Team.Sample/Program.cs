@@ -74,6 +74,13 @@ builder.AddThargaTeam(o =>
     o.Blazor.Consent.Roles = ["Developer"];
     o.Blazor.Consent.GrantTeamsRead = true;
 
+    // Names for the Sign-in column on /users (shown once the Entra directory below is configured). The
+    // directory reports an issuer URL; only the host knows what to call it. Unmapped federated identities
+    // fall back to the issuer's host name, and email identities show as "Email".
+    o.Blazor.SignInMethods.Add(identity => identity.Issuer?.Contains("google", StringComparison.OrdinalIgnoreCase) == true
+        ? new SignInMethod("Google")
+        : null);
+
     // Demo: localize the team menu strings (here to Swedish). A real app would bridge to its content system.
     o.Blazor.AddTextProvider<SampleMenuTextProvider>();
 
@@ -151,7 +158,11 @@ builder.AddThargaTeam(o =>
         // half is the separate team scope simulation:use, granted by access level, so a team administrator
         // keeps "view as another user" without gaining demo mode (Tharga/Team#223). Without this line the
         // sample would enable simulation and then have no way to reach demo mode at all.
-        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo);
+        //
+        // apikeys:oversee lets a Developer see and manage other members' private API keys -- to investigate
+        // an incident, or retire a departed person's keys. The Developer role still has this on its own
+        // until 4.0; mapping it here is what keeps it after that (Tharga/Team#323).
+        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at

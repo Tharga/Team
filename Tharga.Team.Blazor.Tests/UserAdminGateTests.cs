@@ -29,6 +29,35 @@ public class UserAdminGateTests
         Assert.Equal(expected, UserAdminGate.ShowDirectoryFeatures(hasScope, directoryRegistered));
     }
 
+    [Theory]
+    [InlineData(true, true, true)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, false)]
+    public void ShowSignInMethods_RequiresDirectoryFeaturesAndAnIdentityDirectory(bool showDirectory, bool identityRegistered, bool expected)
+    {
+        Assert.Equal(expected, UserAdminGate.ShowSignInMethods(showDirectory, identityRegistered));
+    }
+
+    [Fact]
+    public void PendingSignInRows_OnlyLinkedRowsNotYetReadOrFailed()
+    {
+        var unlinked = new UserViewModel { Key = "unlinked" };
+        var pending = new UserViewModel { Key = "pending", DirectoryId = "oid-1" };
+        var read = new UserViewModel { Key = "read", DirectoryId = "oid-2", SignInMethods = [] };
+        var failed = new UserViewModel { Key = "failed", DirectoryId = "oid-3", SignInError = "Graph down" };
+
+        var result = UserAdminGate.PendingSignInRows([unlinked, pending, read, failed, null]);
+
+        Assert.Equal("pending", Assert.Single(result).Key);
+    }
+
+    [Fact]
+    public void PendingSignInRows_NoGridYet_IsEmpty()
+    {
+        Assert.Empty(UserAdminGate.PendingSignInRows(null));
+    }
+
     /// <summary>
     /// Presentational only. The same gate must never be reused to offer consent or custom-role editing —
     /// the system scope does not reach them and the service refuses.
