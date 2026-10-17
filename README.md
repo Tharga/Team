@@ -13,6 +13,7 @@ A suite of NuGet packages for building multi-tenant Blazor applications with tea
 | [Tharga.Team.Service](https://www.nuget.org/packages/Tharga.Team.Service) | Server-side API key auth, Swagger, audit logging | No |
 | [Tharga.Team.Entra](https://www.nuget.org/packages/Tharga.Team.Entra) | Microsoft Entra ID user directory (verify / list / delete users via Graph) | No |
 | [Tharga.Team.Images](https://www.nuget.org/packages/Tharga.Team.Images) | Automatic squaring and downscaling of uploaded team/user icons (SkiaSharp) | No |
+| [Tharga.Team.Email](https://www.nuget.org/packages/Tharga.Team.Email) | E-mail transport — IMAP reading, SMTP sending and MIME (MailKit), shared by support and any other mailbox | No |
 | [Tharga.Team.Support](https://www.nuget.org/packages/Tharga.Team.Support) | Support module — Slack notifications for audited events, routed per event | No |
 | [Tharga.Team.Mcp](https://www.nuget.org/packages/Tharga.Team.Mcp) | MCP (Model Context Protocol) bridge — auth, scopes, audit for MCP tools. Renamed from `Tharga.Platform.Mcp`, which is deprecated and frozen at 3.5.x | No |
 
@@ -31,8 +32,10 @@ Tharga.Team ── plain .NET, no external dependencies
 │   └── + Azure.Identity, Microsoft Graph REST
 ├── Tharga.Team.Images ── icon squaring + downscaling (optional)
 │   └── + SkiaSharp
+├── Tharga.Team.Email ── e-mail transport, IMAP + SMTP (optional)
+│   └── + MailKit
 └── Tharga.Team.Support ── support module, Slack notifications (optional)
-    └── + Tharga.Team.Service
+    └── + Tharga.Team.Service, Tharga.Team.Email
 ```
 
 ## Quick Start

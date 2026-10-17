@@ -422,8 +422,8 @@ public static class ThargaBlazorRegistration
     }
 
     /// <summary>
-    /// The email sender, as a three-way choice: a custom implementation wins, then SMTP if
-    /// <see cref="ThargaBlazorOptions.Email"/> is set, then nothing.
+    /// The email sender: a custom implementation, or the SMTP settings that <c>Tharga.Team.Email</c>'s
+    /// <c>AddThargaEmailInvitations</c> sends with — with a startup warning when settings exist and no sender does.
     /// </summary>
     /// <remarks>
     /// Registered here rather than only in the <c>AddThargaTeam</c> facade (Tharga/Team#176). It used to
@@ -461,7 +461,9 @@ public static class ThargaBlazorRegistration
             eo.FromName = fromName;
         });
 
-        services.AddScoped<ITeamEmailSender, SmtpTeamEmailSender>();
+        // The SMTP sender itself lives in Tharga.Team.Email (AddThargaEmailInvitations), so MailKit reaches only
+        // hosts that send mail; this package can only say when it is missing.
+        services.AddSingleton<IHostedService, InvitationSenderCheck>();
     }
 
     /// <summary>Named client used to fetch remote icon images (e.g. Gravatar).</summary>

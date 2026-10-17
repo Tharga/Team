@@ -9,7 +9,7 @@ namespace Tharga.Team.Blazor.Tests;
 public class EmailRegistrationTests
 {
     [Fact]
-    public void AddThargaTeam_WithEmailOptions_RegistersSmtpSender()
+    public void AddThargaTeam_WithEmailOptions_RegistersNoSender_ButWarnsWhenNoneIsAdded()
     {
         var builder = WebApplication.CreateBuilder();
         builder.AddThargaTeam(o =>
@@ -19,10 +19,9 @@ public class EmailRegistrationTests
         });
 
         var provider = builder.Services.BuildServiceProvider();
-        var sender = provider.GetService<ITeamEmailSender>();
 
-        Assert.NotNull(sender);
-        Assert.IsType<SmtpTeamEmailSender>(sender);
+        Assert.Null(provider.GetService<ITeamEmailSender>());
+        Assert.Contains(builder.Services, x => x.ImplementationType == typeof(InvitationSenderCheck));
     }
 
     [Fact]
@@ -146,7 +145,6 @@ public class EmailRegistrationTests
 
         var provider = builder.Services.BuildServiceProvider();
 
-        Assert.IsType<SmtpTeamEmailSender>(provider.GetService<ITeamEmailSender>());
         Assert.Equal("smtp.blazor.test", provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<EmailOptions>>().Value.SmtpHost);
     }
 

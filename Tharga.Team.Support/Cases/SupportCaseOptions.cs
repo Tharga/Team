@@ -1,4 +1,4 @@
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Cases;
 

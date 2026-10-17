@@ -1,5 +1,5 @@
 using System.Reflection;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 using Tharga.Team.Support.Slack;
 
 namespace Tharga.Team.Support.Tests;
@@ -24,13 +24,14 @@ namespace Tharga.Team.Support.Tests;
 public class TransportNamespaceIsolationTests
 {
     private const string SlackNamespace = "Tharga.Team.Support.Slack";
-    private const string EmailNamespace = "Tharga.Team.Support.Email";
+    private const string EmailNamespace = "Tharga.Team.Email";
     private const string TeamAssemblyPrefix = "Tharga.Team";
 
     public static TheoryData<string> TransportNamespaces => [SlackNamespace, EmailNamespace];
 
     private static Type[] TypesIn(string transportNamespace) =>
-        typeof(ISlackClient).Assembly.GetTypes()
+        new[] { typeof(ISlackClient).Assembly, typeof(MailOptions).Assembly }
+            .SelectMany(x => x.GetTypes())
             .Where(t => t.Namespace == transportNamespace)
             .ToArray();
 

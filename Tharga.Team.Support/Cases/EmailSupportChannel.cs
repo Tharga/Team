@@ -1,5 +1,5 @@
 using Microsoft.Extensions.Options;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -21,7 +21,7 @@ namespace Tharga.Team.Support.Cases;
 /// </para>
 /// </remarks>
 internal sealed class EmailSupportChannel(
-    ISupportMailClient mailClient,
+    IMailClient mailClient,
     ISupportCaseStore store,
     IOptions<MailOptions> options) : ISupportChannel
 {

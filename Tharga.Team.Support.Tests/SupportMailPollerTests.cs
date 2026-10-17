@@ -1,7 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Support.Cases;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Tests;
 
@@ -200,16 +200,16 @@ public class SupportMailPollerTests
         SentAt: new DateTimeOffset(2026, 9, 3, 9, 0, 0, TimeSpan.Zero));
 
     /// <summary>Makes this instance's ledger report every id as already handled, as a second pass would.</summary>
-    private void Refuse(ISupportMailClient client)
+    private void Refuse(IMailClient client)
         => _ledgers[client].TryRecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
 
-    private readonly Dictionary<ISupportMailClient, ISupportEventLedger> _ledgers = [];
+    private readonly Dictionary<IMailClient, ISupportEventLedger> _ledgers = [];
 
-    private (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, ISupportMailClient Client) Build(
+    private (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, IMailClient Client) Build(
         params InboundMail[] mails)
         => Build(mails, true, true);
 
-    private (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, ISupportMailClient Client) Build(
+    private (SupportMailPoller Poller, ISupportCaseStore Store, ISupportMailPositionStore Positions, IMailClient Client) Build(
         InboundMail[] mails,
         bool withPositionStore = true,
         bool canRead = true,
@@ -220,7 +220,7 @@ public class SupportMailPollerTests
         var ledger = Substitute.For<ISupportEventLedger>();
         ledger.TryRecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
 
-        var client = Substitute.For<ISupportMailClient>();
+        var client = Substitute.For<IMailClient>();
         client.CanRead.Returns(canRead);
         // Faithful to the real client on the part that matters: a fetch that finds nothing reports the
         // mailbox's UID generation with the position it was given, rather than rewinding it to zero.

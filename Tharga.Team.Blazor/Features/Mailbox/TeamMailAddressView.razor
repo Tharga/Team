@@ -1,0 +1,163 @@
+@using Microsoft.JSInterop
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Blazor.Features.Team
+@inject ITeamMailboxService Mailbox
+@inject ITeamStateService TeamState
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject IJSRuntime JsRuntime
+
+@* A team's mail address. Reading it needs mailbox:read and changing it mailbox:manage; the service checks both,
+   so a reader without the grant gets a refusal rather than an address. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (_teamKey == null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[TeamMailAddressViewText.SelectTeam]
+    </RadzenAlert>
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[TeamMailAddressViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+        <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[TeamMailAddressViewText.Title]</RadzenText>
+
+        @if (_addresses?.Primary == null)
+        {
+            <RadzenText TextStyle="TextStyle.Body2">@_text[TeamMailAddressViewText.NoAddress]</RadzenText>
+            @if (AllowChange)
+            {
+                <div>
+                    <RadzenButton Text="@_text[TeamMailAddressViewText.Issue]" Icon="add" Click="IssueAsync" Disabled="_busy" />
+                </div>
+            }
+        }
+        else
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[TeamMailAddressViewText.Explanation]</RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@_addresses.Primary.Address</strong></RadzenText>
+                <RadzenButton Icon="content_copy" Variant="Variant.Text" Size="ButtonSize.Small" title="@_text[TeamMailAddressViewText.Copy]"
+                              aria-label="@_text[TeamMailAddressViewText.Copy]" Click="@(() => CopyAsync(_addresses.Primary.Address))" />
+            </RadzenStack>
+
+            @if (_addresses.Secondary != null)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                    @_text[TeamMailAddressViewText.Previous]: <strong>@_addresses.Secondary.Address</strong>.
+                    @_text[TeamMailAddressViewText.RetiresOn] @Time(_addresses.Secondary.RetiresAt ?? default).
+                </RadzenAlert>
+            }
+
+            @if (AllowChange)
+            {
+                <div>
+                    <RadzenButton Text="@_text[TeamMailAddressViewText.Rotate]" Icon="autorenew" ButtonStyle="ButtonStyle.Light" Click="RotateAsync" Disabled="_busy" />
+                </div>
+            }
+        }
+    </RadzenStack>
+}
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    /// <summary>Renders a moment; the host may supply its own, otherwise the local date is shown.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>
+    /// Offers creating and changing the address. The host sets it from the reader's grant: the service refuses a
+    /// reader without <c>mailbox:manage</c> anyway, and a button that can only fail is worse than none.
+    /// </summary>
+    [Parameter] public bool AllowChange { get; set; } = true;
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+    private string _teamKey;
+    private TeamMailAddresses _addresses;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(TeamMailAddressViewText.All);
+        _teamKey = TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key;
+        if (_teamKey != null) await ReloadAsync();
+        _ready = true;
+    }
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            _addresses = await Mailbox.GetAddressesAsync(_teamKey);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+    }
+
+    private async Task IssueAsync()
+    {
+        _busy = true;
+        try
+        {
+            _addresses = await Mailbox.EnsureKeyAsync(_teamKey);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[TeamMailAddressViewText.NotPermitted]);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RotateAsync()
+    {
+        var confirmed = await DialogService.Confirm(
+            _text[TeamMailAddressViewText.ConfirmRotateBody],
+            _text[TeamMailAddressViewText.ConfirmRotateTitle],
+            new ConfirmOptions
+            {
+                OkButtonText = _text[TeamMailAddressViewText.ConfirmRotateAccept],
+                CancelButtonText = _text[TeamMailAddressViewText.ConfirmRotateCancel]
+            });
+
+        if (confirmed != true) return;
+
+        _busy = true;
+        try
+        {
+            _addresses = await Mailbox.RotateKeyAsync(_teamKey);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[TeamMailAddressViewText.NotPermitted]);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CopyAsync(string address)
+    {
+        await JsRuntime.InvokeVoidAsync("navigator.clipboard.writeText", address);
+        NotificationService.Notify(NotificationSeverity.Info, _text[TeamMailAddressViewText.Copied]);
+    }
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("d")));
+}

@@ -2,7 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -107,7 +107,7 @@ internal sealed class SupportMailPoller(
     {
         using var scope = scopeFactory.CreateScope();
 
-        var client = scope.ServiceProvider.GetService<ISupportMailClient>();
+        var client = scope.ServiceProvider.GetService<IMailClient>();
 
         if (client == null || !client.CanRead) return 0;
 

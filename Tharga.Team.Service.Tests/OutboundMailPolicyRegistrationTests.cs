@@ -32,6 +32,37 @@ public class OutboundMailPolicyRegistrationTests
         Assert.Single(services, x => x.ServiceType == typeof(IHostedService));
     }
 
+    /// <summary>
+    /// The shape a pipeline or app setting writes: one value, <c>Email__Override__AllowedDomains=a.se,b.se</c>. The
+    /// binder turns a single value into an empty array, which silently allowed no domain at all.
+    /// </summary>
+    [Theory]
+    [InlineData("fortdocs.se,eplicta.se")]
+    [InlineData("fortdocs.se;eplicta.se")]
+    [InlineData(" fortdocs.se , eplicta.se ")]
+    public void AllowedDomainsGivenAsOneValue_AreSplit(string value)
+    {
+        using var provider = Build(s => s.AddOutboundMailPolicy(), new Dictionary<string, string>
+        {
+            ["Email:Override:AllowedDomains"] = value
+        });
+
+        var policy = (OutboundMailPolicy)provider.GetRequiredService<IOutboundMailPolicy>();
+
+        Assert.Equal(["fortdocs.se", "eplicta.se"], policy.AllowedDomains);
+    }
+
+    [Fact]
+    public void TheSectionIsMatchedWhateverItsCase_AsFortDocsWritesIt()
+    {
+        using var provider = Build(s => s.AddOutboundMailPolicy(), new Dictionary<string, string>
+        {
+            ["EMail:Override:AllowedDomains"] = "fortdocs.se,eplicta.se"
+        });
+
+        Assert.Equal(["fortdocs.se", "eplicta.se"], ((OutboundMailPolicy)provider.GetRequiredService<IOutboundMailPolicy>()).AllowedDomains);
+    }
+
     [Fact]
     public void TheOptionsBindFromTheEmailOverrideSection()
     {

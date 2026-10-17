@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Options;
 using Tharga.Team.Support.Cases;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Tests;
 
@@ -171,12 +171,12 @@ public class EmailSupportChannelTests
         SentAt = new DateTime(2026, 9, 1, 9, 0, 0, DateTimeKind.Utc)
     };
 
-    private static (ISupportChannel Channel, ISupportMailClient Mail, ISupportCaseStore Store) Build(
+    private static (ISupportChannel Channel, IMailClient Mail, ISupportCaseStore Store) Build(
         bool canSend = true,
         string userEmail = Correspondent,
         bool perCaseReplyTo = false)
     {
-        var mail = Substitute.For<ISupportMailClient>();
+        var mail = Substitute.For<IMailClient>();
         mail.CanSend.Returns(canSend);
 
         var store = Substitute.For<ISupportCaseStore>();

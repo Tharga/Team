@@ -43,11 +43,11 @@ public class GranularEmailRegistrationTests
     }
 
     [Fact]
-    public void SmtpOptions_RegisterTheBuiltInSender()
+    public void SmtpOptions_AloneRegisterNoSender_TheSenderComesFromTharga_Team_Email()
     {
         using var provider = Build(o => o.Email = new EmailOptions { SmtpHost = "smtp.test.com", FromAddress = "a@test.com" });
 
-        Assert.IsType<SmtpTeamEmailSender>(provider.GetService<ITeamEmailSender>());
+        Assert.Null(provider.GetService<ITeamEmailSender>());
     }
 
     /// <summary>

@@ -2,7 +2,7 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Support.Cases;
-using Tharga.Team.Support.Email;
+using Tharga.Team.Email;
 
 namespace Tharga.Team.Support.Tests;
 
@@ -197,7 +197,7 @@ public class SupportEmailRegistrationTests
     {
         var services = Build(_ => { });
 
-        Assert.DoesNotContain(services, x => x.ServiceType == typeof(ISupportMailClient));
+        Assert.DoesNotContain(services, x => x.ServiceType == typeof(IMailClient));
         Assert.DoesNotContain(services, x => x.ImplementationType == typeof(SupportMailPoller));
     }
 

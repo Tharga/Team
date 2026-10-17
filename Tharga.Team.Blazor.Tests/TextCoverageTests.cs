@@ -75,6 +75,8 @@ public class TextCoverageTests
         "Features/Support/SupportCaseCloseDialog.razor",
         "Features/Support/SupportCaseVisibilityPicker.razor",
         "Features/Support/SupportAcrossTeamsView.razor",
+        "Features/Mailbox/PostmasterView.razor",
+        "Features/Mailbox/TeamMailAddressView.razor",
     ];
 
     /// <summary>

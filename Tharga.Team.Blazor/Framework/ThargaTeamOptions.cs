@@ -132,8 +132,8 @@ public class ThargaTeamOptions
     public TeamDeleteMode TeamDeleteMode { get; set; } = TeamDeleteMode.Soft;
 
     /// <summary>
-    /// Options for email sending (SMTP). When set and no custom email service is registered,
-    /// the built-in SmtpTeamEmailSender is used. Set to null to disable email.
+    /// Options for invitation email (SMTP), sent by <c>Tharga.Team.Email</c>'s <c>AddThargaEmailInvitations()</c>
+    /// unless a custom email service is registered. Set to null to disable email.
     /// </summary>
     public EmailOptions Email { get; set; }
 
