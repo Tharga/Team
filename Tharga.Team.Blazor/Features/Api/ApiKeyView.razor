@@ -198,7 +198,7 @@ else
                     <RadzenStack Gap="0.25rem">
                         <RadzenLabel Text="Private" />
                         <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                            <RadzenSwitch @bind-Value="_newPrivate" />
+                            <RadzenCheckBox TValue="bool" @bind-Value="_newPrivate" />
                             <RadzenText TextStyle="TextStyle.Caption" title="Only you can see and manage this key.">only me</RadzenText>
                         </RadzenStack>
                     </RadzenStack>
@@ -255,17 +255,22 @@ else
     [Parameter] public bool AllowGridFiltering { get; set; }
 
     /// <summary>
-    /// Which owner-scoped ("private") keys to include alongside team-wide keys. <c>None</c> (default) shows
-    /// no private keys; <c>Mine</c> shows the caller's own; <c>All</c> shows every private key the caller is
-    /// entitled to see. Setting this to a non-None value also surfaces a "Private (only me)" toggle on the
-    /// create card. The actual visibility is always intersected with the caller's identity server-side.
+    /// Which owner-scoped ("private") keys to include alongside team-wide keys. <c>Mine</c> (default) shows
+    /// the caller's own; <c>All</c> shows every private key the caller is entitled to see; <c>None</c> shows
+    /// no private keys. Any value but <c>None</c> also puts a "Private (only me)" checkbox on the create card.
+    /// The actual visibility is always intersected with the caller's identity server-side.
     /// </summary>
-    [Parameter] public PrivateKeyScope ShowPrivateKeys { get; set; } = PrivateKeyScope.None;
+    /// <remarks>
+    /// The default was <c>None</c> before 4.1, which hid the checkbox unless a page asked for it, so private
+    /// keys could not be created from a default page at all. <c>Mine</c> is the narrowest value that still
+    /// lists a key the caller has just created; set <c>None</c> to hide both.
+    /// </remarks>
+    [Parameter] public PrivateKeyScope ShowPrivateKeys { get; set; } = PrivateKeyScope.Mine;
 
     /// <summary>
     /// When true (and <see cref="ShowPrivateKeys"/> is <c>All</c>), privileged access levels
     /// (Administrator / Owner) may <b>see</b> other members' private keys. They remain view-only — only the
-    /// owner (or a Developer-role caller) can recycle / lock / delete a private key. Default false.
+    /// owner (or a caller holding the <c>apikeys:oversee</c> system scope) can recycle / lock / delete a private key. Default false.
     /// </summary>
     [Parameter] public bool AllowPrivilegedAccess { get; set; }
 
