@@ -14,7 +14,8 @@ namespace Tharga.Team.Email;
 /// </summary>
 /// <remarks>
 /// <b>Never throws</b>, matching <c>SlackClient</c>. A failed send comes back as a failed
-/// <see cref="MailSendResult"/> and a failed read as an empty fetch at the unchanged position, so a mail
+/// <see cref="MailSendResult"/> and a failed read as an empty fetch at the unchanged position carrying
+/// <see cref="MailFetchResult.Error"/>, so a mail
 /// server being down delays a conversation instead of breaking the application that hosts it.
 /// <para>
 /// <b>A connection per operation.</b> Both clients are opened, used and disposed rather than pooled. A
@@ -108,7 +109,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         {
             logger?.LogError(e, "The mailbox could not be read.");
 
-            return MailFetchResult.Empty(position);
+            return MailFetchResult.Failed(position, e.Message);
         }
     }
 

@@ -281,6 +281,10 @@ builder.Services.AddThargaSupportCases(o =>
     // leaves the rest where the other instance will find it -- nothing is flagged or moved, so a drop is
     // invisible to the other reader. Unset means every address is accepted.
     o.Email.Recipients = builder.Configuration.GetSection("Support:Mail:Recipients").Get<string[]>() ?? [];
+
+    // Further mailboxes under Support:Mailboxes:{name}, each with the keys of one mailbox; the name is stored on its cases.
+    foreach (var mailbox in builder.Configuration.GetSection("Support:Mailboxes").GetChildren())
+        o.AddMailbox(mailbox.Key, m => mailbox.Bind(m));
 });
 
 var app = builder.Build();

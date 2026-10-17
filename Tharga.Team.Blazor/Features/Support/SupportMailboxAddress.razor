@@ -1,0 +1,27 @@
+@* Which support address a mailed case came in to, so staff know which mailbox their answer goes out from. *@
+
+@if (Of(Case) is { } address)
+{
+    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-mailbox="@Case.Id">@_text.Format(SupportMailboxText.CameInTo, address)</RadzenText>
+}
+
+@code {
+    /// <summary>The case whose support address is shown; nothing is shown for a case that came in by no mailbox.</summary>
+    [Parameter, EditorRequired] public SupportCase Case { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportMailboxText.All);
+    }
+
+    /// <summary>The support address a case's mail came in to, or null when none was recorded.</summary>
+    public static string Of(SupportCase supportCase)
+        => (supportCase?.Bindings ?? [])
+            .Where(x => x.ChannelType == SupportChannelType.Email)
+            .Select(x => x.MailboxAddress)
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+}

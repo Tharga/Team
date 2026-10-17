@@ -73,6 +73,7 @@ else
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-sender="@item.Id">
                                 @_text[SupportUnassignedViewText.From] @item.AuthorName
                             </RadzenText>
+                            <SupportMailboxAddress Case="item" />
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-time="@item.Id">
                                 @Time(item.LastMessageAt ?? item.CreatedAt)
                             </RadzenText>

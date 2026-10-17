@@ -128,7 +128,7 @@
         if (terms.Length == 0) return true;
 
         var fields = new[] { item.Subject, item.AuthorName, item.Id, item.TeamName, item.TeamKey }
-            .Concat((item.Bindings ?? []).Select(x => x.Address))
+            .Concat((item.Bindings ?? []).SelectMany(x => new[] { x.Address, x.MailboxAddress }))
             .Concat((item.SuggestedTeams ?? []).SelectMany(x => new[] { x.Name, x.Key }))
             .Where(x => !string.IsNullOrEmpty(x))
             .ToArray();

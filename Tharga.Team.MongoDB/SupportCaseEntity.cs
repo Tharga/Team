@@ -199,4 +199,12 @@ public record SupportChannelBindingEntity
 
     [BsonIgnoreIfNull]
     public int? MessageSequence { get; init; }
+
+    /// <summary>The support mailbox's name; absent for the primary mailbox's cases written before mailboxes were named.</summary>
+    [BsonIgnoreIfNull]
+    public string Mailbox { get; init; }
+
+    /// <summary>The support mailbox's address when the mail came in; absent where it was not recorded.</summary>
+    [BsonIgnoreIfNull]
+    public string MailboxAddress { get; init; }
 }

@@ -46,4 +46,10 @@ public record SupportChannelBinding
     /// right answer as not delivered rather than only the case.
     /// </remarks>
     public int? MessageSequence { get; init; }
+
+    /// <summary>The name of the support mailbox the case's mail came in through and is answered from; <c>null</c> means the primary mailbox.</summary>
+    public string Mailbox { get; init; }
+
+    /// <summary>The address of that mailbox when the mail came in, for showing staff which address they answer from; <c>null</c> when not recorded.</summary>
+    public string MailboxAddress { get; init; }
 }

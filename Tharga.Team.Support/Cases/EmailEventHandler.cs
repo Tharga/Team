@@ -33,14 +33,21 @@ internal sealed class EmailEventHandler(
     Tharga.Team.Service.Email.IOutboundMailPolicy policy = null,
     ISupportSenderDirectory senderDirectory = null,
     IOptions<SupportCaseOptions> caseOptions = null,
-    ISupportAttachmentStore attachmentStore = null)
+    ISupportAttachmentStore attachmentStore = null,
+    SupportMailboxes mailboxes = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
+    /// <remarks>One source for every mailbox, so a mail that reached two of them is applied once.</remarks>
     internal const string Source = "email";
 
-    public async Task<EmailHandlingOutcome> HandleAsync(InboundMail mail, CancellationToken cancellationToken = default)
+    private readonly SupportMailboxes _mailboxes = mailboxes ?? new SupportMailboxes(options.Value);
+
+    public Task<EmailHandlingOutcome> HandleAsync(InboundMail mail, CancellationToken cancellationToken = default)
+        => HandleAsync(mail, _mailboxes.Primary, cancellationToken);
+
+    public async Task<EmailHandlingOutcome> HandleAsync(InboundMail mail, SupportMailbox mailbox, CancellationToken cancellationToken = default)
     {
-        var mailOptions = options.Value;
+        var mailOptions = mailbox.Options;
 
         if (string.IsNullOrWhiteSpace(mail.MessageId)) return EmailHandlingOutcome.Ignored("no message id");
 
@@ -71,12 +78,12 @@ internal sealed class EmailEventHandler(
             return EmailHandlingOutcome.Ignored("already handled");
         }
 
-        var supportCase = await MatchAsync(mail, cancellationToken);
+        var supportCase = await MatchAsync(mail, mailOptions, cancellationToken);
 
         // Mail that belongs to no existing case is somebody asking for help for the first time, so it opens
         // one rather than being dropped. Which team it opens in is RaiseAsync's to decide, and its answer is
         // usually none.
-        if (supportCase == null) return await RaiseAsync(mail, cancellationToken);
+        if (supportCase == null) return await RaiseAsync(mail, mailbox, cancellationToken);
 
         var binding = supportCase.Bindings.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email);
 
@@ -94,7 +101,7 @@ internal sealed class EmailEventHandler(
 
         if (IsEmpty(mail, text)) return EmailHandlingOutcome.Ignored("empty body");
 
-        var files = await StoreFilesAsync(supportCase.Id, mail, cancellationToken);
+        var files = await StoreFilesAsync(supportCase.Id, mail, mailOptions, cancellationToken);
         var body = Body(text, files.Notes);
         var html = Html(mail.BodyHtml, textCut, files.Notes);
 
@@ -120,7 +127,14 @@ internal sealed class EmailEventHandler(
         }, cancellationToken);
 
         // The reply's own id joins the thread, so an answer to it, and a reply to that, find the case exactly.
-        await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = mail.MessageId, Address = binding.Address }, cancellationToken);
+        await store.AddBindingAsync(supportCase.TeamKey, supportCase.Id, new SupportChannelBinding
+        {
+            ChannelType = SupportChannelType.Email,
+            ExternalId = mail.MessageId,
+            Address = binding.Address,
+            Mailbox = binding.Mailbox,
+            MailboxAddress = binding.MailboxAddress
+        }, cancellationToken);
 
         notifier?.Notify(new SupportCaseUpdatedEventArgs
         {
@@ -200,7 +214,7 @@ internal sealed class EmailEventHandler(
     /// host's, by decision.
     /// </para>
     /// </remarks>
-    private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, CancellationToken cancellationToken)
+    private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, SupportMailbox mailbox, CancellationToken cancellationToken)
     {
         var text = QuotedText.Trim(mail.Body, out var textCut);
 
@@ -215,7 +229,7 @@ internal sealed class EmailEventHandler(
         var caseId = Guid.NewGuid().ToString();
 
         // Stored under the new case's id before the case exists, so its first message can name them.
-        var files = await StoreFilesAsync(caseId, mail, cancellationToken);
+        var files = await StoreFilesAsync(caseId, mail, mailbox.Options, cancellationToken);
         var body = Body(text, files.Notes);
         var html = Html(mail.BodyHtml, textCut, files.Notes);
 
@@ -239,7 +253,9 @@ internal sealed class EmailEventHandler(
                 {
                     ChannelType = SupportChannelType.Email,
                     ExternalId = mail.MessageId,
-                    Address = mail.From
+                    Address = mail.From,
+                    Mailbox = mailbox.Name,
+                    MailboxAddress = string.IsNullOrWhiteSpace(mailbox.Options.FromAddress) ? null : mailbox.Options.FromAddress.Trim()
                 }
             ]
         };
@@ -272,9 +288,9 @@ internal sealed class EmailEventHandler(
         });
 
         if (team != null)
-            logger?.LogInformation("Opened support case {CaseId} in team {TeamKey}: the mail's sender is verified and a member of that team alone.", caseId, team.Key);
+            logger?.LogInformation("Opened support case {CaseId} in team {TeamKey} from the support mailbox {Mailbox}: the mail's sender is verified and a member of that team alone.", caseId, team.Key, mailbox.Name);
         else
-            logger?.LogInformation("Opened unassigned support case {CaseId} from a mail sent by {Sender}, suggesting {SuggestionCount} team(s).", caseId, mail.From, placement.Suggestions.Length);
+            logger?.LogInformation("Opened unassigned support case {CaseId} from a mail sent by {Sender} to the support mailbox {Mailbox}, suggesting {SuggestionCount} team(s).", caseId, mail.From, mailbox.Name, placement.Suggestions.Length);
 
         return EmailHandlingOutcome.Raised(caseId);
     }
@@ -306,9 +322,9 @@ internal sealed class EmailEventHandler(
     private SupportCaseVisibility? DefaultVisibility()
         => caseOptions?.Value is { Visibility: SupportCaseVisibilityMode.PerCase } configured ? configured.DefaultVisibility : null;
 
-    private static bool IsOurOwn(InboundMail mail, MailOptions options)
-        => !string.IsNullOrWhiteSpace(options.FromAddress) &&
-           string.Equals(mail.From, options.FromAddress.Trim(), StringComparison.OrdinalIgnoreCase);
+    /// <summary>Mail sent from any support mailbox's address, so an answer one mailbox sent never opens a case in another.</summary>
+    private bool IsOurOwn(InboundMail mail, MailOptions mailOptions)
+        => SupportMailboxes.SameAddress(mail.From, mailOptions.FromAddress) || _mailboxes.IsOwnAddress(mail.From);
 
     /// <summary>
     /// Finds the case this mail belongs to, by thread first and by addressed-to second.
@@ -322,7 +338,7 @@ internal sealed class EmailEventHandler(
     /// <see cref="MailOptions.PerCaseReplyTo"/> on, so the headers remain the primary mechanism.
     /// </para>
     /// </remarks>
-    private async Task<SupportCase> MatchAsync(InboundMail mail, CancellationToken cancellationToken)
+    private async Task<SupportCase> MatchAsync(InboundMail mail, MailOptions mailOptions, CancellationToken cancellationToken)
     {
         foreach (var threadId in ThreadIds(mail))
         {
@@ -331,7 +347,7 @@ internal sealed class EmailEventHandler(
             if (found != null) return found;
         }
 
-        var caseId = PerCaseAddress.CaseIdIn(mail.DeliveredTo, options.Value.FromAddress);
+        var caseId = PerCaseAddress.CaseIdIn(mail.DeliveredTo, mailOptions.FromAddress);
 
         return caseId == null ? null : await store.GetCaseByIdAsync(caseId, cancellationToken);
     }
@@ -418,7 +434,7 @@ internal sealed class EmailEventHandler(
     /// <b>A file that cannot be stored never loses the mail.</b> The ledger has already recorded it, so a store
     /// that fails, or none registered, leaves a note where the file would have been and the rest goes on.
     /// </remarks>
-    private async Task<(SupportAttachment[] Stored, IReadOnlyList<string> Notes)> StoreFilesAsync(string caseId, InboundMail mail, CancellationToken cancellationToken)
+    private async Task<(SupportAttachment[] Stored, IReadOnlyList<string> Notes)> StoreFilesAsync(string caseId, InboundMail mail, MailOptions mailOptions, CancellationToken cancellationToken)
     {
         if (mail.Attachments is not { Count: > 0 } attachments)
             return ([], mail.HadAttachments ? ["[attachments were not stored]"] : []);
@@ -426,7 +442,7 @@ internal sealed class EmailEventHandler(
         if (attachmentStore == null)
             return ([], [.. attachments.Select(x => $"[{x.FileName} was not stored: nowhere to keep files is configured.]")]);
 
-        var (kept, notes) = SupportAttachmentLimitCheck.Screen(attachments, SupportAttachmentLimitCheck.LimitsOf(options.Value));
+        var (kept, notes) = SupportAttachmentLimitCheck.Screen(attachments, SupportAttachmentLimitCheck.LimitsOf(mailOptions));
         var stored = new List<SupportAttachment>();
         var allNotes = notes.ToList();
 

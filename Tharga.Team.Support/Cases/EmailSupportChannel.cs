@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Email;
 using Tharga.Team.Service.Html;
@@ -27,8 +28,13 @@ internal sealed class EmailSupportChannel(
     IMailClient mailClient,
     ISupportCaseStore store,
     IOptions<MailOptions> options,
-    ISupportAttachmentStore attachmentStore = null) : ISupportChannel
+    ISupportAttachmentStore attachmentStore = null,
+    SupportMailboxes mailboxes = null,
+    ISupportMailClients mailClients = null,
+    ILogger<EmailSupportChannel> logger = null) : ISupportChannel
 {
+    private readonly SupportMailboxes _mailboxes = mailboxes ?? new SupportMailboxes(options.Value);
+
     public SupportChannelType ChannelType => SupportChannelType.Email;
 
     /// <summary>
@@ -59,7 +65,9 @@ internal sealed class EmailSupportChannel(
     /// </remarks>
     public async Task<SupportChannelPostResult> PostWithResultAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
-        if (!mailClient.CanSend) return SupportChannelPostResult.Failed("No mail server is configured for sending.");
+        var (mailbox, sender) = SenderFor(binding);
+
+        if (!sender.CanSend) return SupportChannelPostResult.Failed("No mail server is configured for sending.");
         if (string.IsNullOrWhiteSpace(binding?.Address)) return SupportChannelPostResult.Failed("The case has no address to mail.");
 
         // It arrived from this channel, so the correspondent has already read it in their own mail client.
@@ -76,14 +84,14 @@ internal sealed class EmailSupportChannel(
         var (files, missing) = await FilesOfAsync(supportCase, message, cancellationToken);
         if (missing != null) return SupportChannelPostResult.Failed(missing);
 
-        var result = await mailClient.SendAsync(
+        var result = await sender.SendAsync(
             new OutboundMail(
                 To: binding.Address,
                 Subject: Subject(supportCase),
                 Body: Body(message, earlier),
                 InReplyTo: thread[^1],
                 References: thread,
-                ReplyTo: ReplyToFor(supportCase?.Id),
+                ReplyTo: ReplyToFor(mailbox.Options, supportCase?.Id),
                 Attachments: files,
                 BodyHtml: Html(message, earlier)),
             cancellationToken);
@@ -97,11 +105,29 @@ internal sealed class EmailSupportChannel(
                 ChannelType = SupportChannelType.Email,
                 ExternalId = result.MessageId,
                 Address = binding.Address,
-                MessageSequence = message.Sequence
+                MessageSequence = message.Sequence,
+                Mailbox = binding.Mailbox,
+                MailboxAddress = binding.MailboxAddress
             }, cancellationToken);
         }
 
         return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
+    }
+
+    /// <summary>The mailbox the case came in through and its client, or the primary's with a warning when that mailbox is no longer configured.</summary>
+    private (SupportMailbox Mailbox, IMailClient Client) SenderFor(SupportChannelBinding binding)
+    {
+        var mailbox = _mailboxes.Find(binding?.Mailbox);
+
+        if (mailbox == null)
+        {
+            logger?.LogWarning("A support answer goes out through the primary mailbox, because the mailbox {Mailbox} its case came in through is no longer configured.", binding.Mailbox);
+            return (_mailboxes.Primary, mailClient);
+        }
+
+        var client = mailbox.IsPrimary ? mailClient : mailClients?.For(mailbox);
+
+        return client == null ? (_mailboxes.Primary, mailClient) : (mailbox, client);
     }
 
     /// <summary>
@@ -219,6 +245,6 @@ internal sealed class EmailSupportChannel(
     /// plus-addressed local part bounces the reply back at the customer. With it off, a reply is matched on
     /// its threading headers instead.
     /// </remarks>
-    private string ReplyToFor(string caseId)
-        => options.Value.PerCaseReplyTo ? PerCaseAddress.Build(options.Value.FromAddress, caseId) : null;
+    private static string ReplyToFor(MailOptions mailOptions, string caseId)
+        => mailOptions.PerCaseReplyTo ? PerCaseAddress.Build(mailOptions.FromAddress, caseId) : null;
 }

@@ -208,6 +208,36 @@ public class SupportUnassignedViewRenderTests : BunitContext
         Assert.Equal(["mailed"], CaseIds(view));
     }
 
+    /// <summary>Staff answer from the address the customer wrote to, so the header names it.</summary>
+    [Fact]
+    public void AMailedCase_NamesTheSupportAddressItCameInTo()
+    {
+        var view = RenderView(out _, items: [Case with { Bindings = [MailedTo("help@example.net")] }]);
+
+        Assert.Equal("to help@example.net", view.Find("[data-case='case-1'] [data-mailbox='case-1']").TextContent);
+    }
+
+    [Fact]
+    public void ACaseWithNoRecordedSupportAddress_NamesNone()
+    {
+        var view = RenderView(out _, items: [Case with { Bindings = [MailedTo(null)] }]);
+
+        Assert.Empty(view.FindAll("[data-mailbox]"));
+    }
+
+    [Fact]
+    public void Searching_FindsTheSupportAddressACaseCameInTo()
+    {
+        var view = RenderView(out _, items: [Case with { Id = "hosted", Bindings = [MailedTo("help@example.net")] }, Case with { Id = "own", Bindings = [MailedTo("support@example.com")] }]);
+
+        view.Find("input[data-search]").Input("example.net");
+
+        Assert.Equal(["hosted"], CaseIds(view));
+    }
+
+    private static SupportChannelBinding MailedTo(string supportAddress)
+        => new() { ChannelType = SupportChannelType.Email, ExternalId = "<m1@example.org>", Address = "stranger@example.org", Mailbox = "hosted", MailboxAddress = supportAddress };
+
     [Fact]
     public void ASearchMatchingNothing_SaysSo()
     {

@@ -30,6 +30,34 @@ public class MailClientLoggingTests
         Assert.DoesNotContain("kommun.se", entry.Message);
     }
 
+    [Fact]
+    public async Task AFailedRead_SaysWhy_KeepsThePosition_AndNeverNamesThePassword()
+    {
+        const string password = "app-password-123";
+        var options = new MailOptions { Timeout = TimeSpan.FromSeconds(5) };
+        options.Imap.Host = "127.0.0.1";
+        options.Imap.Port = 1;
+        options.Imap.UseSsl = false;
+        options.Imap.UserName = "support@example.com";
+        options.Imap.Password = password;
+        var logger = new CapturingLogger();
+        var position = new MailFetchPosition(7, 42);
+
+        var result = await new MailClient(Options.Create(options), logger).FetchAsync(position, TestContext.Current.CancellationToken);
+
+        Assert.Equal(position, result.Position);
+        Assert.Empty(result.Mails);
+        Assert.False(string.IsNullOrWhiteSpace(result.Error));
+        Assert.DoesNotContain(password, result.Error);
+        Assert.All(logger.Entries, x => Assert.DoesNotContain(password, x.Message));
+    }
+
+    [Fact]
+    public void AnEmptyFetch_CarriesNoError()
+    {
+        Assert.Null(MailFetchResult.Empty(MailFetchPosition.Start).Error);
+    }
+
     private sealed class CapturingLogger : ILogger<MailClient>
     {
         public List<(LogLevel Level, string Message)> Entries { get; } = [];

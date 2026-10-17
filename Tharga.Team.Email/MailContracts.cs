@@ -104,13 +104,18 @@ public readonly record struct MailFetchPosition(uint UidValidity, uint LastUid)
 /// True when the mailbox's UID generation had changed and the position was discarded, so these may include
 /// mail already seen. Deduplication downstream is what makes that safe.
 /// </param>
+/// <param name="Error">Why the mailbox could not be read, as the server or the connection put it; null when it was read.</param>
 public readonly record struct MailFetchResult(
     MailFetchPosition Position,
     IReadOnlyList<InboundMail> Mails,
-    bool Rescanned = false)
+    bool Rescanned = false,
+    string Error = null)
 {
     /// <summary>Nothing was read, and the position is unchanged.</summary>
     public static MailFetchResult Empty(MailFetchPosition position) => new(position, []);
+
+    /// <summary>The mailbox could not be read, for the stated reason, and the position is unchanged.</summary>
+    public static MailFetchResult Failed(MailFetchPosition position, string error) => new(position, [], false, error);
 }
 
 /// <summary>

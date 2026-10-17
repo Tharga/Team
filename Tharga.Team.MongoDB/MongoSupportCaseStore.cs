@@ -646,7 +646,9 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ChannelType = entity.ChannelType,
         ExternalId = entity.ExternalId,
         Address = entity.Address,
-        MessageSequence = entity.MessageSequence
+        MessageSequence = entity.MessageSequence,
+        Mailbox = entity.Mailbox,
+        MailboxAddress = entity.MailboxAddress
     };
 
     private static SupportChannelBindingEntity ToEntity(SupportChannelBinding binding) => new()
@@ -654,7 +656,9 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ChannelType = binding.ChannelType,
         ExternalId = binding.ExternalId,
         Address = binding.Address,
-        MessageSequence = binding.MessageSequence
+        MessageSequence = binding.MessageSequence,
+        Mailbox = binding.Mailbox,
+        MailboxAddress = binding.MailboxAddress
     };
 
     internal static SupportMessage ToMessage(SupportMessageEntity entity) => new()

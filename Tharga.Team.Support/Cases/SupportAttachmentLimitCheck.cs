@@ -24,6 +24,15 @@ internal static class SupportAttachmentLimitCheck
                 MaxCount = options.MaxAttachmentCount
             };
 
+    /// <summary>The smallest of each limit across several mail options.</summary>
+    public static SupportAttachmentLimits Strictest(IReadOnlyCollection<MailOptions> options)
+        => new()
+        {
+            MaxFileBytes = options.Min(x => x.MaxAttachmentBytes),
+            MaxTotalBytes = options.Min(x => x.MaxAttachmentTotalBytes),
+            MaxCount = options.Min(x => x.MaxAttachmentCount)
+        };
+
     /// <summary>The files of a received mail that fit the limits, and a note for each one that does not.</summary>
     public static (IReadOnlyList<InboundAttachment> Kept, IReadOnlyList<string> Notes) Screen(IReadOnlyList<InboundAttachment> files, SupportAttachmentLimits limits)
     {

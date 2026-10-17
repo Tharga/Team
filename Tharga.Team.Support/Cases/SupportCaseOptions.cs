@@ -151,11 +151,36 @@ public class SupportCaseOptions
     /// </remarks>
     public TimeSpan? StaffCloseAfter { get; set; }
 
+    /// <summary>The name the mailbox configured on <see cref="Email"/> is stored under on the cases that come in through it.</summary>
+    public const string PrimaryMailboxName = "primary";
+
+    private readonly List<SupportMailbox> _mailboxes = [];
+
     /// <summary>
     /// Reading and sending mail, and which recipients this instance answers for. Leave the hosts unset to
     /// keep email off.
     /// </summary>
     public MailOptions Email { get; } = new();
+
+    /// <summary>Connects one more mailbox to support, read and answered from as <see cref="Email"/> is, under a name that stays stable in stored data.</summary>
+    /// <exception cref="ArgumentException">The name is empty, is <see cref="PrimaryMailboxName"/>, or is already used.</exception>
+    public SupportCaseOptions AddMailbox(string name, Action<MailOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var key = name?.Trim();
+        if (string.IsNullOrEmpty(key)) throw new ArgumentException("A support mailbox needs a name: it is stored on every case that comes in through it.", nameof(name));
+        if (string.Equals(key, PrimaryMailboxName, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException($"'{PrimaryMailboxName}' is the name of the mailbox configured on {nameof(Email)}; give this one another.", nameof(name));
+        if (_mailboxes.FirstOrDefault(x => string.Equals(x.Name, key, StringComparison.OrdinalIgnoreCase)) is { } taken) throw new ArgumentException($"A support mailbox named '{taken.Name}' is already added; each name must be unique, whatever its case.", nameof(name));
+
+        var mail = new MailOptions();
+        configure(mail);
+        _mailboxes.Add(new SupportMailbox(key, mail));
+
+        return this;
+    }
+
+    internal IReadOnlyList<SupportMailbox> AdditionalMailboxes => _mailboxes;
 
     /// <summary>
     /// How the assistant behaves, when the host has registered an <c>IChatClient</c> for it to use.

@@ -55,6 +55,7 @@ else
                         <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
                             @_text[SupportQueueViewText.RaisedBy] @item.AuthorName
                         </RadzenText>
+                        <SupportMailboxAddress Case="item" />
                     </RadzenStack>
 
                     @if (_selected?.Id == item.Id)
