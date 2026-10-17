@@ -206,6 +206,11 @@ builder.AddMongoDB();
 
 builder.Services.AddScoped<AppUserAdminService>();
 
+// Demo: per-team features. billing:manage and case:read are hidden for a team unless its name contains
+// "Billing" / "Case" — rename a team to switch them on. Registered after AddThargaTeam, so it replaces the
+// default all-visible provider.
+builder.Services.AddScoped<ITeamScopeVisibilityProvider, Tharga.Team.Sample.Framework.SampleFeatureScopeVisibility>();
+
 // Demo state behind the member-grid extension points on /team. Singleton so one browser tab's change is
 // visible in another; in memory because persisting a host's own member field is the host's job.
 builder.Services.AddSingleton<Tharga.Team.Sample.Framework.Team.MemberProjectDemo>();

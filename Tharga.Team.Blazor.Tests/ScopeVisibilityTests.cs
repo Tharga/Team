@@ -68,6 +68,22 @@ public class ScopeVisibilityTests
         Assert.Equal(["issue:read", "atlas:manage"], persisted);
     }
 
+    /// <summary>
+    /// A custom role has no inherited scopes, so the rule reduces to "what the editor selected, plus every
+    /// hidden scope the role already held" (Tharga/Team#334).
+    /// </summary>
+    [Fact]
+    public void Persist_ForACustomRole_KeepsAHiddenScopeTheEditorCouldNotSee()
+    {
+        var persisted = ScopeVisibility.Persist(
+            selected: ["content:read"],
+            inherited: [],
+            previousOverrides: ["content:read", "content:write", "atlas:manage"],
+            hidden: Hidden);
+
+        Assert.Equal(["content:read", "atlas:manage"], persisted);
+    }
+
     [Fact]
     public void Persist_WithNothingHidden_IsTheSelectionMinusInherited()
     {

@@ -2393,7 +2393,7 @@ builder.Services.AddSingleton<ITenantRoleVisibilityProvider, FeatureGatedRoleVis
 
 ### Hiding scopes per team
 
-The scope counterpart is `ITeamScopeVisibilityProvider`. Register one to hide the scopes of a feature that is switched off for a team from the scope pickers — member scope overrides in `<TeamComponent>` and team API keys in `<ApiKeyView>`:
+The scope counterpart is `ITeamScopeVisibilityProvider`. Register one to hide the scopes of a feature that is switched off for a team from the scope pickers — member scope overrides in `<TeamComponent>`, team API keys in `<ApiKeyView>` and custom roles in `<TenantRoleManager>` — and from the access page, `<ScopeView>`:
 
 ```csharp
 public sealed class FeatureGatedScopeVisibility : ITeamScopeVisibilityProvider
@@ -2405,7 +2405,11 @@ public sealed class FeatureGatedScopeVisibility : ITeamScopeVisibilityProvider
 builder.Services.AddSingleton<ITeamScopeVisibilityProvider, FeatureGatedScopeVisibility>();
 ```
 
-A hidden scope is not offered, and is left out of the inherited and held scopes the pickers and scope tooltips show. It is **display-only** in the same way as a hidden role: an override a member or key already holds is kept when the picker saves, so re-enabling the feature restores it. Refusing the scope at runtime while the feature is off is the application's decision, made where the feature is enforced. `AddThargaScopes` registers a default provider that shows every scope.
+A hidden scope is not offered, and is left out of the inherited and held scopes the pickers and scope tooltips show. It is **display-only** in the same way as a hidden role: an override a member or key already holds, or a scope a custom role already grants, is kept when the picker saves, so re-enabling the feature restores it. Refusing the scope at runtime while the feature is off is the application's decision, made where the feature is enforced. `AddThargaScopes` registers a default provider that shows every scope.
+
+`<ScopeView>` leaves a hidden scope's row out of the table, and out of everything derived from it: the legends, and the role bar, which drops a role whose every scope is hidden (it grants nothing that applies to the team). That is the opposite of how it treats role visibility, which it deliberately ignores: a hidden role still grants its scopes, so omitting it would understate access, whereas a hidden scope belongs to a feature that does not apply to the team. The page is only right if the application **also refuses the scope at runtime while the feature is off**; a host that hides a scope it still honours makes the access page understate what a member holds. `<TenantRoleManager>` applies the scope provider to the scopes a custom role is built from, but not `ITenantRoleVisibilityProvider` to the roles it lists: those are the team's own definitions, and hiding one would leave the team unable to edit or delete it. The role provider is for the pickers that *assign* roles (`<TeamComponent>`, `<ApiKeyView>`).
+
+*Added in 4.1 (Tharga/Team#318, #331, #334): before, `<TenantRoleManager>` offered and `<ScopeView>` listed every registered scope.*
 
 ### Dynamic (runtime-defined) tenant roles
 

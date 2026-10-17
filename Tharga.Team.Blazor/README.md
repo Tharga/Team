@@ -100,7 +100,7 @@ builder.Services.AddSingleton<ITenantRoleVisibilityProvider, FeatureGatedRoleVis
 
 ### Per-team scope visibility
 
-The scope pickers (`TeamComponent`'s scope overrides with `ShowScopeOverrides`, and `ApiKeyView`) offer every registered scope by default. To hide the scopes of a feature that is switched off for a team, register an `ITeamScopeVisibilityProvider` (from `Tharga.Team`):
+The scope pickers (`TeamComponent`'s scope overrides with `ShowScopeOverrides`, `ApiKeyView`, and the custom role picker in `TenantRoleManager`) offer every registered scope by default, and `ScopeView` lists every one. To hide the scopes of a feature that is switched off for a team, register an `ITeamScopeVisibilityProvider` (from `Tharga.Team`):
 
 ```csharp
 public sealed class FeatureGatedScopeVisibility : ITeamScopeVisibilityProvider
@@ -112,7 +112,9 @@ public sealed class FeatureGatedScopeVisibility : ITeamScopeVisibilityProvider
 builder.Services.AddSingleton<ITeamScopeVisibilityProvider, FeatureGatedScopeVisibility>();
 ```
 
-A hidden scope is not offered, and is left out of the inherited and held scopes the pickers and the scope tooltips show. Like a hidden role it is **UI-only**: a member or key that already holds the scope as an override keeps it — saving the picker writes it back unchanged — so switching the feature on again restores it. Whether the scope is refused at runtime while the feature is off is up to the application, where it enforces the feature. The default provider shows every scope.
+A hidden scope is not offered, and is left out of the inherited and held scopes the pickers and the scope tooltips show. Like a hidden role it is **UI-only**: a member, key or custom role that already holds the scope keeps it — saving the picker writes it back unchanged — so switching the feature on again restores it. Whether the scope is refused at runtime while the feature is off is up to the application, where it enforces the feature. The default provider shows every scope.
+
+`ScopeView` leaves a hidden scope's row out of the access page altogether, and drops a role from its role bar when every scope the role grants is hidden, because a hidden scope belongs to a feature that doesn't apply to the team. (It deliberately ignores *role* visibility: a hidden role still grants its scopes.) So **refuse a hidden scope at runtime while its feature is off**, or the access page understates what a member holds.
 
 ### Dynamic (runtime-defined) tenant roles
 
