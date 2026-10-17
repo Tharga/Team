@@ -176,6 +176,10 @@ public record SupportMessageEntity
 
     [BsonIgnoreIfDefault]
     public bool AsSupport { get; init; }
+
+    /// <summary>The files the entry carries, metadata only; absent when it carries none, as on every entry written before files were kept.</summary>
+    [BsonIgnoreIfNull]
+    public SupportAttachmentEntity[] Attachments { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system.</summary>

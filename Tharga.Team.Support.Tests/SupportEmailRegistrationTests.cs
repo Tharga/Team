@@ -31,6 +31,9 @@ public class SupportEmailRegistrationTests
         o.Email.Timeout = TimeSpan.FromSeconds(45);
         o.Email.PerCaseReplyTo = true;
         o.Email.Recipients = ["fortdocs.se"];
+        o.Email.MaxAttachmentBytes = 10;
+        o.Email.MaxAttachmentTotalBytes = 20;
+        o.Email.MaxAttachmentCount = 3;
     }
 
     [Fact]

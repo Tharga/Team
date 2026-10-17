@@ -32,7 +32,35 @@ public class SupportContractSerializationTests
             Source = SupportChannelType.Email
         };
 
-        Assert.Equal(message, RoundTrip(message));
+        var restored = RoundTrip(message);
+
+        Assert.Empty(restored.Attachments);
+        Assert.Equal(message, restored with { Attachments = message.Attachments });
+    }
+
+    /// <summary>Arrays compare by reference, so the files are asserted one by one rather than by record equality.</summary>
+    [Fact]
+    public void SupportMessage_RoundTrips_WithItsAttachments()
+    {
+        var attachment = new SupportAttachment { Id = "a1", FileName = "logo.png", ContentType = "image/png", Size = 2048, Inline = true, ContentId = "logo@example.com" };
+        var message = new SupportMessage
+        {
+            Sequence = 2,
+            Kind = SupportMessageKind.User,
+            Body = "See the picture.",
+            SentAt = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc),
+            Attachments = [attachment]
+        };
+
+        var restored = RoundTrip(message);
+
+        Assert.Equal(attachment, Assert.Single(restored.Attachments));
+    }
+
+    [Fact]
+    public void SupportAttachmentLimits_RoundTrip()
+    {
+        Assert.Equal(SupportAttachmentLimits.Default, RoundTrip(SupportAttachmentLimits.Default));
     }
 
     [Fact]
@@ -52,7 +80,7 @@ public class SupportContractSerializationTests
         var restored = RoundTrip(message);
 
         Assert.Null(restored.Source);
-        Assert.Equal(message, restored);
+        Assert.Equal(message, restored with { Attachments = message.Attachments });
     }
 
     [Fact]

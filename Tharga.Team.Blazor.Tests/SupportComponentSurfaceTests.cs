@@ -55,7 +55,8 @@ public class SupportComponentSurfaceTests
     private static readonly Type[] Forbidden =
     [
         typeof(ISupportCaseStore),
-        typeof(ISupportEventLedger)
+        typeof(ISupportEventLedger),
+        typeof(ISupportAttachmentStore)
     ];
 
     private static Type[] SupportComponents() =>

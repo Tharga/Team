@@ -70,6 +70,11 @@ public static class ThargaTeamRegistration
             services.TrackMongoCollection(typeof(ISupportCaseRepositoryCollection), typeof(SupportCaseRepositoryCollection));
             services.TryAddScoped<ISupportCaseStore, MongoSupportCaseStore>();
 
+            // The files support messages carry, in GridFS beside the cases rather than inside them. TryAdd so a
+            // host keeping files in blob storage wins.
+            services.TryAddScoped<ISupportAttachmentStore>(sp => new MongoSupportAttachmentStore(
+                new GridFsSupportAttachmentBucket(sp.GetRequiredService<IMongoDbServiceFactory>(), sp.GetService<IOptions<ThargaTeamOptions>>())));
+
             // Deduplicates inbound channel events. Shared across instances by virtue of being in the same
             // database as the cases, with a unique index making the record-or-refuse decision atomic.
             services.TryAddSingleton(TimeProvider.System);

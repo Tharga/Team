@@ -1,3 +1,5 @@
+using System.Globalization;
+using Tharga.Team.Email;
 using Tharga.Team.Service;
 
 namespace Tharga.Team.Support.Cases;
@@ -23,8 +25,12 @@ internal sealed class SupportCaseService(
     ITeamDirectoryService teamDirectory = null,
     IUserService userService = null,
     SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private,
-    SupportCaseVisibility? assistantDefaultVisibility = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportCaseVisibility? assistantDefaultVisibility = null,
+    ISupportAttachmentStore attachmentStore = null,
+    SupportAttachmentLimits attachmentLimits = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
+    private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
+
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
     /// Slack faces support, so a case can hold a binding for each — which is what
@@ -159,10 +165,36 @@ internal sealed class SupportCaseService(
     }
 
     public Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, asSupport: false, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, [], asSupport: false, cancellationToken);
+
+    public Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, attachments, asSupport: false, cancellationToken);
 
     public Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, asSupport: true, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, [], asSupport: true, cancellationToken);
+
+    public Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, attachments, asSupport: true, cancellationToken);
+
+    /// <remarks>
+    /// The entry is read by its sequence and the attachment found on it, so an id belonging to another entry or
+    /// another case finds nothing even before the store compares the case it was saved for.
+    /// </remarks>
+    public async Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        if (attachmentStore == null || sequence < 1 || string.IsNullOrWhiteSpace(attachmentId)) return null;
+
+        var page = await store.GetMessagesAsync(teamKey, caseId, (sequence - 1).ToString(CultureInfo.InvariantCulture), 1, cancellationToken);
+        var attachment = page?.Items?.FirstOrDefault(x => x.Sequence == sequence)?.Attachments?.FirstOrDefault(x => x.Id == attachmentId);
+        if (attachment == null) return null;
+
+        var opened = await attachmentStore.OpenAsync(caseId, attachmentId, cancellationToken);
+
+        return opened == null ? null : new SupportAttachmentContent { Attachment = attachment, Content = opened.Content };
+    }
+
+    public Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(_attachmentLimits);
 
     public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
     {
@@ -189,9 +221,12 @@ internal sealed class SupportCaseService(
         return string.IsNullOrEmpty(subject) ? [] : await store.GetUnreadByCaseAsync(teamKey, subject, cancellationToken);
     }
 
-    private async Task WriteAsync(string teamKey, string caseId, string body, bool asSupport, CancellationToken cancellationToken)
+    private async Task WriteAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken)
     {
         RequireWithinLength(body);
+
+        var uploads = (attachments ?? []).Where(x => x != null).ToArray();
+        RequireAttachable(uploads);
 
         // Costs a read before the write, and is worth it: the caller learns the case is full before typing
         // is discarded, and the limit is checked in the domain so a second adapter inherits it rather than
@@ -202,6 +237,9 @@ internal sealed class SupportCaseService(
                 $"Support case '{caseId}' already holds {existing.MessageCount} messages, which is the limit of " +
                 $"{SupportCaseLimits.MaxMessagesPerCase}. Raise a new case rather than extending this one.");
 
+        if (uploads.Length > 0 && existing == null)
+            throw new InvalidOperationException($"No case '{caseId}' on team '{teamKey}' to attach files to.");
+
         // Writing to a closed case means it is not over: it opens again rather than refusing what was written.
         if (existing?.Status == SupportCaseStatus.Closed)
         {
@@ -210,6 +248,7 @@ internal sealed class SupportCaseService(
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        var stored = await StoreAttachmentsAsync(caseId, uploads, cancellationToken);
 
         var message = new SupportMessage
         {
@@ -217,12 +256,22 @@ internal sealed class SupportCaseService(
             Kind = SupportMessageKind.User,
             AuthorIdentity = await authorizer.GetSubjectAsync(),
             AuthorName = await DisplayNameAsync(),
-            Body = body,
+            Body = body ?? string.Empty,
             SentAt = now,
-            AsSupport = asSupport
+            AsSupport = asSupport,
+            Attachments = stored
         };
 
-        await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+        try
+        {
+            await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+        }
+        catch
+        {
+            await DiscardAsync(caseId, stored);
+            throw;
+        }
+
         var sequence = (existing?.MessageCount ?? 0) + 1;
 
         // An answer is unread for whoever raised the case, even when the one answering raised it too.
@@ -240,6 +289,85 @@ internal sealed class SupportCaseService(
         }
 
         Notify(teamKey, caseId, SupportCaseChange.Replied);
+    }
+
+    /// <summary>Refuses files the limits or a missing store rule out, before anything is written.</summary>
+    private void RequireAttachable(IReadOnlyList<SupportAttachmentUpload> uploads)
+    {
+        if (uploads.Count == 0) return;
+
+        if (attachmentStore == null)
+            throw new InvalidOperationException($"Files cannot be attached: no {nameof(ISupportAttachmentStore)} is registered.");
+
+        SupportAttachmentLimitCheck.RequireWithin(uploads, _attachmentLimits);
+    }
+
+    /// <summary>
+    /// Stores each file under the case, measured as it is read, and returns what was stored; on any failure the
+    /// files already stored are removed again and the failure stands.
+    /// </summary>
+    /// <remarks>
+    /// The name is sanitized and the content type normalized here, so nothing a caller declares reaches the
+    /// transcript as given.
+    /// </remarks>
+    private async Task<SupportAttachment[]> StoreAttachmentsAsync(string caseId, IReadOnlyList<SupportAttachmentUpload> uploads, CancellationToken cancellationToken)
+    {
+        if (uploads.Count == 0) return [];
+
+        var stored = new List<SupportAttachment>();
+        long total = 0;
+
+        try
+        {
+            foreach (var upload in uploads)
+            {
+                var contentType = AttachmentContentType.Normalize(upload.ContentType);
+                var fileName = AttachmentFileName.Sanitize(upload.FileName, contentType);
+                var allowed = Math.Min(_attachmentLimits.MaxFileBytes, _attachmentLimits.MaxTotalBytes - total);
+                var measured = new LimitedReadStream(upload.Content, allowed);
+
+                try
+                {
+                    var saved = await attachmentStore.SaveAsync(caseId, new SupportAttachmentUpload
+                    {
+                        FileName = fileName,
+                        ContentType = contentType,
+                        Content = measured
+                    }, cancellationToken);
+
+                    stored.Add(saved);
+                    total += saved.Size;
+                }
+                catch (Exception) when (measured.Exceeded)
+                {
+                    throw measured.BytesRead > _attachmentLimits.MaxFileBytes
+                        ? SupportAttachmentLimitCheck.TooLarge(fileName, measured.BytesRead, _attachmentLimits)
+                        : SupportAttachmentLimitCheck.TooLargeTogether(_attachmentLimits);
+                }
+            }
+        }
+        catch
+        {
+            await DiscardAsync(caseId, stored);
+            throw;
+        }
+
+        return [.. stored];
+    }
+
+    /// <summary>Removes files stored for an entry that was never written; best effort, since the failure that led here is the one to report.</summary>
+    private async Task DiscardAsync(string caseId, IReadOnlyList<SupportAttachment> stored)
+    {
+        foreach (var attachment in stored)
+        {
+            try
+            {
+                await attachmentStore.DeleteAsync(caseId, attachment.Id, CancellationToken.None);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+            }
+        }
     }
 
     /// <remarks>

@@ -13,11 +13,13 @@
     @if (AsStaff)
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="false" TimeTemplate="TimeTemplate"
-                           ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync" />
+                           ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync"
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" />
     }
     else
     {
-        <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate" />
+        <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate"
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" />
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
@@ -25,8 +27,10 @@
                     @oninput="@(e => _reply = e.Value?.ToString())"
                     Placeholder="@ReplyText" Rows="3" Style="width: 100%;" aria-label="@ReplyText" />
 
+    <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
+
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-        <RadzenButton Text="@ReplyText" Icon="send" Click="ReplyAsync" Disabled="@(string.IsNullOrWhiteSpace(_reply) || _busy)" />
+        <RadzenButton Text="@ReplyText" Icon="send" Click="ReplyAsync" Disabled="@(NothingToSend || _busy)" />
 
         @* Only while an assistant is answering; on a case already handed over it would promise what has happened. *@
         @if (!AsStaff && WithAssistant)
@@ -97,7 +101,10 @@
     private SupportCaseVisibilityChoice _choice = SupportCaseVisibilityChoice.None;
     private SupportMessage[] _messages = [];
     private string _reply;
+    private IReadOnlyList<SupportAttachmentUpload> _files = [];
     private bool _busy;
+
+    private bool NothingToSend => string.IsNullOrWhiteSpace(_reply) && _files.Count == 0;
 
     private bool WithAssistant => Case.AssistantState == SupportAssistantState.Active;
 
@@ -149,15 +156,23 @@
         }
     }
 
+    /// <remarks>Without files the call is the one it always was; files go through the overload that carries them.</remarks>
     private async Task ReplyAsync()
     {
-        if (string.IsNullOrWhiteSpace(_reply)) return;
+        if (NothingToSend) return;
 
-        var body = _reply;
-        await ActAsync(() => AsStaff
-            ? SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, body)
-            : SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, body));
+        var body = _reply ?? string.Empty;
+        var files = SupportAttachmentPicker.Rewound(_files);
+
+        await ActAsync(() => (AsStaff, files.Count > 0) switch
+        {
+            (true, false) => SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, body),
+            (true, true) => SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, body, files),
+            (false, false) => SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, body),
+            (false, true) => SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, body, files)
+        });
         _reply = null;
+        _files = [];
 
         if (!AsStaff) await Written.InvokeAsync(Case.Id);
     }

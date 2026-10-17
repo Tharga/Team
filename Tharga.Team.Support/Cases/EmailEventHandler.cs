@@ -30,7 +30,8 @@ internal sealed class EmailEventHandler(
     ILogger<EmailEventHandler> logger = null,
     Tharga.Team.Service.Email.IOutboundMailPolicy policy = null,
     ISupportSenderDirectory senderDirectory = null,
-    IOptions<SupportCaseOptions> caseOptions = null)
+    IOptions<SupportCaseOptions> caseOptions = null,
+    ISupportAttachmentStore attachmentStore = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
     internal const string Source = "email";
@@ -87,9 +88,12 @@ internal sealed class EmailEventHandler(
             return EmailHandlingOutcome.Ignored("sender does not correspond with the case");
         }
 
-        var body = Body(mail);
+        var text = QuotedText.Trim(mail.Body);
 
-        if (string.IsNullOrWhiteSpace(body)) return EmailHandlingOutcome.Ignored("empty body");
+        if (IsEmpty(mail, text)) return EmailHandlingOutcome.Ignored("empty body");
+
+        var files = await StoreFilesAsync(supportCase.Id, mail, cancellationToken);
+        var body = Body(text, files.Notes);
 
         await store.AppendMessageAsync(supportCase.TeamKey, supportCase.Id, new SupportMessage
         {
@@ -107,7 +111,8 @@ internal sealed class EmailEventHandler(
             // It came from the channel, so it is already there. Posting it back would echo it into the
             // thread it arrived from.
             Delivery = SupportMessageDelivery.Sent,
-            Source = SupportChannelType.Email
+            Source = SupportChannelType.Email,
+            Attachments = files.Stored
         }, cancellationToken);
 
         // The reply's own id joins the thread, so an answer to it, and a reply to that, find the case exactly.
@@ -193,9 +198,9 @@ internal sealed class EmailEventHandler(
     /// </remarks>
     private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, CancellationToken cancellationToken)
     {
-        var body = Body(mail);
+        var text = QuotedText.Trim(mail.Body);
 
-        if (string.IsNullOrWhiteSpace(body)) return EmailHandlingOutcome.Ignored("empty body");
+        if (IsEmpty(mail, text)) return EmailHandlingOutcome.Ignored("empty body");
 
         var placement = SupportSenderPlacement.Decide(mail.SenderVerified, await SendersAsync(mail.From, cancellationToken));
         var team = placement.Team;
@@ -205,6 +210,10 @@ internal sealed class EmailEventHandler(
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var caseId = Guid.NewGuid().ToString();
 
+        // Stored under the new case's id before the case exists, so its first message can name them.
+        var files = await StoreFilesAsync(caseId, mail, cancellationToken);
+        var body = Body(text, files.Notes);
+
         var supportCase = new SupportCase
         {
             Id = caseId,
@@ -212,7 +221,7 @@ internal sealed class EmailEventHandler(
             TeamName = team?.Name,
             AuthorIdentity = authorIdentity,
             AuthorName = authorName,
-            Subject = string.IsNullOrWhiteSpace(mail.Subject) ? SubjectFromMessage.Derive(body) : mail.Subject.Trim(),
+            Subject = string.IsNullOrWhiteSpace(mail.Subject) ? SubjectFromMessage.Derive(SubjectSource(body, files.Stored)) : mail.Subject.Trim(),
             Status = SupportCaseStatus.Open,
             CreatedAt = now,
             MessageCount = 1,
@@ -242,7 +251,8 @@ internal sealed class EmailEventHandler(
             // It arrived through the channel, so it is already delivered. Marking it Pending would have the
             // reply path mail the customer their own message back.
             Delivery = SupportMessageDelivery.Sent,
-            Source = SupportChannelType.Email
+            Source = SupportChannelType.Email,
+            Attachments = files.Stored
         }, cancellationToken);
 
         if (team != null) await store.MarkReadAsync(team.Key, caseId, authorIdentity, 1, cancellationToken);
@@ -342,6 +352,10 @@ internal sealed class EmailEventHandler(
         return decision is { Action: Tharga.Team.Service.Email.OutboundMailAction.Redirect } && string.Equals(decision.Recipient?.Trim(), sender.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>Nothing written and no file carried, so there is nothing to keep.</summary>
+    private static bool IsEmpty(InboundMail mail, string text)
+        => string.IsNullOrWhiteSpace(text) && !mail.HadAttachments && mail.Attachments is not { Count: > 0 };
+
     /// <remarks>
     /// <b>Over-long mail is trimmed, not refused.</b> The service throws past
     /// <see cref="SupportCaseLimits.MaxMessageLength"/>, which is right for somebody typing into a form who
@@ -349,17 +363,67 @@ internal sealed class EmailEventHandler(
     /// message id -- so refusing would discard what a customer sent and never ask again. A pasted log file is
     /// a real support case, and the tail of it is the part nobody reads.
     /// </remarks>
-    private static string Body(InboundMail mail)
+    private static string Body(string text, IReadOnlyList<string> notes)
     {
-        var text = QuotedText.Trim(mail.Body);
-
-        if (mail.HadAttachments) text = $"{text}\n\n[attachments were not stored]".TrimStart();
+        if (notes.Count > 0) text = $"{text}\n\n{string.Join("\n", notes)}".Trim();
 
         if (text.Length <= SupportCaseLimits.MaxMessageLength) return text;
 
         const string marker = "\n\n[trimmed]";
 
         return string.Concat(text.AsSpan(0, SupportCaseLimits.MaxMessageLength - marker.Length), marker);
+    }
+
+    /// <summary>What a case opened without a subject is named after: its text, or its files when it has none.</summary>
+    private static string SubjectSource(string body, SupportAttachment[] files)
+        => string.IsNullOrWhiteSpace(body) ? string.Join(", ", files.Select(x => x.FileName)) : body;
+
+    /// <summary>
+    /// Keeps the mail's files that fit the limits under the case, and notes in the message each one that was
+    /// not kept and why.
+    /// </summary>
+    /// <remarks>
+    /// <b>A file that cannot be stored never loses the mail.</b> The ledger has already recorded it, so a store
+    /// that fails, or none registered, leaves a note where the file would have been and the rest goes on.
+    /// </remarks>
+    private async Task<(SupportAttachment[] Stored, IReadOnlyList<string> Notes)> StoreFilesAsync(string caseId, InboundMail mail, CancellationToken cancellationToken)
+    {
+        if (mail.Attachments is not { Count: > 0 } attachments)
+            return ([], mail.HadAttachments ? ["[attachments were not stored]"] : []);
+
+        if (attachmentStore == null)
+            return ([], [.. attachments.Select(x => $"[{x.FileName} was not stored: nowhere to keep files is configured.]")]);
+
+        var (kept, notes) = SupportAttachmentLimitCheck.Screen(attachments, SupportAttachmentLimitCheck.LimitsOf(options.Value));
+        var stored = new List<SupportAttachment>();
+        var allNotes = notes.ToList();
+
+        foreach (var file in kept)
+        {
+            try
+            {
+                using var content = new MemoryStream(file.Content ?? [], false);
+
+                stored.Add(await attachmentStore.SaveAsync(caseId, new SupportAttachmentUpload
+                {
+                    FileName = file.FileName,
+                    ContentType = file.ContentType,
+                    Content = content,
+                    Inline = file.Inline,
+                    ContentId = file.ContentId
+                }, cancellationToken));
+            }
+            catch (Exception e) when (e is not OperationCanceledException)
+            {
+                logger?.LogWarning(e, "A file of a support mail on case {CaseId} could not be stored.", caseId);
+                allNotes.Add($"[{file.FileName} could not be stored.]");
+            }
+        }
+
+        if (allNotes.Count > 0)
+            logger?.LogInformation("{Count} file(s) of a support mail on case {CaseId} were not stored.", allNotes.Count, caseId);
+
+        return ([.. stored], allNotes);
     }
 }
 

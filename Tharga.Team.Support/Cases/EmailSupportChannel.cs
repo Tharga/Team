@@ -23,7 +23,8 @@ namespace Tharga.Team.Support.Cases;
 internal sealed class EmailSupportChannel(
     IMailClient mailClient,
     ISupportCaseStore store,
-    IOptions<MailOptions> options) : ISupportChannel
+    IOptions<MailOptions> options,
+    ISupportAttachmentStore attachmentStore = null) : ISupportChannel
 {
     public SupportChannelType ChannelType => SupportChannelType.Email;
 
@@ -69,6 +70,9 @@ internal sealed class EmailSupportChannel(
         var thread = ThreadOf(supportCase, binding);
         var earlier = supportCase == null ? [] : await EarlierAsync(supportCase, message, cancellationToken);
 
+        var (files, missing) = await FilesOfAsync(supportCase, message, cancellationToken);
+        if (missing != null) return SupportChannelPostResult.Failed(missing);
+
         var result = await mailClient.SendAsync(
             new OutboundMail(
                 To: binding.Address,
@@ -76,7 +80,8 @@ internal sealed class EmailSupportChannel(
                 Body: Body(message, earlier),
                 InReplyTo: thread[^1],
                 References: thread,
-                ReplyTo: ReplyToFor(supportCase?.Id)),
+                ReplyTo: ReplyToFor(supportCase?.Id),
+                Attachments: files),
             cancellationToken);
 
         // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case,
@@ -93,6 +98,35 @@ internal sealed class EmailSupportChannel(
         }
 
         return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
+    }
+
+    /// <summary>
+    /// The files the entry carries, read from the store, or why they could not all be read.
+    /// </summary>
+    /// <remarks>
+    /// <b>All or nothing.</b> An answer that says "see the attached" and arrives without it misleads the person
+    /// reading it, so a file that cannot be read keeps the whole answer back as not delivered, with the reason,
+    /// where support can see it and send it again.
+    /// </remarks>
+    private async Task<(IReadOnlyList<MailAttachment> Files, string Missing)> FilesOfAsync(SupportCase supportCase, SupportMessage message, CancellationToken cancellationToken)
+    {
+        if (message.Attachments is not { Length: > 0 } attachments) return ([], null);
+        if (attachmentStore == null) return (null, "The answer carries files, and no attachment store is registered to read them from.");
+        if (supportCase == null) return (null, "The answer carries files, and its case could not be found to read them from.");
+
+        var files = new List<MailAttachment>();
+
+        foreach (var attachment in attachments)
+        {
+            await using var opened = await attachmentStore.OpenAsync(supportCase.Id, attachment.Id, cancellationToken);
+            if (opened?.Content == null) return (null, $"The file '{attachment.FileName}' could not be read from the attachment store.");
+
+            using var buffer = new MemoryStream();
+            await opened.Content.CopyToAsync(buffer, cancellationToken);
+            files.Add(new MailAttachment(attachment.FileName, attachment.ContentType, buffer.ToArray()));
+        }
+
+        return (files, null);
     }
 
     /// <summary>Every message id the case's mail thread has carried, oldest first: the opening mail, then each reply and answer.</summary>

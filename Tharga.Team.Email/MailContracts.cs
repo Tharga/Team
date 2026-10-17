@@ -17,13 +17,33 @@ namespace Tharga.Team.Email;
 /// Address replies should be sent to, when it differs from the sender — a per-case
 /// <c>support+{caseId}@…</c>. Null uses the configured sending address.
 /// </param>
+/// <param name="Attachments">Files to send with the mail, in order; null or empty sends the body alone.</param>
 public readonly record struct OutboundMail(
     string To,
     string Subject,
     string Body,
     string InReplyTo = null,
     IReadOnlyList<string> References = null,
-    string ReplyTo = null);
+    string ReplyTo = null,
+    IReadOnlyList<MailAttachment> Attachments = null);
+
+/// <summary>
+/// A file sent with a mail.
+/// </summary>
+/// <param name="FileName">The name the recipient sees.</param>
+/// <param name="ContentType">The declared content type; one that does not parse is sent as <c>application/octet-stream</c>.</param>
+/// <param name="Content">The file's bytes.</param>
+public readonly record struct MailAttachment(string FileName, string ContentType, byte[] Content);
+
+/// <summary>
+/// A file that arrived with a mail: an attachment, an image shown inside its body, or a forwarded message.
+/// </summary>
+/// <param name="FileName">The sanitized file name: no path, no control characters, never empty.</param>
+/// <param name="ContentType">The content type the sender declared, kept as data.</param>
+/// <param name="Content">The decoded bytes.</param>
+/// <param name="Inline">True when the mail showed the file inside its body rather than as an attachment.</param>
+/// <param name="ContentId">The part's Content-ID without angle brackets, which an HTML body names as <c>cid:</c>; otherwise null.</param>
+public readonly record struct InboundAttachment(string FileName, string ContentType, byte[] Content, bool Inline = false, string ContentId = null);
 
 /// <summary>
 /// What happened to a send.
@@ -106,10 +126,7 @@ public readonly record struct MailFetchResult(
 /// <param name="IsAutomated">
 /// True when the mail announces itself as machine-generated — a vacation responder, a bounce, a bulk send.
 /// </param>
-/// <param name="HadAttachments">
-/// True when attachments were present. They are not carried: storing them needs somewhere to put them, and
-/// silently dropping them without saying so would leave a transcript that misrepresents the conversation.
-/// </param>
+/// <param name="HadAttachments">True when files were present, whether or not the source carried them in <paramref name="Attachments"/>.</param>
 /// <param name="Uid">The message's IMAP UID in its folder; 0 when it was not read from a mailbox.</param>
 /// <param name="Raw">The message exactly as it arrived, when the fetch was asked to keep it; otherwise null.</param>
 /// <param name="FromName">The sender's display name, or null.</param>
@@ -128,6 +145,7 @@ public readonly record struct MailFetchResult(
 /// a parent of it. False when it is unsigned, when no such signature verifies, or when it could not be checked.
 /// </param>
 /// <param name="SenderDomain">The signing domain that vouches for the sender when <paramref name="SenderVerified"/>; otherwise null.</param>
+/// <param name="Attachments">The files that came with the mail in the order they appear — attachments, images shown inside the body and forwarded messages as <c>.eml</c> files — or null when the source did not read them.</param>
 /// <remarks>
 /// <b>Verified vouches for the domain's mail system, not for a person.</b> A large provider signs only what its
 /// own account holder sent, so there it amounts to the address; a company domain signs whatever its servers
@@ -152,4 +170,5 @@ public readonly record struct InboundMail(
     string BouncedMessageId = null,
     string BounceReason = null,
     bool SenderVerified = false,
-    string SenderDomain = null);
+    string SenderDomain = null,
+    IReadOnlyList<InboundAttachment> Attachments = null);

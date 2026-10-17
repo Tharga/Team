@@ -20,7 +20,7 @@ internal static class MailMessageFactory
         var message = new MimeMessage
         {
             Subject = mail.Subject ?? string.Empty,
-            Body = new TextPart("plain") { Text = mail.Body ?? string.Empty }
+            Body = Body(mail)
         };
 
         message.From.Add(from);
@@ -46,6 +46,35 @@ internal static class MailMessageFactory
         }
 
         return message;
+    }
+
+    /// <summary>
+    /// The text alone, or <c>multipart/mixed</c> with the text first and each file after it in order.
+    /// </summary>
+    /// <remarks>
+    /// Every file goes base64 as an attachment under its declared type, so nothing in it is read as part of the
+    /// message; a type that does not parse goes as <c>application/octet-stream</c>.
+    /// </remarks>
+    private static MimeEntity Body(OutboundMail mail)
+    {
+        var text = new TextPart("plain") { Text = mail.Body ?? string.Empty };
+
+        if (mail.Attachments is not { Count: > 0 } attachments) return text;
+
+        var mixed = new Multipart("mixed") { text };
+
+        foreach (var attachment in attachments)
+        {
+            mixed.Add(new MimePart(ContentType.TryParse(attachment.ContentType ?? string.Empty, out var parsed) ? parsed : new ContentType("application", "octet-stream"))
+            {
+                Content = new MimeContent(new MemoryStream(attachment.Content ?? [], false)),
+                ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
+                ContentTransferEncoding = ContentEncoding.Base64,
+                FileName = AttachmentFileName.Sanitize(attachment.FileName, attachment.ContentType)
+            });
+        }
+
+        return mixed;
     }
 
     /// <summary>

@@ -124,6 +124,51 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>Audited as a reply, with how many files it carried and never what they were called.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.ReplyToCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
+
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>Audited as an answer, with how many files it carried and never what they were called.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.AnswerCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
+
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>A read, and not audited, like every other read of a case.</remarks>
+    public Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+        => inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+
+    public Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default)
+        => inner.GetAttachmentLimitsAsync(cancellationToken);
+
     public async Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
@@ -304,6 +349,9 @@ internal sealed class AuditingSupportCaseServiceDecorator(
 
         auditLogger.Log(entry);
     }
+
+    private static string CountOf(IReadOnlyList<SupportAttachmentUpload> attachments)
+        => (attachments?.Count(x => x != null) ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private static Dictionary<string, string> Meta(params (string Key, string Value)[] pairs)
     {

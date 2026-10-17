@@ -120,6 +120,35 @@ public class SupportRegistrationTests
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<ISupportCaseNotifier>());
     }
 
+    /// <summary>The limits a host sets on its mail options are the ones the service applies and a component is told.</summary>
+    [Fact]
+    public async Task TheConfiguredAttachmentLimits_ReachTheResolvedService()
+    {
+        using var provider = Build(s =>
+        {
+            s.AddSingleton(Substitute.For<ISupportCaseStore>());
+            s.AddSingleton(Substitute.For<ISupportAttachmentStore>());
+            s.AddSingleton(Substitute.For<ITeamPrincipalAccessor>());
+            s.AddSingleton<TeamAuthorizer>();
+            s.Configure<AuditOptions>(_ => { });
+            s.AddSingleton<CompositeAuditLogger>();
+            s.AddSingleton(Substitute.For<IAuditEntryFactory>());
+
+            s.AddThargaSupportCases(o =>
+            {
+                o.Email.MaxAttachmentBytes = 1000;
+                o.Email.MaxAttachmentTotalBytes = 2000;
+                o.Email.MaxAttachmentCount = 3;
+            });
+        });
+
+        using var scope = provider.CreateScope();
+
+        var limits = await scope.ServiceProvider.GetRequiredService<ISupportCaseService>().GetAttachmentLimitsAsync();
+
+        Assert.Equal(new SupportAttachmentLimits { MaxFileBytes = 1000, MaxTotalBytes = 2000, MaxCount = 3 }, limits);
+    }
+
     /// <summary>
     /// The whole mail path resolves in a real graph: two channels, the poller and the inbound handler.
     /// </summary>

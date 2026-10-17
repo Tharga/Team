@@ -73,4 +73,7 @@ public record SupportMessage
     /// </para>
     /// </remarks>
     public SupportChannelType? Source { get; init; }
+
+    /// <summary>The files this entry carries, in the order they arrived; empty for none.</summary>
+    public SupportAttachment[] Attachments { get; init; } = [];
 }

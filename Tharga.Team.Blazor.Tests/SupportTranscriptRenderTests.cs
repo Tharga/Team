@@ -5,6 +5,7 @@ using Radzen;
 using Tharga.Team;
 using Tharga.Team.Blazor.Features.Support;
 using Tharga.Team.Blazor.Framework;
+using Tharga.Team.Support.Cases;
 
 namespace Tharga.Team.Blazor.Tests;
 
@@ -87,6 +88,7 @@ public class SupportTranscriptRenderTests : BunitContext
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         Services.AddSingleton(Mock.Of<IIconResolver>());
         Services.AddRadzenComponents();
+        Services.AddSingleton(Mock.Of<ISupportCaseService>());
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         var view = Render<SupportTranscript>(parameters => parameters
@@ -180,6 +182,7 @@ public class SupportTranscriptRenderTests : BunitContext
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         Services.AddSingleton(Mock.Of<IIconResolver>());
         Services.AddRadzenComponents();
+        Services.AddSingleton(Mock.Of<ISupportCaseService>());
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         return Render<SupportTranscript>(parameters =>
@@ -199,6 +202,7 @@ public class SupportTranscriptRenderTests : BunitContext
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         Services.AddSingleton(Mock.Of<IIconResolver>());
         Services.AddRadzenComponents();
+        Services.AddSingleton(Mock.Of<ISupportCaseService>());
         JSInterop.Mode = JSRuntimeMode.Loose;
 
         return Render<SupportTranscript>(parameters => parameters

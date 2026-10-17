@@ -58,6 +58,15 @@ public record ThargaTeamOptions
     /// </summary>
     public string SupportMailPositionCollectionName { get; set; } = "SupportMailPosition";
 
+    /// <summary>The default for <see cref="SupportAttachmentBucketName"/>.</summary>
+    public const string DefaultSupportAttachmentBucketName = "SupportAttachment";
+
+    /// <summary>
+    /// GridFS bucket holding the files support messages carry, beside the support cases. Default
+    /// <c>SupportAttachment</c>.
+    /// </summary>
+    public string SupportAttachmentBucketName { get; set; } = DefaultSupportAttachmentBucketName;
+
     /// <summary>
     /// How long a handled event is remembered. Default 24 hours.
     /// </summary>

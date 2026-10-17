@@ -652,7 +652,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         MessageSequence = binding.MessageSequence
     };
 
-    private static SupportMessage ToMessage(SupportMessageEntity entity) => new()
+    internal static SupportMessage ToMessage(SupportMessageEntity entity) => new()
     {
         Sequence = entity.Sequence,
         Kind = entity.Kind,
@@ -663,10 +663,11 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Delivery = entity.Delivery,
         DeliveryError = entity.Delivery == SupportMessageDelivery.Failed ? entity.DeliveryError : null,
         Source = entity.Source,
-        AsSupport = entity.AsSupport
+        AsSupport = entity.AsSupport,
+        Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)]
     };
 
-    private static SupportMessageEntity ToEntity(SupportMessage message) => new()
+    internal static SupportMessageEntity ToEntity(SupportMessage message) => new()
     {
         Sequence = message.Sequence,
         Kind = message.Kind,
@@ -677,6 +678,27 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Delivery = message.Delivery,
         DeliveryError = message.Delivery == SupportMessageDelivery.Failed ? message.DeliveryError : null,
         Source = message.Source,
-        AsSupport = message.AsSupport
+        AsSupport = message.AsSupport,
+        Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null
+    };
+
+    private static SupportAttachment ToAttachment(SupportAttachmentEntity entity) => new()
+    {
+        Id = entity.Id,
+        FileName = entity.FileName,
+        ContentType = entity.ContentType,
+        Size = entity.Size,
+        Inline = entity.Inline,
+        ContentId = entity.ContentId
+    };
+
+    private static SupportAttachmentEntity ToEntity(SupportAttachment attachment) => new()
+    {
+        Id = attachment.Id,
+        FileName = attachment.FileName,
+        ContentType = attachment.ContentType,
+        Size = attachment.Size,
+        Inline = attachment.Inline,
+        ContentId = attachment.ContentId
     };
 }

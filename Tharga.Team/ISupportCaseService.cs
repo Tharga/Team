@@ -43,6 +43,9 @@ public interface ISupportCaseService
     /// <summary>Appends a reply to an open case.</summary>
     Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
 
+    /// <summary>Appends a reply carrying files to an open case, authorized exactly as a reply without files.</summary>
+    Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Answers a case from the support side. The answer counts as support's whoever writes it, so it takes the
     /// case out of the waiting count and is unread for the person who raised it until they open it.
@@ -54,13 +57,22 @@ public interface ISupportCaseService
     /// </remarks>
     Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
 
+    /// <summary>Answers a case from the support side with files, authorized exactly as an answer without files.</summary>
+    Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
+    /// <summary>Opens a file carried by one entry of a case, authorized exactly as reading its transcript, or returns null when that entry carries no attachment with this id; the caller disposes it and serves it as <see cref="SupportAttachmentContentTypes.ServedAs"/> says.</summary>
+    Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default);
+
+    /// <summary>How many files, and how large, a reply or answer may carry, so a component offers what the service accepts.</summary>
+    Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Sends one transcript entry to the case's channels again, and returns where it stands now.
     /// </summary>
     /// <remarks>
     /// Only an entry that is <see cref="SupportMessageDelivery.Failed"/> or <see cref="SupportMessageDelivery.Pending"/>
     /// is sent; any other is left alone and its status returned, so pressing the button again after it went
-    /// through sends nothing twice. Authorized exactly as <see cref="AnswerCaseAsync"/> is.
+    /// through sends nothing twice. Authorized exactly as <see cref="AnswerCaseAsync(string, string, string, CancellationToken)"/> is.
     /// </remarks>
     Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default);
 

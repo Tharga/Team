@@ -194,7 +194,7 @@ public class InboundMailReaderTests
     }
 
     [Fact]
-    public void AMailWithAnAttachment_SaysSo_ButDoesNotCarryIt()
+    public void AMailWithAnAttachment_SaysSo_AndCarriesIt()
     {
         var mail = InboundMailReader.Read(Message(customize: m =>
         {
@@ -210,5 +210,11 @@ public class InboundMailReaderTests
 
         Assert.True(mail.HadAttachments);
         Assert.Equal("See attached.", mail.Body);
+
+        var attachment = Assert.Single(mail.Attachments);
+        Assert.Equal("report.pdf", attachment.FileName);
+        Assert.Equal("application/pdf", attachment.ContentType);
+        Assert.Equal("not really a pdf"u8.ToArray(), attachment.Content);
+        Assert.False(attachment.Inline);
     }
 }

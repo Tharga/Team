@@ -96,6 +96,11 @@ public static class SupportRegistration
     /// repository. Without one, every new mail opens unassigned, as before.
     /// </para>
     /// <para>
+    /// <b>Files are kept through an <see cref="ISupportAttachmentStore"/></b> — <c>AddThargaTeamRepository</c>
+    /// registers the GridFS one. Without one, a mail's files are named in its message as not stored and a reply
+    /// carrying files is refused.
+    /// </para>
+    /// <para>
     /// <b>Nothing else may be registered as <see cref="ISupportCaseService"/>.</b> The only registration is
     /// the authorizing decorator; the implementation it wraps is internal and unregistered by itself, so
     /// there is no unchecked instance in the container for a component to resolve by accident.
@@ -250,7 +255,9 @@ public static class SupportRegistration
                     sp.GetService<ITeamDirectoryService>(),
                     sp.GetService<IUserService>(),
                     caseOptions.DefaultVisibility,
-                    caseOptions.AssistantDefaultVisibility),
+                    caseOptions.AssistantDefaultVisibility,
+                    sp.GetService<ISupportAttachmentStore>(),
+                    SupportAttachmentLimitCheck.LimitsOf(sp.GetService<IOptions<MailOptions>>()?.Value)),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,

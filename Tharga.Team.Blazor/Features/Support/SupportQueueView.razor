@@ -63,7 +63,8 @@ else
                             @* Shared with SupportUnassignedView, which renders the same transcript for the
                                same reader. A copy is what gets extended in one place and not the other. *@
                             <SupportTranscript Messages="_messages" CaseAuthorIdentity="@_selected.AuthorIdentity"
-                                               ShowDelivery="true" HasChannels="@(_selected.Bindings is { Length: > 0 })" Resend="ResendAsync" />
+                                               ShowDelivery="true" HasChannels="@(_selected.Bindings is { Length: > 0 })" Resend="ResendAsync"
+                                               TeamKey="@_teamKey" CaseId="@_selected.Id" />
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {
@@ -73,9 +74,10 @@ else
                                                 @oninput="@(e => _answer = e.Value?.ToString())"
                                                 Placeholder="@_text[SupportQueueViewText.AnswerLabel]"
                                                 Rows="3" Style="width: 100%;" aria-label="@_text[SupportQueueViewText.AnswerLabel]" />
+                                <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                     <RadzenButton Text="@_text[SupportQueueViewText.AnswerLabel]" Click="AnswerAsync"
-                                                  Disabled="@(string.IsNullOrWhiteSpace(_answer) || _busy)" />
+                                                  Disabled="@((string.IsNullOrWhiteSpace(_answer) && _files.Count == 0) || _busy)" />
                                     <RadzenButton Text="@_text[SupportQueueViewText.Close]" ButtonStyle="ButtonStyle.Light"
                                                   Click="CloseAsync" Disabled="_busy" />
                                 </RadzenStack>
@@ -104,6 +106,7 @@ else
 
     private string _teamKey;
     private string _answer;
+    private IReadOnlyList<SupportAttachmentUpload> _files = [];
     private int _awaiting;
 
     private SupportCase[] _cases = [];
@@ -149,13 +152,18 @@ else
 
     private async Task AnswerAsync()
     {
-        if (string.IsNullOrWhiteSpace(_answer) || _selected == null) return;
+        if ((string.IsNullOrWhiteSpace(_answer) && _files.Count == 0) || _selected == null) return;
 
         _busy = true;
         try
         {
-            await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, _answer);
+            var files = SupportAttachmentPicker.Rewound(_files);
+
+            if (files.Count == 0) await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, _answer);
+            else await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, _answer ?? string.Empty, files);
+
             _answer = null;
+            _files = [];
 
             await ReloadAsync();
             await SelectAsync(_selected.Id);
@@ -231,6 +239,8 @@ else
     /// </remarks>
     private async Task ToggleAsync(string caseId)
     {
+        _files = [];
+
         if (_selected?.Id == caseId)
         {
             _selected = null;
