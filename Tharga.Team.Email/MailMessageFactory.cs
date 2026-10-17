@@ -45,7 +45,23 @@ internal static class MailMessageFactory
             message.References.Add(reference);
         }
 
+        AddUnsubscribe(message, mail.UnsubscribeUrl);
+
         return message;
+    }
+
+    internal const string ListUnsubscribeHeader = "List-Unsubscribe";
+    internal const string ListUnsubscribePostHeader = "List-Unsubscribe-Post";
+    internal const string OneClickValue = "List-Unsubscribe=One-Click";
+
+    /// <remarks>RFC 8058 allows the one-click header only beside an https address, because the mail provider posts to it without asking the recipient.</remarks>
+    private static void AddUnsubscribe(MimeMessage message, string unsubscribeUrl)
+    {
+        if (!Uri.TryCreate(unsubscribeUrl, UriKind.Absolute, out var uri) || (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)) return;
+
+        message.Headers.Add(ListUnsubscribeHeader, $"<{uri.AbsoluteUri}>");
+
+        if (uri.Scheme == Uri.UriSchemeHttps) message.Headers.Add(ListUnsubscribePostHeader, OneClickValue);
     }
 
     /// <summary>

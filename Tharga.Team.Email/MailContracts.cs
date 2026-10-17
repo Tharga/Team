@@ -19,6 +19,7 @@ namespace Tharga.Team.Email;
 /// </param>
 /// <param name="Attachments">Files to send with the mail, in order; null or empty sends the body alone.</param>
 /// <param name="BodyHtml">The same message as HTML the caller has sanitized, sent as <c>multipart/alternative</c> with <paramref name="Body"/> as its text and any file it names by <c>cid:</c> inline beside it; null sends the text alone.</param>
+/// <param name="UnsubscribeUrl">An address that unsubscribes the recipient, sent as <c>List-Unsubscribe</c>, with <c>List-Unsubscribe-Post</c> for one-click unsubscribing (RFC 8058) when it is https; null sends neither.</param>
 public readonly record struct OutboundMail(
     string To,
     string Subject,
@@ -27,7 +28,8 @@ public readonly record struct OutboundMail(
     IReadOnlyList<string> References = null,
     string ReplyTo = null,
     IReadOnlyList<MailAttachment> Attachments = null,
-    string BodyHtml = null);
+    string BodyHtml = null,
+    string UnsubscribeUrl = null);
 
 /// <summary>
 /// A file sent with a mail.

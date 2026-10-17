@@ -50,6 +50,10 @@ public static class ThargaBlazorRegistration
         }
         services.TryAddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
 
+        // The same strings for text written outside a component -- mail and server-rendered pages -- so a host
+        // translating the components translates those too. Scoped, because a host's provider may be.
+        services.TryAddScoped<ITextResolver, ThargaTextResolver>();
+
         // Where the claims path keeps its lookups. TryAdd, so a host running more than one instance registers
         // a shared implementation and wins -- the built-in is process-local and cannot see another instance's
         // writes. Singleton because the services reading it are scoped: a scoped cache would live for one

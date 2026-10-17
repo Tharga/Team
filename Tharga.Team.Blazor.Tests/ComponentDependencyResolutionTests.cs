@@ -42,7 +42,9 @@ public class ComponentDependencyResolutionTests
         "ISupportCaseNotifier",
         "ITeamMailboxService",
         "IPostmasterService",
-        "ITeamMailNotifier"
+        "ITeamMailNotifier",
+        // Registered by AddThargaUserMail in Tharga.Team.Email; only a host that sends mail to users places the view.
+        "IUserMailPreferenceService"
     ];
 
     /// <summary>Services the host supplies by construction — its own storage types and member type.</summary>

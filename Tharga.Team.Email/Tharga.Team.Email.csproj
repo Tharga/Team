@@ -51,9 +51,10 @@
       transport uses it on its own account and has to keep doing so if it is lifted out.
     -->
     <PackageReference Include="AngleSharp" Version="1.8.1" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.13" />
-    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.13" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <!-- Mail to users protects its unsubscribe links with Data Protection and answers them on an ASP.NET route.
+         Private, so it does not flow to a consumer taking this package for the transport alone. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team.Service\Tharga.Team.Service.csproj" />

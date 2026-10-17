@@ -125,4 +125,37 @@ public class MailMessageFactoryTests
         Assert.Equal(string.Empty, message.Subject);
         Assert.Equal(string.Empty, ((TextPart)message.Body).Text);
     }
+
+    [Fact]
+    public void AnHttpsUnsubscribeAddress_IsSentAsListUnsubscribe_WithOneClick()
+    {
+        const string url = "https://app.example.com/mail/unsubscribe?token=CfDJ8abc_-xyz";
+
+        var message = MailMessageFactory.Create(new OutboundMail("user@example.com", "News", "Body", UnsubscribeUrl: url), Options());
+
+        Assert.Equal($"<{url}>", message.Headers[MailMessageFactory.ListUnsubscribeHeader]);
+        Assert.Equal("List-Unsubscribe=One-Click", message.Headers[MailMessageFactory.ListUnsubscribePostHeader]);
+    }
+
+    [Fact]
+    public void AnHttpUnsubscribeAddress_IsSentWithoutOneClick_WhichRfc8058AllowsOnlyOverHttps()
+    {
+        var message = MailMessageFactory.Create(new OutboundMail("user@example.com", "News", "Body", UnsubscribeUrl: "http://localhost:5000/mail/unsubscribe?token=a"), Options());
+
+        Assert.True(message.Headers.Contains(MailMessageFactory.ListUnsubscribeHeader));
+        Assert.False(message.Headers.Contains(MailMessageFactory.ListUnsubscribePostHeader));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not a url")]
+    [InlineData("javascript:alert(1)")]
+    public void WithoutAWebUnsubscribeAddress_NeitherHeaderIsSent(string url)
+    {
+        var message = MailMessageFactory.Create(new OutboundMail("user@example.com", "News", "Body", UnsubscribeUrl: url), Options());
+
+        Assert.False(message.Headers.Contains(MailMessageFactory.ListUnsubscribeHeader));
+        Assert.False(message.Headers.Contains(MailMessageFactory.ListUnsubscribePostHeader));
+    }
 }

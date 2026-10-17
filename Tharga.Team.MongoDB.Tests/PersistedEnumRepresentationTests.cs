@@ -48,6 +48,7 @@ public class PersistedEnumRepresentationTests
         Assert.Contains("TeamMemberBase.AccessLevel", found);
         Assert.Contains("TeamMemberBase.State", found);
         Assert.Contains("IconEntity.Kind", found);
+        Assert.Contains("UserMailEntity.Status", found);
 
         // Embedded documents, which the sweep missed entirely until the closure walk replaced the
         // derives-from check. If these drop out, the walk has regressed to roots only.

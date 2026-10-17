@@ -19,6 +19,7 @@ using Tharga.Team.Service.Audit;
 using Microsoft.Extensions.AI;
 using Tharga.Team.Support;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Email.Users;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -287,6 +288,26 @@ builder.Services.AddThargaSupportCases(o =>
         o.AddMailbox(mailbox.Key, m => mailbox.Bind(m));
 });
 
+// Mail to users: categories each user chooses from on their profile, and a queue sent in the background by
+// whichever instance claims each mail. On the same terms as support mail: with no UserMail settings nothing is
+// sent -- queued mail waits, which is logged once -- so the wiring and the "Mail I receive" view work with
+// nothing checked in. The sending address is the host's own, answerable one; there is no no-reply default.
+builder.Services.AddThargaUserMail(o =>
+{
+    o.Mail.Smtp.Host = builder.Configuration["UserMail:Smtp:Host"];
+    o.Mail.Smtp.UserName = builder.Configuration["UserMail:Smtp:UserName"];
+    o.Mail.Smtp.Password = builder.Configuration["UserMail:Smtp:Password"];
+    o.Mail.FromAddress = builder.Configuration["UserMail:FromAddress"];
+    o.Mail.FromName = "Tharga Team Sample";
+    o.ReplyTo = builder.Configuration["UserMail:ReplyTo"];
+
+    // Unsubscribe links in optional mail are built on this, so it must be the address users reach the site at.
+    o.BaseUrl = builder.Configuration["UserMail:BaseUrl"] ?? "https://localhost:7291";
+
+    o.AddCategory(new UserMailCategory { Key = "news", Name = "Product news", Description = "What is new in the product, a few times a year." });
+    o.AddCategory(new UserMailCategory { Key = "tips", Name = "Tips", Description = "Ways to get more out of the product.", OnByDefault = false });
+});
+
 var app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
@@ -306,6 +327,10 @@ app.UseThargaMcp();
 // Where Slack posts thread replies. Public and unauthenticated by design -- Slack cannot present a
 // credential, so the request signature is the credential, verified before the body is read.
 app.MapThargaSupportSlack();
+
+// Where unsubscribe links lead. Anonymous by design: the token in the link authorizes the one change it names, and
+// GET only asks -- the change is a POST, from the page's button or a mail provider's one-click request.
+app.MapThargaMailUnsubscribe();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

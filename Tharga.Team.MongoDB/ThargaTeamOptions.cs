@@ -76,6 +76,24 @@ public record ThargaTeamOptions
     /// </remarks>
     public TimeSpan SupportEventLedgerRetention { get; set; } = TimeSpan.FromHours(24);
 
+    /// <summary>The default for <see cref="UserMailPreferenceCollectionName"/>.</summary>
+    public const string DefaultUserMailPreferenceCollectionName = "UserMailPreference";
+
+    /// <summary>Collection holding users' mail choices that differ from a category's default, default <c>UserMailPreference</c>.</summary>
+    public string UserMailPreferenceCollectionName { get; set; } = DefaultUserMailPreferenceCollectionName;
+
+    /// <summary>The default for <see cref="UserMailCollectionName"/>.</summary>
+    public const string DefaultUserMailCollectionName = "UserMail";
+
+    /// <summary>Collection holding queued mail to users and what became of it, default <c>UserMail</c>.</summary>
+    public string UserMailCollectionName { get; set; } = DefaultUserMailCollectionName;
+
+    /// <summary>The default for <see cref="UserMailRetention"/>.</summary>
+    public static readonly TimeSpan DefaultUserMailRetention = TimeSpan.FromDays(90);
+
+    /// <summary>How long a mail to a user is kept once sent, skipped or given up; a queued one is kept until then, default 90 days.</summary>
+    public TimeSpan UserMailRetention { get; set; } = DefaultUserMailRetention;
+
     /// <summary>
     /// Whether to report, at startup, stored team members that carry no access level and are therefore
     /// being treated as <see cref="AccessLevel.Owner"/>. Default <c>true</c>.

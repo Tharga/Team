@@ -33,8 +33,21 @@ public static class ThargaTeamRegistration
         // nothing -- but one seam should cover every per-team store, not the ones somebody remembered.
         services.AddTransient<ITeamPurgeParticipant, IconPurgeParticipant>();
 
+        // Mail to users: each user's choices, and the queue the sender drains. Neither depends on the user or team
+        // entity types. TryAdd so a host keeping them elsewhere wins.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddTransient<IUserMailPreferenceCollection, UserMailPreferenceCollection>();
+        services.TrackMongoCollection(typeof(IUserMailPreferenceCollection), typeof(UserMailPreferenceCollection));
+        services.TryAddScoped<IUserMailPreferenceStore, MongoUserMailPreferenceStore>();
+        services.AddTransient<IUserMailCollection, UserMailCollection>();
+        services.TrackMongoCollection(typeof(IUserMailCollection), typeof(UserMailCollection));
+        services.TryAddScoped<IUserMailOutbox, MongoUserMailOutbox>();
+
         if (o._userEntity != null)
         {
+            // Where a user mail goes, read from the user record when it is sent.
+            services.TryAddScoped(typeof(IUserMailRecipientDirectory), typeof(MongoUserMailRecipientDirectory<>).MakeGenericType(o._userEntity));
+
             var userEntityType = o._userEntity;
 
             var userRepositoryInterfaceType = typeof(IUserRepository<>).MakeGenericType(userEntityType);

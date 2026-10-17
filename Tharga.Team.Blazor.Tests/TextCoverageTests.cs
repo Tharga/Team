@@ -83,6 +83,7 @@ public class TextCoverageTests
         "Framework/RichTextView.razor",
         "Features/Mailbox/PostmasterView.razor",
         "Features/Mailbox/TeamMailAddressView.razor",
+        "Features/User/UserMailPreferencesView.razor",
     ];
 
     /// <summary>
@@ -258,6 +259,8 @@ public class TextCoverageTests
         Assert.All(SupportAttachmentText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(RichTextEditorText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportMailboxText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserMailPreferencesViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()
