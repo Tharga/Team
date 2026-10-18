@@ -16,6 +16,7 @@ Server-side API-key authentication, authorization enforcement, controller regist
 - **Audit logging** - `CompositeAuditLogger` with `ILogger` and MongoDB backends. ⚠️ Stores to `ILogger` only by default — see [Audit logging](#audit-logging).
 - **API-key lifecycle hook** - Capture the private token on create/recycle (plus a delete signal) via `IApiKeyLifecycleHandler` — see [Capturing the private token](#capturing-the-private-token).
 - **Pluggable** - Implement `IApiKeyAdministrationService` (from Tharga.Team) to bring your own storage backend.
+- **One HTML sanitizer** - `SafeHtml` (namespace `Tharga.Team.Service.Html`) — see [Sanitizing HTML](#sanitizing-html).
 
 ## Quick start
 
@@ -373,7 +374,28 @@ override address — not sent at all.
 
 **Upgrading changes what a test environment sends.** Set `Email:Override` first if it should keep receiving
 mail. A custom `ITeamEmailSender` can inject `IOutboundMailPolicy` to apply the same rules; see *Mail outside
-production* in the implementation guide.
+production* in the implementation guide. Mail to users, messages and notices go through the same policy; a
+withheld one is recorded as failed, with the reason.
+
+## Sanitizing HTML
+
+`SafeHtml` is the one sanitizer the toolkit runs formatted text through — support messages and mail to users —
+on every way in and again at every render. Use it for anything you show that a user or a mail wrote.
+
+```csharp
+var safe = SafeHtml.Sanitize(untrustedHtml);                         // null when nothing readable remains
+var shown = SafeHtml.Sanitize(stored, id => HtmlImage.FromContent("image/png", bytesFor(id)));
+```
+
+- **An allow-list**: paragraphs, line breaks, headings to `h4`, bold, italic, underline, strike-through, lists,
+  quotes, preformatted text, code, tables, links and images. No styles, classes or event attributes.
+- **Links** are http, https or mailto only, and get `rel="noopener noreferrer"` and `target="_blank"`.
+- **Images** are kept only as `cid:` references; the overload taking a callback decides each one — keep the
+  reference (`HtmlImage.Keep`, for a mail carrying the image), show it from data you read
+  (`HtmlImage.FromContent`, PNG, JPEG, GIF or WebP only), or replace it with text (`HtmlImage.Described`). A remote
+  image always becomes its alt text.
+- **Removed with their content**: scripts, styles, forms, frames, media, embedded objects and hidden text.
+- `IsEmpty`, `IsFormatted`, `ContentIds` and `FromPlainText` answer the questions a form or a mail composer asks.
 
 ## Dependencies
 
@@ -381,6 +403,7 @@ production* in the implementation guide.
 - [Tharga.MongoDB](https://www.nuget.org/packages/Tharga.MongoDB) - MongoDB repository infrastructure.
 - [Tharga.Toolkit](https://www.nuget.org/packages/Tharga.Toolkit) - Shared utilities including API key hashing.
 - [Swashbuckle.AspNetCore](https://www.nuget.org/packages/Swashbuckle.AspNetCore) - Swagger UI generation.
+- [HtmlSanitizer](https://www.nuget.org/packages/HtmlSanitizer) - The parser and allow-list behind `SafeHtml` (new in 4.2).
 
 ## Related packages
 

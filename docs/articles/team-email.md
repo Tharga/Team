@@ -1,14 +1,41 @@
 # Email: team mailboxes, the postmaster and invitations
 
 `Tharga.Team.Email` is the mail layer of the toolkit: reading a mailbox over IMAP, sending over SMTP, and the
-MIME handling both need. Three things use it:
+MIME handling both need. Four things use it:
 
 - **Support cases by email**, in `Tharga.Team.Support`, which now depends on this package.
 - **Team mailboxes** — an address per team that receives real mail, described below.
 - **Invitation email**, which moved here from `Tharga.Team.Service` in 3.29.
+- **[Mail to users](user-mail.md)** — categories, unsubscribe links and a persisted queue, with
+  [messages](user-messages.md) and [automatic notices](user-notices.md) on top. New in 4.2.
 
 The package exists so that MailKit reaches only hosts that use mail. `Tharga.Team.Blazor` never references it:
-the views below depend on contracts in `Tharga.Team` alone.
+the views depend on contracts in `Tharga.Team` alone.
+
+## The transport
+
+Everything above goes through one transport, `IMailClient`, which never throws: every outcome is a result.
+
+- **Sending:** `OutboundMail` carries the text body, and optionally `BodyHtml` (sanitized by the caller) sent as
+  `multipart/alternative`, `Attachments` (`MailAttachment`, with a `ContentId` for an image the HTML shows as
+  `cid:`, sent beside it as `multipart/related`), threading headers, a reply address, and `UnsubscribeUrl`, sent as
+  `List-Unsubscribe` — with `List-Unsubscribe-Post` for one-click unsubscribing when it is https.
+- **Reading:** `InboundMail` carries the envelope and the text, and also `BodyHtml` — **exactly as the sender
+  wrote it, not sanitized**; run it through `SafeHtml` before showing it — and `Attachments`
+  (`InboundAttachment`: attachments, inline images with their Content-ID, and forwarded mail as `.eml`, with
+  file names sanitized). A delivery status notification fills `BouncedMessageId` and `BounceReason`.
+- **Who sent it:** every mail read is checked by DKIM. `SenderVerified` is true when a signature verifies, signs
+  `From` and the whole body, and its domain is the `From` domain or a parent of it; `SenderDomain` names that
+  domain. Keys are looked up in DNS (cached ten minutes, a miss one minute, a lookup cut off after five seconds),
+  and anything that goes wrong means not verified. **It vouches for the domain's mail system, not for a person.**
+- **A mailbox that could not be read** returns `MailFetchResult.Error` with the server's reason, never the
+  password.
+- **`MailOptions`** gained `FirstReadSince`, where a mailbox with no read position starts, and the file limits
+  `MaxAttachmentBytes` (25 MB), `MaxAttachmentTotalBytes` (50 MB) and `MaxAttachmentCount` (20).
+- **`HtmlText.ToPlainText(html)`** is the plain-text rendering the toolkit uses for HTML: paragraphs kept, list
+  items as `- ` lines, quotes as `> ` lines, links as `text (address)`.
+- **`IMailBounceHandler`** receives a bounce support read that names no support answer; see
+  [Bounces](user-mail.md#bounces).
 
 ## Team mailboxes
 
@@ -186,6 +213,28 @@ builder.Services.AddThargaEmailInvitations(o =>
 It sends through the same transport as everything else, obeys the outbound mail policy, and throws when the server
 refuses, so the invite dialog can tell the inviter. A sender the host registered itself — `AddEmailService<T>()` —
 still wins, whichever is registered first.
+
+**With [mail to users](user-mail.md#invitations) registered, this sender is replaced**: invitations are recorded in
+its outbox, sent from `UserMailOptions.Mail` in one immediate attempt, marked bounced when they come back, and
+shown in the invited person's mail history. `AddThargaEmailInvitations()` is then unnecessary.
+
+## Moving to 4.2
+
+Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](implementation-guide.md) first.
+
+- **`OutboundMail`, `InboundMail` and `MailFetchResult` gained trailing positional parameters** — `OutboundMail`:
+  `Attachments`, `BodyHtml`, `UnsubscribeUrl`; `InboundMail`: `BouncedMessageId`, `BounceReason`,
+  `SenderVerified`, `SenderDomain`, `Attachments`, `BodyHtml`; `MailFetchResult`: `Error`. Recompile; code that
+  deconstructs them positionally adds the new elements.
+- **`InboundMail.BodyHtml` is raw.** Sanitize it before showing it anywhere.
+- **`InboundMail.HadAttachments`** is true when files were present, whether or not they were carried in
+  `Attachments`; mail read from a mailbox now carries them.
+- **Every mail read is DKIM-checked over DNS**, so a host reading mail needs outbound DNS. Without it nothing is
+  verified and nothing breaks.
+- **Dependencies:** the package adds `DnsClient` and `AngleSharp`, takes the ASP.NET Core framework reference
+  privately (Data Protection and the unsubscribe route of mail to users), and no longer lists
+  `Microsoft.Extensions.Logging.Abstractions` and `Microsoft.Extensions.Options`, which the framework provides.
+- **With `AddThargaUserMail`, invitations go through mail to users** — see above.
 
 ## Moving to 3.29
 

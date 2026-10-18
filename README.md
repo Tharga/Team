@@ -13,8 +13,8 @@ A suite of NuGet packages for building multi-tenant Blazor applications with tea
 | [Tharga.Team.Service](https://www.nuget.org/packages/Tharga.Team.Service) | Server-side API key auth, Swagger, audit logging | No |
 | [Tharga.Team.Entra](https://www.nuget.org/packages/Tharga.Team.Entra) | Microsoft Entra ID user directory (verify / list / delete users via Graph) | No |
 | [Tharga.Team.Images](https://www.nuget.org/packages/Tharga.Team.Images) | Automatic squaring and downscaling of uploaded team/user icons (SkiaSharp) | No |
-| [Tharga.Team.Email](https://www.nuget.org/packages/Tharga.Team.Email) | E-mail transport — IMAP reading, SMTP sending and MIME (MailKit), shared by support and any other mailbox | No |
-| [Tharga.Team.Support](https://www.nuget.org/packages/Tharga.Team.Support) | Support module — Slack notifications for audited events, routed per event | No |
+| [Tharga.Team.Email](https://www.nuget.org/packages/Tharga.Team.Email) | E-mail — IMAP reading, SMTP sending and MIME (MailKit), team mailboxes, and mail to users: categories, unsubscribe links, a persisted queue, staff messages and automatic notices | No |
+| [Tharga.Team.Support](https://www.nuget.org/packages/Tharga.Team.Support) | Support module — Slack notifications for audited events, and support cases on the site, by mail and in Slack | No |
 | [Tharga.Team.Mcp](https://www.nuget.org/packages/Tharga.Team.Mcp) | MCP (Model Context Protocol) bridge — auth, scopes, audit for MCP tools. Renamed from `Tharga.Platform.Mcp`, which is deprecated and frozen at 3.5.x | No |
 
 ## Dependency graph
@@ -27,13 +27,13 @@ Tharga.Team ── plain .NET, no external dependencies
 ├── Tharga.Team.MongoDB ── persistence layer
 │   └── + Tharga.MongoDB
 ├── Tharga.Team.Service ── server-side API + auth
-│   └── + Tharga.MongoDB, ASP.NET Core
+│   └── + Tharga.MongoDB, ASP.NET Core, HtmlSanitizer
 ├── Tharga.Team.Entra ── Entra ID user directory (optional)
 │   └── + Azure.Identity, Microsoft Graph REST
 ├── Tharga.Team.Images ── icon squaring + downscaling (optional)
 │   └── + SkiaSharp
-├── Tharga.Team.Email ── e-mail transport, IMAP + SMTP (optional)
-│   └── + MailKit
+├── Tharga.Team.Email ── e-mail transport, team mailboxes, mail to users (optional)
+│   └── + Tharga.Team.Service, MailKit, DnsClient, AngleSharp
 └── Tharga.Team.Support ── support module, Slack notifications (optional)
     └── + Tharga.Team.Service, Tharga.Team.Email
 ```
@@ -396,6 +396,10 @@ the invitation page needs to stay on screen, and note that `ITeamService.SelectT
 when an invitation is accepted**, because the screen that accepted it now makes the selection itself.
 Creating a team still raises it.
 
+**With [mail to users](#mail-to-users) registered, the invitation mail goes through it (4.2)**: recorded, sent in
+one immediate attempt from its address so the inviter is told whether it went, shown in the invited person's mail
+history and marked bounced when it comes back. A sender of your own is kept.
+
 ## Support cases, and an assistant to answer them
 
 A support case lives on the site, and can project onto Slack (where support watches) and email (where the
@@ -419,7 +423,38 @@ The assistant reads through the same scope-checked services as any caller — it
 answering sees, and nothing more — and it answers rather than acts: closing, assigning and reopening stay
 with people. Add tools over your own product by implementing `ISupportAssistantTools`.
 
+**Support by mail is complete both ways (4.2).** Several mailboxes feed one support and a case is answered from
+the one it came in through; a sender whose DKIM-verified address belongs to one account in one team lands in that
+team, anything less waits unassigned with suggested teams; files and formatting survive both ways through one
+sanitizer; and every answer says whether it was delivered, with a bounce marking it and a button to send it again.
+
 Full article: [Support cases](docs/articles/support-cases.md).
+
+## Mail to users
+
+`Tharga.Team.Email` mails the people who use your product, in **categories** each user turns on or off on their
+profile, with an **unsubscribe link** and the one-click headers on every mail they could have turned off, through a
+**persisted queue** that whichever instance claims a mail sends:
+
+```csharp
+builder.Services.AddThargaUserMail(o =>
+{
+    o.Mail.Smtp.Host = "smtp.example.com";
+    o.Mail.FromAddress = "hello@example.com";      // an address a reply reaches; there is no default
+    o.BaseUrl = "https://app.example.com";
+    o.AddCategory(new UserMailCategory { Key = "news", Name = "Product news" });
+});
+
+app.MapThargaMailUnsubscribe();                    // allow it anonymously in a deny-by-default host
+```
+
+On top of it: **messages** your staff write to chosen users of chosen teams (`AddThargaUserMessages`, the
+`messages:send` system scope), **automatic notices** raised from server code and delivered at once or in a daily
+summary, chosen per user over each team's default (`AddThargaUserNotices`), a **mail history** per user, mail
+marked **bounced** when it comes back, and **invitations** recorded and sent through the same outbox.
+
+Full articles: [Mail to users](docs/articles/user-mail.md), [Messages to users](docs/articles/user-messages.md),
+[Automatic notices](docs/articles/user-notices.md).
 
 ## Reading the audit log
 

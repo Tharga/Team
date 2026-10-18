@@ -33,6 +33,22 @@ Domain models, service abstractions, and authorization primitives for multi-tena
 - `SystemTeamScopes` - Cross-team system scopes: `teams:read` (enumerate any team), `teams:delete` (delete any team), `teams:assign-owner` (give an **ownerless** team an owner, chosen from its existing members; refused when the team already has one).
 - `ISystemScopeRegistry` / `ISystemRoleRegistry` - Global (system) scopes for system API keys, and a mapping of app/global roles (e.g. `Developer`) to those scopes for privileged users. Configured via `o.ConfigureSystemScopes` / `o.ConfigureSystemRoles`.
 
+### Mail to users, messages and notices
+The contracts of mail to users; the services are in **Tharga.Team.Email**, storage in **Tharga.Team.MongoDB**. See [Mail to users](https://team.tharga.net/articles/user-mail.html).
+- `UserMailCategory`, `UserMailCategories` - The categories a user chooses from; `account` and `service` are built in and required.
+- `IUserMailPreferenceService` - A user's choice per category, read and changed by that user or by staff holding `users:manage`.
+- `IUserMailHistoryService` - The mail sent to a user and what became of each (`UserMailStatus`: `Queued`, `Sent`, `Skipped`, `Failed`, `Bounced`), for that user or staff holding `users:manage`.
+- `IUserMailQueue` - Queues mail from server code: `QueueAsync`, `QueueBatchAsync`, `SendNowAsync`. **Unchecked and `[EditorBrowsable(Never)]`** — never inject it into a component, controller or MCP provider.
+- `IUserMessageService` / `SystemMessageScopes` - Messages staff write to chosen users of chosen teams, gated by the system scope `messages:send`.
+- `UserNoticeType`, `UserNoticeAudience`, `IUserNoticeRaiser` - The notice catalogue and raising an occurrence from server code (unchecked, like the queue).
+- `IUserNoticePreferenceService` / `IUserNoticeTeamService` / `NoticeScopes` - Each user's notice choices, and each team's defaults gated by the team scope `notices:manage`.
+- `ITextResolver` - Resolves a user-facing string outside a component — in a mail or a server-rendered page — by key with its English default; `Tharga.Team.Blazor` answers it from your text provider.
+
+### Support
+- `ISupportCaseService` - Support cases, with files (`SupportAttachmentUpload`, `OpenAttachmentAsync`, `GetAttachmentLimitsAsync`), formatting (`bodyHtml`) and `ResendAsync`. See [Support cases](https://team.tharga.net/articles/support-cases.html).
+- `SupportAttachment`, `SupportAttachmentContentTypes` - A file on a support message, and the only types that may open in the browser.
+- `ISupportAttachmentStore` / `ISupportSenderDirectory` - Where support files are kept, and who a support mail's sender is; both internal and unchecked, registered by **Tharga.Team.MongoDB**.
+
 ### Base classes
 - `TeamServiceBase` - Implement your own team service backend.
 - `UserServiceBase` - Implement your own user service backend.
