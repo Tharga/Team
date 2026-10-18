@@ -66,10 +66,13 @@ internal static class DkimTestMail
 
     public static MimeMessage Received(string raw) => MimeMessage.Load(new MemoryStream(Encoding.ASCII.GetBytes(raw)));
 
+    /// <summary>The mail as it travels, with CRLF line ends on every platform, as SMTP and IMAP carry it.</summary>
     private static string Raw(MimeMessage message)
     {
         using var stream = new MemoryStream();
-        message.WriteTo(stream);
+        var options = FormatOptions.Default.Clone();
+        options.NewLineFormat = NewLineFormat.Dos;
+        message.WriteTo(options, stream);
 
         return Encoding.ASCII.GetString(stream.ToArray());
     }
