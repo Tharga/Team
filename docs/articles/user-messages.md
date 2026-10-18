@@ -50,6 +50,10 @@ The parts add up, and **each user is reached once**, however many parts and team
 **Only active members count:** accepted, not suspended, with a user record that is not disabled, in a team that is
 not deleted. Invited members, suspended members, disabled accounts and deleted teams are left out.
 
+**A member with no access level** holds nothing since 4.0, roles included, so `AccessLevels` and `Roles` never
+reach them; `EveryMember` does, and so does naming them in `UserKeys`. The choices offer no level, and no role that
+only such members hold.
+
 ## The service
 
 `IUserMessageService` is registered as a gated system service: a call without `messages:send` is refused before it
@@ -191,6 +195,9 @@ Messages are new in 4.2: nothing changes until you call `AddThargaUserMessages`.
   `GetRolesAndLevelsAsync` and `SearchActiveMembersAsync` — that read every team; a host's own directory keeps
   compiling and implements them to avoid that. `UserMessageMember` gained `EMail` and `ScopeOverrides` (fill the
   second so rules by scope see overrides).
+- **`UserMessageMember.AccessLevel` is `AccessLevel?`**, following `ITeamMember` in 4.0. A host's own directory
+  passes the stored level through, null included, and its `GetRolesAndLevelsAsync` leaves out members with none.
+  `UserNoticeAudience.MayReceive` takes `AccessLevel?` too.
 - **`UserMessageCandidate` gained `EMail`, `SentUserMessage` gained `ChosenUsers`**, and `UserMessageAudit` gained
   `RecipientsAction`, `Status` and `Bounced`.
 - **`UserMessageDetails` lists recipients instead of failures**, and gained `TimeTemplate` and

@@ -375,6 +375,10 @@ Mail to users is new in 4.2, so nothing changes until you call `AddThargaUserMai
 
 The surface changed while it was being built. A host that linked the source along the way also needs:
 
+- **The source now carries 4.0 and 4.1**, which it did not while it was built: an unset access level grants
+  nothing and `ITeamMember.AccessLevel` is `AccessLevel?`, an invitation must name a level, `ITeamEmailSender` has
+  only `SendInviteAsync(TeamInviteMail)`, and API keys can be personal. Work through *Migrating to 4.0* in the
+  [implementation guide](implementation-guide.md) as a 3.x host would.
 - **`UserMail.RecipientUserKey` and `UserMailDelivery.RecipientUserKey` are no longer `required`**, because a
   mail may go to an address alone. `UserMail` gained `RecipientAddress`, `RecipientName` and `Kind`;
   `UserMailBatch` gained `Kind`; `UserMailItem` gained `BatchId`, `RecipientAddress` and `BouncedAt`;

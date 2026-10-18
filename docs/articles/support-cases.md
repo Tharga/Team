@@ -675,7 +675,9 @@ the guess that puts one customer's problem in another customer's list.
   cached for ten minutes (a miss for one) and cut off after five seconds; anything that goes wrong means *not
   verified*, never an error. The result is `InboundMail.SenderVerified` and `SenderDomain`.
 - **Exactly one user account holds the address**, compared trimmed and ignoring case.
-- **That account is an active member of exactly one team**: accepted, not suspended, the account enabled.
+- **That account is an active member of exactly one team**: accepted, not suspended, with an access level, the
+  account enabled. A membership with no access level grants nothing since 4.0, so mail neither opens there nor
+  suggests it.
 
 Then the case opens in that team with that user as its author, exactly as if they had raised it on the site.
 

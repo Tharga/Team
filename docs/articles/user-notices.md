@@ -82,6 +82,10 @@ as they are into the subject line.
 member of the occurrence's team**: accepted, not suspended, with a user record that is not disabled. A rule is
 evaluated per team, against what each member holds in that team.
 
+**A member with no access level** holds nothing since 4.0: no scope, not even through a role or an override, as
+their own claims carry none. `WithScope`, `WithRole` and `AtLeast` never admit them; `EveryMember` does, and so does
+naming them or returning them from `ResolvedBy`. Their profile offers only the notices that could still reach them.
+
 A notice whose recipients are named or resolved per occurrence is offered on the profile of every active member,
 because any of them could be the one it reaches.
 
@@ -244,3 +248,9 @@ an occurrence raised again is recognised.
 
 Notices are new in 4.2: nothing changes until you call `AddThargaUserNotices`. `AddThargaTeamRepository`
 registers their stores either way, with `TryAdd`.
+
+### If you built against the 4.2 source before its release
+
+- **A member with no access level is admitted only by `EveryMember`, by name or by `ResolvedBy`**, since 4.0 made
+  an unset level grant nothing; see *Who may receive it*. `UserNoticeAudience.MayReceive` takes `AccessLevel?`, as
+  `UserMessageMember.AccessLevel` now is (see [Messages to users](user-messages.md#moving-to-42)).
