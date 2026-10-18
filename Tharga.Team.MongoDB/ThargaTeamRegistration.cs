@@ -50,6 +50,11 @@ public static class ThargaTeamRegistration
         services.TrackMongoCollection(typeof(IUserMessageCollection), typeof(UserMessageCollection));
         services.TryAddScoped<IUserMessageLog, MongoUserMessageLog>();
 
+        // Addresses that opted out of contact mail, kept for good; TryAdd so a host keeping them elsewhere wins.
+        services.AddTransient<IContactMailSuppressionCollection, ContactMailSuppressionCollection>();
+        services.TrackMongoCollection(typeof(IContactMailSuppressionCollection), typeof(ContactMailSuppressionCollection));
+        services.TryAddScoped<IContactMailSuppressionStore, MongoContactMailSuppressionStore>();
+
         // Automatic notices: occurrences until distributed, each user's notices and streams until mailed, and the
         // choices and team defaults that differ from a default. TryAdd so a host keeping them elsewhere wins.
         services.AddTransient<IUserNoticeCollection, UserNoticeCollection>();

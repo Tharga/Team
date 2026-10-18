@@ -106,6 +106,12 @@ public record ThargaTeamOptions
     /// <summary>Collection holding the log of messages staff sent to users, default <c>UserMessage</c>.</summary>
     public string UserMessageCollectionName { get; set; } = DefaultUserMessageCollectionName;
 
+    /// <summary>The default for <see cref="ContactMailSuppressionCollectionName"/>.</summary>
+    public const string DefaultContactMailSuppressionCollectionName = "ContactMailSuppression";
+
+    /// <summary>Collection holding the addresses that opted out of contact mail, kept for good, default <c>ContactMailSuppression</c>.</summary>
+    public string ContactMailSuppressionCollectionName { get; set; } = DefaultContactMailSuppressionCollectionName;
+
     /// <summary>The default for <see cref="UserNoticeCollectionName"/>.</summary>
     public const string DefaultUserNoticeCollectionName = "UserNotice";
 
