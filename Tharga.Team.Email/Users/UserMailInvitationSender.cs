@@ -14,9 +14,6 @@ internal sealed class UserMailInvitationSender(
     UserMailText text,
     IOptions<UserMailOptions> options) : ITeamEmailSender
 {
-    public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
-        => SendInviteAsync(new TeamInviteMail { RecipientEmail = recipientEmail, RecipientName = recipientName, InviteLink = inviteLink, TeamKey = null, TeamName = teamName });
-
     /// <exception cref="InvalidOperationException">Mail to users cannot be sent, or this invitation was not; the message says why.</exception>
     /// <exception cref="ArgumentException">The address is not one a mail can be sent to.</exception>
     public async Task SendInviteAsync(TeamInviteMail invite)

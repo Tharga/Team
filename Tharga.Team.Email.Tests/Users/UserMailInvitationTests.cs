@@ -56,15 +56,6 @@ public class UserMailInvitationTests
     }
 
     [Fact]
-    public async Task TheFourStringOverload_SendsTheSameInvitation()
-    {
-        await Sender().SendInviteAsync(Invited, "Bea Berg", Link, "Alpha");
-
-        Assert.Equal(UserMailKind.Invitation, _fixture.Outbox.Single.Mail.Kind);
-        Assert.Equal("You've been invited to join Alpha", Assert.Single(_fixture.Mail.Sent).Subject);
-    }
-
-    [Fact]
     public async Task AnInvitationWithNoName_GreetsTheAddress()
     {
         await Sender().SendInviteAsync(Invite(name: " "));
@@ -298,7 +289,7 @@ public class UserMailInvitationTests
 
     private sealed class HostSender : ITeamEmailSender
     {
-        public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName) => Task.CompletedTask;
+        public Task SendInviteAsync(TeamInviteMail mail) => Task.CompletedTask;
     }
 
     private sealed class NobodyElse : ITeamPrincipalAccessor
