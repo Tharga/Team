@@ -13,25 +13,25 @@ namespace Tharga.Team.Email.Tests;
 /// </remarks>
 public class BounceReaderTests
 {
-    internal const string AnswerId = "answer-2@fortdocs.se";
+    internal const string AnswerId = "answer-2@example.net";
 
     /// <summary>An RFC 3464 report, as a current Exim writes one.</summary>
     internal static readonly string EximReport = Lf("""
         Return-path: <>
-        Envelope-to: support@fortdocs.se
+        Envelope-to: support@example.net
         Delivery-date: Sat, 17 Oct 2026 10:12:03 +0200
-        Received: from mailnull by s1.hostup.se with local (Exim 4.98)
+        Received: from mailnull by mx.example.net with local (Exim 4.98)
         	id 1tXyZa-0001Ab-2C
-        	for support@fortdocs.se; Sat, 17 Oct 2026 10:12:03 +0200
-        X-Failed-Recipients: kund@kommun.se
+        	for support@example.net; Sat, 17 Oct 2026 10:12:03 +0200
+        X-Failed-Recipients: kund@customer.example
         Auto-Submitted: auto-replied
-        From: Mail Delivery System <Mailer-Daemon@s1.hostup.se>
-        To: support@fortdocs.se
-        References: <answer-2@fortdocs.se>
+        From: Mail Delivery System <Mailer-Daemon@mx.example.net>
+        To: support@example.net
+        References: <answer-2@example.net>
         Content-Type: multipart/report; report-type=delivery-status; boundary=1729152723-eximdsn-1804289383
         MIME-Version: 1.0
         Subject: Mail delivery failed: returning message to sender
-        Message-Id: <E1tXyZa-0001Ab-2C@s1.hostup.se>
+        Message-Id: <E1tXyZa-0001Ab-2C@mx.example.net>
         Date: Sat, 17 Oct 2026 10:12:03 +0200
 
         --1729152723-eximdsn-1804289383
@@ -42,32 +42,32 @@ public class BounceReaderTests
         A message that you sent could not be delivered to one or more of its
         recipients. This is a permanent error. The following address(es) failed:
 
-          kund@kommun.se
-            host mx1.kommun.se [192.0.2.10]
-            SMTP error from remote mail server after RCPT TO:<kund@kommun.se>:
+          kund@customer.example
+            host mx1.customer.example [192.0.2.10]
+            SMTP error from remote mail server after RCPT TO:<kund@customer.example>:
             554 5.7.23 SPF validation failed
 
         --1729152723-eximdsn-1804289383
         Content-type: message/delivery-status
 
-        Reporting-MTA: dns; s1.hostup.se
+        Reporting-MTA: dns; mx.example.net
 
         Action: failed
-        Final-Recipient: rfc822;kund@kommun.se
+        Final-Recipient: rfc822;kund@customer.example
         Status: 5.7.23
-        Remote-MTA: dns; mx1.kommun.se
+        Remote-MTA: dns; mx1.customer.example
         Diagnostic-Code: smtp; 554 5.7.23 SPF validation failed
 
         --1729152723-eximdsn-1804289383
         Content-type: message/rfc822
 
-        Return-path: <support@fortdocs.se>
-        From: FortDocs Support <support@fortdocs.se>
-        To: kund@kommun.se
+        Return-path: <support@example.net>
+        From: Example Support <support@example.net>
+        To: kund@customer.example
         Subject: Re: Export is empty
-        Message-Id: <answer-2@fortdocs.se>
-        In-Reply-To: <opening-1@kommun.se>
-        References: <opening-1@kommun.se>
+        Message-Id: <answer-2@example.net>
+        In-Reply-To: <opening-1@customer.example>
+        References: <opening-1@customer.example>
         Date: Sat, 17 Oct 2026 10:12:01 +0200
         Content-Type: text/plain; charset=utf-8
 
@@ -81,10 +81,10 @@ public class BounceReaderTests
     /// <summary>The older plain-text Exim bounce: no report, the original's headers pasted under the explanation.</summary>
     internal static readonly string EximPlain = Lf("""
         Return-path: <>
-        From: Mail Delivery System <Mailer-Daemon@s1.hostup.se>
-        To: support@fortdocs.se
+        From: Mail Delivery System <Mailer-Daemon@mx.example.net>
+        To: support@example.net
         Subject: Mail delivery failed: returning message to sender
-        Message-Id: <E1tXyZb-0001Ac-3D@s1.hostup.se>
+        Message-Id: <E1tXyZb-0001Ac-3D@mx.example.net>
         Date: Sat, 17 Oct 2026 10:14:03 +0200
         Content-Type: text/plain; charset=us-ascii
 
@@ -93,17 +93,17 @@ public class BounceReaderTests
         A message that you sent could not be delivered to one or more of its
         recipients. This is a permanent error. The following address(es) failed:
 
-          kund@kommun.se
-            SMTP error from remote mail server after RCPT TO:<kund@kommun.se>:
+          kund@customer.example
+            SMTP error from remote mail server after RCPT TO:<kund@customer.example>:
             554 5.7.23 SPF validation failed
 
         ------ This is a copy of the message, including all the headers. ------
 
-        Return-path: <support@fortdocs.se>
-        From: FortDocs Support <support@fortdocs.se>
-        To: kund@kommun.se
+        Return-path: <support@example.net>
+        From: Example Support <support@example.net>
+        To: kund@customer.example
         Subject: Re: Export is empty
-        Message-Id: <answer-2@fortdocs.se>
+        Message-Id: <answer-2@example.net>
         Date: Sat, 17 Oct 2026 10:14:01 +0200
 
         Sam Support:
@@ -149,7 +149,7 @@ public class BounceReaderTests
         var mail = InboundMailReader.Read(Parse(EximPlain));
 
         Assert.Equal(AnswerId, mail.BouncedMessageId);
-        Assert.StartsWith("SMTP error from remote mail server after RCPT TO:<kund@kommun.se>:", mail.BounceReason);
+        Assert.StartsWith("SMTP error from remote mail server after RCPT TO:<kund@customer.example>:", mail.BounceReason);
         Assert.EndsWith("554 5.7.23 SPF validation failed", mail.BounceReason);
         Assert.DoesNotContain("This is a copy", mail.BounceReason);
     }
@@ -212,13 +212,13 @@ public class BounceReaderTests
     public void ADaemonWithTheOriginalAttached_IsABounceWithoutAReport()
     {
         var original = Parse(EximReport).BodyParts.OfType<MessagePart>().Single().Message;
-        var message = new MimeMessage { Subject = "Undeliverable: Re: Export is empty", MessageId = "ndr-1@kommun.se" };
-        message.From.Add(new MailboxAddress("Postmaster", "postmaster@kommun.se"));
-        message.Body = new Multipart("mixed") { new TextPart("plain") { Text = "Delivery has failed to these recipients: kund@kommun.se" }, new MessagePart { Message = original } };
+        var message = new MimeMessage { Subject = "Undeliverable: Re: Export is empty", MessageId = "ndr-1@customer.example" };
+        message.From.Add(new MailboxAddress("Postmaster", "postmaster@customer.example"));
+        message.Body = new Multipart("mixed") { new TextPart("plain") { Text = "Delivery has failed to these recipients: kund@customer.example" }, new MessagePart { Message = original } };
 
         var mail = InboundMailReader.Read(message);
 
         Assert.Equal(AnswerId, mail.BouncedMessageId);
-        Assert.Equal("Delivery has failed to these recipients: kund@kommun.se", mail.BounceReason);
+        Assert.Equal("Delivery has failed to these recipients: kund@customer.example", mail.BounceReason);
     }
 }

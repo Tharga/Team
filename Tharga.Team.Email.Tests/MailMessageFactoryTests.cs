@@ -15,7 +15,7 @@ public class MailMessageFactoryTests
 {
     private static MailOptions Options()
     {
-        var options = new MailOptions { FromAddress = "support@fortdocs.se", FromName = "FortDocs Support" };
+        var options = new MailOptions { FromAddress = "support@example.net", FromName = "Example Support" };
         options.Smtp.Host = "smtp.example.com";
 
         return options;
@@ -27,8 +27,8 @@ public class MailMessageFactoryTests
         var message = MailMessageFactory.Create(
             new OutboundMail("user@example.com", "Export is empty", "It returns nothing."), Options());
 
-        Assert.Equal("support@fortdocs.se", message.From.Mailboxes.Single().Address);
-        Assert.Equal("FortDocs Support", message.From.Mailboxes.Single().Name);
+        Assert.Equal("support@example.net", message.From.Mailboxes.Single().Address);
+        Assert.Equal("Example Support", message.From.Mailboxes.Single().Name);
         Assert.Equal("user@example.com", message.To.Mailboxes.Single().Address);
         Assert.Equal("Export is empty", message.Subject);
         Assert.Equal("It returns nothing.", message.TextBody);
@@ -45,17 +45,17 @@ public class MailMessageFactoryTests
 
         Assert.False(string.IsNullOrWhiteSpace(first.MessageId));
         Assert.NotEqual(first.MessageId, second.MessageId);
-        Assert.EndsWith("fortdocs.se", first.MessageId);
+        Assert.EndsWith("example.net", first.MessageId);
     }
 
     [Fact]
     public void AReply_NamesTheMessageItAnswers()
     {
         var message = MailMessageFactory.Create(
-            new OutboundMail("user@example.com", "Re: Export", "Looking into it.", InReplyTo: "opening@fortdocs.se"),
+            new OutboundMail("user@example.com", "Re: Export", "Looking into it.", InReplyTo: "opening@example.net"),
             Options());
 
-        Assert.Equal("opening@fortdocs.se", message.InReplyTo);
+        Assert.Equal("opening@example.net", message.InReplyTo);
     }
 
     /// <summary>
@@ -67,11 +67,11 @@ public class MailMessageFactoryTests
     {
         var message = MailMessageFactory.Create(
             new OutboundMail("user@example.com", "Re: Export", "Looking into it.",
-                InReplyTo: "second@fortdocs.se",
-                References: ["first@fortdocs.se"]),
+                InReplyTo: "second@example.net",
+                References: ["first@example.net"]),
             Options());
 
-        Assert.Equal(["first@fortdocs.se", "second@fortdocs.se"], message.References.ToArray());
+        Assert.Equal(["first@example.net", "second@example.net"], message.References.ToArray());
     }
 
     [Fact]
@@ -79,11 +79,11 @@ public class MailMessageFactoryTests
     {
         var message = MailMessageFactory.Create(
             new OutboundMail("user@example.com", "Re: Export", "Looking into it.",
-                InReplyTo: "second@fortdocs.se",
-                References: ["first@fortdocs.se", "second@fortdocs.se"]),
+                InReplyTo: "second@example.net",
+                References: ["first@example.net", "second@example.net"]),
             Options());
 
-        Assert.Equal(["first@fortdocs.se", "second@fortdocs.se"], message.References.ToArray());
+        Assert.Equal(["first@example.net", "second@example.net"], message.References.ToArray());
     }
 
     [Fact]
@@ -103,10 +103,10 @@ public class MailMessageFactoryTests
     public void APerCaseReplyAddress_IsSetWhenGiven()
     {
         var message = MailMessageFactory.Create(
-            new OutboundMail("user@example.com", "New", "Body", ReplyTo: "support+64f1c2@fortdocs.se"),
+            new OutboundMail("user@example.com", "New", "Body", ReplyTo: "support+64f1c2@example.net"),
             Options());
 
-        Assert.Equal("support+64f1c2@fortdocs.se", message.ReplyTo.Mailboxes.Single().Address);
+        Assert.Equal("support+64f1c2@example.net", message.ReplyTo.Mailboxes.Single().Address);
     }
 
     [Fact]

@@ -178,7 +178,7 @@ public class SupportRegistrationTests
                 o.SlackChannel = "#support";
                 o.Email.Imap.Host = "imap.example.com";
                 o.Email.Smtp.Host = "smtp.example.com";
-                o.Email.FromAddress = "support@fortdocs.se";
+                o.Email.FromAddress = "support@example.net";
             });
         });
 

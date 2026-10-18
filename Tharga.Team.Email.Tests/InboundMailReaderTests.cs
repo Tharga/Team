@@ -25,7 +25,7 @@ public class InboundMailReaderTests
         };
 
         message.From.Add(new MailboxAddress("A User", "user@example.com"));
-        message.To.Add(new MailboxAddress("Support", "support@fortdocs.se"));
+        message.To.Add(new MailboxAddress("Support", "support@example.net"));
 
         customize?.Invoke(message);
 
@@ -64,7 +64,7 @@ public class InboundMailReaderTests
         var mail = InboundMailReader.Read(Message(customize: m => m.Cc.Add(new MailboxAddress("Board", "Board@Example.com"))));
 
         Assert.Equal("A User", mail.FromName);
-        Assert.Equal(["support@fortdocs.se"], mail.To);
+        Assert.Equal(["support@example.net"], mail.To);
         Assert.Equal(["board@example.com"], mail.Cc);
     }
 
@@ -84,22 +84,22 @@ public class InboundMailReaderTests
     {
         var mail = InboundMailReader.Read(Message(customize: m =>
         {
-            m.InReplyTo = "opening@fortdocs.se";
-            m.References.Add("opening@fortdocs.se");
+            m.InReplyTo = "opening@example.net";
+            m.References.Add("opening@example.net");
         }));
 
-        Assert.Equal("opening@fortdocs.se", mail.InReplyTo);
-        Assert.Equal(["opening@fortdocs.se"], mail.References);
+        Assert.Equal("opening@example.net", mail.InReplyTo);
+        Assert.Equal(["opening@example.net"], mail.References);
     }
 
     [Fact]
     public void DeliveredTo_IsPreferredOverTheToHeader()
     {
         var mail = InboundMailReader.Read(Message(customize: m =>
-            m.Headers.Add("Delivered-To", "support+64f1c2@fortdocs.se")));
+            m.Headers.Add("Delivered-To", "support+64f1c2@example.net")));
 
-        Assert.Equal("support+64f1c2@fortdocs.se", mail.DeliveredTo[0]);
-        Assert.Contains("support@fortdocs.se", mail.DeliveredTo);
+        Assert.Equal("support+64f1c2@example.net", mail.DeliveredTo[0]);
+        Assert.Contains("support@example.net", mail.DeliveredTo);
     }
 
     [Theory]
@@ -107,9 +107,9 @@ public class InboundMailReaderTests
     [InlineData("Envelope-To")]
     public void TheOtherDeliveryHeaders_AreHonoured(string header)
     {
-        var mail = InboundMailReader.Read(Message(customize: m => m.Headers.Add(header, "billing@eplicta.se")));
+        var mail = InboundMailReader.Read(Message(customize: m => m.Headers.Add(header, "billing@example.org")));
 
-        Assert.Equal("billing@eplicta.se", mail.DeliveredTo[0]);
+        Assert.Equal("billing@example.org", mail.DeliveredTo[0]);
     }
 
     /// <summary>
@@ -120,18 +120,18 @@ public class InboundMailReaderTests
     public void ADeliveryHeaderWithADisplayName_YieldsTheAddress()
     {
         var mail = InboundMailReader.Read(Message(customize: m =>
-            m.Headers.Add("Delivered-To", "\"FortDocs\" <Support@FortDocs.se>")));
+            m.Headers.Add("Delivered-To", "\"Example\" <Support@Example.net>")));
 
-        Assert.Equal("support@fortdocs.se", mail.DeliveredTo[0]);
+        Assert.Equal("support@example.net", mail.DeliveredTo[0]);
     }
 
     [Fact]
     public void CcRecipients_AreIncluded()
     {
         var mail = InboundMailReader.Read(Message(customize: m =>
-            m.Cc.Add(new MailboxAddress("Other", "other@eplicta.se"))));
+            m.Cc.Add(new MailboxAddress("Other", "other@example.org"))));
 
-        Assert.Contains("other@eplicta.se", mail.DeliveredTo);
+        Assert.Contains("other@example.org", mail.DeliveredTo);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class InboundMailReaderTests
     {
         var mail = InboundMailReader.Read(Message());
 
-        Assert.Equal(["support@fortdocs.se"], mail.DeliveredTo);
+        Assert.Equal(["support@example.net"], mail.DeliveredTo);
     }
 
     [Theory]

@@ -230,7 +230,7 @@ public class EmailSenderMatchingTests
     [Fact]
     public async Task AReplyOnAKnownThread_DoesNotLookTheSenderUp()
     {
-        _store.GetCaseByBindingAsync(SupportChannelType.Email, "thread-1@fortdocs.se", Arg.Any<CancellationToken>()).Returns(ExistingCase(authorIdentity: null));
+        _store.GetCaseByBindingAsync(SupportChannelType.Email, "thread-1@example.net", Arg.Any<CancellationToken>()).Returns(ExistingCase(authorIdentity: null));
 
         var outcome = await Build().HandleAsync(Reply(verified: true));
 
@@ -247,7 +247,7 @@ public class EmailSenderMatchingTests
     [Fact]
     public async Task AReplyOnACaseOpenedInATeam_CountsAsTheAuthors()
     {
-        _store.GetCaseByBindingAsync(SupportChannelType.Email, "thread-1@fortdocs.se", Arg.Any<CancellationToken>()).Returns(ExistingCase(authorIdentity: Identity));
+        _store.GetCaseByBindingAsync(SupportChannelType.Email, "thread-1@example.net", Arg.Any<CancellationToken>()).Returns(ExistingCase(authorIdentity: Identity));
 
         await Build().HandleAsync(Reply(verified: false));
 
@@ -257,7 +257,7 @@ public class EmailSenderMatchingTests
     [Fact]
     public async Task AReplyOnAnUnattributedCase_StaysUnattributed()
     {
-        _store.GetCaseByBindingAsync(SupportChannelType.Email, "thread-1@fortdocs.se", Arg.Any<CancellationToken>()).Returns(ExistingCase(authorIdentity: null));
+        _store.GetCaseByBindingAsync(SupportChannelType.Email, "thread-1@example.net", Arg.Any<CancellationToken>()).Returns(ExistingCase(authorIdentity: null));
 
         await Build().HandleAsync(Reply(verified: true));
 
@@ -272,7 +272,7 @@ public class EmailSenderMatchingTests
     private static InboundMail NewMail(bool verified) => new(
         MessageId: "first-1@example.com",
         From: Sender,
-        DeliveredTo: ["support@fortdocs.se"],
+        DeliveredTo: ["support@example.net"],
         Subject: "Export is empty",
         Body: "Nothing comes out.",
         SentAt: new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero),
@@ -282,8 +282,8 @@ public class EmailSenderMatchingTests
     private static InboundMail Reply(bool verified) => NewMail(verified) with
     {
         MessageId = "reply-1@example.com",
-        InReplyTo = "thread-1@fortdocs.se",
-        References = ["thread-1@fortdocs.se"],
+        InReplyTo = "thread-1@example.net",
+        References = ["thread-1@example.net"],
         Body = "Any news?"
     };
 
@@ -297,7 +297,7 @@ public class EmailSenderMatchingTests
         Status = SupportCaseStatus.Open,
         CreatedAt = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc),
         MessageCount = 1,
-        Bindings = [new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = "thread-1@fortdocs.se", Address = Sender }]
+        Bindings = [new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = "thread-1@example.net", Address = Sender }]
     };
 
     private EmailEventHandler Build(SupportCaseOptions caseOptions = null, bool withDirectory = true)
@@ -305,7 +305,7 @@ public class EmailSenderMatchingTests
         var ledger = Substitute.For<ISupportEventLedger>();
         ledger.TryRecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(true);
 
-        var options = new MailOptions { FromAddress = "support@fortdocs.se", Recipients = ["fortdocs.se"] };
+        var options = new MailOptions { FromAddress = "support@example.net", Recipients = ["example.net"] };
 
         return new EmailEventHandler(_store, ledger, Options.Create(options), TimeProvider.System, _notifier, _logger,
             senderDirectory: withDirectory ? _directory : null,

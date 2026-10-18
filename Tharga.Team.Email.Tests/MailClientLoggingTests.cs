@@ -10,7 +10,7 @@ namespace Tharga.Team.Email.Tests;
 /// </summary>
 public class MailClientLoggingTests
 {
-    private const string Customer = "kund@kommun.se";
+    private const string Customer = "kund@customer.example";
 
     [Fact]
     public async Task AFailedSend_IsLoggedWithoutTheRecipientAddress()
@@ -27,7 +27,7 @@ public class MailClientLoggingTests
         var entry = Assert.Single(logger.Entries);
         Assert.Equal(LogLevel.Error, entry.Level);
         Assert.DoesNotContain(Customer, entry.Message);
-        Assert.DoesNotContain("kommun.se", entry.Message);
+        Assert.DoesNotContain("customer.example", entry.Message);
     }
 
     [Fact]

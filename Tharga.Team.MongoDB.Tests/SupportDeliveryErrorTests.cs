@@ -77,9 +77,9 @@ public class SupportDeliveryErrorTests
     public async Task ABindingsMessageSequence_IsWrittenAndReadBack()
     {
 
-        var store = Store(Case(new SupportChannelBindingEntity { ChannelType = SupportChannelType.Email, ExternalId = "answer-2@fortdocs.se", MessageSequence = 2 }));
+        var store = Store(Case(new SupportChannelBindingEntity { ChannelType = SupportChannelType.Email, ExternalId = "answer-2@example.net", MessageSequence = 2 }));
 
-        await store.AddBindingAsync("acme", "case-1", new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = "answer-3@fortdocs.se", MessageSequence = 3 }, TestContext.Current.CancellationToken);
+        await store.AddBindingAsync("acme", "case-1", new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = "answer-3@example.net", MessageSequence = 3 }, TestContext.Current.CancellationToken);
         var pushed = BsonSerializer.Deserialize<SupportChannelBindingEntity>(RenderedUpdate()["$push"]["Bindings"].AsBsonDocument);
 
         var read = await store.GetCaseAsync("acme", "case-1", TestContext.Current.CancellationToken);

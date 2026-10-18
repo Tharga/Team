@@ -17,8 +17,8 @@ public class EmailEventHandlerTests
     private const string TeamKey = "acme";
     private const string CaseId = "case-1";
     private const string Correspondent = "user@example.com";
-    private const string ThreadId = "opening-1@fortdocs.se";
-    private const string From = "support@fortdocs.se";
+    private const string ThreadId = "opening-1@example.net";
+    private const string From = "support@example.net";
 
     [Fact]
     public async Task AReplyInAKnownThread_IsAppendedToTheCase()
@@ -74,9 +74,9 @@ public class EmailEventHandlerTests
     [Fact]
     public async Task AMailAddressedToTheOtherSite_IsIgnored()
     {
-        var (handler, store, _, _) = Build(["fortdocs.se"]);
+        var (handler, store, _, _) = Build(["example.net"]);
 
-        var outcome = await handler.HandleAsync(Mail() with { DeliveredTo = ["support@eplicta.se"] });
+        var outcome = await handler.HandleAsync(Mail() with { DeliveredTo = ["support@example.org"] });
 
         Assert.False(outcome.WasApplied);
         await store.DidNotReceive().AppendMessageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
@@ -89,9 +89,9 @@ public class EmailEventHandlerTests
     [Fact]
     public async Task AMailAddressedElsewhere_NeverReachesTheLedger()
     {
-        var (handler, _, _, ledger) = Build(["fortdocs.se"]);
+        var (handler, _, _, ledger) = Build(["example.net"]);
 
-        await handler.HandleAsync(Mail() with { DeliveredTo = ["support@eplicta.se"] });
+        await handler.HandleAsync(Mail() with { DeliveredTo = ["support@example.org"] });
 
         await ledger.DidNotReceive().TryRecordAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -274,7 +274,7 @@ public class EmailEventHandlerTests
         {
             InReplyTo = null,
             References = [],
-            DeliveredTo = ["support+case-1@fortdocs.se"]
+            DeliveredTo = ["support+case-1@example.net"]
         });
 
         Assert.True(outcome.WasApplied);
@@ -325,7 +325,7 @@ public class EmailEventHandlerTests
     private static InboundMail Mail() => new(
         MessageId: "reply-1@example.com",
         From: Correspondent,
-        DeliveredTo: ["support@fortdocs.se"],
+        DeliveredTo: ["support@example.net"],
         Subject: "Re: Export is empty",
         Body: "Any news?",
         SentAt: new DateTimeOffset(2026, 9, 1, 9, 0, 0, TimeSpan.Zero),
@@ -367,7 +367,7 @@ public class EmailEventHandlerTests
 
         var notifier = Substitute.For<ISupportCaseNotifier>();
 
-        var options = new MailOptions { FromAddress = From, Recipients = recipients ?? ["fortdocs.se"] };
+        var options = new MailOptions { FromAddress = From, Recipients = recipients ?? ["example.net"] };
 
         var handler = new EmailEventHandler(store, ledger, Options.Create(options), TimeProvider.System, notifier);
 

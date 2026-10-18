@@ -1823,7 +1823,7 @@ toolkit sends — invitations and support mail alike — goes through one policy
 |---|---|---|
 | Production | anyone | Sent unchanged |
 | Not production | in an allowed domain | Sent unchanged |
-| Not production | anyone else, override address set | Sent to the override address instead; the subject says who it was for: `[Staging -> kund@kommun.se] You've been invited…` |
+| Not production | anyone else, override address set | Sent to the override address instead; the subject says who it was for: `[Staging -> customer@example.org] You've been invited…` |
 | Not production | anyone else, no override address | **Not sent**, and logged |
 
 ```json

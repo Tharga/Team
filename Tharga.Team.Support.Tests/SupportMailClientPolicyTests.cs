@@ -12,8 +12,8 @@ namespace Tharga.Team.Support.Tests;
 /// </summary>
 public class SupportMailClientPolicyTests
 {
-    private const string Customer = "kund@kommun.se";
-    private const string Override = "test-inbox@eplicta.se";
+    private const string Customer = "kund@customer.example";
+    private const string Override = "test-inbox@example.org";
     private const string Subject = "Re: printer";
 
     private readonly IMailClient _inner = Substitute.For<IMailClient>();
@@ -75,7 +75,7 @@ public class SupportMailClientPolicyTests
 
         var entry = Assert.Single(logger.Entries);
         Assert.DoesNotContain(Customer, entry);
-        Assert.DoesNotContain("kommun.se", entry);
+        Assert.DoesNotContain("customer.example", entry);
     }
 
     /// <summary>

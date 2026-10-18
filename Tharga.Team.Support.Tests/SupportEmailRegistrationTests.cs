@@ -24,13 +24,13 @@ public class SupportEmailRegistrationTests
         o.Email.Smtp.UseSsl = false;
         o.Email.Smtp.UserName = "sender";
         o.Email.Smtp.Password = "sender-secret";
-        o.Email.FromAddress = "support@fortdocs.se";
-        o.Email.FromName = "FortDocs Support";
+        o.Email.FromAddress = "support@example.net";
+        o.Email.FromName = "Example Support";
         o.Email.Folder = "Support";
         o.Email.PollInterval = TimeSpan.FromSeconds(30);
         o.Email.Timeout = TimeSpan.FromSeconds(45);
         o.Email.PerCaseReplyTo = true;
-        o.Email.Recipients = ["fortdocs.se"];
+        o.Email.Recipients = ["example.net"];
         o.Email.MaxAttachmentBytes = 10;
         o.Email.MaxAttachmentTotalBytes = 20;
         o.Email.MaxAttachmentCount = 3;
@@ -49,13 +49,13 @@ public class SupportEmailRegistrationTests
         Assert.Equal("smtp.example.com", options.Smtp.Host);
         Assert.Equal("sender", options.Smtp.UserName);
         Assert.False(options.Smtp.UseSsl);
-        Assert.Equal("support@fortdocs.se", options.FromAddress);
-        Assert.Equal("FortDocs Support", options.FromName);
+        Assert.Equal("support@example.net", options.FromAddress);
+        Assert.Equal("Example Support", options.FromName);
         Assert.Equal("Support", options.Folder);
         Assert.Equal(TimeSpan.FromSeconds(30), options.PollInterval);
         Assert.Equal(TimeSpan.FromSeconds(45), options.Timeout);
         Assert.True(options.PerCaseReplyTo);
-        Assert.Equal(["fortdocs.se"], options.Recipients);
+        Assert.Equal(["example.net"], options.Recipients);
     }
 
     /// <summary>
@@ -124,12 +124,12 @@ public class SupportEmailRegistrationTests
     {
         var exception = Assert.Throws<InvalidOperationException>(() => Configure(o =>
         {
-            o.Email.FromAddress = "support@fortdocs.se";
-            o.Email.Recipients = ["eplicta.se"];
+            o.Email.FromAddress = "support@example.net";
+            o.Email.Recipients = ["example.org"];
         }));
 
-        Assert.Contains("support@fortdocs.se", exception.Message);
-        Assert.Contains("eplicta.se", exception.Message);
+        Assert.Contains("support@example.net", exception.Message);
+        Assert.Contains("example.org", exception.Message);
     }
 
     [Fact]
@@ -137,11 +137,11 @@ public class SupportEmailRegistrationTests
     {
         var options = Configure(o =>
         {
-            o.Email.FromAddress = "support+ignored@fortdocs.se";
-            o.Email.Recipients = ["fortdocs.se"];
+            o.Email.FromAddress = "support+ignored@example.net";
+            o.Email.Recipients = ["example.net"];
         });
 
-        Assert.Equal(["fortdocs.se"], options.Recipients);
+        Assert.Equal(["example.net"], options.Recipients);
     }
 
     /// <summary>
@@ -151,9 +151,9 @@ public class SupportEmailRegistrationTests
     [Fact]
     public void ASendingAddressWithNoFilter_IsAccepted()
     {
-        var options = Configure(o => o.Email.FromAddress = "support@fortdocs.se");
+        var options = Configure(o => o.Email.FromAddress = "support@example.net");
 
-        Assert.Equal("support@fortdocs.se", options.FromAddress);
+        Assert.Equal("support@example.net", options.FromAddress);
     }
 
     /// <summary>
@@ -172,7 +172,7 @@ public class SupportEmailRegistrationTests
             o.SlackChannel = "#support";
             o.Email.Imap.Host = "imap.example.com";
             o.Email.Smtp.Host = "smtp.example.com";
-            o.Email.FromAddress = "support@fortdocs.se";
+            o.Email.FromAddress = "support@example.net";
         });
 
         Assert.Equal(2, services.Count(x => x.ServiceType == typeof(ISupportChannel)));
@@ -189,7 +189,7 @@ public class SupportEmailRegistrationTests
         var services = Build(o =>
         {
             o.Email.Smtp.Host = "smtp.example.com";
-            o.Email.FromAddress = "support@fortdocs.se";
+            o.Email.FromAddress = "support@example.net";
         });
 
         Assert.Single(services, x => x.ServiceType == typeof(ISupportChannel));

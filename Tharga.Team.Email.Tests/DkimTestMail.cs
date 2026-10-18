@@ -55,7 +55,7 @@ internal static class DkimTestMail
     {
         var message = new MimeMessage();
         message.From.Add(MailboxAddress.Parse(from));
-        message.To.Add(MailboxAddress.Parse("support@fortdocs.se"));
+        message.To.Add(MailboxAddress.Parse("support@example.net"));
         message.Subject = "Export is empty";
         message.MessageId = "first-1@example.com";
         message.Date = new DateTimeOffset(2026, 10, 17, 9, 0, 0, TimeSpan.Zero);

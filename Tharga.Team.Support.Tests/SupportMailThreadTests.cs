@@ -42,9 +42,9 @@ public class SupportMailThreadTests
     [Fact]
     public void AnAnswerQuotesTheConversationSoFar_NewestFirst()
     {
-        var body = EmailSupportChannel.Body(Message(3, "Daniel", "Here is the answer."), [Message(2, "anna@example.org", "Any news?"), Message(1, "anna@example.org", "It does not work.\nAt all.")]);
+        var body = EmailSupportChannel.Body(Message(3, "Sam", "Here is the answer."), [Message(2, "anna@example.org", "Any news?"), Message(1, "anna@example.org", "It does not work.\nAt all.")]);
 
-        Assert.StartsWith("Daniel:\n\nHere is the answer.", body);
+        Assert.StartsWith("Sam:\n\nHere is the answer.", body);
         Assert.True(body.IndexOf("> Any news?", StringComparison.Ordinal) < body.IndexOf("> It does not work.", StringComparison.Ordinal));
         Assert.Contains("> At all.", body);
         Assert.Contains("2026-10-17 12:01 UTC, anna@example.org:", body);
@@ -53,7 +53,7 @@ public class SupportMailThreadTests
     [Fact]
     public void AnAnswerWithNothingBefore_IsJustTheAnswer()
     {
-        Assert.Equal("Daniel:\n\nHej", EmailSupportChannel.Body(Message(2, "Daniel", "Hej"), []));
+        Assert.Equal("Sam:\n\nHej", EmailSupportChannel.Body(Message(2, "Sam", "Hej"), []));
     }
 
     [Fact]
