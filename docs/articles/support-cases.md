@@ -791,6 +791,34 @@ any of them finds its case, whichever one the customer's mail program chose to a
 every answer to the override address, so the person testing answers from there; that reply is accepted on the
 case as if the customer had written it.
 
+### How an answer speaks for support
+
+**An answer mail names no staff member.** It starts with the answer itself, with no author heading; the host's
+signature follows it, before the conversation it quotes, the way a mail program places a signature; and every
+earlier entry written by support — a person answering from the support side, or the assistant — is attributed to
+**support's name**, never the person. The customer's own entries keep the name they were written under.
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Answers.SupportName = "Example Support";                  // default: the text key team.support.mail.supportName, "Support"
+    o.Answers.Signature = ["Kind regards,", "Example Support"];  // default: none
+    o.Answers.TimeZoneId = "Europe/Stockholm";                  // default: UTC
+});
+```
+
+- **The signature** is plain text lines: in the text body after a blank line, and in the HTML one paragraph,
+  `<p class="signature">`, its lines encoded and joined by `<br>`, so a template can style it. Without one nothing
+  is added.
+- **Each quoted entry** is introduced by one translatable line, `team.support.mail.wrote` — "On {0}, {1} wrote:",
+  `{0}` when and `{1}` who. The time is `yyyy-MM-dd HH:mm` in `TimeZoneId`, followed by `UTC` only when that is UTC.
+  An unknown zone is refused at registration.
+- **A frame of its own.** With `MailTemplateOptions.SupportHtml` set, answers and their previews go out in it rather
+  than in the template for mail to users — see [the mail template](user-mail.md#the-mail-template). Its
+  `{{footer}}` is always empty.
+- **The language is the culture of whoever answers**, as the request runs in it; there is no per-recipient
+  language yet.
+
 ### Where the answer goes, and its preview
 
 Staff answering a mailed case see **the address the answer is mailed to** and **the support address it is sent
@@ -810,8 +838,9 @@ var preview = await cases.PreviewAnswerAsync(teamKey, caseId, body: null, bodyHt
   `MailPolicyEffect.None`, `Redirect` with `RedirectedTo`, or `Withhold` — from `IOutboundMailPolicy.Decide`.
   `SupportAnswerRoute.Site` is a case answered on the site: one with no mail thread, or a host that mails nothing.
 - **`PreviewAnswerAsync`** returns the draft as a `MailPreview` — `From`, `To`, `ReplyTo` (the per-case address
-  when the mailbox uses one), `Subject`, the `Html` in the host's [mail template](user-mail.md#the-mail-template)
-  with the conversation so far quoted, and the `Text` alternative — **composed by the code that sends the answer**,
+  when the mailbox uses one), `Subject`, the `Html` in the host's [mail template](user-mail.md#the-mail-template) —
+  its support frame when it has one — with the signature and the conversation so far quoted, and the `Text`
+  alternative — **composed by the code that sends the answer**,
   without sending or storing anything. The draft is sanitized and derived exactly as an answer is, and written as
   by the caller. Files are not rendered; the dialog names them.
 - **Both are authorized exactly as answering**, since they show the correspondent's address to whoever may write to
@@ -1303,7 +1332,11 @@ Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](impleme
 - **A bounce marks the answer it names as not delivered**; one naming no answer goes to the registered
   `IMailBounceHandler`s.
 - **With a [mail template](user-mail.md#the-mail-template) registered, every answer is framed in it**, a plain one
-  included. Without one, answers are mailed as before.
+  included — in `SupportHtml` when that is set. Without one, answers are mailed as before.
+- **An answer names no staff member.** It no longer starts with "{author}:", earlier support entries it quotes are
+  attributed to `SupportCaseOptions.Answers.SupportName`, and each quote is introduced by "On {date}, {name} wrote:"
+  instead of "{date} UTC, {name}:"; the host's signature follows the answer. See
+  [How an answer speaks for support](#how-an-answer-speaks-for-support). A test matching the old text updates.
 - **The support answer boxes** — in `SupportUnassignedView`, `SupportAcrossTeamsView` and `SupportQueueView` —
   show where the answer goes and offer a Preview; they call `GetAnswerRouteAsync` when a case opens and
   `PreviewAnswerAsync` on Preview, so a test verifying their calls expects them. A member's own reply box in
@@ -1318,6 +1351,8 @@ Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](impleme
 `team.support.transcript.notSentYet|notDelivered|sendAgain`;
 `team.support.unassigned.noneMatch|awaiting|needsAnswer|suggested|suggested.assign|reason.severalTeams|reason.notVerified|reason.sharedAddress`;
 `team.support.mailbox.cameInTo` ("to {0}");
+`team.support.mail.wrote` ("On {0}, {1} wrote:") and `team.support.mail.supportName` ("Support"), in
+`SupportMailText`, resolved through `ITextResolver` when an answer is mailed;
 `team.support.answerRoute.mailed|mailedTo|site|redirected|withheld`;
 `team.mailPreview.open|title|from|replyTo|to|toMany|subject|files|textOnly|frame|close|failed`;
 `team.support.attachments.*` (attach, remove, chosen, attached, open, save, notAvailable, tooMany, tooLarge,

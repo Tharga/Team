@@ -36,8 +36,8 @@ Domain models, service abstractions, and authorization primitives for multi-tena
 
 ### Mail to users, messages and notices
 The contracts of mail to users; the services are in **Tharga.Team.Email**, storage in **Tharga.Team.MongoDB**. See [Mail to users](https://team.tharga.net/articles/user-mail.html).
-- `UserMailCategory`, `UserMailCategories` - The categories a user chooses from; `account` and `service` are built in and required.
-- `IUserMailPreferenceService` - A user's choice per category, read and changed by that user or by staff holding `users:manage`.
+- `UserMailCategory`, `UserMailCategories` - The categories a user chooses from; `account` and `service` are built in, `account` always required and `service` unless the host makes it optional.
+- `IUserMailPreferenceService` - A user's choice per category, read and changed by that user or by staff holding `users:manage`; the terms of use a required category links to, and how often each category is sent (`UserMailCategoryFrequency`, in words through `UserMailFrequencyPhrase`).
 - `IUserMailHistoryService` - The mail sent to a user and what became of each (`UserMailStatus`: `Queued`, `Sent`, `Skipped`, `Failed`, `Bounced`), for that user or staff holding `users:manage`.
 - `IUserMailQueue` - Queues mail from server code: `QueueAsync`, `QueueBatchAsync`, `SendNowAsync`. **Unchecked and `[EditorBrowsable(Never)]`** — never inject it into a component, controller or MCP provider.
 - `IUserMessageService` / `SystemMessageScopes` - Messages staff write to chosen users of chosen teams, gated by the system scope `messages:send`.

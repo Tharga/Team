@@ -179,7 +179,8 @@ Refusals are audited too.
 ## Components
 
 ```razor
-@* On the profile: which notices I receive, and how. UserKey shows another user's to staff holding users:manage *@
+@* On the profile: which notices I receive, and how. UserKey shows another user's to staff holding users:manage;
+   Framed="false" leaves the card and title to a tab of the host's own *@
 <UserNoticePreferencesView />
 
 @* In team settings: what the team's members receive until they choose. TeamKey defaults to the selected team *@

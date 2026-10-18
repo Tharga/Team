@@ -29,7 +29,9 @@ builder.AddThargaTeam(o =>
 - **Call it after `AddThargaUserMail`**, whose categories it checks; it throws otherwise.
 - **`StaffMessageCategories`** are the categories staff may write in, default the built-in `service`. Every key
   must be a registered category and at least one must be named, or registration throws. Writing in a required
-  category reaches everyone selected; writing in an optional one leaves out whoever turned it off.
+  category reaches everyone selected; writing in an optional one leaves out whoever turned it off. The built-in
+  `account` may be listed too, for what every user must get whatever they chose; with
+  [`ServiceRequired`](user-mail.md#categories) false, `service` is optional and respects each user's choice.
 - **The team directory and the sent log come from `AddThargaTeamRepository`**, which needs both the user and the
   team repository registered.
 - **Grant `messages:send`** (`SystemMessageScopes.Send`) through a system role, as above, or to a system API key.

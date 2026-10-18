@@ -28,13 +28,18 @@ they choose from, through a persisted queue, with staff messages and automatic n
   address it goes out from, or that it is read on the site, and outside production whether the outbound policy
   redirects it or holds it back (`GetAnswerRouteAsync`). **Preview** shows the answer as the customer will receive
   it, with the conversation quoted (`PreviewAnswerAsync`).
+- **An answer speaks for support.** No staff member is named: no author heading, the host's signature after the
+  answer, earlier support entries attributed to support's name in "On {date}, {name} wrote:", dates in the host's
+  time zone (`o.Answers`).
 
 ## Mail to users (`Tharga.Team.Email`)
 
-- **`AddThargaUserMail`** — categories each user turns on or off on their profile (`account` and `service` built
-  in and required), an unsubscribe link and the one-click headers on every optional mail, answered by
-  `MapThargaMailUnsubscribe()`, and a persisted queue any instance sends, reading the user's choice and address
-  when it sends. There is no default sending address and no no-reply one.
+- **`AddThargaUserMail`** — categories each user turns on or off on their profile (`account` built in and
+  required; `service` built in and required unless `ServiceRequired` is false), with how often each is sent and a
+  required one linking to your terms, an unsubscribe link and the one-click headers on every optional mail,
+  answered by `MapThargaMailUnsubscribe()` — a page that says it turns off only that category and shows the
+  signed-in user every category, or offers sign-in — and a persisted queue any instance sends, reading the user's
+  choice and address when it sends. There is no default sending address and no no-reply one.
 - **`AddThargaUserMessages`** — staff holding the `messages:send` system scope write to chosen users: a filter of
   teams and who in them (role, access level or everyone), and users added by name whatever the filter says. Before
   sending they see the list of recipients — who came in how, and who turned the category off
@@ -51,7 +56,8 @@ they choose from, through a persisted queue, with staff messages and automatic n
 **`AddThargaMailTemplate(o => o.Html = …)`** frames every HTML mail the toolkit sends — support answers, messages,
 notices and invitations — in your own HTML, with `{{content}}`, `{{subject}}`, `{{footer}}` and `{{preheader}}`.
 Mail written as text alone gets an HTML part so the frame always applies; without a template nothing changes. The
-previews are rendered by the same code, in a sandboxed frame.
+previews are rendered by the same code, in a sandboxed frame. `SupportHtml` gives support answers a frame of their
+own.
 
 ## Moving to 4.2
 

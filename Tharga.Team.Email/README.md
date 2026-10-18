@@ -20,7 +20,7 @@ The guides are [Email, team mailboxes & the postmaster](https://team.tharga.net/
 - **`HtmlText`** — the plain-text rendering of HTML the toolkit uses: paragraphs kept, list items as `- ` lines, quotes as `> ` lines, links as `text (address)`.
 - **`IMailBounceHandler` / `MailBounce`** — receives a bounce the support mail poller read that names no support answer; register your own to mark mail you sent as undelivered. Make it idempotent, and do not log the reason, which often quotes an address.
 - **`RecipientFilter`** — accept mail only for chosen domains or addresses.
-- **`AddThargaMailTemplate(o => o.Html = …)` / `MailTemplateOptions`** — the host's HTML frame around every HTML mail the toolkit sends (support answers, mail to users, invitations) and the previews of them, with `{{content}}` (required), `{{subject}}`, `{{footer}}` and `{{preheader}}`. The template is trusted markup; what goes into it is sanitized. With a template, a mail with text alone also gets an HTML part. See [the mail template](https://team.tharga.net/articles/user-mail.html#the-mail-template).
+- **`AddThargaMailTemplate(o => o.Html = …)` / `MailTemplateOptions`** — the host's HTML frame around every HTML mail the toolkit sends (support answers, mail to users, invitations) and the previews of them, with `SupportHtml` an optional frame of its own for support answers, with `{{content}}` (required), `{{subject}}`, `{{footer}}` and `{{preheader}}`. The template is trusted markup; what goes into it is sanitized. With a template, a mail with text alone also gets an HTML part. See [the mail template](https://team.tharga.net/articles/user-mail.html#the-mail-template).
 
 The transport knows nothing about teams, users or audit entries; a test guards that.
 
@@ -57,7 +57,8 @@ builder.Services.AddThargaUserNotices(o => o.Add(/* your catalogue */));
 app.MapThargaMailUnsubscribe();                            // anonymous; allow it in a deny-by-default host
 ```
 
-- **Categories** each user turns on or off on their profile — two required built-ins, `account` and `service`, plus your own — with an unsubscribe link and the RFC 8058 headers on every mail they could have turned off.
+- **Categories** each user turns on or off on their profile — two built-ins, `account` (always required) and `service` (required unless `ServiceRequired` is false), plus your own — with an unsubscribe link and the RFC 8058 headers on every mail they could have turned off, how often each is sent, and a required one linking to your terms (`TermsUrl`).
+- **An unsubscribe page** that names the category and the product, says it turns off only that, and shows the signed-in user the link is for every category and its state (`PreferencesPath`), or anyone else a way to sign in (`SignInPath`); `PageCss` styles it.
 - **A persisted queue** any instance sends from, reading the user's choice and address when it sends, retrying only what may pass, under the outbound mail policy.
 - **Messages** (`IUserMessageService`) staff write to chosen users of chosen teams, and **notices** (`IUserNoticeRaiser`) raised by events and delivered at once or in a daily summary.
 - **A mail history per user** (`IUserMailHistoryService`), and mail marked **bounced** when the receiving server returns it — seen when it was sent from a support mailbox's address.
@@ -88,6 +89,7 @@ The SMTP invitation sender, through the same transport and the outbound mail pol
 - **Every mail read is DKIM-checked**, so a host reading mail needs outbound DNS; without it nothing is verified and nothing breaks.
 - **Dependencies changed:** `DnsClient` and `AngleSharp` added, the ASP.NET Core framework referenced privately, and `Microsoft.Extensions.Logging.Abstractions` and `Microsoft.Extensions.Options` no longer listed, since the framework provides them.
 - **With `AddThargaUserMail`, invitations go through mail to users**, from `UserMailOptions.Mail` rather than `EmailOptions`; a withheld or failed invitation says "could not send".
+- **`UserMailOptions` gained `ServiceRequired`, `TermsUrl`, `ProductName`, `PreferencesPath`, `SignInPath` and `PageCss`, and `MailTemplateOptions` `SupportHtml`.** Their defaults change nothing but the unsubscribe page's wording; see [Moving to 4.2](https://team.tharga.net/articles/user-mail.html#moving-to-42) for the text keys added and removed.
 
 ## Moving from Tharga.Team.Support
 

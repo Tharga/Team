@@ -57,16 +57,25 @@ Only the SMTP half of `o.Mail` is used.
 
 ## Categories
 
-Every mail goes out in a category, and a category is what a user turns on or off. Two are built in, and both are
-**required** — nobody can turn them off, so no choice is stored for them and their mail carries no unsubscribe
-link:
+Every mail goes out in a category, and a category is what a user turns on or off. Two are built in. A **required**
+category cannot be turned off, so no choice is stored for it and its mail carries no unsubscribe link:
 
 | Key | Name | For |
 |---|---|---|
-| `account` (`UserMailCategories.AccountKey`) | Account and security | The user's own account, access and its security; invitations go here |
-| `service` (`UserMailCategories.ServiceKey`) | Service messages | What everyone needs to know, such as planned maintenance or changed terms |
+| `account` (`UserMailCategories.AccountKey`) | Account and security | The user's own account, access and its security; invitations go here. Always required |
+| `service` (`UserMailCategories.ServiceKey`) | Service messages | What everyone needs to know, such as planned maintenance or disruptions. Required unless the host says otherwise |
 
 They exist so that mail the toolkit sends itself always has a category every host has. Their keys are reserved.
+
+**Making service messages optional.** A host that wants exactly one category nobody can turn off — account, which
+it may describe as account, sign-in, security and essential system information — sets `o.ServiceRequired = false`.
+Service messages are then on until a user turns them off, carry an unsubscribe link like any optional category, and
+`BaseUrl` becomes required. Their text keys stay the same; describe them through your translations.
+
+**Why a required category is required.** Wherever one is shown to a user — the preferences view and the
+unsubscribe page — it reads "Always sent: part of the terms of use" (`team.userMail.alwaysSent`). Set
+`o.TermsUrl` to a site path or an absolute address and the line links to your terms; without it, it says the same
+with no link.
 
 A host adds its own with `o.AddCategory(new UserMailCategory { ... })`:
 
@@ -98,16 +107,46 @@ everyone who never chose. A choice follows the user, not the team: one person ha
 | `GetChoicesAsync(userKey)` | The user's effective choice for each, saying whether it is their own or the default |
 | `ReceivesAsync(userKey, categoryKey)` | Whether they receive one category |
 | `SetChoiceAsync(userKey, categoryKey, receives)` | Records a choice for an optional category; refuses turning off a required one |
+| `GetTermsUrl()` | `TermsUrl`, which a required category links to; null when unset |
+| `GetCategoryFrequenciesAsync()` | How often each category was sent — see [How often](#how-often) |
 
 **Your own, or anyone's with `users:manage`.** The rule is checked in the service, because a scope alone cannot
 say "yourself or staff". A caller who is neither is refused with `UnauthorizedAccessException`, and the refusal
 is audited. A change is audited under the feature `usermail`, action `choice`, with `usermail.user`,
-`usermail.category` and `usermail.receives`.
+`usermail.category` and `usermail.receives`. The categories, the terms and the frequencies name nobody, so any
+caller may read them.
 
 ```razor
 @* "Mail I receive", for the signed-in user; UserKey shows another user's to staff holding users:manage *@
 <UserMailPreferencesView />
+
+@* In a tab of the host's own, which names it: no card and no title *@
+<UserMailPreferencesView Framed="false" />
 ```
+
+Each category shows its name, its description, how often it is sent, and for a required one the always-sent line.
+`Framed` (default `true`) draws the view's own card and title; `UserNoticePreferencesView` and
+`UserMailHistoryView` take it too, so a host can place the three in tabs such as "Mail", "Notices" and "History".
+
+### How often
+
+Users deciding whether to turn a category off want to know how often it comes, so the preferences view and the
+unsubscribe page say it in words under each category: *None in the past year*, *Fewer than one a year*,
+*About N a year*, *About N a month* or *About N a week*.
+
+- **Counted from the outbox** in one aggregation: the mails in each category **sent or bounced** — a bounced mail
+  was sent — to a user, never one queued, skipped or given up, and never mail to an address alone such as an
+  invitation. The figure is the average per user who received at least one, per month.
+- **Over the past year, or what the outbox keeps.** Done mail is removed after `UserMailRetention` (90 days by
+  default), so by default the past 90 days are counted and scaled; raise the retention to a year to count a whole
+  year. With less than a year counted, none sent reads *None sent recently*.
+- **The words:** under one a year, *fewer than one a year*; under about twelve a year, *about N a year*; under
+  4.5 a month, *about N a month*; more, *about N a week* — N rounded, never below one. `UserMailFrequencyPhrase`
+  decides it, in one place, and `UserMailCategoryFrequency.Phrase` gives it for a category.
+- **Kept for ten minutes** on each instance. It is read-only statistics, so instances may differ by a few minutes.
+- **One index.** `Tharga.Team.MongoDB` answers it from `Status_CompletedAt_Category_RecipientUserKey` on
+  `UserMail` without reading a mail. A host's own `IUserMailOutbox` implements `CountSentByCategoryAsync` (and
+  `Retention`); until it does, no figures are shown.
 
 ## Unsubscribing
 
@@ -124,6 +163,25 @@ header. When the link is https it also carries
 - **POST turns that one category off for that one user** — from the page's button, or from the mail provider's
   one-click request — and is audited under `usermail`, action `unsubscribe`.
 
+The page says exactly what it does:
+
+- **GET**: "Stop receiving News?", "This only turns off News. Other mail from Example is not affected.", the
+  category's description, how often it is sent, and the button "Stop sending me News".
+- **POST**: "You will no longer receive News." and how to turn it back on.
+- **Below, on both**: for a request **signed in as the very user the link is for**, every category with its
+  state — on, off, or always sent with the terms line — and how often it is sent, then "Change your mail settings"
+  linking to `PreferencesPath`. For anyone else — nobody signed in, or somebody else — only "Sign in to see all the
+  mail you get and choose what you want", linking to `SignInPath` with `returnUrl` set to `PreferencesPath`. Either
+  link is left out when its option is unset.
+
+**The token alone reveals only its own category.** Who is signed in is decided by the user key `IUserService`
+resolves for the request's principal, compared with the key in the token; another user's choices are never shown.
+The product is `ProductName`, else `Mail.FromName`, else the sending address. `PageCss` adds the host's style rules
+after the page's own in its one inline style element; the page's policy still loads nothing from elsewhere, so no
+images or fonts by address. Its paragraphs carry the classes `scope`, `description`, `frequency` and
+`turn-back-on`, the list is `section.mail` with one `li` per category (`data-category`, `data-state`), and the
+links are `p.settings` and `p.sign-in`. The page's language is the request's culture.
+
 The link's token names one user and one category and is protected by Data Protection under the purpose
 `Tharga.Team.UserMail.Unsubscribe`. It does not expire, because a mail is read whenever somebody gets to it.
 Raise `UnsubscribeTokenVersion` to invalidate every link already sent.
@@ -133,6 +191,10 @@ Raise `UnsubscribeTokenVersion` to invalidate every link already sent.
 - **The path, anonymously, for GET and POST.** The route is mapped `AllowAnonymous`, and its POST takes no
   antiforgery token, because a one-click request carries none — the token in the link is the credential. A host
   whose own middleware challenges every request without a signed-in user must let `UnsubscribePath` through.
+- **Authentication before the route**, for the signed-in list: `UseAuthentication()` runs for the path as for any
+  other, so a signed-in visitor's principal reaches it. Without it, everyone is offered sign-in.
+- **A sign-in that honours `returnUrl`**, for the sign-in link to lead back to the mail settings. The toolkit's own
+  `/login` (`UseThargaAuth`) returns to the start page whatever it is given.
 - **One Data Protection key ring, persisted, shared by every instance.** A link made on one instance is refused
   by another that holds different keys, and every link sent dies when keys are lost on a restart. Configure
   `AddDataProtection().PersistKeysTo…()` against a store every instance reaches, with one application name.
@@ -147,8 +209,17 @@ and invitations — and for the previews staff open before sending. Register it 
 that send:
 
 ```csharp
-builder.Services.AddThargaMailTemplate(o => o.Html = File.ReadAllText("mail-template.html"));
+builder.Services.AddThargaMailTemplate(o =>
+{
+    o.Html = File.ReadAllText("mail-template.html");
+    o.SupportHtml = File.ReadAllText("support-template.html");   // optional: support answers alone
+});
 ```
+
+**Support answers can have a frame of their own.** An answer is a person writing back rather than the product
+announcing, so `SupportHtml` frames support answers and their previews, with the same placeholders and
+`{{footer}}` always empty; unset, they use `Html` as before. It is checked like `Html`. See
+[Support answers](support-cases.md#how-an-answer-speaks-for-support).
 
 ```html
 <!doctype html>
@@ -268,8 +339,8 @@ first, with the address it went to and what became of it.
 </UserMailHistoryView>
 ```
 
-`UserMailHistoryView` takes `UserKey`, `TimeTemplate` and `PageSize` (20). Behind it is
-`IUserMailHistoryService`:
+`UserMailHistoryView` takes `UserKey`, `TimeTemplate`, `PageSize` (20) and `Framed` (`true`; false leaves the
+card and title to the host). Behind it is `IUserMailHistoryService`:
 
 | Member | Who |
 |---|---|
@@ -367,8 +438,9 @@ The footer, the unsubscribe page, the built-in categories and the invitation are
 so they resolve through `ITextResolver`. `AddThargaTeamBlazor` registers one that asks your
 `IThargaTextProvider`, so a host translating the components translates these too; without one, the English
 defaults are used. The keys are `team.userMail.footer.*`, `team.userMail.unsubscribe.*`,
-`team.userMail.category.account|service.name|description` and `team.userMail.invitation.*`, all listed in
-`ThargaTextKeys.All`, plus your own categories' `userMail.category.{key}.*`.
+`team.userMail.category.account|service.name|description`, `team.userMail.invitation.*`,
+`team.userMail.alwaysSent` and `team.userMail.frequency.*` — the last two shared with the preferences view — all
+listed in `ThargaTextKeys.All` (`UserMailText.All`), plus your own categories' `userMail.category.{key}.*`.
 
 **Mail follows the server's culture, not the recipient's.** There is no per-recipient language yet.
 
@@ -383,6 +455,12 @@ defaults are used. The keys are `team.userMail.footer.*`, `team.userMail.unsubsc
 | `BaseUrl` | null | The site's absolute address; required once an optional category is registered |
 | `UnsubscribePath` | `/mail/unsubscribe` | Where `MapThargaMailUnsubscribe` answers; must start with `/` |
 | `UnsubscribeTokenVersion` | 1 | Raise it to invalidate every unsubscribe link already sent |
+| `ServiceRequired` | `true` | False makes service messages a category each user may turn off, on until they do |
+| `TermsUrl` | null | A site path or absolute address of the terms of use, which a required category's always-sent line links to |
+| `ProductName` | null | The product the unsubscribe page names; null uses `Mail.FromName`, then the sending address |
+| `PreferencesPath` | null | The host's mail settings, a site path or absolute address; the unsubscribe page links there and sign-in returns there |
+| `SignInPath` | null | Where a user signs in; the unsubscribe page offers it, with `returnUrl`, to anyone not signed in as the link's user |
+| `PageCss` | null | Style rules added to the unsubscribe page's own; may not contain `</` |
 | `MaxAttempts` | 5 | Attempts at one mail before it is given up |
 | `RetryDelay` | 1 minute | The wait after the first failed attempt, doubling after each |
 | `MaxRetryDelay` | 1 hour | The longest wait between attempts |
@@ -404,6 +482,8 @@ defaults are used. The keys are `team.userMail.footer.*`, `team.userMail.unsubsc
 - **A deleted user's choices and queued mail are not purged.** A mail still queued for them fails as having no
   user.
 - **A bounce is only seen when the mail went out from a mailbox support reads**, as described above.
+- **How often a category is sent is what was kept**: with the default 90-day retention, the past 90 days scaled to
+  a year, and a category sent quarterly may read as none sent recently.
 
 ## Moving to 4.2
 
@@ -452,3 +532,25 @@ The surface changed while it was being built. A host that linked the source alon
   `team.userMail.invitation.subject|body`.
 - **The footer goes into the template's `{{footer}}`** once a template is set; without one, the HTML footer is as
   it was. Mail composed with a template is the same for every kind of mail, previews included.
+- **Service messages can be made optional** (`ServiceRequired`, default `true`, so nothing changes until you set
+  it), and `TermsUrl`, `ProductName`, `PreferencesPath`, `SignInPath` and `PageCss` are new options.
+- **The unsubscribe page changed**: it names the product and says it turns off only that category, how often it
+  comes, the button reads "Stop sending me {0}", and below it lists every category for the signed-in user the link
+  is for or offers sign-in to anyone else. A host matching on its old markup or wording updates.
+- **`IUserMailPreferenceService` gained `GetTermsUrl()` and `GetCategoryFrequenciesAsync()`**, default members
+  returning null and nothing, so a host's own implementation or decorator keeps compiling and forwards them to show
+  the terms link and the frequencies.
+- **`IUserMailOutbox` gained `CountSentByCategoryAsync` and `Retention`**, default members (the first throws
+  `NotSupportedException`, which shows no figures). `IUserMailCollection` (`Tharga.Team.MongoDB`) gained the same
+  two as default members, and the `UserMail` collection a new index, `Status_CompletedAt_Category_RecipientUserKey`,
+  created as its other indexes are.
+- **`UserMailPreferencesView`, `UserNoticePreferencesView` and `UserMailHistoryView` take `Framed`** (default
+  `true`, as before).
+- **Text keys removed:** `team.userMail.preferences.required` (the required line is now
+  `team.userMail.alwaysSent`, shared with the unsubscribe page), `team.userMail.unsubscribe.confirm` (the button
+  is now `team.userMail.unsubscribe.stop`) and `team.userMail.unsubscribe.doneDetail` (now
+  `team.userMail.unsubscribe.turnBackOn`); `UserMailPreferencesViewText.Required`, `UserMailText.PageConfirm`,
+  `UserMailText.PageDoneDetail`, `UserMailTexts.PageConfirm*` and `UserMailTexts.PageDoneDetail*` went with them.
+- **Text keys added:** `team.userMail.alwaysSent`, `team.userMail.frequency.*` (none, noneRecently,
+  underOneAYear, perYear, perMonth, perWeek) and `team.userMail.unsubscribe.*` (onlyThis, stop, turnBackOn,
+  yourMail, on, off, settings, signIn).

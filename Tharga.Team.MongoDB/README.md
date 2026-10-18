@@ -41,8 +41,9 @@ both) — read through the repositories.
 
 `UserMail` stores its `Kind` by name, the address a mail went to (`RecipientAddress`, in lower case), the name of
 an address-only recipient (`RecipientName`) and `BouncedAt`, under the indexes `Status_NextAttemptAt`,
-`DeduplicationKey`, `BatchId_Status`, `RecipientUserKey_Id`, `RecipientAddress_Id` and a sparse `MessageId`, which
-is how a bounce finds its mail. A batch's recorded outcomes count `Bounced` apart from `Sent`.
+`DeduplicationKey`, `BatchId_Status`, `RecipientUserKey_Id`, `RecipientAddress_Id`, a sparse `MessageId`, which
+is how a bounce finds its mail, and `Status_CompletedAt_Category_RecipientUserKey`, from which how often each
+category was sent is counted without reading a mail (`IUserMailCollection.CountSentByCategoryAsync`). A batch's recorded outcomes count `Bounced` apart from `Sent`.
 `UserNoticeRetention` is also how long an occurrence raised again is recognised and not sent twice.
 
 ## Finding users and teams in one read
@@ -63,6 +64,8 @@ and leaves out disabled users.
   directory, and the mail to users stores and directories above. A host substituting any of them registers its
   own first.
 - **A repository of your own** keeps compiling; see the default members above.
+- **`UserMail` gains the index `Status_CompletedAt_Category_RecipientUserKey`**, created as the others are, and
+  `IUserMailCollection` the default members `CountSentByCategoryAsync` and `Retention`.
 
 ## Quick start
 

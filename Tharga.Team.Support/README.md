@@ -172,6 +172,9 @@ is comes from `ISupportSenderDirectory`, which `Tharga.Team.MongoDB` registers.
   through one sanitizer on the way in and at every render; a formatted answer is mailed as HTML beside the text.
 - **The thread** — an answer carries the whole conversation and every message id is recorded, so a reply to any
   of them finds its case.
+- **Speaking for support** — an answer names no staff member: no author heading, the host's signature after it,
+  earlier support entries attributed to support's name in the host's time zone (`o.Answers`), and the host's
+  support frame (`MailTemplateOptions.SupportHtml`) around it.
 - **Delivery** — every answer says whether it reached the customer, a bounce marks it not delivered with the
   reason, and `ResendAsync` sends it again.
 
@@ -180,7 +183,8 @@ A bounce that names no support answer is handed to every registered `IMailBounce
 
 **Moving to 4.2:** `ISupportCaseService` gained seven members and `ISupportCaseStore.SetMessageDeliveryAsync` an
 `error` parameter, so implementers and decorators update; mail from a known sender may now open in their team;
-and mail attachments are now stored in your database. The full list is in the article.
+mail attachments are now stored in your database; and an answer mail no longer names who wrote it, its quotes
+read "On {date}, {name} wrote:" with support's name for support's entries. The full list is in the article.
 
 **Your own support staff answer across every team.** They belong to none of the customers' teams, so the
 team scopes cannot reach those cases. Two system scopes do — `support:all:read` and `support:all:manage` —
