@@ -194,7 +194,9 @@ Raise `UnsubscribeTokenVersion` to invalidate every link already sent.
 - **Authentication before the route**, for the signed-in list: `UseAuthentication()` runs for the path as for any
   other, so a signed-in visitor's principal reaches it. Without it, everyone is offered sign-in.
 - **A sign-in that honours `returnUrl`**, for the sign-in link to lead back to the mail settings. The toolkit's own
-  `/login` (`UseThargaAuth`) returns to the start page whatever it is given.
+  `/login` (`UseThargaAuth`) does, for a path on the site — see
+  [Where signing in returns](implementation-guide.md#where-signing-in-returns); a sign-in of your own must too,
+  and should accept a local path only.
 - **One Data Protection key ring, persisted, shared by every instance.** A link made on one instance is refused
   by another that holds different keys, and every link sent dies when keys are lost on a restart. Configure
   `AddDataProtection().PersistKeysTo…()` against a store every instance reaches, with one application name.

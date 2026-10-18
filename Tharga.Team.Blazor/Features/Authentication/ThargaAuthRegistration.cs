@@ -26,6 +26,9 @@ public static class ThargaAuthRegistration
     private const string PromptParameterName = "prompt";
     private const string SelectAccountPrompt = "select_account";
 
+    /// <summary>The query parameter the login endpoint reads where to return to after sign-in.</summary>
+    internal const string ReturnUrlParameterName = "returnUrl";
+
     private const string MissingConfigMessage =
         $"Missing '{AzureAdSectionName}' configuration section. " +
         "Add an AzureAd section to appsettings.json with Authority, ClientId, TenantId, and CallbackPath. " +
@@ -102,7 +105,7 @@ public static class ThargaAuthRegistration
 
         app.MapGet(options.LoginPath, async (HttpContext context) =>
         {
-            var properties = new AuthenticationProperties { RedirectUri = HomePath };
+            var properties = new AuthenticationProperties { RedirectUri = ReturnPath(context.Request.Query[ReturnUrlParameterName].ToString()) };
 
             // The handler reads the prompt out of Items and removes it before building the request; there is
             // no property on the challenge itself to set.
@@ -131,5 +134,21 @@ public static class ThargaAuthRegistration
                 OpenIdConnectDefaults.AuthenticationScheme,
                 new AuthenticationProperties { RedirectUri = HomePath });
         });
+    }
+
+    /// <summary>Where sign-in returns to: <paramref name="returnUrl"/> when it is a path on this site, otherwise the start page.</summary>
+    /// <remarks>
+    /// <b>Only a local path, so the login endpoint is no open redirect.</b> It starts with a single <c>/</c>; a second
+    /// <c>/</c> or a <c>\</c> after it would name another host to a browser, and so would a scheme. Control characters
+    /// are refused anywhere, because browsers drop tabs and line breaks and would read <c>/&#9;/host</c> as <c>//host</c>.
+    /// </remarks>
+    internal static string ReturnPath(string returnUrl) => IsLocalPath(returnUrl) ? returnUrl : HomePath;
+
+    private static bool IsLocalPath(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value[0] != '/') return false;
+        if (value.Length > 1 && (value[1] == '/' || value[1] == '\\')) return false;
+
+        return !value.Any(char.IsControl);
     }
 }

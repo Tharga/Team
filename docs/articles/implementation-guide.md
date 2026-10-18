@@ -245,6 +245,16 @@ builder.AddThargaAuth(o =>
 });
 ```
 
+#### Where signing in returns
+
+`/login` returns to the site root, unless it is given **`returnUrl`, a path on this site**:
+`/login?returnUrl=%2Fprofile%2Fmail` signs in and lands on `/profile/mail`. Since 4.2. That is what the
+[unsubscribe page](user-mail.md#unsubscribing) links to with `SignInPath = "/login"`.
+
+Only a local path is honoured, so the endpoint is no open redirect: it must start with a single `/`. A scheme
+(`https://…`), a second slash (`//host`), a backslash after the slash (`/\host`) or a control character anywhere
+— which a browser drops, turning `/<tab>/host` into `//host` — returns to the root as before.
+
 #### Signing out ends the provider session
 
 **`FederatedSignOut` is on by default and should stay on.** Signing out clears the local cookie *and* sends
