@@ -129,11 +129,9 @@
 </div>
 
 @code {
-    private const string IconCircle = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--rz-secondary-lighter); color: var(--rz-secondary);";
-    private const string RightBubble = "background: var(--rz-primary-lighter); color: var(--rz-text-color); border-bottom-right-radius: 0.25rem;";
-
-    // A tint of the theme's own text colour: Radzen's dark themes keep the base scale light, so --rz-base-200 under light text is unreadable.
-    private const string LeftBubble = "background: var(--rz-secondary-lighter); background: color-mix(in srgb, var(--rz-text-color) 8%, transparent); color: var(--rz-text-color); border-bottom-left-radius: 0.25rem;";
+    private const string IconCircle = ConversationBubble.IconCircle;
+    private const string RightBubble = ConversationBubble.Right;
+    private const string LeftBubble = ConversationBubble.Left;
 
     /// <summary>The largest image shown in place; a larger one is named there and listed with the files.</summary>
     public const long MaxInlineImageBytes = 2L * 1024 * 1024;
