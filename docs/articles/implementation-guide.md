@@ -1079,6 +1079,12 @@ public class MyTeamService : TeamServiceRepositoryBase<TeamEntity, TeamMember>
 
 > **Auto-generated fields:** When `CreateTeamMember` returns a member without `Invitation`, the base class auto-generates it using the model's email, a new invite token, and the current timestamp — plus an expiry when an invitation lifetime is configured. Similarly, `State` defaults to `MembershipState.Invited` if not set. You can still set these explicitly if you need custom behavior.
 
+> **Writing your own store?** Write each member change as an update of that member alone. Tharga.Team.MongoDB
+> sends one update per write: a positional update of the member's fields, or a `$pull` to remove one. Reading
+> the team and writing its member list back loses one of two overlapping edits to the same team, and the lost
+> edit can be a removal or a suspension. This applies to a replacement `ITeamRepository` and to the member
+> methods a host overrides on `TeamServiceBase` (changed in 4.1, Tharga/Team#338).
+
 ### _Imports.razor
 
 ```razor
