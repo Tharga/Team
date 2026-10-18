@@ -23,7 +23,8 @@ public interface IUser
     /// <summary>
     /// When the user last made an authenticated request. Defaults to null. Stamped by the user service
     /// at most once per configured interval (see LastSeenStampInterval), so the value is approximate
-    /// within that interval. Distinct from the per-team-member LastSeen, which tracks team selection.
+    /// within that interval. Distinct from the per-team-member <see cref="ITeamMember.LastSeen"/>, which tracks
+    /// activity in that one team.
     /// </summary>
     public DateTime? LastSeen => null;
 

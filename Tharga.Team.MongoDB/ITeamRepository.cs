@@ -2,6 +2,13 @@
 
 namespace Tharga.Team.MongoDB;
 
+/// <summary>The team store behind <see cref="TeamServiceRepositoryBase{TTeamEntity,TMember}"/>.</summary>
+/// <remarks>
+/// <b>A member write changes that member alone.</b> The built-in implementation sends one update per write — a
+/// positional update of the member's fields, or a <c>$pull</c> to remove one — and never reads the member list
+/// and writes it back. A replacement should do the same. Written back whole, the second of two overlapping edits
+/// to one team undoes the first, and the undone edit can be a removal or a suspension (Tharga/Team#338).
+/// </remarks>
 public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     where TTeamEntity : TeamEntityBase<TMember>
     where TMember : TeamMemberBase
