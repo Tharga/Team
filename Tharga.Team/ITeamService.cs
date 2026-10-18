@@ -150,6 +150,11 @@ public interface ITeamService
     Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides);
     Task SetMemberNameAsync(string teamKey, string userKey, string name);
     Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept);
+
+    /// <summary>
+    /// Records that the current user is active in <paramref name="teamKey"/> (<see cref="ITeamMember.LastSeen"/>).
+    /// Throttled per team and user, so it is cheap to call on every resolve; a no-op for a non-member.
+    /// </summary>
     Task SetMemberLastSeenAsync(string teamKey);
     Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember;
 

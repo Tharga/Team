@@ -51,17 +51,37 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         return _collection.AddAsync(teamEntity);
     }
 
-    public async Task SetLastSeenAsync(string teamKey, string userKey, DateTime utcNow)
+    /// <summary>Stamps one member's <see cref="TeamMemberBase.LastSeen"/> on a live team; no-op for a non-member.</summary>
+    /// <remarks>
+    /// <b>One atomic update of that field, never a read-and-replace.</b> This is the most frequent write to a
+    /// team document — every active member, every stamp interval (Tharga/Team#317). It used to read the team
+    /// and replace the whole document, so a stamp landing between an administrator's read and write could put
+    /// back a member they had just removed, suspended or demoted, or undo a rename.
+    /// <para>
+    /// <b><see cref="EMode.FirstOrDefault"/> is required, not a preference.</b> The positional <c>$</c> needs
+    /// the array match from the query that performs the update. In its other modes Tharga.MongoDB finds the
+    /// document first and then updates it by id, so the server rejects the update ("The positional operator
+    /// did not find the match needed from the query"). <c>FirstOrDefault</c> sends the filter and the update
+    /// together as one <c>findAndModify</c>.
+    /// </para>
+    /// </remarks>
+    public Task SetLastSeenAsync(string teamKey, string userKey, DateTime utcNow)
     {
-        var filter = new FilterDefinitionBuilder<TTeamEntity>().Eq(x => x.Key, teamKey);
-        var team = await _collection.GetOneAsync(filter);
+        var filter = LastSeenFilter(teamKey, userKey);
+        var update = new UpdateDefinitionBuilder<TTeamEntity>()
+            .Set(x => x.Members.FirstMatchingElement().LastSeen, utcNow);
 
-        var target = team.Members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
-        if (target == null) return;
+        return _collection.UpdateOneAsync(filter, update, OneOption<TTeamEntity>.FirstOrDefault);
+    }
 
-        var updated = target with { LastSeen = utcNow };
-        team = team with { Members = team.Members.ReplaceByReference(target, updated) };
-        await _collection.ReplaceOneAsync(team);
+    /// <summary>The team, live, with a member of that key; the positional update writes the first such member.</summary>
+    internal static FilterDefinition<TTeamEntity> LastSeenFilter(string teamKey, string userKey)
+    {
+        var builder = new FilterDefinitionBuilder<TTeamEntity>();
+        return builder.And(
+            builder.Eq(x => x.Key, teamKey),
+            builder.Eq(x => x.DeletedAt, null),
+            builder.ElemMatch(x => x.Members, m => m.Key == userKey));
     }
 
     public Task AddMemberAsync(string teamKey, TMember member)

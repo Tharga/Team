@@ -38,7 +38,7 @@ public class UserService : UserServiceRepositoryBase<UserEntity>
 ```
 
 The users admin list (`<UsersView />` → Users tab) shows a **Last seen** column. This is distinct from
-the per-team-member `LastSeen`, which tracks when a member last selected that team. A user who has never
+the per-team-member `LastSeen`, which tracks when a member was last active in that one team. A user who has never
 made an authenticated request reads as **Never** rather than blank — "we have no value" and "this has
 never happened" are different answers on a list whose purpose is finding dormant accounts.
 
@@ -631,9 +631,14 @@ The directory id distinguishes two kinds of absence rather than showing a blank,
 | Members | Accepted members, with a `+n invited` badge when invitations are still outstanding |
 | Last used | The most recent `LastSeen` across the team's members, or **Never** |
 
-**Last used is team selection, not sign-in.** `ITeamMember.LastSeen` records when a member last selected
-that team, so the maximum across members reads as "when anyone last used this team". A team whose members
-sign in daily but never switch to it still reads as stale — which is the intended signal.
+**Last used is activity in the team, not sign-in.** `ITeamMember.LastSeen` records when a member was last
+active in that team — stamped whenever it is resolved as their selected team, at most once per
+`TeamServiceBase.LastSeenStampInterval` (15 minutes by default; override it like the user's own interval) —
+so the maximum across members reads as "when anyone last used this team". A team whose members sign in daily
+but work in other teams still reads as stale, which is the intended signal.
+
+*Changed in 4.1 (Tharga/Team#317): the member stamp used to be written only when a team was selected, so a
+member who never switched teams kept the date they joined, and a single-team member looked inactive.*
 
 The member count deliberately separates accepted members from outstanding invitations: a team showing a
 flat "5" may be one member and four abandoned invitations, and that distinction is usually what a decision

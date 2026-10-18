@@ -15,9 +15,10 @@ public static class TeamActivity
     /// When anyone last used this team, or null if no member ever has.
     /// </summary>
     /// <remarks>
-    /// <see cref="ITeamMember.LastSeen"/> tracks <i>team selection</i>, so the maximum across members
+    /// <see cref="ITeamMember.LastSeen"/> tracks <i>activity in the team</i>, so the maximum across members
     /// reads as "when this team was last used" — not "when its most active member last signed in", which
-    /// is <see cref="IUser.LastSeen"/> and a different question.
+    /// is <see cref="IUser.LastSeen"/> and a different question: a member active only in another team
+    /// doesn't count here.
     /// </remarks>
     public static DateTime? LastUsed(IEnumerable<TeamMemberInfo> members)
         => members?.Where(m => m.LastSeen.HasValue).Max(m => m.LastSeen);
