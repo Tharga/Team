@@ -44,16 +44,16 @@ public class SupportMailThreadTests
     {
         var body = EmailSupportChannel.Body(Message(3, "Sam", "Here is the answer."), [Message(2, "anna@example.org", "Any news?"), Message(1, "anna@example.org", "It does not work.\nAt all.")]);
 
-        Assert.StartsWith("Sam:\n\nHere is the answer.", body);
+        Assert.StartsWith("Here is the answer.\n\n", body);
         Assert.True(body.IndexOf("> Any news?", StringComparison.Ordinal) < body.IndexOf("> It does not work.", StringComparison.Ordinal));
         Assert.Contains("> At all.", body);
-        Assert.Contains("2026-10-17 12:01 UTC, anna@example.org:", body);
+        Assert.Contains("On 2026-10-17 12:01 UTC, anna@example.org wrote:", body);
     }
 
     [Fact]
     public void AnAnswerWithNothingBefore_IsJustTheAnswer()
     {
-        Assert.Equal("Sam:\n\nHej", EmailSupportChannel.Body(Message(2, "Sam", "Hej"), []));
+        Assert.Equal("Hej", EmailSupportChannel.Body(Message(2, "Sam", "Hej"), []));
     }
 
     [Fact]

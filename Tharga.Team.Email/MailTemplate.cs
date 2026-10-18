@@ -19,11 +19,19 @@ internal sealed partial class MailTemplate
     private readonly bool _hasFooter;
 
     public MailTemplate(IOptions<MailTemplateOptions> options)
+        : this(options?.Value?.Html, nameof(MailTemplateOptions.Html))
     {
-        _html = string.IsNullOrWhiteSpace(options?.Value?.Html) ? null : options.Value.Html;
+        var support = options?.Value?.SupportHtml;
+        Support = string.IsNullOrWhiteSpace(support) ? this : new MailTemplate(support, nameof(MailTemplateOptions.SupportHtml));
+    }
+
+    private MailTemplate(string html, string name)
+    {
+        Support = this;
+        _html = string.IsNullOrWhiteSpace(html) ? null : html;
         if (_html == null) return;
 
-        RequireContent(_html);
+        RequireContent(_html, name);
         _hasFooter = Placeholder().Matches(_html).Any(x => IsNamed(x, MailTemplateOptions.FooterPlaceholder));
     }
 
@@ -32,6 +40,9 @@ internal sealed partial class MailTemplate
 
     /// <summary>Whether a host template is set.</summary>
     public bool IsSet => _html != null;
+
+    /// <summary>The frame support answers go out in: <see cref="MailTemplateOptions.SupportHtml"/> when set, otherwise this one.</summary>
+    public MailTemplate Support { get; }
 
     /// <summary>The HTML body a mail goes out with: <paramref name="html"/>, or the text as paragraphs, in the template with the subject, footer and preheader filled; without a template the HTML with the footer after a rule, or null when the mail has no HTML.</summary>
     /// <param name="subject">The subject line, as the recipient would see it in production.</param>
@@ -82,10 +93,10 @@ internal sealed partial class MailTemplate
     }
 
     /// <exception cref="InvalidOperationException">The template has no <see cref="MailTemplateOptions.ContentPlaceholder"/>.</exception>
-    internal static void RequireContent(string html)
+    internal static void RequireContent(string html, string name = nameof(MailTemplateOptions.Html))
     {
         if (!Placeholder().Matches(html ?? string.Empty).Any(x => IsNamed(x, MailTemplateOptions.ContentPlaceholder)))
-            throw new InvalidOperationException($"The mail template has no {MailTemplateOptions.ContentPlaceholder} placeholder, so no mail would carry its own content.");
+            throw new InvalidOperationException($"The mail template {nameof(MailTemplateOptions)}.{name} has no {MailTemplateOptions.ContentPlaceholder} placeholder, so no mail would carry its own content.");
     }
 
     private static bool IsNamed(Match match, string placeholder)

@@ -22,4 +22,8 @@ public class MailTemplateOptions
 
     /// <summary>The template, an HTML document or fragment holding <see cref="ContentPlaceholder"/>; null or empty sends each mail's own HTML unframed.</summary>
     public string Html { get; set; }
+
+    /// <summary>The frame for support answers alone, with the same placeholders, its <see cref="FooterPlaceholder"/> always empty; null or empty frames them in <see cref="Html"/>.</summary>
+    /// <remarks>An answer is a person writing back rather than a product announcing, so a host may want it plainer than its mail to users.</remarks>
+    public string SupportHtml { get; set; }
 }

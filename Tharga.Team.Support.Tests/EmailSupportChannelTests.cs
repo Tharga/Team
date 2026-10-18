@@ -60,7 +60,7 @@ public class EmailSupportChannelTests
     }
 
     [Fact]
-    public async Task AReply_NamesWhoWroteIt()
+    public async Task AReply_NamesNoStaffMember()
     {
         var (channel, mail, store) = Build();
         store.GetCaseByBindingAsync(SupportChannelType.Email, OpeningId, Arg.Any<CancellationToken>()).Returns(Case());
@@ -69,7 +69,7 @@ public class EmailSupportChannelTests
         await channel.PostAsync(Binding(), Message("Looking into it."));
 
         await mail.Received(1).SendAsync(
-            Arg.Is<OutboundMail>(x => x.Body == "Support Agent:\n\nLooking into it."),
+            Arg.Is<OutboundMail>(x => x.Body == "Looking into it."),
             Arg.Any<CancellationToken>());
     }
 

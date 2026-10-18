@@ -113,6 +113,37 @@ public class MailTemplateTests
     }
 
     [Fact]
+    public void ASupportTemplate_FramesSupportAnswersAlone_AndWithoutOneTheyUseTheMailTemplate()
+    {
+        var both = new MailTemplate(Options.Create(new MailTemplateOptions { Html = "<div>{{content}}</div>", SupportHtml = "<section>{{content}}<i>{{footer}}</i></section>" }));
+        var one = Template("<div>{{content}}</div>");
+
+        Assert.Equal("<div><p>T</p></div>", both.Render("S", "T", "<p>T</p>"));
+        Assert.Equal("<section><p>T</p><i></i></section>", both.Support.Render("S", "T", "<p>T</p>"));
+        Assert.Same(one, one.Support);
+        Assert.Same(MailTemplate.None, MailTemplate.None.Support);
+    }
+
+    [Fact]
+    public void ASupportTemplateAlone_FramesSupportAnswers_AndLeavesOtherMailUnframed()
+    {
+        var template = new MailTemplate(Options.Create(new MailTemplateOptions { SupportHtml = "<section>{{content}}</section>" }));
+
+        Assert.False(template.IsSet);
+        Assert.True(template.Support.IsSet);
+        Assert.Equal("<section><p>T</p></section>", template.Support.Render("S", "T", null));
+    }
+
+    [Fact]
+    public void ASupportTemplateWithoutContent_IsRefused_NamingIt()
+    {
+        var registration = Assert.Throws<InvalidOperationException>(() => new ServiceCollection().AddThargaMailTemplate(o => o.SupportHtml = "<div>{{subject}}</div>"));
+
+        Assert.Contains(nameof(MailTemplateOptions.SupportHtml), registration.Message);
+        Assert.Throws<InvalidOperationException>(() => new MailTemplate(Options.Create(new MailTemplateOptions { SupportHtml = "<div></div>" })));
+    }
+
+    [Fact]
     public void AnEmptyTemplate_FramesNothing()
     {
         Assert.False(Template("   ").IsSet);

@@ -273,6 +273,7 @@ public class TextCoverageTests
         Assert.All(UserNoticePreferencesViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserNoticeTeamDefaultsViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserNoticeText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()

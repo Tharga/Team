@@ -182,6 +182,9 @@ public class SupportCaseOptions
 
     internal IReadOnlyList<SupportMailbox> AdditionalMailboxes => _mailboxes;
 
+    /// <summary>How an answer mail speaks for support, from every mailbox: the name earlier support entries are attributed to, the signature, and the time zone of quoted dates.</summary>
+    public SupportAnswerOptions Answers { get; } = new();
+
     /// <summary>
     /// How the assistant behaves, when the host has registered an <c>IChatClient</c> for it to use.
     /// </summary>

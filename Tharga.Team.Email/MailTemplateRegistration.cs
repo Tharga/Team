@@ -11,9 +11,10 @@ public static class MailTemplateRegistration
     /// <remarks>
     /// <see cref="MailTemplateOptions.Html"/> is trusted host markup and is not sanitized; what is placed into it is. A mail
     /// with text alone also gets an HTML part, its text escaped into paragraphs, so the frame always applies; its text
-    /// alternative is unchanged. <c>services.Configure&lt;MailTemplateOptions&gt;(…)</c> sets it as well.
+    /// alternative is unchanged. Support answers go out in <see cref="MailTemplateOptions.SupportHtml"/> when it is set.
+    /// <c>services.Configure&lt;MailTemplateOptions&gt;(…)</c> sets it as well.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">The template has no <see cref="MailTemplateOptions.ContentPlaceholder"/>.</exception>
+    /// <exception cref="InvalidOperationException">A template has no <see cref="MailTemplateOptions.ContentPlaceholder"/>.</exception>
     public static IServiceCollection AddThargaMailTemplate(this IServiceCollection services, Action<MailTemplateOptions> configure)
     {
         ArgumentNullException.ThrowIfNull(configure);
@@ -21,6 +22,7 @@ public static class MailTemplateRegistration
         var options = new MailTemplateOptions();
         configure(options);
         if (!string.IsNullOrWhiteSpace(options.Html)) MailTemplate.RequireContent(options.Html);
+        if (!string.IsNullOrWhiteSpace(options.SupportHtml)) MailTemplate.RequireContent(options.SupportHtml, nameof(MailTemplateOptions.SupportHtml));
 
         services.Configure(configure);
 

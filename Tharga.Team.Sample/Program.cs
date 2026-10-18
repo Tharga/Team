@@ -293,6 +293,11 @@ builder.Services.AddThargaSupportCases(o =>
     // Further mailboxes under Support:Mailboxes:{name}, each with the keys of one mailbox; the name is stored on its cases.
     foreach (var mailbox in builder.Configuration.GetSection("Support:Mailboxes").GetChildren())
         o.AddMailbox(mailbox.Key, m => mailbox.Bind(m));
+
+    // An answer names no staff member: support signs it, and earlier support entries it quotes are attributed to support.
+    o.Answers.SupportName = "Tharga Team Sample Support";
+    o.Answers.Signature = ["Kind regards,", "Tharga Team Sample Support"];
+    o.Answers.TimeZoneId = "Europe/Stockholm";
 });
 
 // Mail to users: categories each user chooses from on their profile, and a queue sent in the background by
@@ -319,7 +324,9 @@ builder.Services.AddThargaUserMail(o =>
 // One HTML frame for every mail the toolkit sends -- support answers, messages, notices and invitations -- and for
 // the previews staff open before sending. The template is the host's own markup and is used as written; what is
 // placed into it is sanitized. A mail with text alone gets its text as paragraphs, so the frame always applies.
-builder.Services.AddThargaMailTemplate(o => o.Html = """
+builder.Services.AddThargaMailTemplate(o =>
+{
+    o.Html = """
     <!doctype html>
     <html>
     <head><meta charset="utf-8"><title>{{subject}}</title></head>
@@ -332,7 +339,20 @@ builder.Services.AddThargaMailTemplate(o => o.Html = """
     </div>
     </body>
     </html>
-    """);
+    """;
+
+    // Support answers in a plainer frame of their own: a person writing back, with the signature styled.
+    o.SupportHtml = """
+    <!doctype html>
+    <html>
+    <head><meta charset="utf-8"><title>{{subject}}</title><style>.signature{color:#6b7280}</style></head>
+    <body style="margin:0;padding:24px;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;">
+    <div style="display:none;max-height:0;overflow:hidden;">{{preheader}}</div>
+    <div style="max-width:640px;">{{content}}</div>
+    </body>
+    </html>
+    """;
+});
 
 // Messages staff write to users of chosen teams, in service messages and product news but never in tips.
 builder.Services.AddThargaUserMessages(o => o.StaffMessageCategories = [UserMailCategories.ServiceKey, "news"]);

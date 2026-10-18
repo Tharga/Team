@@ -27,7 +27,11 @@ namespace Tharga.Team.Support.Cases;
 /// </para>
 /// <para>
 /// <b>An answer is composed in one place</b>, so the preview a staff member opens and the mail that is sent are the
-/// same mail, the host's template included.
+/// same mail, the host's support frame included.
+/// </para>
+/// <para>
+/// <b>An answer names no staff member.</b> It carries no author heading, the host's signature follows it, and each
+/// earlier entry it quotes written by support is attributed to support's name (<see cref="SupportAnswerFrame"/>).
 /// </para>
 /// </remarks>
 internal sealed class EmailSupportChannel(
@@ -39,10 +43,12 @@ internal sealed class EmailSupportChannel(
     ISupportMailClients mailClients = null,
     ILogger<EmailSupportChannel> logger = null,
     IOutboundMailPolicy policy = null,
-    MailTemplate template = null) : ISupportChannel, ISupportAnswerMail
+    MailTemplate template = null,
+    SupportAnswerOptions answers = null,
+    ITextResolver texts = null) : ISupportChannel, ISupportAnswerMail
 {
     private readonly SupportMailboxes _mailboxes = mailboxes ?? new SupportMailboxes(options.Value);
-    private readonly MailTemplate _template = template ?? MailTemplate.None;
+    private readonly MailTemplate _template = (template ?? MailTemplate.None).Support;
 
     public SupportChannelType ChannelType => SupportChannelType.Email;
 
@@ -148,13 +154,14 @@ internal sealed class EmailSupportChannel(
         };
     }
 
-    /// <summary>The answer mail as it goes out, before the outbound policy: the thread, the conversation so far quoted, the mailbox's Reply-To, and the HTML in the host's template.</summary>
+    /// <summary>The answer mail as it goes out, before the outbound policy: the thread, the signature, the conversation so far quoted, the mailbox's Reply-To, and the HTML in the host's support frame.</summary>
     private async Task<OutboundMail> ComposeAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, SupportMailbox mailbox, IReadOnlyList<MailAttachment> files, CancellationToken cancellationToken)
     {
         var thread = ThreadOf(supportCase, binding);
         var earlier = supportCase == null ? [] : await EarlierAsync(supportCase, message, cancellationToken);
+        var frame = await SupportAnswerFrame.CreateAsync(answers, texts);
         var subject = Subject(supportCase);
-        var body = Body(message, earlier);
+        var body = Body(message, earlier, frame);
 
         return new OutboundMail(
             To: binding.Address,
@@ -164,7 +171,7 @@ internal sealed class EmailSupportChannel(
             References: thread,
             ReplyTo: ReplyToFor(mailbox.Options, supportCase?.Id),
             Attachments: files,
-            BodyHtml: _template.Render(subject, body, Html(message, earlier, _template.IsSet)));
+            BodyHtml: _template.Render(subject, body, Html(message, earlier, frame, _template.IsSet)));
     }
 
     /// <summary>The mailbox the case came in through and its client, or the primary's with a warning when that mailbox is no longer configured.</summary>
@@ -248,22 +255,21 @@ internal sealed class EmailSupportChannel(
     private static string Subject(SupportCase supportCase)
         => string.IsNullOrWhiteSpace(supportCase?.Subject) ? "Re: your support case" : $"Re: {supportCase.Subject}";
 
-    /// <remarks>
-    /// A system entry is the toolkit speaking — a closure note — so attributing it to a person would be a
-    /// lie in front of a customer.
-    /// </remarks>
-    internal static string Body(SupportMessage message, IReadOnlyList<SupportMessage> earlier)
+    /// <summary>The answer as text: the answer itself with no heading, the signature, then the conversation so far quoted.</summary>
+    internal static string Body(SupportMessage message, IReadOnlyList<SupportMessage> earlier, SupportAnswerFrame frame = null)
     {
-        var text = message.Kind == SupportMessageKind.System ? message.Body : $"{message.AuthorName}:\n\n{message.Body}";
+        frame ??= SupportAnswerFrame.Default;
 
-        return earlier.Count == 0 ? text : text + "\n\n" + string.Join("\n\n", earlier.Select(Quoted));
+        var parts = new List<string> { message.Body ?? string.Empty };
+        if (frame.SignatureText is { } signature) parts.Add(signature);
+        parts.AddRange(earlier.Select(x => Quoted(x, frame)));
+
+        return string.Join("\n\n", parts);
     }
 
     // The conversation so far, newest first, quoted the way mail clients quote, so the answer reads on its own.
-    private static string Quoted(SupportMessage message)
-        => $"{Attribution(message)}:\n" + string.Join("\n", (message.Body ?? "").Split('\n').Select(x => "> " + x.TrimEnd('\r')));
-
-    private static string Attribution(SupportMessage message) => $"{message.SentAt:yyyy-MM-dd HH:mm} UTC, {message.AuthorName}";
+    private static string Quoted(SupportMessage message, SupportAnswerFrame frame)
+        => frame.Attribution(message) + "\n" + string.Join("\n", (message.Body ?? "").Split('\n').Select(x => "> " + x.TrimEnd('\r')));
 
     /// <summary>
     /// The HTML version of <see cref="Body"/>, for an entry written with formatting; null for a plain entry, which is
@@ -271,27 +277,27 @@ internal sealed class EmailSupportChannel(
     /// host template does.
     /// </summary>
     /// <remarks>
-    /// Each earlier message is quoted in a <c>blockquote</c>, as its own formatting when it had some and as its
-    /// escaped text otherwise. Everything is sanitized again on the way out. An image keeps its <c>cid:</c>
-    /// reference only when this entry carries that file, so it travels beside the HTML; an earlier message's images
-    /// are named rather than sent again.
+    /// The signature follows the answer as a paragraph of class <c>signature</c>. Each earlier message is quoted in a
+    /// <c>blockquote</c>, as its own formatting when it had some and as its escaped text otherwise. Everything is
+    /// sanitized again on the way out. An image keeps its <c>cid:</c> reference only when this entry carries that file,
+    /// so it travels beside the HTML; an earlier message's images are named rather than sent again.
     /// </remarks>
-    internal static string Html(SupportMessage message, IReadOnlyList<SupportMessage> earlier, bool plainAsHtml = false)
+    internal static string Html(SupportMessage message, IReadOnlyList<SupportMessage> earlier, SupportAnswerFrame frame = null, bool plainAsHtml = false)
     {
+        frame ??= SupportAnswerFrame.Default;
+
         var own = SafeHtml.Sanitize(message.BodyHtml, contentId => Carries(message, contentId) ? HtmlImage.Keep : HtmlImage.Described(NameOf(message, contentId)));
         if (own == null && plainAsHtml) own = string.IsNullOrEmpty(message.Body) ? string.Empty : $"<p>{SafeHtml.FromPlainText(message.Body)}</p>";
         if (own == null) return null;
 
-        var html = new StringBuilder();
-
-        if (message.Kind != SupportMessageKind.System) html.Append("<p>").Append(WebUtility.HtmlEncode(message.AuthorName)).Append(":</p>");
-        html.Append(own);
+        var html = new StringBuilder(own);
+        if (frame.SignatureHtml is { } signature) html.Append(signature);
 
         foreach (var quoted in earlier)
         {
             var body = SafeHtml.Sanitize(quoted.BodyHtml, contentId => HtmlImage.Described(NameOf(quoted, contentId))) ?? SafeHtml.FromPlainText(quoted.Body);
 
-            html.Append("<p>").Append(WebUtility.HtmlEncode(Attribution(quoted))).Append(":</p>");
+            html.Append("<p>").Append(WebUtility.HtmlEncode(frame.Attribution(quoted))).Append("</p>");
             html.Append("<blockquote>").Append(body).Append("</blockquote>");
         }
 

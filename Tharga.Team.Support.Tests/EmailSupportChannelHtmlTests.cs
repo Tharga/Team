@@ -27,7 +27,7 @@ public class EmailSupportChannelHtmlTests
 
         await mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x =>
                 x.Body == EmailSupportChannel.Body(answer, earlier) &&
-                x.BodyHtml == "<p>Support Agent:</p><p>Try <b>this</b>.</p><p>2026-10-17 08:00 UTC, A User:</p><blockquote>It is &lt;empty&gt;.<br>Really.</blockquote>"),
+                x.BodyHtml == "<p>Try <b>this</b>.</p><p>On 2026-10-17 08:00 UTC, A User wrote:</p><blockquote>It is &lt;empty&gt;.<br>Really.</blockquote>"),
             Arg.Any<CancellationToken>());
     }
 
@@ -38,7 +38,7 @@ public class EmailSupportChannelHtmlTests
 
         await channel.PostWithResultAsync(Binding(), Answer(null));
 
-        await mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x => x.BodyHtml == null && x.Body.StartsWith("Support Agent:\n\nTry this.")), Arg.Any<CancellationToken>());
+        await mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x => x.BodyHtml == null && x.Body.StartsWith("Try this.\n\nOn 2026-10-17 08:00 UTC, A User wrote:")), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -52,9 +52,9 @@ public class EmailSupportChannelHtmlTests
 
         var html = EmailSupportChannel.Html(Answer("<p><b>Fixed</b></p>"), earlier);
 
-        Assert.Equal("<p>Support Agent:</p><p><b>Fixed</b></p>" +
-                     "<p>2026-10-17 08:01 UTC, A User:</p><blockquote><p>Still <i>empty</i></p></blockquote>" +
-                     "<p>2026-10-17 08:00 UTC, A User:</p><blockquote>Help</blockquote>", html);
+        Assert.Equal("<p><b>Fixed</b></p>" +
+                     "<p>On 2026-10-17 08:01 UTC, A User wrote:</p><blockquote><p>Still <i>empty</i></p></blockquote>" +
+                     "<p>On 2026-10-17 08:00 UTC, A User wrote:</p><blockquote>Help</blockquote>", html);
     }
 
     /// <summary>Whatever was stored, what leaves is sanitized again.</summary>
@@ -69,11 +69,11 @@ public class EmailSupportChannelHtmlTests
     }
 
     [Fact]
-    public void AnAuthorNameIsEscaped()
+    public void AQuotedAuthorsName_IsEscaped()
     {
-        var html = EmailSupportChannel.Html(Answer("<p><b>Fixed</b></p>") with { AuthorName = "<b>Eve</b>" }, []);
+        var html = EmailSupportChannel.Html(Answer("<p><b>Fixed</b></p>"), [Customer(1, "Help") with { AuthorName = "<b>Eve</b>" }]);
 
-        Assert.StartsWith("<p>&lt;b&gt;Eve&lt;/b&gt;:</p>", html);
+        Assert.Contains("<p>On 2026-10-17 08:00 UTC, &lt;b&gt;Eve&lt;/b&gt; wrote:</p>", html);
     }
 
     [Fact]

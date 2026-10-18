@@ -176,8 +176,8 @@ public class SupportAnswerRouteTests
         Assert.Equal(Customer, preview.To);
         Assert.Equal("Re: Export is empty", preview.Subject);
         Assert.Null(preview.ReplyTo);
-        Assert.Equal("<p>sam:</p><p>Try <b>this</b>.</p><p>2026-10-17 08:00 UTC, A Customer:</p><blockquote>The export is empty.</blockquote>", preview.Html);
-        Assert.StartsWith("sam:\n\nTry this.\n\n2026-10-17 08:00 UTC, A Customer:\n> The export is empty.", preview.Text);
+        Assert.Equal("<p>Try <b>this</b>.</p><p>On 2026-10-17 08:00 UTC, A Customer wrote:</p><blockquote>The export is empty.</blockquote>", preview.Html);
+        Assert.StartsWith("Try this.\n\nOn 2026-10-17 08:00 UTC, A Customer wrote:\n> The export is empty.", preview.Text);
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public class SupportAnswerRouteTests
         await staff.AnswerCaseAsync(TeamKey, CaseId, string.Empty, "<p>Try <b>this</b>.</p>", []);
 
         await _mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x =>
-                x.BodyHtml == "<body><h1>Re: Export is empty</h1><p>sam:</p><p>Try <b>this</b>.</p><p>2026-10-17 08:00 UTC, A Customer:</p><blockquote>The export is empty.</blockquote><i></i></body>"),
+                x.BodyHtml == "<body><h1>Re: Export is empty</h1><p>Try <b>this</b>.</p><p>On 2026-10-17 08:00 UTC, A Customer wrote:</p><blockquote>The export is empty.</blockquote><i></i></body>"),
             Arg.Any<CancellationToken>());
     }
 
@@ -231,8 +231,8 @@ public class SupportAnswerRouteTests
         await staff.AnswerCaseAsync(TeamKey, CaseId, "Plain <words>.\nTwo lines.");
 
         await _mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x =>
-                x.BodyHtml == "<div><p>sam:</p><p>Plain &lt;words&gt;.<br>Two lines.</p><p>2026-10-17 08:00 UTC, A Customer:</p><blockquote>The export is empty.</blockquote></div>" &&
-                x.Body.StartsWith("sam:\n\nPlain <words>.\nTwo lines.\n\n")),
+                x.BodyHtml == "<div><p>Plain &lt;words&gt;.<br>Two lines.</p><p>On 2026-10-17 08:00 UTC, A Customer wrote:</p><blockquote>The export is empty.</blockquote></div>" &&
+                x.Body.StartsWith("Plain <words>.\nTwo lines.\n\n")),
             Arg.Any<CancellationToken>());
     }
 
@@ -266,7 +266,7 @@ public class SupportAnswerRouteTests
 
         var preview = await mail.PreviewAsync(supportCase, Binding(), Opening() with { Sequence = 2, Source = null, Body = "Hi", AuthorName = "sam", AsSupport = true }, TestContext.Current.CancellationToken);
 
-        Assert.StartsWith("<div><p>sam:</p><p>Hi</p>", preview.Html);
+        Assert.StartsWith("<div><p>Hi</p>", preview.Html);
     }
 
     private void Decide(OutboundMailAction action, string redirectTo = null)

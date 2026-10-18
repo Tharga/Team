@@ -104,6 +104,9 @@ public static class SupportRegistration
     /// <b>Further mailboxes are added with <see cref="SupportCaseOptions.AddMailbox"/></b>; each is read on its own and answers the cases that came in through it.
     /// </para>
     /// <para>
+    /// <b>An answer mail names no staff member</b>: <see cref="SupportCaseOptions.Answers"/> sets the name earlier support entries are attributed to, the signature and the time zone of quoted dates.
+    /// </para>
+    /// <para>
     /// <b>Nothing else may be registered as <see cref="ISupportCaseService"/>.</b> The only registration is
     /// the authorizing decorator; the implementation it wraps is internal and unregistered by itself, so
     /// there is no unchecked instance in the container for a component to resolve by accident.
@@ -126,6 +129,7 @@ public static class SupportRegistration
             o.DefaultVisibility = caseOptions.DefaultVisibility;
             o.AssistantDefaultVisibility = caseOptions.AssistantDefaultVisibility;
             o.StaffCloseAfter = caseOptions.StaffCloseAfter;
+            CopySettable(caseOptions.Answers, o.Answers);
         });
 
         // Projected onto its own options type for the same reason the Slack section is: the mail transport
@@ -138,6 +142,9 @@ public static class SupportRegistration
         foreach (var mailbox in additionalMailboxes) RequireSendingAddressIsAccepted(mailbox.Options, mailbox.Name);
 
         services.TryAddSingleton(sp => new SupportMailboxes(sp.GetRequiredService<IOptions<MailOptions>>().Value, additionalMailboxes));
+
+        _ = SupportAnswerFrame.Zone(caseOptions.Answers.TimeZoneId);
+        services.TryAddSingleton(caseOptions.Answers);
 
         MailOptions[] everyMailbox = [caseOptions.Email, .. additionalMailboxes.Select(x => x.Options)];
 
