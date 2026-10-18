@@ -266,9 +266,9 @@ Messages are new in 4.2: nothing changes until you call `AddThargaUserMessages`.
   as a framed filter, users added, and the list of recipients beside them, with a Preview button.
 - **`SupportAttachmentPicker` resolves the support service only when no `Limits` is given**, so the compose view
   needs no support registration.
-- **Text keys removed:** `team.userMessage.log.failures`, `team.userMessage.compose.chooseUsers`. **Added:**
+- **Text keys removed:** `team.userMessage.log.failures`, `team.userMessage.compose.chooseUsers|users|noTeams`. **Added:**
   `team.userMessage.log.bounced|recipientList|statusFilter|anyStatus|noRecipients|moreRecipients`,
-  `team.userMessage.compose.searchUsers|noUserMatches|removeUser|filter|filterExplanation|addedExplanation|recipientList|byFilter|added|optedOut|optedOutDetail|noRecipients|moreRecipients`
-  and `team.mailPreview.open|title|from|replyTo|to|toMany|subject|files|textOnly|frame|close|failed`. **Reworded:**
-  `team.userMessage.compose.users` is now "Add users" and `team.userMessage.compose.noTeams` "Choose teams and who
-  in them, or add users, to see who receives it."; a translation of the old wording should follow.
+  `team.userMessage.compose.addUsers|nothingChosen|searchUsers|noUserMatches|removeUser|filter|filterExplanation|addedExplanation|recipientList|byFilter|added|optedOut|optedOutDetail|noRecipients|moreRecipients`
+  and `team.mailPreview.open|title|from|replyTo|to|toMany|subject|files|textOnly|frame|close|failed`. The heading
+  over the users added and the prompt shown before anything is chosen say something new, so they moved to
+  `addUsers` and `nothingChosen` rather than keep a key whose stored translation says the old thing.

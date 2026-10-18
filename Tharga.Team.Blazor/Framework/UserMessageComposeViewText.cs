@@ -40,7 +40,7 @@ public static class UserMessageComposeViewText
     public static readonly TextKey ChooseRoles = new("team.userMessage.compose.chooseRoles", "Choose roles");
 
     /// <summary>The heading over the search that adds users one by one.</summary>
-    public static readonly TextKey Users = new("team.userMessage.compose.users", "Add users");
+    public static readonly TextKey Users = new("team.userMessage.compose.addUsers", "Add users");
 
     /// <summary>What adding a user does, under its heading.</summary>
     public static readonly TextKey AddedExplanation = new("team.userMessage.compose.addedExplanation", "A user added is on the list whatever the filter says, in any team.");
@@ -85,7 +85,7 @@ public static class UserMessageComposeViewText
     public static readonly TextKey Body = new("team.userMessage.compose.body", "Message");
 
     /// <summary>Asks for a selection before anything can be listed.</summary>
-    public static readonly TextKey NoTeams = new("team.userMessage.compose.noTeams", "Choose teams and who in them, or add users, to see who receives it.");
+    public static readonly TextKey NoTeams = new("team.userMessage.compose.nothingChosen", "Choose teams and who in them, or add users, to see who receives it.");
 
     /// <summary>How many the selection reaches; <c>{0}</c> is the count.</summary>
     public static readonly TextKey Reaches = new("team.userMessage.compose.reaches", "Reaches {0} people.");
