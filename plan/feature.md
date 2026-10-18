@@ -16,6 +16,7 @@ Support by mail works end to end and is pleasant to work: answers reach the send
 8. The unassigned queue reads like the cases view: expandable cards, dates through the host's time template, filters.
 9. No no-reply default anywhere: From and Reply-To are real, answerable addresses.
 10. Mail to users (shared with support): categories with opt-out and an unsubscribe link; staff writing to users by person, list, role, access level, team or teams (no team writes to its users by hand, decided 2026-10-17); automatic notices from an event catalogue with per-user choices. Built on 4 and 5.
+11. After the consumer's run against real mailboxes (2026-10-18): where a support answer goes, beside the answer box; writing to users as a filter plus added users with the resulting recipient list; one host mail template for every HTML mail, and a preview of messages and answers rendered by the same code.
 
 ## Done when
 All of the above is in, every suite is green, the docs (`docs/articles`, READMEs) describe it with a "Moving to" section, and the consumer has exercised it against real mailboxes.

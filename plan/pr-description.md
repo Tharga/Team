@@ -24,6 +24,10 @@ they choose from, through a persisted queue, with staff messages and automatic n
   answer it names; **Send again** (`ResendAsync`) retries it.
 - **The unassigned queue reads like the cases view**: expandable cards, the host's dates, a filter with search,
   and `RefreshAsync()` for a host's backplane.
+- **Where the answer goes.** Beside every support answer box: the address the answer is mailed to and the support
+  address it goes out from, or that it is read on the site, and outside production whether the outbound policy
+  redirects it or holds it back (`GetAnswerRouteAsync`). **Preview** shows the answer as the customer will receive
+  it, with the conversation quoted (`PreviewAnswerAsync`).
 
 ## Mail to users (`Tharga.Team.Email`)
 
@@ -31,9 +35,10 @@ they choose from, through a persisted queue, with staff messages and automatic n
   in and required), an unsubscribe link and the one-click headers on every optional mail, answered by
   `MapThargaMailUnsubscribe()`, and a persisted queue any instance sends, reading the user's choice and address
   when it sends. There is no default sending address and no no-reply one.
-- **`AddThargaUserMessages`** — staff holding the `messages:send` system scope write to chosen users of chosen
-  teams (by user, role, access level or everyone), see how many it reaches first, and read what became of each
-  mail.
+- **`AddThargaUserMessages`** — staff holding the `messages:send` system scope write to chosen users: a filter of
+  teams and who in them (role, access level or everyone), and users added by name whatever the filter says. Before
+  sending they see the list of recipients — who came in how, and who turned the category off
+  (`GetAddresseesAsync`) — and a preview of the mail (`PreviewMailAsync`); afterwards, what became of each mail.
 - **`AddThargaUserNotices`** — a catalogue of notices raised from server code, delivered at once or in a daily
   summary, chosen per user over each team's default (the `notices:manage` team scope).
 - **History and bounces** — every mail to a user is in their history (`IUserMailHistoryService`,
@@ -41,11 +46,19 @@ they choose from, through a persisted queue, with staff messages and automatic n
 - **Invitations** go through the same outbox once it is registered: recorded, one immediate attempt from its
   address, so the inviter is still told whether it went.
 
+## One mail template
+
+**`AddThargaMailTemplate(o => o.Html = …)`** frames every HTML mail the toolkit sends — support answers, messages,
+notices and invitations — in your own HTML, with `{{content}}`, `{{subject}}`, `{{footer}}` and `{{preheader}}`.
+Mail written as text alone gets an HTML part so the frame always applies; without a template nothing changes. The
+previews are rendered by the same code, in a sandboxed frame.
+
 ## Moving to 4.2
 
-- `ISupportCaseService` gained seven members (files, formatting, `OpenAttachmentAsync`,
-  `GetAttachmentLimitsAsync`, `ResendAsync`) and `ISupportCaseStore.SetMessageDeliveryAsync` an `error` parameter:
-  implementers and decorators add them.
+- `ISupportCaseService` gained nine members (files, formatting, `OpenAttachmentAsync`,
+  `GetAttachmentLimitsAsync`, `ResendAsync`, `GetAnswerRouteAsync`, `PreviewAnswerAsync`) and
+  `ISupportCaseStore.SetMessageDeliveryAsync` an `error` parameter: implementers and decorators add them. A host
+  with its own REST surface adds endpoints for the answer's route and its preview.
 - `OutboundMail`, `InboundMail` and `MailFetchResult` gained positional parameters: recompile.
 - Support mail from a known sender may now open in their team; register an `ISupportSenderDirectory` that finds
   nobody to keep every mail unassigned. Reading mail needs outbound DNS for the DKIM check.

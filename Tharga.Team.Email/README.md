@@ -20,6 +20,7 @@ The guides are [Email, team mailboxes & the postmaster](https://team.tharga.net/
 - **`HtmlText`** — the plain-text rendering of HTML the toolkit uses: paragraphs kept, list items as `- ` lines, quotes as `> ` lines, links as `text (address)`.
 - **`IMailBounceHandler` / `MailBounce`** — receives a bounce the support mail poller read that names no support answer; register your own to mark mail you sent as undelivered. Make it idempotent, and do not log the reason, which often quotes an address.
 - **`RecipientFilter`** — accept mail only for chosen domains or addresses.
+- **`AddThargaMailTemplate(o => o.Html = …)` / `MailTemplateOptions`** — the host's HTML frame around every HTML mail the toolkit sends (support answers, mail to users, invitations) and the previews of them, with `{{content}}` (required), `{{subject}}`, `{{footer}}` and `{{preheader}}`. The template is trusted markup; what goes into it is sanitized. With a template, a mail with text alone also gets an HTML part. See [the mail template](https://team.tharga.net/articles/user-mail.html#the-mail-template).
 
 The transport knows nothing about teams, users or audit entries; a test guards that.
 

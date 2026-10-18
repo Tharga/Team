@@ -9,7 +9,8 @@ instance claims a mail sends. Three things are built on it:
 - **Invitations** — once mail to users is registered, invitations go through it too.
 
 Every one of them is recorded, so a user's **mail history** shows what was sent to them and what became of it,
-and a mail the receiving server returns is marked **bounced**.
+and a mail the receiving server returns is marked **bounced**. Every one of them can be framed in the host's own
+**[mail template](#the-mail-template)**, as support answers are.
 
 The services are in `Tharga.Team.Email` (namespace `Tharga.Team.Email.Users`), the contracts in `Tharga.Team`,
 storage in `Tharga.Team.MongoDB` and the views in `Tharga.Team.Blazor`. New in 4.2.
@@ -111,7 +112,8 @@ is audited. A change is audited under the feature `usermail`, action `choice`, w
 ## Unsubscribing
 
 A mail in an optional category carries a footer — a sentence saying why it came and an **Unsubscribe** link, in
-both the HTML and the text body — and the `List-Unsubscribe` header. When the link is https it also carries
+both the HTML and the text body, in the template's `{{footer}}` when there is one — and the `List-Unsubscribe`
+header. When the link is https it also carries
 `List-Unsubscribe-Post: List-Unsubscribe=One-Click`, so a mail provider can offer its own one-click button
 (RFC 8058). Mail in a required category carries none of this.
 
@@ -137,6 +139,54 @@ Raise `UnsubscribeTokenVersion` to invalidate every link already sent.
 - **`BaseUrl` is the address users reach the site at**, absolute http or https; links are built on it.
 - **Sign outgoing mail with DKIM on the sending server**, covering the `List-Unsubscribe` headers. Mail
   providers honour one-click unsubscribing only for signed mail.
+
+## The mail template
+
+One HTML frame for **every HTML mail the toolkit sends** — support answers, and mail to users: messages, notices
+and invitations — and for the previews staff open before sending. Register it once, in any order with the modules
+that send:
+
+```csharp
+builder.Services.AddThargaMailTemplate(o => o.Html = File.ReadAllText("mail-template.html"));
+```
+
+```html
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>{{subject}}</title></head>
+<body style="margin:0;padding:24px;background:#f3f4f6;font-family:Arial,sans-serif;">
+  <div style="display:none;max-height:0;overflow:hidden;">{{preheader}}</div>
+  <div style="max-width:640px;margin:0 auto;background:#ffffff;padding:24px;">
+    <img src="https://app.example.com/mail-logo.png" alt="Example" height="32">
+    {{content}}
+    <div style="margin-top:24px;font-size:12px;color:#6b7280;">{{footer}}</div>
+  </div>
+</body>
+</html>
+```
+
+| Placeholder | Becomes |
+|---|---|
+| `{{content}}` (required) | The mail's own HTML, sanitized; a mail with text alone gets its text escaped into paragraphs, with line breaks kept and web addresses as links |
+| `{{subject}}` | The subject line, escaped, as it reads in production — without the prefix a redirect adds outside it |
+| `{{footer}}` | For an optional category, why the mail came and the unsubscribe link; otherwise nothing. Without this placeholder the footer follows the content after a rule |
+| `{{preheader}}` | The start of the text on one line, escaped, about 140 characters — the line an inbox shows after the subject |
+
+- **The template is trusted host markup** and is used as written; only what goes into it is sanitized. Inline its
+  styles, as most mail clients ignore a `<style>` block, and leave scripts out — mail clients drop them.
+- **Placeholders are filled in one pass**, ignoring case and spaces inside the braces, so a placeholder written in
+  a mail's own content stays text. Any other `{{name}}` is left as it is.
+- **With a template every mail has an HTML part.** A mail written as text alone — an invitation, a plain support
+  answer — gets one made from its text; its text alternative is unchanged.
+- **Without a template nothing changes:** a formatted mail's HTML goes as it is, with the footer after a rule, and
+  a text-only mail stays text.
+- **A template without `{{content}}` is refused** when `AddThargaMailTemplate` runs. `services.Configure<MailTemplateOptions>(…)`
+  sets it too, and is checked when the first mail is composed.
+- **Invitations sent without mail to users** (`AddThargaEmailInvitations`) are framed as well.
+
+**One renderer.** Sending and previewing go through the same composition — the footer, the template, the
+sanitizing — so a preview shows the mail that is sent. See [Preview](user-messages.md#preview) for messages and
+[Where the answer goes, and its preview](support-cases.md#where-the-answer-goes-and-its-preview) for support.
 
 ## Queuing mail from server code
 
@@ -305,7 +355,8 @@ With `AddThargaUserMail` registered, **invitations are sent as mail to users**:
 - **A withheld invitation reports failure.** Outside production, an invitation the outbound policy withholds
   says "could not send", with the reason, instead of claiming it went.
 - **The text** is `team.userMail.invitation.subject` (`{0}` the team) and `team.userMail.invitation.body` (`{0}`
-  the invited person, `{1}` the team, `{2}` the link), resolved through `ITextResolver`.
+  the invited person, `{1}` the team, `{2}` the link), resolved through `ITextResolver`. It is text alone; with a
+  [mail template](#the-mail-template) it also goes as HTML, its link clickable.
 - **A sender of your own is kept.** Anything registered as `ITeamEmailSender` other than the toolkit's SMTP
   sender — `AddEmailService<T>()`, for example — stays in place, whichever is registered first.
   `AddThargaEmailInvitations()` becomes unnecessary; registered as well, in either order, it is replaced.
@@ -370,6 +421,8 @@ Mail to users is new in 4.2, so nothing changes until you call `AddThargaUserMai
   `Microsoft.Extensions.Options` as package references, which the framework provides.
 - **`OutboundMail` gained a trailing positional parameter, `UnsubscribeUrl`** — see
   [Email](team-email.md#moving-to-42). Recompile.
+- **The mail template is new** (`AddThargaMailTemplate`, `MailTemplateOptions`). Nothing is framed until you set
+  one; then support answers, mail to users and invitations all carry it, and text-only mail gains an HTML part.
 
 ### If you built against the 4.2 source before its release
 
@@ -397,3 +450,5 @@ The surface changed while it was being built. A host that linked the source alon
 - **`UserMailAudit` gained `HistoryAction` and `Count`.** New text keys: `team.userMail.history.*` (title,
   explanation, empty, showMore, notPermitted, noUser, to, `kind.*`, `status.*`) and
   `team.userMail.invitation.subject|body`.
+- **The footer goes into the template's `{{footer}}`** once a template is set; without one, the HTML footer is as
+  it was. Mail composed with a template is the same for every kind of mail, previews included.

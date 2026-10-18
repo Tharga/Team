@@ -339,7 +339,10 @@ host that labels the tab or card it sits in.
 
 Every answer box in these views takes formatting ([`RichTextEditor`](#formatting)) and files
 ([`SupportAttachmentPicker`](#attachments)), and every staff view shows the support address a case came in to
-and whether each answer was delivered.
+and whether each answer was delivered. Above each support answer box, `SupportAnswerRouteLine` says **where the
+answer goes** — the address it is mailed to and the support address it is sent from, or that it is shown on the
+site — and beside the button that answers, **Preview** opens the mail as the person who raised the case would
+receive it; see [Where the answer goes, and its preview](#where-the-answer-goes-and-its-preview).
 
 **Closing asks first.** The team's dialog offers who may read the case from now on, under `PerCase`, with
 `Private` offered only where `GetVisibilityChoiceAsync` allows it; the staff dialog says it is better left to the
@@ -788,6 +791,37 @@ any of them finds its case, whichever one the customer's mail program chose to a
 every answer to the override address, so the person testing answers from there; that reply is accepted on the
 case as if the customer had written it.
 
+### Where the answer goes, and its preview
+
+Staff answering a mailed case see **the address the answer is mailed to** and **the support address it is sent
+from** — not only the author's name, which for a sender nobody knows is "Unknown". A case with no mail thread,
+raised on the site, says the answer is shown there instead. Outside production, when the
+[outbound mail policy](implementation-guide.md#mail-outside-production) would not deliver to that address, it says
+so plainly: *In this environment the answer is redirected to {override}*, or *…is not sent*. In production, or
+for an address in an allowed domain, nothing more is added.
+
+```csharp
+var route = await cases.GetAnswerRouteAsync(teamKey, caseId);          // null for no such case
+var preview = await cases.PreviewAnswerAsync(teamKey, caseId, body: null, bodyHtml: draft);  // null when not mailed
+```
+
+- **`GetAnswerRouteAsync`** returns a `SupportAnswerRoute`: `ByMail`, `To`, `From` and `Mailbox` (the mailbox the
+  case came in through, or the primary when that one is no longer configured), and `Effect` —
+  `MailPolicyEffect.None`, `Redirect` with `RedirectedTo`, or `Withhold` — from `IOutboundMailPolicy.Decide`.
+  `SupportAnswerRoute.Site` is a case answered on the site: one with no mail thread, or a host that mails nothing.
+- **`PreviewAnswerAsync`** returns the draft as a `MailPreview` — `From`, `To`, `ReplyTo` (the per-case address
+  when the mailbox uses one), `Subject`, the `Html` in the host's [mail template](user-mail.md#the-mail-template)
+  with the conversation so far quoted, and the `Text` alternative — **composed by the code that sends the answer**,
+  without sending or storing anything. The draft is sanitized and derived exactly as an answer is, and written as
+  by the caller. Files are not rendered; the dialog names them.
+- **Both are authorized exactly as answering**, since they show the correspondent's address to whoever may write to
+  it; neither is audited, as reads are not — the answer is, when it is sent.
+
+The components show them: `SupportAnswerRouteLine` (`Route`) and `MailPreviewDialog` (in `Tharga.Team.Blazor`'s
+framework, `Preview`, `FileNames`), which renders the mail in an `iframe` given the HTML as `srcdoc` and sandboxed
+with no permissions, so the template's styles stay inside it and nothing in it runs. A reader who may not answer
+is shown no route and no preview. Their texts are `team.support.answerRoute.*` and `team.mailPreview.*`.
+
 ### Several mailboxes
 
 `o.Email` is the **primary** mailbox. Add more with `AddMailbox`, each with a whole `MailOptions` of its own — its
@@ -910,7 +944,8 @@ shown formatted — through **one sanitizer**, on every way in and again at ever
 - **Inline images show in place** in the transcript: PNG, JPEG, GIF and WebP up to 2 MB, read through
   `OpenAttachmentAsync`. An image shown in place is not listed again among the files; one that cannot be shown is.
 - **A formatted answer is mailed as HTML** beside the same text as before (`multipart/alternative`), with the
-  earlier conversation in quotes.
+  earlier conversation in quotes. With a [mail template](user-mail.md#the-mail-template) it is framed in it, and a
+  plain answer is mailed as HTML too — its escaped text, the conversation in quotes — beside the same text.
 
 ```csharp
 await cases.AnswerCaseAsync(teamKey, caseId, body: null, bodyHtml: "<p>Fixed in <b>2.4</b>.</p>", attachments: []);
@@ -1169,7 +1204,8 @@ A custom store that does not implement them returns nothing, so the worker simpl
 
 The toolkit ships no REST endpoints for support cases; a host with its own surface calls `ISupportCaseService` and
 nothing else. Since 4.2 that surface needs a few more endpoints to keep up with the components: answering and
-replying with files and an optional `bodyHtml`, downloading a file, and sending an answer again.
+replying with files and an optional `bodyHtml`, downloading a file, sending an answer again, and where an answer
+goes and what it will look like.
 
 ```csharp
 [HttpPost("{teamKey}/cases/{caseId}/answers")]
@@ -1203,7 +1239,18 @@ public async Task<IActionResult> AttachmentAsync(string teamKey, string caseId, 
 [HttpPost("{teamKey}/cases/{caseId}/messages/{sequence:int}/resend")]
 public Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence)
     => cases.ResendAsync(teamKey, caseId, sequence, HttpContext.RequestAborted);
+
+[HttpGet("{teamKey}/cases/{caseId}/answer-route")]
+public Task<SupportAnswerRoute> AnswerRouteAsync(string teamKey, string caseId)
+    => cases.GetAnswerRouteAsync(teamKey, caseId, HttpContext.RequestAborted);
+
+[HttpPost("{teamKey}/cases/{caseId}/answers/preview")]
+public Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, [FromForm] string body, [FromForm] string bodyHtml)
+    => cases.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, HttpContext.RequestAborted);
 ```
+
+A client showing `MailPreview.Html` shows it isolated — a sandboxed frame without scripts — never as markup in its
+own page: it carries the host template's styles.
 
 A case's `SuggestedTeams`, `SuggestionReason` and its bindings' `MailboxAddress`, and a message's `BodyHtml`,
 `Attachments` and `DeliveryError`, are worth exposing in what you return. `BodyHtml` is sanitized already; a client
@@ -1227,9 +1274,9 @@ Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](impleme
 
 **For implementers and decorators:**
 
-- **`ISupportCaseService` gained seven members**: `ReplyToCaseAsync` and `AnswerCaseAsync` with files, and with
-  HTML and files; `OpenAttachmentAsync`, `GetAttachmentLimitsAsync` and `ResendAsync`. A host implementing or
-  decorating it adds them.
+- **`ISupportCaseService` gained nine members**: `ReplyToCaseAsync` and `AnswerCaseAsync` with files, and with
+  HTML and files; `OpenAttachmentAsync`, `GetAttachmentLimitsAsync`, `ResendAsync`, `GetAnswerRouteAsync` and
+  `PreviewAnswerAsync`. A host implementing or decorating it adds them; the last two are authorized as answering.
 - **`ISupportCaseStore.SetMessageDeliveryAsync` gained `string error = null` before the cancellation token.** A
   host's own store changes its signature and keeps the error only with `Failed`; a caller passing the token
   positionally names it.
@@ -1244,7 +1291,9 @@ Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](impleme
   store of your own persists them. The built-in store reads documents without them as before; nothing to migrate.
 - **`SupportMessage` and `SupportCase` now hold arrays**, so record equality between two of them compares the
   arrays by reference. Compare fields instead.
-- **Add the endpoints above** — files, `bodyHtml`, download and resend — to keep up with the components.
+- **Add the endpoints above** — files, `bodyHtml`, download, resend, the answer's route and its preview — to keep
+  up with the components. `SupportAnswerRoute`, `MailPolicyEffect` and `MailPreview` are new contracts in
+  `Tharga.Team`.
 
 **Behaviour:**
 
@@ -1253,6 +1302,12 @@ Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](impleme
 - **An answer carries the whole thread and quotes the conversation**; every message id is recorded.
 - **A bounce marks the answer it names as not delivered**; one naming no answer goes to the registered
   `IMailBounceHandler`s.
+- **With a [mail template](user-mail.md#the-mail-template) registered, every answer is framed in it**, a plain one
+  included. Without one, answers are mailed as before.
+- **The support answer boxes** — in `SupportUnassignedView`, `SupportAcrossTeamsView` and `SupportQueueView` —
+  show where the answer goes and offer a Preview; they call `GetAnswerRouteAsync` when a case opens and
+  `PreviewAnswerAsync` on Preview, so a test verifying their calls expects them. A member's own reply box in
+  `SupportCasesView` shows neither.
 - **`SupportUnassignedView` carries no heading** — add your own from `SupportUnassignedViewText.Title` — and reads
   every page rather than the first twenty. Pass it the same `TimeTemplate` you give `SupportAcrossTeamsView`.
 - **`SupportTranscript` injects `ISupportCaseService`**, to open files; a page using it directly has support
@@ -1263,6 +1318,8 @@ Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](impleme
 `team.support.transcript.notSentYet|notDelivered|sendAgain`;
 `team.support.unassigned.noneMatch|awaiting|needsAnswer|suggested|suggested.assign|reason.severalTeams|reason.notVerified|reason.sharedAddress`;
 `team.support.mailbox.cameInTo` ("to {0}");
+`team.support.answerRoute.mailed|mailedTo|site|redirected|withheld`;
+`team.mailPreview.open|title|from|replyTo|to|toMany|subject|files|textOnly|frame|close|failed`;
 `team.support.attachments.*` (attach, remove, chosen, attached, open, save, notAvailable, tooMany, tooLarge,
 tooLargeTogether, unreadable); and `team.richText.*` (bold, italic, underline, bulletedList, numberedList, link,
 linkAddress, linkText, linkNewWindow, linkOk, linkCancel, removeFormatting, undo, redo). No key was removed.
