@@ -3,8 +3,9 @@
 @inject IUserService UserService
 @inject NotificationService NotificationService
 
-@* Which categories of mail a user receives. A required category shows as always on with why; an optional one is a
-   switch that saves at once. The service checks that the reader is this user or holds users:manage. *@
+@* Which categories of mail a user receives, and how often each is sent. A required category shows as always on with
+   why; an optional one is a switch that saves at once. The service checks that the reader is this user or holds
+   users:manage. *@
 
 <RadzenCard>
     @if (!_ready)
@@ -33,6 +34,7 @@
             {
                 var category = choice.Category;
                 var description = Description(category);
+                var frequency = Frequency(category);
 
                 <RadzenStack @key="@($"{category.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-category="@category.Key">
                     <RadzenSwitch Value="@choice.Receives" Disabled="@(category.Required || _busy)" Change="@(value => SetAsync(category, value))"
@@ -42,6 +44,10 @@
                         @if (description != null)
                         {
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@description</RadzenText>
+                        }
+                        @if (frequency != null)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-frequency="@category.Key">@frequency</RadzenText>
                         }
                         @if (category.Required)
                         {
@@ -78,6 +84,7 @@
     private bool _busy;
     private int _revision;
     private string _termsUrl;
+    private IReadOnlyDictionary<string, UserMailCategoryFrequency> _frequencies = new Dictionary<string, UserMailCategoryFrequency>();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -103,8 +110,34 @@
             }
         }
 
-        _text = await TextProvider.ResolveAsync([.. UserMailPreferencesViewText.All, UserMailText.AlwaysSent, .. _choices.SelectMany(x => CategoryKeys(x.Category))]);
+        if (_choices.Count > 0) _frequencies = await FrequenciesAsync();
+
+        _text = await TextProvider.ResolveAsync([.. UserMailPreferencesViewText.All, UserMailText.AlwaysSent, .. UserMailText.Frequency, .. _choices.SelectMany(x => CategoryKeys(x.Category))]);
         _ready = true;
+    }
+
+    // How often is a help to the reader, never a reason the choices cannot be shown.
+    private async Task<IReadOnlyDictionary<string, UserMailCategoryFrequency>> FrequenciesAsync()
+    {
+        try
+        {
+            return (await Preferences.GetCategoryFrequenciesAsync() ?? [])
+                .Where(x => x?.Category != null)
+                .GroupBy(x => x.Category, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+        }
+        catch (Exception)
+        {
+            return new Dictionary<string, UserMailCategoryFrequency>();
+        }
+    }
+
+    private string Frequency(UserMailCategory category)
+    {
+        if (!_frequencies.TryGetValue(category.Key, out var frequency)) return null;
+
+        var phrase = frequency.Phrase;
+        return phrase.Format(_text[new TextKey(phrase.Key, phrase.English)]);
     }
 
     private async Task SetAsync(UserMailCategory category, bool receives)

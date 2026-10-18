@@ -1,6 +1,6 @@
 namespace Tharga.Team;
 
-/// <summary>The keys and English defaults of the text user mail carries outside a component: the unsubscribe footer, the unsubscribe page and the invitation.</summary>
+/// <summary>The keys and English defaults of the text user mail carries outside a component — the unsubscribe footer, the unsubscribe page and the invitation — and of the lines the page shares with the preferences view: always sent, and how often.</summary>
 /// <remarks>Resolved through <see cref="ITextResolver"/>, which <c>Tharga.Team.Blazor</c> answers from the host's text provider, and listed among the toolkit's text keys there.</remarks>
 public static class UserMailTexts
 {
@@ -75,4 +75,40 @@ public static class UserMailTexts
 
     /// <summary>Beside a required category, wherever it is shown to a user, saying why it cannot be turned off; a link to the terms of use when the host has them.</summary>
     public const string AlwaysSent = "Always sent: part of the terms of use";
+
+    /// <summary>The key of <see cref="FrequencyNone"/>.</summary>
+    public const string FrequencyNoneKey = "team.userMail.frequency.none";
+
+    /// <summary>How often a category is sent, when none was sent in the past year.</summary>
+    public const string FrequencyNone = "None in the past year";
+
+    /// <summary>The key of <see cref="FrequencyNoneRecently"/>.</summary>
+    public const string FrequencyNoneRecentlyKey = "team.userMail.frequency.noneRecently";
+
+    /// <summary>How often a category is sent, when none was sent in the shorter period the outbox keeps.</summary>
+    public const string FrequencyNoneRecently = "None sent recently";
+
+    /// <summary>The key of <see cref="FrequencyUnderOneAYear"/>.</summary>
+    public const string FrequencyUnderOneAYearKey = "team.userMail.frequency.underOneAYear";
+
+    /// <summary>How often a category is sent, when it is less than once a year.</summary>
+    public const string FrequencyUnderOneAYear = "Fewer than one a year";
+
+    /// <summary>The key of <see cref="FrequencyPerYear"/>.</summary>
+    public const string FrequencyPerYearKey = "team.userMail.frequency.perYear";
+
+    /// <summary>How often a category is sent, a few times a year; <c>{0}</c> is how many.</summary>
+    public const string FrequencyPerYear = "About {0} a year";
+
+    /// <summary>The key of <see cref="FrequencyPerMonth"/>.</summary>
+    public const string FrequencyPerMonthKey = "team.userMail.frequency.perMonth";
+
+    /// <summary>How often a category is sent, a few times a month; <c>{0}</c> is how many.</summary>
+    public const string FrequencyPerMonth = "About {0} a month";
+
+    /// <summary>The key of <see cref="FrequencyPerWeek"/>.</summary>
+    public const string FrequencyPerWeekKey = "team.userMail.frequency.perWeek";
+
+    /// <summary>How often a category is sent, about weekly or more; <c>{0}</c> is how many.</summary>
+    public const string FrequencyPerWeek = "About {0} a week";
 }

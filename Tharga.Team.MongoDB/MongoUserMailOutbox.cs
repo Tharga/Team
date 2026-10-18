@@ -179,6 +179,12 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
             : new UserMailBounceResult(UserMailBounceOutcome.Unknown);
     }
 
+    /// <remarks>One aggregation answered from the collection's statistics index, so no mail is read.</remarks>
+    public async Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => await collection.CountSentByCategoryAsync(since, cancellationToken) ?? [];
+
+    public TimeSpan? Retention => collection.Retention;
+
     /// <summary>The sent mail with one of these <c>Message-ID</c> forms.</summary>
     internal static FilterDefinition<UserMailEntity> BouncedSent(string[] messageIds)
         => Filter.In(x => x.MessageId, messageIds) & Filter.Eq(x => x.Status, UserMailStatus.Sent);

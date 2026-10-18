@@ -50,13 +50,20 @@ public static class UserMailRegistration
             sp.GetService<CompositeAuditLogger>(),
             sp.GetService<IAuditEntryFactory>()));
         services.TryAddScoped<UserMailUnsubscribe>();
+        services.TryAddSingleton<UserMailFrequencyCache>();
+        services.TryAddScoped(sp => new UserMailFrequencies(
+            sp.GetRequiredService<IUserMailOutbox>(),
+            sp.GetRequiredService<UserMailCategoryRegistry>(),
+            sp.GetRequiredService<UserMailFrequencyCache>(),
+            sp.GetRequiredService<TimeProvider>()));
 
         services.TryAddScoped<IUserMailPreferenceService>(sp => new UserMailPreferenceService(
             sp.GetRequiredService<UserMailPreferences>(),
             sp.GetRequiredService<UserMailCategoryRegistry>(),
             sp.GetRequiredService<TeamAuthorizer>(),
             sp.GetRequiredService<IUserService>(),
-            sp.GetRequiredService<IOptions<UserMailOptions>>().Value));
+            sp.GetRequiredService<IOptions<UserMailOptions>>().Value,
+            sp.GetRequiredService<UserMailFrequencies>()));
 
         services.TryAddScoped<IUserMailQueue>(sp => new UserMailQueue(
             sp.GetRequiredService<UserMailCategoryRegistry>(),

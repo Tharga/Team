@@ -9,11 +9,15 @@ internal sealed class UserMailPreferenceService(
     UserMailCategoryRegistry categories,
     TeamAuthorizer authorizer,
     IUserService userService,
-    UserMailOptions options = null) : IUserMailPreferenceService
+    UserMailOptions options = null,
+    UserMailFrequencies frequencies = null) : IUserMailPreferenceService
 {
     public IReadOnlyList<UserMailCategory> GetCategories() => categories.All;
 
     public string GetTermsUrl() => string.IsNullOrWhiteSpace(options?.TermsUrl) ? null : options.TermsUrl.Trim();
+
+    public async Task<IReadOnlyList<UserMailCategoryFrequency>> GetCategoryFrequenciesAsync(CancellationToken cancellationToken = default)
+        => frequencies == null ? [] : await frequencies.GetAsync(cancellationToken);
 
     public async Task<IReadOnlyList<UserMailChoice>> GetChoicesAsync(string userKey, CancellationToken cancellationToken = default)
     {

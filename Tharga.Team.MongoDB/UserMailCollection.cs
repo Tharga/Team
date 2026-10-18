@@ -115,17 +115,28 @@ public record UserMailAttachmentEntity
 }
 
 /// <summary>The collection of queued mail to users.</summary>
-public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>;
+public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
+{
+    /// <summary>For each category, the mails sent or bounced to a user since <paramref name="since"/>, and to how many users, in one aggregation on the server.</summary>
+    Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(CountSentByCategoryAsync)}.");
+
+    /// <summary>How long a mail is kept once it is done.</summary>
+    TimeSpan Retention => ThargaTeamOptions.DefaultUserMailRetention;
+}
 
 /// <summary>Queued mail to users, default collection name <c>UserMail</c>.</summary>
 /// <remarks>
 /// Due mail is found by status and due time; a deduplication key is unique where one was given; a batch's mail by its
 /// batch and status; a user's history by their key or address, newest first; a sent mail by the <c>Message-ID</c> a bounce
-/// report names; and a mail that is done expires after
-/// <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never does.
+/// report names; how often each category was sent by status, completion, category and recipient, read from the index
+/// alone; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never
+/// does.
 /// </remarks>
 public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, IUserMailCollection
 {
+    private static readonly FilterDefinitionBuilder<UserMailEntity> Filter = Builders<UserMailEntity>.Filter;
+
     private readonly string _collectionName;
     private readonly TimeSpan _retention;
 
@@ -156,6 +167,55 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.RecipientAddress).Descending(x => x.Id),
             new CreateIndexOptions { Name = "RecipientAddress_Id" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.MessageId),
-            new CreateIndexOptions { Sparse = true, Name = "MessageId" })
+            new CreateIndexOptions { Sparse = true, Name = "MessageId" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.CompletedAt).Ascending(x => x.Category).Ascending(x => x.RecipientUserKey),
+            new CreateIndexOptions { Name = "Status_CompletedAt_Category_RecipientUserKey" })
     ];
+
+    /// <inheritdoc />
+    public TimeSpan Retention => _retention;
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => ExecuteAsync(nameof(CountSentByCategoryAsync), async (collection, _, ct) =>
+        {
+            var rows = await collection.Aggregate(SentByCategory(since), cancellationToken: ct).ToListAsync(ct);
+            IReadOnlyList<UserMailCategorySent> counted = [.. rows.Select(ToCategorySent)];
+            return (counted, counted.Count);
+        }, Operation.Read, cancellationToken, SentSince(since));
+
+    /// <summary>Mail sent or bounced, completed at or after <paramref name="since"/>; the fields the statistics index leads with, so nothing else is read.</summary>
+    internal static FilterDefinition<UserMailEntity> SentSince(DateTime since)
+        => Filter.In(x => x.Status, [UserMailStatus.Sent, UserMailStatus.Bounced]) & Filter.Gte(x => x.CompletedAt, since);
+
+    /// <summary>
+    /// The mails sent since a time grouped by category and recipient, mail to an address alone left out, then by category:
+    /// how many mails and how many recipients.
+    /// </summary>
+    /// <remarks>Every field it reads is in <c>Status_CompletedAt_Category_RecipientUserKey</c>, so the server answers from the index without reading a mail.</remarks>
+    internal static PipelineDefinition<UserMailEntity, BsonDocument> SentByCategory(DateTime since)
+    {
+        IPipelineStageDefinition[] stages =
+        [
+            PipelineStageDefinitionBuilder.Match(SentSince(since)),
+            new BsonDocumentPipelineStageDefinition<UserMailEntity, BsonDocument>(new BsonDocument("$group", new BsonDocument
+            {
+                { "_id", new BsonDocument { { "c", "$" + nameof(UserMailEntity.Category) }, { "u", "$" + nameof(UserMailEntity.RecipientUserKey) } } },
+                { "n", new BsonDocument("$sum", 1) }
+            })),
+            new BsonDocumentPipelineStageDefinition<BsonDocument, BsonDocument>(new BsonDocument("$match", new BsonDocument("_id.u", new BsonDocument("$ne", BsonNull.Value)))),
+            new BsonDocumentPipelineStageDefinition<BsonDocument, BsonDocument>(new BsonDocument("$group", new BsonDocument
+            {
+                { "_id", "$_id.c" },
+                { "sent", new BsonDocument("$sum", "$n") },
+                { "recipients", new BsonDocument("$sum", 1) }
+            }))
+        ];
+
+        return new PipelineStagePipelineDefinition<UserMailEntity, BsonDocument>(stages);
+    }
+
+    /// <summary>One row of <see cref="SentByCategory"/>.</summary>
+    internal static UserMailCategorySent ToCategorySent(BsonDocument row)
+        => new(row["_id"].IsString ? row["_id"].AsString : null, row["sent"].ToInt32(), row["recipients"].ToInt32());
 }

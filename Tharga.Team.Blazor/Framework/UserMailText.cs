@@ -51,6 +51,27 @@ public static class UserMailText
     /// <summary>Beside a required category, in the preferences view and on the unsubscribe page; a link to the terms of use when the host has them.</summary>
     public static readonly TextKey AlwaysSent = new(UserMailTexts.AlwaysSentKey, UserMailTexts.AlwaysSent);
 
+    /// <summary>How often a category is sent, when none was sent in the past year.</summary>
+    public static readonly TextKey FrequencyNone = new(UserMailTexts.FrequencyNoneKey, UserMailTexts.FrequencyNone);
+
+    /// <summary>How often a category is sent, when none was sent in the shorter period the outbox keeps.</summary>
+    public static readonly TextKey FrequencyNoneRecently = new(UserMailTexts.FrequencyNoneRecentlyKey, UserMailTexts.FrequencyNoneRecently);
+
+    /// <summary>How often a category is sent, when it is less than once a year.</summary>
+    public static readonly TextKey FrequencyUnderOneAYear = new(UserMailTexts.FrequencyUnderOneAYearKey, UserMailTexts.FrequencyUnderOneAYear);
+
+    /// <summary>How often a category is sent, a few times a year; <c>{0}</c> is how many.</summary>
+    public static readonly TextKey FrequencyPerYear = new(UserMailTexts.FrequencyPerYearKey, UserMailTexts.FrequencyPerYear);
+
+    /// <summary>How often a category is sent, a few times a month; <c>{0}</c> is how many.</summary>
+    public static readonly TextKey FrequencyPerMonth = new(UserMailTexts.FrequencyPerMonthKey, UserMailTexts.FrequencyPerMonth);
+
+    /// <summary>How often a category is sent, about weekly or more; <c>{0}</c> is how many.</summary>
+    public static readonly TextKey FrequencyPerWeek = new(UserMailTexts.FrequencyPerWeekKey, UserMailTexts.FrequencyPerWeek);
+
+    /// <summary>Every phrase saying how often a category is sent, for a component resolving them together.</summary>
+    public static readonly TextKey[] Frequency = [FrequencyNone, FrequencyNoneRecently, FrequencyUnderOneAYear, FrequencyPerYear, FrequencyPerMonth, FrequencyPerWeek];
+
     /// <summary>Every key here.</summary>
-    public static readonly TextKey[] All = [FooterReason, FooterUnsubscribe, PageTitle, PageQuestion, PageConfirm, PageDone, PageDoneDetail, PageInvalid, PageInvalidDetail, AccountName, AccountDescription, ServiceName, ServiceDescription, InvitationSubject, InvitationBody, AlwaysSent];
+    public static readonly TextKey[] All = [FooterReason, FooterUnsubscribe, PageTitle, PageQuestion, PageConfirm, PageDone, PageDoneDetail, PageInvalid, PageInvalidDetail, AccountName, AccountDescription, ServiceName, ServiceDescription, InvitationSubject, InvitationBody, AlwaysSent, .. Frequency];
 }

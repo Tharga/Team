@@ -77,6 +77,50 @@ public class UserMailPreferencesViewRenderTests : BunitContext
     }
 
     [Fact]
+    public void EachCategory_SaysHowOftenItIsSent()
+    {
+        var since = new DateTime(2025, 10, 17, 0, 0, 0, DateTimeKind.Utc);
+        var until = since.AddDays(365);
+        _preferences.Setup(x => x.GetCategoryFrequenciesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+        [
+            new UserMailCategoryFrequency { Category = "account", Sent = 2, Recipients = 2, Since = since, Until = until },
+            new UserMailCategoryFrequency { Category = "service", Sent = 0, Recipients = 0, Since = since, Until = until },
+            new UserMailCategoryFrequency { Category = "news", Sent = 48, Recipients = 2, Since = since, Until = until },
+            new UserMailCategoryFrequency { Category = "digest", Sent = 104, Recipients = 1, Since = since, Until = until }
+        ]);
+
+        var view = Render();
+
+        Assert.Equal("About 1 a year", view.Find("[data-frequency=\"account\"]").TextContent);
+        Assert.Equal("None in the past year", view.Find("[data-frequency=\"service\"]").TextContent);
+        Assert.Equal("About 2 a month", view.Find("[data-frequency=\"news\"]").TextContent);
+        Assert.Equal("About 2 a week", view.Find("[data-frequency=\"digest\"]").TextContent);
+    }
+
+    [Fact]
+    public void HowOften_IsTranslatedThroughTheTextProvider()
+    {
+        var since = new DateTime(2025, 10, 17, 0, 0, 0, DateTimeKind.Utc);
+        _preferences.Setup(x => x.GetCategoryFrequenciesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(
+            [new UserMailCategoryFrequency { Category = "news", Sent = 48, Recipients = 2, Since = since, Until = since.AddDays(365) }]);
+
+        var view = Render(texts: new Translating(new Dictionary<string, string> { [UserMailText.FrequencyPerMonth.Key] = "Cirka {0} i månaden" }));
+
+        Assert.Equal("Cirka 2 i månaden", view.Find("[data-frequency=\"news\"]").TextContent);
+    }
+
+    [Fact]
+    public void WithoutFigures_OrWhenTheyCannotBeRead_TheChoicesAreStillShown_WithoutHowOften()
+    {
+        _preferences.Setup(x => x.GetCategoryFrequenciesAsync(It.IsAny<CancellationToken>())).ThrowsAsync(new TimeoutException());
+
+        var view = Render();
+
+        Assert.Equal(4, view.FindAll("[data-category]").Count);
+        Assert.Empty(view.FindAll("[data-frequency]"));
+    }
+
+    [Fact]
     public void WithoutTermsOfUse_TheAlwaysSentLine_IsNoLink()
     {
         var view = Render();

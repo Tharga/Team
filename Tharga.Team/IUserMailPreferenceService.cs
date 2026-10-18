@@ -18,6 +18,11 @@ public interface IUserMailPreferenceService
     /// <summary>Where the host's terms of use are, a site path or an absolute address, which a required category links to as the reason it is always sent; null when the host has none.</summary>
     string GetTermsUrl() => null;
 
+    /// <summary>How often each registered category was sent over the past year, per user who received it, in the order of <see cref="GetCategories"/>; empty when the outbox cannot count.</summary>
+    /// <remarks>Statistics across all users that name nobody, so any caller may read them. Computed in one query and kept for a few minutes.</remarks>
+    Task<IReadOnlyList<UserMailCategoryFrequency>> GetCategoryFrequenciesAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult<IReadOnlyList<UserMailCategoryFrequency>>([]);
+
     /// <summary>The user's effective choice for every registered category, in the order of <see cref="GetCategories"/>.</summary>
     /// <exception cref="UnauthorizedAccessException">The caller is not this user and does not hold <c>users:manage</c>.</exception>
     Task<IReadOnlyList<UserMailChoice>> GetChoicesAsync(string userKey, CancellationToken cancellationToken = default);

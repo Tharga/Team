@@ -65,6 +65,14 @@ public interface IUserMailOutbox
     /// <remarks>Only a sent mail becomes bounced, so a second report for the same mail changes nothing and says so.</remarks>
     Task<UserMailBounceResult> MarkBouncedAsync(string messageId, string reason, DateTime at, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(MarkBouncedAsync)}. Implement it to record mail to users that bounced.");
+
+    /// <summary>For each category, the mails sent to a user — sent or bounced — completed at or after <paramref name="since"/>, and how many users received at least one, counted in one query on the server.</summary>
+    /// <remarks>A category nothing was sent in is left out. Mail to an address alone is not counted.</remarks>
+    Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(CountSentByCategoryAsync)}. Implement it to tell users how often each category is sent.");
+
+    /// <summary>How long a mail is kept once it is done, which bounds how far back <see cref="CountSentByCategoryAsync"/> can count; null when it is kept for good.</summary>
+    TimeSpan? Retention => null;
 }
 
 /// <summary>What a bounce report did to the mail it names.</summary>

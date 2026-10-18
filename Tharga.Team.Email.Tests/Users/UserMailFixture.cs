@@ -56,6 +56,20 @@ internal sealed class UserMailFixture
 
     public UserMailQueue Queue => new(Categories, Outbox, Wrapped, Time);
 
+    public UserMailFrequencyCache FrequencyCache { get; } = new();
+
+    public UserMailFrequencies Frequencies => new(Outbox, Categories, FrequencyCache, Time);
+
+    /// <summary>A mail already done, as the outbox keeps it, completed <paramref name="ago"/> before now.</summary>
+    public UserMailItem Done(string category, string userKey, UserMailStatus status, TimeSpan ago) => new()
+    {
+        Id = Guid.NewGuid().ToString("N"),
+        Mail = new UserMail { RecipientUserKey = userKey, RecipientAddress = userKey == null ? "someone@example.org" : null, Category = category, Subject = "S" },
+        Status = status,
+        QueuedAt = Time.GetUtcNow().UtcDateTime - ago,
+        CompletedAt = Time.GetUtcNow().UtcDateTime - ago
+    };
+
     public UserMailDispatcher Dispatcher(ITextResolver texts = null)
         => new(Outbox, Categories, Preferences, Recipients, Mail, Policy, Footer(texts), Wrapped, Time, null, Template);
 
@@ -168,6 +182,32 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
     public void ForgetBatch(string batchId)
     {
         lock (_gate) _batches.Remove(batchId);
+    }
+
+    public TimeSpan? Retention { get; set; }
+
+    public int Counts { get; private set; }
+
+    public void Add(UserMailItem item)
+    {
+        lock (_gate) _items.Add(item);
+    }
+
+    public Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            Counts++;
+            IReadOnlyList<UserMailCategorySent> counted =
+            [
+                .. _items
+                    .Where(x => x.Status is UserMailStatus.Sent or UserMailStatus.Bounced && x.CompletedAt >= since && x.Mail.RecipientUserKey != null)
+                    .GroupBy(x => x.Mail.Category)
+                    .Select(x => new UserMailCategorySent(x.Key, x.Count(), x.Select(m => m.Mail.RecipientUserKey).Distinct().Count()))
+            ];
+
+            return Task.FromResult(counted);
+        }
     }
 
     public Task<UserMailQueued> AddAsync(UserMail mail, DateTime queuedAt, CancellationToken cancellationToken = default)
