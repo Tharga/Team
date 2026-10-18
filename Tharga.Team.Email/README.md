@@ -4,7 +4,7 @@ E-mail for [Tharga.Team](https://www.nuget.org/packages/Tharga.Team): reading a 
 
 It is the mail layer shared by [Tharga.Team.Support](https://www.nuget.org/packages/Tharga.Team.Support) (support cases by e-mail), **team mailboxes** (an address per team that receives real mail), **invitation email** and **mail to users** (categories, unsubscribe links, a persisted queue, staff messages and automatic notices). The package exists so that MailKit reaches only consumers who use mail.
 
-The guides are [Email, team mailboxes & the postmaster](https://team.tharga.net/articles/team-email.html), [Mail to users](https://team.tharga.net/articles/user-mail.html), [Messages to users](https://team.tharga.net/articles/user-messages.html) and [Automatic notices](https://team.tharga.net/articles/user-notices.html).
+The guides are [Email, team mailboxes & the postmaster](https://team.tharga.net/articles/team-email.html), [Mail to users](https://team.tharga.net/articles/user-mail.html), [Messages to users](https://team.tharga.net/articles/user-messages.html), [Messages to contacts](https://team.tharga.net/articles/contact-messages.html) and [Automatic notices](https://team.tharga.net/articles/user-notices.html).
 
 ## What is in it
 
@@ -63,6 +63,7 @@ app.MapThargaMailUnsubscribe();                            // anonymous; allow i
 - **Messages** (`IUserMessageService`) staff write to chosen users of chosen teams, and **notices** (`IUserNoticeRaiser`) raised by events and delivered at once or in a daily summary.
 - **A mail history per user** (`IUserMailHistoryService`), and mail marked **bounced** when the receiving server returns it — seen when it was sent from a support mailbox's address.
 - **Invitations** go through it once it is registered: recorded, one immediate attempt, from its address. A sender of your own is kept.
+- **Messages to contacts** (`AddThargaContactMessages`, `IContactMessageService`, the `contacts:send` system scope) — staff write to people who are not users, listed by the host with its own references: each address once, in contact categories of their own, from `ContactMessageOptions.FromAddress` or the address of mail to users, with a footer naming the sender (`SenderLine`), why it came and an unsubscribe link that opts the address out of the category or of all contact mail, for good. The same unsubscribe route answers it.
 
 Storage comes from `Tharga.Team.MongoDB`, views from `Tharga.Team.Blazor`. Every instance must share one persisted Data Protection key ring, or unsubscribe links made on one are refused by another.
 
@@ -90,6 +91,7 @@ The SMTP invitation sender, through the same transport and the outbound mail pol
 - **Dependencies changed:** `DnsClient` and `AngleSharp` added, the ASP.NET Core framework referenced privately, and `Microsoft.Extensions.Logging.Abstractions` and `Microsoft.Extensions.Options` no longer listed, since the framework provides them.
 - **With `AddThargaUserMail`, invitations go through mail to users**, from `UserMailOptions.Mail` rather than `EmailOptions`; a withheld or failed invitation says "could not send".
 - **`UserMailOptions` gained `ServiceRequired`, `TermsUrl`, `ProductName`, `PreferencesPath`, `SignInPath` and `PageCss`, and `MailTemplateOptions` `SupportHtml`.** Their defaults change nothing but the unsubscribe page's wording; see [Moving to 4.2](https://team.tharga.net/articles/user-mail.html#moving-to-42) for the text keys added and removed.
+- **Messages to contacts are new** (`AddThargaContactMessages`); nothing changes until it is called. They share the user mail queue, so a host with its own outbox reads [Moving to 4.2](https://team.tharga.net/articles/user-mail.html#moving-to-42): `UserMailKind.Contact`, `UserMailBatch.RecipientAddresses` and `IUserMailOutbox.CountSentToContactsByCategoryAsync`.
 
 ## Moving from Tharga.Team.Support
 

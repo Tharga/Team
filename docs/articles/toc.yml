@@ -20,6 +20,8 @@
   href: user-mail.md
 - name: Messages to users
   href: user-messages.md
+- name: Messages to contacts
+  href: contact-messages.md
 - name: Automatic notices
   href: user-notices.md
 - name: Access simulation

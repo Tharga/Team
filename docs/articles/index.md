@@ -9,6 +9,7 @@ Feature guides for **Tharga.Team**. If you're new, start with [Getting started](
 - **[Support cases](support-cases.md)** — cases raised on the site or by mail, from several mailboxes, with files and formatting both ways, answered from the back office or Slack
 - **[Mail to users](user-mail.md)** — categories each user chooses from, unsubscribe links, a persisted queue, each user's mail history and bounces (optional `Tharga.Team.Email` package)
 - **[Messages to users](user-messages.md)** — your staff write to chosen users of chosen teams, and see what became of each mail
+- **[Messages to contacts](contact-messages.md)** — your staff write to people who are not users, listed from your own records, with an opt-out per address that holds for good
 - **[Automatic notices](user-notices.md)** — mail raised by events, at once or in a daily summary, chosen per user over each team's default
 - **[Implementation guide](implementation-guide.md)** — the complete reference: UI foundation, authentication, API controllers, team management, API-key authentication, scopes, tenant roles, system scopes & consent, and audit logging — both the single-call setup and the step-by-step alternative
 

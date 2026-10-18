@@ -51,6 +51,19 @@ they choose from, through a persisted queue, with staff messages and automatic n
 - **Invitations** go through the same outbox once it is registered: recorded, one immediate attempt from its
   address, so the inviter is still told whether it went.
 
+## Mail to contacts (`Tharga.Team.Email`)
+
+- **`AddThargaContactMessages`** — staff holding the `contacts:send` system scope write to people who are not
+  users, listed by the host from its own records with its own filters (`ContactAddressee`: address, name, a
+  reference returned with every outcome, a detail line, and an optional reason to leave the row out).
+  `IContactMessageService` checks the list — each address once, who opted out, which rows are left out — previews
+  the mail, queues one per address on the user mail queue with the content stored once, and keeps a log of what
+  became of every address. `ContactMessageComposeView` and `ContactMessageLogView` sit beside the host's own filter.
+- **An opt-out that holds.** Every contact mail says who sends it (`SenderLine`), why it came, and carries an
+  unsubscribe link and the one-click headers; the page offers to stop that category or all mail from the product,
+  and the opt-out is kept for the address, for good, checked again when each mail is sent.
+- **`/login` honours a local `returnUrl`**, so the unsubscribe page's sign-in leads back to the mail settings.
+
 ## One mail template
 
 **`AddThargaMailTemplate(o => o.Html = …)`** frames every HTML mail the toolkit sends — support answers, messages,
@@ -71,8 +84,10 @@ own.
 - Mail attachments are now stored in your database (25 MB a file, 50 MB and 20 files a mail by default).
 - `SupportUnassignedView` carries no heading any more.
 - With `AddThargaUserMail`, invitations are sent from `UserMailOptions.Mail`, not `EmailOptions`.
+- A host with its own `IUserMailOutbox` stores `UserMailBatch.RecipientAddresses` and leaves contact mail out of a
+  user's history; `UserMailKind` gained `Contact`.
 - New dependencies: `HtmlSanitizer` (Service), `DnsClient` and `AngleSharp` (Email).
 
 Every change and the new text keys are listed in the *Moving to 4.2* sections of
-[Support cases](docs/articles/support-cases.md), [Email](docs/articles/team-email.md) and
-[Mail to users](docs/articles/user-mail.md).
+[Support cases](docs/articles/support-cases.md), [Email](docs/articles/team-email.md),
+[Mail to users](docs/articles/user-mail.md) and [Messages to contacts](docs/articles/contact-messages.md).

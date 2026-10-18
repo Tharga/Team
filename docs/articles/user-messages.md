@@ -8,7 +8,8 @@ history.
 
 **Only staff write, and only across teams.** A team never writes to its users by hand; the grant is a system
 scope, a decision about the whole product. Mail a team should receive about its own work is an
-[automatic notice](user-notices.md).
+[automatic notice](user-notices.md). Mail to people who are not users is a
+[message to contacts](contact-messages.md).
 
 ## Enabling it
 

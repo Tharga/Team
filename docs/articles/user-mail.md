@@ -7,6 +7,8 @@ instance claims a mail sends. Three things are built on it:
 - **[Messages to users](user-messages.md)** — your own staff writing to chosen users of chosen teams.
 - **[Automatic notices](user-notices.md)** — mail raised by something that happened, which each user tunes.
 - **Invitations** — once mail to users is registered, invitations go through it too.
+- **[Messages to contacts](contact-messages.md)** — your staff writing to people who are not users, through the same
+  queue, with categories and opt-outs of their own.
 
 Every one of them is recorded, so a user's **mail history** shows what was sent to them and what became of it,
 and a mail the receiving server returns is marked **bounced**. Every one of them can be framed in the host's own
@@ -354,7 +356,8 @@ status, reason, the address it went to, when it was queued and when it last chan
 
 - **What a history holds:** every mail queued for the user's key, and every mail queued to their **current**
   address alone — such as the invitation that brought them in. Another user's mail is never added. An
-  invitation sent to an address the user has since changed away from is no longer in it.
+  invitation sent to an address the user has since changed away from is no longer in it. Mail to
+  [contacts](contact-messages.md) is never in it, even when the user holds the address it went to.
 - **How far back:** as long as the queue keeps mail, `UserMailRetention`.
 - **Staff reading somebody else's history is audited** under `usermail`, action `history`, with `usermail.user`
   and `usermail.count` — how many mails were read, never an address. A refusal is audited too.
@@ -442,7 +445,8 @@ so they resolve through `ITextResolver`. `AddThargaTeamBlazor` registers one tha
 defaults are used. The keys are `team.userMail.footer.*`, `team.userMail.unsubscribe.*`,
 `team.userMail.category.account|service.name|description`, `team.userMail.invitation.*`,
 `team.userMail.alwaysSent` and `team.userMail.frequency.*` — the last two shared with the preferences view — all
-listed in `ThargaTextKeys.All` (`UserMailText.All`), plus your own categories' `userMail.category.{key}.*`.
+listed in `ThargaTextKeys.All` (`UserMailText.All`), plus your own categories' `userMail.category.{key}.*`. Contact
+mail adds `team.contactMail.*` (`ContactMailText.All`); see [Text](contact-messages.md#text).
 
 **Mail follows the server's culture, not the recipient's.** There is no per-recipient language yet.
 
@@ -505,6 +509,11 @@ Mail to users is new in 4.2, so nothing changes until you call `AddThargaUserMai
   [Email](team-email.md#moving-to-42). Recompile.
 - **The mail template is new** (`AddThargaMailTemplate`, `MailTemplateOptions`). Nothing is framed until you set
   one; then support answers, mail to users and invitations all carry it, and text-only mail gains an HTML part.
+- **`AddThargaTeamRepository` also registers the contact mail stores** — the opt-outs and the log — with `TryAdd`,
+  whether or not [contact mail](contact-messages.md) is used.
+- **`/login` returns to `returnUrl` when it is a path on the site**, where it always returned to the start page, so the
+  unsubscribe page's sign-in link leads back to the mail settings — see
+  [Where signing in returns](implementation-guide.md#where-signing-in-returns). Anything else still returns home.
 
 ### If you built against the 4.2 source before its release
 
@@ -539,6 +548,20 @@ The surface changed while it was being built. A host that linked the source alon
 - **The unsubscribe page changed**: it names the product and says it turns off only that category, how often it
   comes, the button reads "Stop sending me {0}", and below it lists every category for the signed-in user the link
   is for or offers sign-in to anyone else. A host matching on its old markup or wording updates.
+- **Mail to contacts is new** ([Messages to contacts](contact-messages.md)) and shares the queue, so:
+  - `UserMailKind` gained **`Contact`** (a switch over kinds handles it), and **`UserMailBatch` gained
+    `RecipientAddresses`** (`UserMailBatchAddress`), the addresses a batch goes to alone. `IUserMailQueue` refuses
+    both — contact mail is queued only by `IContactMessageService` — and a host's own `IUserMailOutbox` stores
+    `RecipientAddresses` in `AddBatchAsync` (one mail per address, after the users, counted in the batch's recipients).
+  - **`IUserMailOutbox` gained `CountSentToContactsByCategoryAsync`**, a default member that throws
+    `NotSupportedException`, which shows no contact figures; `IUserMailCollection` gained the same, and `UserMail` the
+    index `Kind_Status_CompletedAt_Category_RecipientAddress`.
+  - **A user's history leaves contact mail out**: `ListForRecipientAsync` no longer returns mail of kind `Contact` to
+    the address, and a host's own outbox does the same.
+  - **The unsubscribe route answers a contact's link too**, when `AddThargaContactMessages` is registered; the token may
+    name an address instead of a user. Tokens already sent keep working.
+  - The queue's refusals for a mail with no subject or body or too many files now say "A mail…" rather than "A mail
+    to a user…".
 - **`IUserMailPreferenceService` gained `GetTermsUrl()` and `GetCategoryFrequenciesAsync()`**, default members
   returning null and nothing, so a host's own implementation or decorator keeps compiling and forwards them to show
   the terms link and the frequencies.

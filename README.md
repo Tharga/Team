@@ -451,10 +451,12 @@ app.MapThargaMailUnsubscribe();                    // allow it anonymously in a 
 On top of it: **messages** your staff write to chosen users of chosen teams (`AddThargaUserMessages`, the
 `messages:send` system scope), **automatic notices** raised from server code and delivered at once or in a daily
 summary, chosen per user over each team's default (`AddThargaUserNotices`), a **mail history** per user, mail
-marked **bounced** when it comes back, and **invitations** recorded and sent through the same outbox.
+marked **bounced** when it comes back, and **invitations** recorded and sent through the same outbox. And mail to
+**contacts** — people who are not users, listed from your own records — in categories of its own, with an opt-out per
+address that holds for good (`AddThargaContactMessages`, the `contacts:send` system scope).
 
 Full articles: [Mail to users](docs/articles/user-mail.md), [Messages to users](docs/articles/user-messages.md),
-[Automatic notices](docs/articles/user-notices.md).
+[Messages to contacts](docs/articles/contact-messages.md), [Automatic notices](docs/articles/user-notices.md).
 
 ## Reading the audit log
 
