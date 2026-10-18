@@ -61,7 +61,7 @@ internal sealed class UserMessageFixture
     public static ClaimsPrincipal Staff(params Claim[] extra)
         => new(new ClaimsIdentity([new Claim(ClaimTypes.Name, "Sam Staff"), new Claim(ClaimTypes.NameIdentifier, "sam"), .. extra], "Test"));
 
-    public void Member(string teamKey, string userKey, string name, AccessLevel level, params string[] roles)
+    public void Member(string teamKey, string userKey, string name, AccessLevel? level, params string[] roles)
     {
         Directory.Members.Add(new UserMessageMember { TeamKey = teamKey, UserKey = userKey, Name = name, EMail = $"{userKey}@example.org", AccessLevel = level, Roles = roles });
         Mail.Recipients.Add(new UserMailRecipient { Key = userKey, EMail = $"{userKey}@example.org", Name = name });

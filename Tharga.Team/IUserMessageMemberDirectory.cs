@@ -24,15 +24,15 @@ public interface IUserMessageMemberDirectory
     async Task<UserMessageMember[]> GetActiveMembershipsOfUserAsync(string userKey, CancellationToken cancellationToken = default)
         => [.. (await GetActiveMembersOfEveryTeamAsync(cancellationToken) ?? []).Where(x => x != null && string.Equals(x.UserKey, userKey, StringComparison.Ordinal))];
 
-    /// <summary>The tenant roles and access levels the members of every team hold; by default read from every team's active memberships, which a host's own directory may answer without reading its users.</summary>
+    /// <summary>The tenant roles and access levels the members of every team hold, leaving out members with no access level; by default read from every team's active memberships, which a host's own directory may answer without reading its users.</summary>
     async Task<UserMessageRolesAndLevels> GetRolesAndLevelsAsync(CancellationToken cancellationToken = default)
     {
-        var memberships = (await GetActiveMembersOfEveryTeamAsync(cancellationToken) ?? []).Where(x => x != null).ToArray();
+        var memberships = (await GetActiveMembersOfEveryTeamAsync(cancellationToken) ?? []).Where(x => x is { AccessLevel: not null }).ToArray();
 
         return new UserMessageRolesAndLevels
         {
             Roles = [.. memberships.SelectMany(x => x.Roles ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
-            AccessLevels = [.. memberships.Select(x => x.AccessLevel).Distinct().Order()]
+            AccessLevels = [.. memberships.Select(x => x.AccessLevel.Value).Distinct().Order()]
         };
     }
 
@@ -83,8 +83,8 @@ public sealed record UserMessageMember
     /// <summary>The address on the user's record, or null; filled where a directory reads it.</summary>
     public string EMail { get; init; }
 
-    /// <summary>The member's access level in the team.</summary>
-    public AccessLevel AccessLevel { get; init; }
+    /// <summary>The member's access level in the team, or null when none is set; an unset level grants nothing, so only a selection that names the member or reaches every member includes them.</summary>
+    public AccessLevel? AccessLevel { get; init; }
 
     /// <summary>The tenant roles the member holds in the team.</summary>
     public string[] Roles { get; init; } = [];

@@ -29,7 +29,7 @@ public class MongoUserMessageMemberDirectoryTests
 
     private static TeamEntity Team(string key, params Member[] members) => new() { Key = key, Name = key.ToUpperInvariant(), Members = members };
 
-    private static Member Membership(string key, AccessLevel level = AccessLevel.User, MembershipState? state = MembershipState.Member, params string[] roles)
+    private static Member Membership(string key, AccessLevel? level = AccessLevel.User, MembershipState? state = MembershipState.Member, params string[] roles)
         => new() { Key = key, Name = $"{key} in team", State = state, AccessLevel = level, TenantRoles = roles };
 
     private static UserEntity User(string key, bool disabled = false)
@@ -209,6 +209,20 @@ public class MongoUserMessageMemberDirectoryTests
         Assert.Equal(["Auditor", "Editor"], held.Roles);
         Assert.Equal([AccessLevel.Owner, AccessLevel.User], held.AccessLevels);
         await _users.DidNotReceiveWithAnyArgs().GetByKeysAsync(default);
+    }
+
+    [Fact]
+    public async Task AMemberWithNoAccessLevel_IsActive_WithNoLevel_AndOffersNoLevelOrRoleOfTheirOwn()
+    {
+        Users(User("u-1"), User("u-2"));
+        Teams(Team("acme", Membership("u-1", AccessLevel.User, MembershipState.Member, "Editor"), Membership("u-2", null, MembershipState.Member, "Ghost")));
+
+        var members = await Directory.GetActiveMembersAsync(["acme"], TestContext.Current.CancellationToken);
+        var held = await Directory.GetRolesAndLevelsAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal([("u-1", (AccessLevel?)AccessLevel.User), ("u-2", null)], members.Select(x => (x.UserKey, x.AccessLevel)));
+        Assert.Equal(["Editor"], held.Roles);
+        Assert.Equal([AccessLevel.User], held.AccessLevels);
     }
 
     [Fact]

@@ -12,7 +12,8 @@ namespace Tharga.Team.MongoDB;
 /// <para>
 /// <b>Only a membership that grants access counts.</b> An invitation not yet accepted is no membership at all,
 /// and a suspended one is left out because suspension is a containment: mail must not become the way a
-/// suspended member still writes into the team. A disabled account is returned with no teams for the same
+/// suspended member still writes into the team. A membership with no access level grants nothing since 4.0,
+/// so it is left out as a suspended one is. A disabled account is returned with no teams for the same
 /// reason, but it is returned — it still holds the address, and an address two accounts hold belongs to
 /// neither.
 /// </para>
@@ -51,7 +52,7 @@ internal sealed class MongoSupportSenderDirectory<TUserEntity, TTeamEntity, TMem
         {
             if (team.DeletedAt != null) continue;
 
-            var grantsAccess = (team.Members ?? []).Any(x => x.Key == userKey && x.State == MembershipState.Member && x.SuspendedAt == null);
+            var grantsAccess = (team.Members ?? []).Any(x => x.Key == userKey && x.State == MembershipState.Member && x.SuspendedAt == null && x.AccessLevel != null);
 
             if (grantsAccess && found.All(x => x.Key != team.Key)) found.Add(new SupportCaseTeam { Key = team.Key, Name = team.Name });
         }

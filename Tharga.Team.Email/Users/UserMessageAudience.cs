@@ -17,6 +17,7 @@ internal static class UserMessageAudience
     }
 
     /// <summary>The users the selection reaches among <paramref name="memberships"/>, each once, in the order first found.</summary>
+    /// <remarks>A member with no access level is reached only by name or by every member: an unset level grants nothing, roles included.</remarks>
     public static UserMessageMember[] Select(IEnumerable<UserMessageMember> memberships, UserMessageRecipients recipients)
     {
         var users = Clean(recipients.UserKeys).ToHashSet(StringComparer.Ordinal);
@@ -25,7 +26,7 @@ internal static class UserMessageAudience
 
         return [.. (memberships ?? [])
             .Where(x => x != null && !string.IsNullOrWhiteSpace(x.UserKey))
-            .Where(x => recipients.EveryMember || users.Contains(x.UserKey) || levels.Contains(x.AccessLevel) || (x.Roles ?? []).Any(roles.Contains))
+            .Where(x => recipients.EveryMember || users.Contains(x.UserKey) || (x.AccessLevel is { } level && (levels.Contains(level) || (x.Roles ?? []).Any(roles.Contains))))
             .GroupBy(x => x.UserKey, StringComparer.Ordinal)
             .Select(x => x.First())];
     }

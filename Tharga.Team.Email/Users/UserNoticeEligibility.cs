@@ -3,7 +3,8 @@ namespace Tharga.Team.Email.Users;
 /// <summary>Whether a member may receive a notice in their team, reading their effective team scopes only when the rule asks for a scope.</summary>
 /// <remarks>
 /// Scopes come from the team-aware role service when the host has dynamic roles, otherwise from the scope registry, as
-/// for the member's own claims. Members holding the same level, roles and overrides in a team share one lookup.
+/// for the member's own claims. Members holding the same level, roles and overrides in a team share one lookup. A
+/// member with no access level holds no scope at all, roles and overrides included, as their claims do not.
 /// </remarks>
 internal sealed class UserNoticeEligibility(ITenantRoleService roles = null, IScopeRegistry scopes = null)
 {
@@ -20,6 +21,8 @@ internal sealed class UserNoticeEligibility(ITenantRoleService roles = null, ISc
 
     private async Task<IReadOnlyList<string>> ScopesOfAsync(UserMessageMember member)
     {
+        if (member.AccessLevel is null) return [];
+
         string[] parts = [member.TeamKey, member.AccessLevel.ToString(), .. (member.Roles ?? []).Order(StringComparer.Ordinal), string.Empty, .. (member.ScopeOverrides ?? []).Order(StringComparer.Ordinal)];
         var key = string.Join('\n', parts);
         if (_scopes.TryGetValue(key, out var known)) return known;

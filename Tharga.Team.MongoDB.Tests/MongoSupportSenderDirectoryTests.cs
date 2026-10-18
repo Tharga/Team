@@ -73,6 +73,20 @@ public class MongoSupportSenderDirectoryTests
         Assert.Equal(["beta"], sender.Teams.Select(x => x.Key));
     }
 
+    /// <summary>A membership with no access level grants nothing since 4.0, so mail must not place a case in that team either.</summary>
+    [Fact]
+    public async Task AMembershipWithNoAccessLevel_IsLeftOut()
+    {
+        Users(User("u-1", "sub-1"));
+        Teams("u-1",
+            Team("acme", "Acme", Membership("u-1") with { AccessLevel = null }),
+            Team("beta", "Beta", Membership("u-1")));
+
+        var sender = Assert.Single(await Directory.FindAsync(Address, TestContext.Current.CancellationToken));
+
+        Assert.Equal(["beta"], sender.Teams.Select(x => x.Key));
+    }
+
     [Fact]
     public async Task ADeletedTeam_IsLeftOut()
     {

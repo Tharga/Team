@@ -6,6 +6,10 @@ namespace Tharga.Team;
 /// in the team the occurrence belongs to. Recipients the raiser names are added to whoever the rule admits, and every
 /// recipient must be an active member of that team: accepted, not suspended, with a user record that is not disabled.
 /// <para>
+/// <b>A member with no access level</b> holds nothing since 4.0, so a scope, role or access-level rule never admits
+/// them; <see cref="EveryMember"/> does, and so does naming them.
+/// </para>
+/// <para>
 /// A notice whose recipients are named or resolved per occurrence is offered on the profile of every active member,
 /// because any of them could be the one it reaches.
 /// </para>
@@ -74,11 +78,11 @@ public sealed record UserNoticeAudience
     /// <summary>Whether the rule chooses recipients from the team's members by what each holds, rather than by name or callback.</summary>
     public bool SelectsByMembership => Kind is UserNoticeAudienceKind.Scope or UserNoticeAudienceKind.Role or UserNoticeAudienceKind.AccessLevel or UserNoticeAudienceKind.EveryMember;
 
-    /// <summary>Whether a member holding this level, these roles and these effective scopes may receive the notice in their team.</summary>
-    public bool MayReceive(AccessLevel accessLevel, IEnumerable<string> roles, IEnumerable<string> scopes) => Kind switch
+    /// <summary>Whether a member holding this level, these roles and these effective scopes may receive the notice in their team; a null level is admitted only by every member or a named or resolved rule.</summary>
+    public bool MayReceive(AccessLevel? accessLevel, IEnumerable<string> roles, IEnumerable<string> scopes) => Kind switch
     {
-        UserNoticeAudienceKind.Scope => (scopes ?? []).Contains(Scope, StringComparer.Ordinal),
-        UserNoticeAudienceKind.Role => (roles ?? []).Contains(Role, StringComparer.Ordinal),
+        UserNoticeAudienceKind.Scope => accessLevel != null && (scopes ?? []).Contains(Scope, StringComparer.Ordinal),
+        UserNoticeAudienceKind.Role => accessLevel != null && (roles ?? []).Contains(Role, StringComparer.Ordinal),
         UserNoticeAudienceKind.AccessLevel => MinimumAccessLevel is { } minimum && AccessLevelPrivilege.IsNoMorePrivilegedThan(minimum, accessLevel),
         _ => true
     };

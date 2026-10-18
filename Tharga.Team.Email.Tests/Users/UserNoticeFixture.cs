@@ -143,7 +143,7 @@ internal sealed class UserNoticeFixture
 
     public UserNoticeTeamService TeamDefaults => new(Notices, Store, AuditLogger, new AuditEntryFactory(null));
 
-    public void Member(string teamKey, string userKey, AccessLevel level, string[] roles = null, string[] scopeOverrides = null)
+    public void Member(string teamKey, string userKey, AccessLevel? level, string[] roles = null, string[] scopeOverrides = null)
     {
         Directory.Members.Add(new UserMessageMember { TeamKey = teamKey, UserKey = userKey, Name = userKey, AccessLevel = level, Roles = roles ?? [], ScopeOverrides = scopeOverrides ?? [] });
         Mail.Recipients.Add(new UserMailRecipient { Key = userKey, EMail = $"{userKey}@example.org", Name = userKey });

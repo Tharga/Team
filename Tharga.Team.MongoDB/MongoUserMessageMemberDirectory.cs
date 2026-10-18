@@ -70,12 +70,12 @@ internal sealed class MongoUserMessageMemberDirectory<TUserEntity, TTeamEntity, 
         var found = new List<TTeamEntity>();
         await foreach (var team in teams.GetAllTeamsAsync().WithCancellation(cancellationToken)) found.Add(team);
 
-        var memberships = Memberships(found).Select(x => x.Member).ToArray();
+        var memberships = Memberships(found).Select(x => x.Member).Where(x => x.AccessLevel != null).ToArray();
 
         return new UserMessageRolesAndLevels
         {
             Roles = [.. memberships.SelectMany(x => x.TenantRoles ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
-            AccessLevels = [.. memberships.Select(x => x.AccessLevel).Distinct().Order()]
+            AccessLevels = [.. memberships.Select(x => x.AccessLevel.Value).Distinct().Order()]
         };
     }
 
