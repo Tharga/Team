@@ -47,7 +47,7 @@ public class PostmasterTests
         Assert.Equal("anna@example.org", summary.From);
         Assert.Equal("Sekretessbelagd uppgift", summary.Subject);
         Assert.Equal(MailRouteReason.RetiredKey, summary.Reason);
-        Assert.Equal(["Id", "From", "Subject", "ReceivedAt", "Reason"], typeof(PostmasterMailSummary).GetProperties().Select(x => x.Name));
+        Assert.Equal(["Id", "From", "Subject", "ReceivedAt", "Reason", "ArchivedAt", "ArchivedBy"], typeof(PostmasterMailSummary).GetProperties().Select(x => x.Name));
     }
 
     [Fact]

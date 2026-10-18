@@ -28,10 +28,18 @@ public record InboundMailItem
     /// <summary>What the mail belongs to, once known.</summary>
     public MailThreadOwner Owner { get; init; }
 
-    /// <summary>What became of the mail, in the host's terms; null while nobody has handled it.</summary>
+    /// <summary>
+    /// What became of the mail, in the host's terms; null while nobody has handled it. On mail the postmaster holds
+    /// it is <see cref="PostmasterMailOutcome.Archived"/> or null.
+    /// </summary>
     public string Outcome { get; init; }
 
+    /// <summary>When the outcome was recorded.</summary>
     public DateTime? HandledAt { get; init; }
 
+    /// <summary>
+    /// Who recorded the outcome: on a team's mail the subject of whoever recorded it, on mail the postmaster archived
+    /// the archiver's name as it was then.
+    /// </summary>
     public string HandledBy { get; init; }
 }

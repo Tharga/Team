@@ -18,4 +18,10 @@ public record PostmasterMailSummary
     public required DateTime ReceivedAt { get; init; }
 
     public required MailRouteReason Reason { get; init; }
+
+    /// <summary>When the mail was archived; null while it is held.</summary>
+    public DateTime? ArchivedAt { get; init; }
+
+    /// <summary>The name of whoever archived it, as it was then; null while it is held.</summary>
+    public string ArchivedBy { get; init; }
 }

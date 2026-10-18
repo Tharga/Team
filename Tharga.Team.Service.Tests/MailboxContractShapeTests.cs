@@ -91,9 +91,47 @@ public class MailboxContractShapeTests
     [InlineData(typeof(ITeamMailboxService), nameof(ITeamMailboxService.RotateKeyAsync))]
     [InlineData(typeof(ITeamMailboxService), nameof(ITeamMailboxService.SetOutcomeAsync))]
     [InlineData(typeof(IPostmasterService), nameof(IPostmasterService.RouteAsync))]
+    [InlineData(typeof(IPostmasterService), nameof(IPostmasterService.ArchiveAsync))]
+    [InlineData(typeof(IPostmasterService), nameof(IPostmasterService.RestoreAsync))]
     public void EveryChange_IsRecordedAsAChange(Type service, string method)
     {
         Assert.Equal(AuditMode.Change, ScopeOf(service.GetMethod(method)!).Audit);
+    }
+
+    /// <summary>Putting a mail away is a decision about where it goes, so it takes the scope routing takes, not the one reading takes.</summary>
+    [Theory]
+    [InlineData(nameof(IPostmasterService.RouteAsync))]
+    [InlineData(nameof(IPostmasterService.ArchiveAsync))]
+    [InlineData(nameof(IPostmasterService.RestoreAsync))]
+    public void DecidingWhereAMailGoes_TakesTheManageScope(string method)
+    {
+        Assert.Equal(SystemMailboxScopes.PostmasterManage, ScopeOf(typeof(IPostmasterService).GetMethod(method)!).Scope);
+    }
+
+    /// <summary>Listing stays thin and unrecorded in either state; only opening is the recorded act.</summary>
+    [Fact]
+    public void ListingEitherState_TakesTheReadScope_AndIsNotRecordedAsAnOpen()
+    {
+        var lists = typeof(IPostmasterService).GetMethods().Where(x => x.Name == nameof(IPostmasterService.ListAsync)).ToArray();
+
+        Assert.Equal(2, lists.Length);
+        Assert.Contains(lists, x => x.GetParameters()[0].ParameterType == typeof(PostmasterMailState));
+        Assert.All(lists, x => Assert.Equal(SystemMailboxScopes.PostmasterRead, ScopeOf(x).Scope));
+        Assert.All(lists, x => Assert.NotEqual(AuditMode.Access, ScopeOf(x).Audit));
+    }
+
+    /// <summary>The call compiled before the state existed keeps its shape, so assemblies built against it keep running.</summary>
+    [Fact]
+    public void TheListingWithoutAState_KeepsItsSignature()
+    {
+        Assert.NotNull(typeof(IPostmasterService).GetMethod(nameof(IPostmasterService.ListAsync), [typeof(string), typeof(int), typeof(CancellationToken)]));
+    }
+
+    [Fact]
+    public void TheNewChangeKinds_ComeAfterTheOldOnes()
+    {
+        Assert.Equal([TeamMailChange.Received, TeamMailChange.Handled, TeamMailChange.Rerouted, TeamMailChange.Archived, TeamMailChange.Restored], Enum.GetValues<TeamMailChange>());
+        Assert.Equal(2, (int)TeamMailChange.Rerouted);
     }
 
     [Fact]

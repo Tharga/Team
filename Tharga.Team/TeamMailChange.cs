@@ -12,5 +12,11 @@ public enum TeamMailChange
     Handled,
 
     /// <summary>The postmaster routed the mail to a team.</summary>
-    Rerouted
+    Rerouted,
+
+    /// <summary>The postmaster put the mail away without routing it; it is still the postmaster's.</summary>
+    Archived,
+
+    /// <summary>The postmaster brought an archived mail back among the mail it holds.</summary>
+    Restored
 }

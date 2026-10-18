@@ -5,7 +5,8 @@ using Tharga.MongoDB;
 namespace Tharga.Team.MongoDB;
 
 /// <summary>
-/// The stored form of <see cref="InboundMailItem"/>. A mail with no <see cref="TeamKey"/> is held by the postmaster.
+/// The stored form of <see cref="InboundMailItem"/>. A mail with no <see cref="TeamKey"/> is held by the postmaster,
+/// and archived there when its <see cref="Outcome"/> is <see cref="PostmasterMailOutcome.Archived"/>.
 /// </summary>
 public record InboundMailEntity : EntityBase
 {

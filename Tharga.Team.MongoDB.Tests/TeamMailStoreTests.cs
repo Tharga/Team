@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using NSubstitute;
@@ -66,13 +67,15 @@ public class TeamMailStoreTests
     }
 
     [Fact]
-    public async Task ThePostmastersCount_IsMailWithNoTeam()
+    public async Task ThePostmastersCount_IsMailWithNoTeam_ThatNobodyArchived()
     {
         _collection.CountAsync(Arg.Do<FilterDefinition<InboundMailEntity>>(x => _sent = x)).Returns(1L);
 
         await new MongoTeamMailStore(_collection).CountUnroutedAsync();
 
-        Assert.Contains("\"TeamKey\" : { \"$exists\" : false }", Render(_sent));
+        var filter = Render(_sent);
+        Assert.Contains("\"TeamKey\" : { \"$exists\" : false }", filter);
+        Assert.Contains("\"Outcome\" : { \"$exists\" : false }", filter);
     }
 
     [Fact]
@@ -88,6 +91,108 @@ public class TeamMailStoreTests
         Assert.Contains("\"TeamKey\" : { \"$exists\" : false }", filter);
         Assert.Contains("\"MailId\" : \"mail-1\"", filter);
     }
+
+    [Fact]
+    public async Task Routing_ClearsAnyOutcome_SoAnArchivedMailArrivesUnhandled()
+    {
+        UpdateDefinition<InboundMailEntity> update = null;
+        _collection.UpdateOneAsync(Arg.Any<FilterDefinition<InboundMailEntity>>(), Arg.Do<UpdateDefinition<InboundMailEntity>>(x => update = x))
+            .Returns((EntityChangeResult<InboundMailEntity>)null);
+
+        await new MongoTeamMailStore(_collection).RouteAsync("mail-1", "team-b");
+
+        var rendered = RenderUpdate(update);
+        Assert.Contains("\"TeamKey\" : \"team-b\"", rendered);
+        Assert.Contains("\"Outcome\" : 1", rendered);
+        Assert.Contains("\"HandledAt\" : 1", rendered);
+        Assert.Contains("\"HandledBy\" : 1", rendered);
+    }
+
+    [Theory]
+    [InlineData(PostmasterMailState.Held, "\"Outcome\" : { \"$exists\" : false }")]
+    [InlineData(PostmasterMailState.Archived, "\"Outcome\" : \"archived\"")]
+    public void TheState_IsMailWithNoTeam_AndItsOutcome(PostmasterMailState state, string outcome)
+    {
+        var filter = Render(MongoTeamMailStore.InState(state));
+
+        Assert.Contains("\"TeamKey\" : { \"$exists\" : false }", filter);
+        Assert.Contains(outcome, filter);
+    }
+
+    [Fact]
+    public async Task Archiving_WritesOnlyAHeldMailOfThePostmasters_WithWhoAndWhen()
+    {
+        UpdateDefinition<InboundMailEntity> update = null;
+        _collection.UpdateOneAsync(Arg.Do<FilterDefinition<InboundMailEntity>>(x => _sent = x), Arg.Do<UpdateDefinition<InboundMailEntity>>(x => update = x))
+            .Returns((EntityChangeResult<InboundMailEntity>)null);
+
+        var archived = await new MongoTeamMailStore(_collection).ArchiveUnroutedAsync("mail-1", "Sam Staff", Received);
+
+        var filter = Render(_sent);
+        var rendered = RenderUpdate(update);
+        Assert.Null(archived);
+        Assert.Contains("\"TeamKey\" : { \"$exists\" : false }", filter);
+        Assert.Contains("\"MailId\" : \"mail-1\"", filter);
+        Assert.Contains("\"Outcome\" : { \"$exists\" : false }", filter);
+        Assert.Contains("\"Outcome\" : \"archived\"", rendered);
+        Assert.Contains("\"HandledBy\" : \"Sam Staff\"", rendered);
+        Assert.Contains("\"HandledAt\"", rendered);
+    }
+
+    [Fact]
+    public async Task Restoring_WritesOnlyAnArchivedMailOfThePostmasters_AndClearsWhoAndWhen()
+    {
+        UpdateDefinition<InboundMailEntity> update = null;
+        _collection.UpdateOneAsync(Arg.Do<FilterDefinition<InboundMailEntity>>(x => _sent = x), Arg.Do<UpdateDefinition<InboundMailEntity>>(x => update = x))
+            .Returns((EntityChangeResult<InboundMailEntity>)null);
+
+        var restored = await new MongoTeamMailStore(_collection).RestoreUnroutedAsync("mail-1");
+
+        var filter = Render(_sent);
+        var rendered = RenderUpdate(update);
+        Assert.Null(restored);
+        Assert.Contains("\"TeamKey\" : { \"$exists\" : false }", filter);
+        Assert.Contains("\"Outcome\" : \"archived\"", filter);
+        Assert.Contains("\"$unset\"", rendered);
+        Assert.Contains("\"Outcome\" : 1", rendered);
+        Assert.Contains("\"HandledBy\" : 1", rendered);
+    }
+
+    [Theory]
+    [InlineData(PostmasterMailState.Held, "\"Outcome\" : { \"$exists\" : false }")]
+    [InlineData(PostmasterMailState.Archived, "\"Outcome\" : \"archived\"")]
+    public async Task ListingByState_ReadsOnlyThatState_NewestReceivedFirst(PostmasterMailState state, string outcome)
+    {
+        Options<InboundMailEntity> options = null;
+        _collection.GetManyAsync(Arg.Do<FilterDefinition<InboundMailEntity>>(x => _sent = x), Arg.Do<Options<InboundMailEntity>>(x => options = x), Arg.Any<CancellationToken>())
+            .Returns(new Result<InboundMailEntity, ObjectId> { Items = [] });
+
+        var page = await new MongoTeamMailStore(_collection).ListUnroutedAsync(state, null, 20);
+
+        Assert.Empty(page.Items);
+        Assert.Contains(outcome, Render(_sent));
+        Assert.Equal("{ \"ReceivedAt\" : -1, \"MailId\" : 1 }", options.Sort.Render(new RenderArgs<InboundMailEntity>(BsonSerializer.LookupSerializer<InboundMailEntity>(), BsonSerializer.SerializerRegistry)).ToString());
+    }
+
+    /// <summary>The postmaster's lists and counts, and a team's unhandled list, are served by one index in the order they page.</summary>
+    [Fact]
+    public void ListsByOutcome_HaveTheirIndex()
+    {
+        var index = ((InboundMailCollection)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(InboundMailCollection))).Indices.Single(x => x.Options.Name == "TeamKey_Outcome_ReceivedAt");
+
+        Assert.Equal("{ \"TeamKey\" : 1, \"Outcome\" : 1, \"ReceivedAt\" : -1, \"MailId\" : 1 }", index.Keys.Render(new RenderArgs<InboundMailEntity>(BsonSerializer.LookupSerializer<InboundMailEntity>(), BsonSerializer.SerializerRegistry)).ToString());
+    }
+
+    [Fact]
+    public void AnArchivedMail_SurvivesTheRoundTripToStorage()
+    {
+        var item = Item(teamKey: null) with { Outcome = PostmasterMailOutcome.Archived, HandledBy = "Sam Staff", Owner = null };
+
+        Assert.Equivalent(item, MongoTeamMailStore.ToItem(MongoTeamMailStore.ToEntity(item)));
+    }
+
+    private static string RenderUpdate(UpdateDefinition<InboundMailEntity> update) =>
+        update.Render(new RenderArgs<InboundMailEntity>(BsonSerializer.LookupSerializer<InboundMailEntity>(), BsonSerializer.SerializerRegistry)).ToString();
 
     [Fact]
     public async Task RecordingAnOutcome_NamesTheTeam_SoAnotherTeamsMailIsOutOfReach()
