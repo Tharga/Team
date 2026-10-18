@@ -178,9 +178,8 @@
     {
         var recipients = Shown.Recipients ?? new UserMessageRecipients();
 
-        yield return recipients.AllTeams
-            ? Text[UserMessageLogViewText.AllTeams]
-            : Text.Format(UserMessageLogViewText.Teams, Join(recipients.TeamKeys.Select(TeamName)));
+        if (recipients.AllTeams) yield return Text[UserMessageLogViewText.AllTeams];
+        else if (recipients.TeamKeys.Length > 0) yield return Text.Format(UserMessageLogViewText.Teams, Join(recipients.TeamKeys.Select(TeamName)));
 
         if (recipients.EveryMember) yield return Text[UserMessageLogViewText.Everyone];
         if (recipients.AccessLevels.Length > 0) yield return Text.Format(UserMessageLogViewText.AccessLevels, Join(recipients.AccessLevels.Select(x => Text[AccessLevelText.For(x)])));

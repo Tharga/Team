@@ -82,6 +82,8 @@ public class TextCoverageTests
         "Features/Support/SupportUnassignedConversation.razor",
         "Features/Support/SupportAttachmentPicker.razor",
         "Features/Support/SupportMailboxAddress.razor",
+        "Features/Support/SupportAnswerRouteLine.razor",
+        "Framework/MailPreviewDialog.razor",
         "Framework/RichTextEditor.razor",
         "Framework/RichTextView.razor",
         "Features/Mailbox/PostmasterView.razor",

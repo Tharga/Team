@@ -26,7 +26,8 @@ internal sealed class UserMailDispatcher(
     UserMailFooter footer,
     IOptions<UserMailOptions> options,
     TimeProvider timeProvider,
-    ILogger<UserMailDispatcher> logger = null)
+    ILogger<UserMailDispatcher> logger = null,
+    MailTemplate template = null)
 {
     internal const string OptedOutReason = "The recipient does not receive this category.";
     internal const string WithheldReason = "Withheld by the non-production mail policy: set Email:Override to receive it.";
@@ -34,6 +35,7 @@ internal sealed class UserMailDispatcher(
     internal const string AddressAloneReason = "A mail to an address alone is sent only in a required category.";
 
     private readonly Dictionary<string, UserMailBatch> _batches = new(StringComparer.Ordinal);
+    private readonly UserMailComposer _composer = new(footer, template);
 
     /// <summary>Sends claimed mail until none is due or a batch is done, and returns how many were handled.</summary>
     public async Task<int> RunAsync(string claimant, CancellationToken cancellationToken)
@@ -124,8 +126,8 @@ internal sealed class UserMailDispatcher(
         if (decision.Action == OutboundMailAction.Redirect)
             logger?.LogInformation("Redirecting user mail {Id} to {Recipient} instead of the user it was addressed to, because the environment is not production.", item.Id, decision.Recipient);
 
-        var outbound = await footer.ApplyAsync(Outbound(mail, recipient, decision), mail.RecipientUserKey, category);
-        var result = await mailClient.SendAsync(outbound, cancellationToken);
+        var composed = await _composer.ComposeAsync(mail.Subject, mail.Body, mail.BodyHtml, mail.RecipientUserKey, category);
+        var result = await mailClient.SendAsync(Outbound(mail, composed, recipient, decision), cancellationToken);
 
         if (!result.Success) return await RetryAsync(item, claimant, result.Error, retry, cancellationToken);
 
@@ -153,7 +155,7 @@ internal sealed class UserMailDispatcher(
         };
     }
 
-    private OutboundMail Outbound(UserMail mail, UserMailRecipient recipient, OutboundMailDecision decision)
+    private OutboundMail Outbound(UserMail mail, UserMailComposed composed, UserMailRecipient recipient, OutboundMailDecision decision)
     {
         var to = decision.Action == OutboundMailAction.Deliver && !string.IsNullOrWhiteSpace(recipient.Name)
             ? new MailboxAddress(recipient.Name, decision.Recipient).ToString()
@@ -162,10 +164,11 @@ internal sealed class UserMailDispatcher(
         return new OutboundMail(
             to,
             decision.Subject,
-            mail.Body,
+            composed.Body,
             ReplyTo: mail.ReplyTo ?? options.Value.ReplyTo,
             Attachments: [.. (mail.Attachments ?? []).Where(x => x.Content != null).Select(x => new MailAttachment(x.FileName, x.ContentType, x.Content, x.ContentId))],
-            BodyHtml: mail.BodyHtml);
+            BodyHtml: composed.BodyHtml,
+            UnsubscribeUrl: composed.UnsubscribeUrl);
     }
 
     private async Task<UserMailStatus> RetryAsync(UserMailItem item, string claimant, string reason, bool retry, CancellationToken cancellationToken)

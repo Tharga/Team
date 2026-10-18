@@ -197,6 +197,30 @@ public class MongoUserMessageMemberDirectoryTests
     }
 
     [Fact]
+    public async Task UsersAddedByKey_AreReadThroughTheirOwnTeams_ActiveMembershipsOnly()
+    {
+        Users(User("u-1"), User("u-2", disabled: true), User("u-9"));
+        TeamsOfUsers(
+            Team("acme", Membership("u-1", AccessLevel.Owner), Membership("u-2"), Membership("u-9")),
+            Team("beta", Membership("u-1", state: MembershipState.Invited)),
+            Team("gamma", Membership("u-1") with { SuspendedAt = Earlier }),
+            Team("delta", Membership("u-1", null)));
+
+        var found = await Directory.GetActiveMembershipsOfUsersAsync(["u-1", "u-2", "u-1", " "], TestContext.Current.CancellationToken);
+
+        Assert.Equal([("acme", "u-1", (AccessLevel?)AccessLevel.Owner), ("delta", "u-1", null)], found.Select(x => (x.TeamKey, x.UserKey, x.AccessLevel)));
+        await _teams.Received(1).GetTeamsByUsersAsync(Arg.Is<IReadOnlyCollection<string>>(x => x.Order().SequenceEqual(new[] { "u-1", "u-2" })));
+        _teams.DidNotReceive().GetAllTeamsAsync();
+    }
+
+    [Fact]
+    public async Task NoUserAddedByKey_ReadsNothing()
+    {
+        Assert.Empty(await Directory.GetActiveMembershipsOfUsersAsync([], TestContext.Current.CancellationToken));
+        await _teams.DidNotReceiveWithAnyArgs().GetTeamsByUsersAsync(default);
+    }
+
+    [Fact]
     public async Task TheRolesAndLevels_AreReadFromTheTeamsAlone()
     {
         Teams(

@@ -2,7 +2,9 @@ using System.Net;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MimeKit;
 using Tharga.Team.Email;
+using Tharga.Team.Service.Email;
 using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Support.Cases;
@@ -23,6 +25,10 @@ namespace Tharga.Team.Support.Cases;
 /// so replying needs no lookup and no signed-in user. By the time support answers, the person at the keyboard
 /// is the agent rather than the correspondent, which is why reading it from the session would be wrong.
 /// </para>
+/// <para>
+/// <b>An answer is composed in one place</b>, so the preview a staff member opens and the mail that is sent are the
+/// same mail, the host's template included.
+/// </para>
 /// </remarks>
 internal sealed class EmailSupportChannel(
     IMailClient mailClient,
@@ -31,9 +37,12 @@ internal sealed class EmailSupportChannel(
     ISupportAttachmentStore attachmentStore = null,
     SupportMailboxes mailboxes = null,
     ISupportMailClients mailClients = null,
-    ILogger<EmailSupportChannel> logger = null) : ISupportChannel
+    ILogger<EmailSupportChannel> logger = null,
+    IOutboundMailPolicy policy = null,
+    MailTemplate template = null) : ISupportChannel, ISupportAnswerMail
 {
     private readonly SupportMailboxes _mailboxes = mailboxes ?? new SupportMailboxes(options.Value);
+    private readonly MailTemplate _template = template ?? MailTemplate.None;
 
     public SupportChannelType ChannelType => SupportChannelType.Email;
 
@@ -78,23 +87,11 @@ internal sealed class EmailSupportChannel(
         // reads the subject line even though their mail client threads on the headers. One read by binding
         // is the same lookup the inbound path already does.
         var supportCase = await store.GetCaseByBindingAsync(SupportChannelType.Email, binding.ExternalId, cancellationToken);
-        var thread = ThreadOf(supportCase, binding);
-        var earlier = supportCase == null ? [] : await EarlierAsync(supportCase, message, cancellationToken);
 
         var (files, missing) = await FilesOfAsync(supportCase, message, cancellationToken);
         if (missing != null) return SupportChannelPostResult.Failed(missing);
 
-        var result = await sender.SendAsync(
-            new OutboundMail(
-                To: binding.Address,
-                Subject: Subject(supportCase),
-                Body: Body(message, earlier),
-                InReplyTo: thread[^1],
-                References: thread,
-                ReplyTo: ReplyToFor(mailbox.Options, supportCase?.Id),
-                Attachments: files,
-                BodyHtml: Html(message, earlier)),
-            cancellationToken);
+        var result = await sender.SendAsync(await ComposeAsync(supportCase, binding, message, mailbox, files, cancellationToken), cancellationToken);
 
         // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case,
         // and a bounce naming it finds the very entry that did not arrive.
@@ -114,20 +111,88 @@ internal sealed class EmailSupportChannel(
         return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
     }
 
+    public SupportAnswerRoute RouteOf(SupportCase supportCase, SupportChannelBinding binding)
+    {
+        var mailbox = MailboxOf(binding);
+        var decision = policy?.Decide(binding.Address, Subject(supportCase));
+
+        return new SupportAnswerRoute
+        {
+            ByMail = true,
+            To = binding.Address,
+            From = mailbox.Options.FromAddress,
+            Mailbox = mailbox.Name,
+            Effect = decision?.Action switch
+            {
+                OutboundMailAction.Redirect => MailPolicyEffect.Redirect,
+                OutboundMailAction.Withhold => MailPolicyEffect.Withhold,
+                _ => MailPolicyEffect.None
+            },
+            RedirectedTo = decision?.Action == OutboundMailAction.Redirect ? decision.Recipient : null
+        };
+    }
+
+    public async Task<MailPreview> PreviewAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
+    {
+        var mailbox = MailboxOf(binding);
+        var mail = await ComposeAsync(supportCase, binding, message, mailbox, [], cancellationToken);
+
+        return new MailPreview
+        {
+            From = SenderOf(mailbox.Options),
+            ReplyTo = mail.ReplyTo,
+            To = mail.To,
+            Subject = mail.Subject,
+            Html = mail.BodyHtml,
+            Text = mail.Body
+        };
+    }
+
+    /// <summary>The answer mail as it goes out, before the outbound policy: the thread, the conversation so far quoted, the mailbox's Reply-To, and the HTML in the host's template.</summary>
+    private async Task<OutboundMail> ComposeAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, SupportMailbox mailbox, IReadOnlyList<MailAttachment> files, CancellationToken cancellationToken)
+    {
+        var thread = ThreadOf(supportCase, binding);
+        var earlier = supportCase == null ? [] : await EarlierAsync(supportCase, message, cancellationToken);
+        var subject = Subject(supportCase);
+        var body = Body(message, earlier);
+
+        return new OutboundMail(
+            To: binding.Address,
+            Subject: subject,
+            Body: body,
+            InReplyTo: thread[^1],
+            References: thread,
+            ReplyTo: ReplyToFor(mailbox.Options, supportCase?.Id),
+            Attachments: files,
+            BodyHtml: _template.Render(subject, body, Html(message, earlier, _template.IsSet)));
+    }
+
     /// <summary>The mailbox the case came in through and its client, or the primary's with a warning when that mailbox is no longer configured.</summary>
     private (SupportMailbox Mailbox, IMailClient Client) SenderFor(SupportChannelBinding binding)
     {
-        var mailbox = _mailboxes.Find(binding?.Mailbox);
+        if (_mailboxes.Find(binding?.Mailbox) == null)
+            logger?.LogWarning("A support answer goes out through the primary mailbox, because the mailbox {Mailbox} its case came in through is no longer configured.", binding?.Mailbox);
 
-        if (mailbox == null)
-        {
-            logger?.LogWarning("A support answer goes out through the primary mailbox, because the mailbox {Mailbox} its case came in through is no longer configured.", binding.Mailbox);
-            return (_mailboxes.Primary, mailClient);
-        }
-
-        var client = mailbox.IsPrimary ? mailClient : mailClients?.For(mailbox);
+        var mailbox = MailboxOf(binding);
+        var client = mailbox.IsPrimary ? mailClient : mailClients.For(mailbox);
 
         return client == null ? (_mailboxes.Primary, mailClient) : (mailbox, client);
+    }
+
+    /// <summary>The mailbox an answer goes out through: the one the case came in through, or the primary when that one is no longer configured or cannot be given a client of its own.</summary>
+    private SupportMailbox MailboxOf(SupportChannelBinding binding)
+    {
+        var mailbox = _mailboxes.Find(binding?.Mailbox);
+
+        return mailbox == null || (!mailbox.IsPrimary && mailClients == null) ? _mailboxes.Primary : mailbox;
+    }
+
+    private static string SenderOf(MailOptions mailOptions)
+    {
+        var address = mailOptions.FromAddress?.Trim();
+        if (string.IsNullOrEmpty(address)) return null;
+
+        return string.IsNullOrWhiteSpace(mailOptions.FromName) ? address : new MailboxAddress(mailOptions.FromName, address).ToString();
     }
 
     /// <summary>
@@ -202,7 +267,8 @@ internal sealed class EmailSupportChannel(
 
     /// <summary>
     /// The HTML version of <see cref="Body"/>, for an entry written with formatting; null for a plain entry, which is
-    /// mailed as text alone as it always was.
+    /// mailed as text alone as it always was, unless <paramref name="plainAsHtml"/> asks for its escaped text, as a
+    /// host template does.
     /// </summary>
     /// <remarks>
     /// Each earlier message is quoted in a <c>blockquote</c>, as its own formatting when it had some and as its
@@ -210,9 +276,10 @@ internal sealed class EmailSupportChannel(
     /// reference only when this entry carries that file, so it travels beside the HTML; an earlier message's images
     /// are named rather than sent again.
     /// </remarks>
-    internal static string Html(SupportMessage message, IReadOnlyList<SupportMessage> earlier)
+    internal static string Html(SupportMessage message, IReadOnlyList<SupportMessage> earlier, bool plainAsHtml = false)
     {
         var own = SafeHtml.Sanitize(message.BodyHtml, contentId => Carries(message, contentId) ? HtmlImage.Keep : HtmlImage.Described(NameOf(message, contentId)));
+        if (own == null && plainAsHtml) own = string.IsNullOrEmpty(message.Body) ? string.Empty : $"<p>{SafeHtml.FromPlainText(message.Body)}</p>";
         if (own == null) return null;
 
         var html = new StringBuilder();

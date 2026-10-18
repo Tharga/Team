@@ -135,6 +135,22 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.ResendAsync(teamKey, caseId, sequence, cancellationToken);
     }
 
+    /// <remarks>Authorized as answering is: where an answer goes, the correspondent's address included, is shown to whoever may send one.</remarks>
+    public async Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        return await inner.GetAnswerRouteAsync(teamKey, caseId, cancellationToken);
+    }
+
+    /// <remarks>Authorized as answering is: a preview is the answer, with the conversation so far quoted, before it is sent.</remarks>
+    public async Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        return await inner.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, cancellationToken);
+    }
+
     public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         await RequireMembershipAsync(teamKey);

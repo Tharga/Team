@@ -40,6 +40,9 @@ internal sealed class SupportCaseService(
     /// </remarks>
     private readonly ISupportChannel[] _channels = channels?.ToArray() ?? [];
 
+    /// <summary>The mail channel's own composition of an answer, so the route and preview shown are what posting sends.</summary>
+    private ISupportAnswerMail AnswerMail => _channels.OfType<ISupportAnswerMail>().FirstOrDefault();
+
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
     {
         RequireWithinLength(body);
@@ -219,6 +222,52 @@ internal sealed class SupportCaseService(
         Notify(teamKey, caseId, SupportCaseChange.DeliveryChanged);
 
         return status;
+    }
+
+    /// <remarks>The binding an answer is posted into is the first mail binding, as delivering takes it; a case with none, or a host that mails nothing, is answered on the site. A mail channel of the host's own is described by the address alone.</remarks>
+    public async Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        if (supportCase == null) return null;
+
+        var binding = MailBindingOf(supportCase);
+
+        if (binding == null) return SupportAnswerRoute.Site;
+
+        return AnswerMail?.RouteOf(supportCase, binding) ?? new SupportAnswerRoute { ByMail = true, To = binding.Address };
+    }
+
+    /// <remarks>The draft becomes the entry answering would append — the writer's name, the next sequence, sanitized and derived as written — and is mailed nowhere.</remarks>
+    public async Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        var binding = supportCase == null || AnswerMail == null ? null : MailBindingOf(supportCase);
+        if (binding == null) return null;
+
+        (body, bodyHtml) = Content(body, bodyHtml);
+
+        var draft = new SupportMessage
+        {
+            Sequence = supportCase.MessageCount + 1,
+            Kind = SupportMessageKind.User,
+            AuthorIdentity = await authorizer.GetSubjectAsync(),
+            AuthorName = await DisplayNameAsync(),
+            Body = body ?? string.Empty,
+            BodyHtml = bodyHtml,
+            SentAt = timeProvider.GetUtcNow().UtcDateTime,
+            AsSupport = true
+        };
+
+        return await AnswerMail.PreviewAsync(supportCase, binding, draft, cancellationToken);
+    }
+
+    private SupportChannelBinding MailBindingOf(SupportCase supportCase)
+    {
+        if (_channels.All(x => x.ChannelType != SupportChannelType.Email)) return null;
+
+        var binding = supportCase.Bindings?.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email);
+
+        return string.IsNullOrWhiteSpace(binding?.Address) ? null : binding;
     }
 
     public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)

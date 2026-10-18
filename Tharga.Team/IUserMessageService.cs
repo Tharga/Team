@@ -17,12 +17,24 @@ public interface IUserMessageService
     Task<UserMessageCandidate[]> SearchUsersAsync(UserMessageUserSearch search, CancellationToken cancellationToken = default);
 
     /// <summary>How many users the selection reaches and how many of them turned the category off, counts only.</summary>
-    /// <exception cref="ArgumentException">The selection names no team, or the category is not one staff may write in.</exception>
+    /// <exception cref="ArgumentException">The selection names neither teams nor users, or the category is not one staff may write in.</exception>
     [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
     Task<UserMessagePreview> PreviewAsync(UserMessageRecipients recipients, string category, CancellationToken cancellationToken = default);
 
+    /// <summary>One page of the users the selection reaches, ordered by name, each with the address the mail would go to, their teams, whether the filter selected them or they were added, and whether they turned the category off; the totals are <see cref="PreviewAsync"/>'s and the users are those <see cref="SendAsync"/> would queue.</summary>
+    /// <remarks>At most 100 users a page; not audited, as reading the counts and searching are not.</remarks>
+    /// <exception cref="ArgumentException">The selection names neither teams nor users, or the category is not one staff may write in.</exception>
+    [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
+    Task<UserMessageAddresseePage> GetAddresseesAsync(UserMessageRecipients recipients, string category, int skip = 0, int take = 50, CancellationToken cancellationToken = default);
+
+    /// <summary>The message as a recipient would receive it — sender, subject, the body in the host's template, and the footer with an unsubscribe line for an optional category — rendered without sending or storing anything.</summary>
+    /// <remarks>The selection is not read, and the unsubscribe link in it unsubscribes nobody; files are not rendered.</remarks>
+    /// <exception cref="ArgumentException">The category is not one staff may write in.</exception>
+    [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
+    Task<MailPreview> PreviewMailAsync(UserMessage message, CancellationToken cancellationToken = default);
+
     /// <summary>Queues one mail per user the selection reaches, returns at once with the message as the log records it, and audits the send.</summary>
-    /// <exception cref="ArgumentException">The selection reaches nobody, the category is not one staff may write in, or the message has no subject or body or exceeds the limits.</exception>
+    /// <exception cref="ArgumentException">The selection names neither teams nor users or reaches nobody, the category is not one staff may write in, or the message has no subject or body or exceeds the limits.</exception>
     [RequireScope(SystemMessageScopes.Send, Audit = AuditMode.None)]
     Task<SentUserMessage> SendAsync(UserMessage message, CancellationToken cancellationToken = default);
 

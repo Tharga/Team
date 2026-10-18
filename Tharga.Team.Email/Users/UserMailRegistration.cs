@@ -22,7 +22,8 @@ public static class UserMailRegistration
     /// every instance must share one persisted Data Protection key ring. A bounce handler is registered too, so mail sent
     /// from the address of a mailbox support reads is marked bounced when the receiving server returns it. Invitations
     /// are sent as mail to users, recorded and in the account category, unless the host registered its own
-    /// <see cref="ITeamEmailSender"/>.
+    /// <see cref="ITeamEmailSender"/>. Every mail is framed in the template set with
+    /// <see cref="MailTemplateRegistration.AddThargaMailTemplate"/>, when there is one.
     /// </remarks>
     /// <exception cref="InvalidOperationException">A category is not acceptable, an optional category is registered without an absolute <see cref="UserMailOptions.BaseUrl"/>, or a limit is out of range.</exception>
     public static IServiceCollection AddThargaUserMail(this IServiceCollection services, Action<UserMailOptions> configure = null)
@@ -38,6 +39,7 @@ public static class UserMailRegistration
         services.TryAddSingleton(TimeProvider.System);
         services.AddDataProtection();
         services.AddOutboundMailPolicy();
+        services.AddMailTemplate();
 
         services.TryAddSingleton<UserMailUnsubscribeToken>();
         services.TryAddScoped(sp => new UserMailText(sp.GetService<ITextResolver>()));
@@ -80,7 +82,8 @@ public static class UserMailRegistration
             sp.GetRequiredService<UserMailFooter>(),
             sp.GetRequiredService<IOptions<UserMailOptions>>(),
             sp.GetRequiredService<TimeProvider>(),
-            sp.GetService<ILogger<UserMailDispatcher>>()));
+            sp.GetService<ILogger<UserMailDispatcher>>(),
+            sp.GetService<MailTemplate>()));
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, UserMailSender>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailBounceHandler, UserMailBounceHandler>());

@@ -19,6 +19,7 @@ using Tharga.Team.Service.Audit;
 using Microsoft.Extensions.AI;
 using Tharga.Team.Support;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Email;
 using Tharga.Team.Email.Users;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -314,6 +315,24 @@ builder.Services.AddThargaUserMail(o =>
     o.AddCategory(new UserMailCategory { Key = "tips", Name = "Tips", Description = "Ways to get more out of the product.", OnByDefault = false });
     o.AddCategory(new UserMailCategory { Key = "work", Name = "Notices about my work", Description = "Automatic notices about what happens in your teams." });
 });
+
+// One HTML frame for every mail the toolkit sends -- support answers, messages, notices and invitations -- and for
+// the previews staff open before sending. The template is the host's own markup and is used as written; what is
+// placed into it is sanitized. A mail with text alone gets its text as paragraphs, so the frame always applies.
+builder.Services.AddThargaMailTemplate(o => o.Html = """
+    <!doctype html>
+    <html>
+    <head><meta charset="utf-8"><title>{{subject}}</title></head>
+    <body style="margin:0;padding:24px;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;">
+    <div style="display:none;max-height:0;overflow:hidden;">{{preheader}}</div>
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px;">
+    <div style="font-weight:600;font-size:18px;margin-bottom:16px;">Tharga Team Sample</div>
+    {{content}}
+    <div style="margin-top:24px;font-size:12px;color:#6b7280;">{{footer}}</div>
+    </div>
+    </body>
+    </html>
+    """);
 
 // Messages staff write to users of chosen teams, in service messages and product news but never in tips.
 builder.Services.AddThargaUserMessages(o => o.StaffMessageCategories = [UserMailCategories.ServiceKey, "news"]);

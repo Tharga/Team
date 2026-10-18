@@ -17,7 +17,7 @@ namespace Tharga.Team.Email.Invitations;
 /// the mail did not go out only if this throws, so the result is turned back into an exception here.
 /// </para>
 /// </remarks>
-internal sealed class InvitationMailSender(IOptions<EmailOptions> options, IOutboundMailPolicy policy, ILogger<InvitationMailSender> logger = null, ILogger<MailClient> clientLogger = null) : ITeamEmailSender
+internal sealed class InvitationMailSender(IOptions<EmailOptions> options, IOutboundMailPolicy policy, ILogger<InvitationMailSender> logger = null, ILogger<MailClient> clientLogger = null, MailTemplate template = null) : ITeamEmailSender
 {
     public async Task SendInviteAsync(TeamInviteMail invite)
     {
@@ -33,7 +33,8 @@ internal sealed class InvitationMailSender(IOptions<EmailOptions> options, IOutb
 
     internal OutboundMail? CreateMail(string recipientEmail, string recipientName, string inviteLink, string teamName)
     {
-        var decision = policy.Decide(recipientEmail, $"You've been invited to join {teamName}");
+        var subject = $"You've been invited to join {teamName}";
+        var decision = policy.Decide(recipientEmail, subject);
         if (!decision.ShouldSend)
         {
             // The recipient is deliberately not logged: an address is personal data, and logs travel further than mail.
@@ -48,7 +49,7 @@ internal sealed class InvitationMailSender(IOptions<EmailOptions> options, IOutb
             ? new MailboxAddress(recipientName, decision.Recipient).ToString()
             : decision.Recipient;
 
-        return new OutboundMail(to, decision.Subject, $"""
+        var text = $"""
             Hi {recipientName},
 
             You have been invited to join the team "{teamName}".
@@ -57,7 +58,9 @@ internal sealed class InvitationMailSender(IOptions<EmailOptions> options, IOutb
             {inviteLink}
 
             If you did not expect this invitation, you can safely ignore this email.
-            """);
+            """;
+
+        return new OutboundMail(to, decision.Subject, text, BodyHtml: (template ?? MailTemplate.None).Render(subject, text, null));
     }
 
     internal static MailOptions ToMailOptions(EmailOptions settings)

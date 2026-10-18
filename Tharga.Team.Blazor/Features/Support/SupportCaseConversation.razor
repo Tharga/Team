@@ -23,12 +23,22 @@
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
+    @if (AsStaff)
+    {
+        <SupportAnswerRouteLine Route="_route" />
+    }
     <RichTextEditor @bind-Value="_reply" Label="@ReplyText" Disabled="_busy" Height="8rem" />
 
     <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
 
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
         <RadzenButton Text="@ReplyText" Icon="send" Click="ReplyAsync" Disabled="@(NothingToSend || _busy)" />
+
+        @if (AsStaff && _route?.ByMail == true)
+        {
+            <RadzenButton Text="@_mail[MailPreviewText.Open]" Icon="preview" ButtonStyle="ButtonStyle.Light" Click="PreviewAsync"
+                          Disabled="_busy" data-preview-answer="@Case.Id" />
+        }
 
         @* Only while an assistant is answering; on a case already handed over it would promise what has happened. *@
         @if (!AsStaff && WithAssistant)
@@ -93,8 +103,10 @@
 
     private TextSet _member = TextSet.Empty;
     private TextSet _staff = TextSet.Empty;
+    private TextSet _mail = TextSet.Empty;
 
     private SupportCase _shown;
+    private SupportAnswerRoute _route;
     private SupportAttention _attention;
     private SupportCaseVisibilityChoice _choice = SupportCaseVisibilityChoice.None;
     private SupportMessage[] _messages = [];
@@ -130,6 +142,7 @@
     {
         _member = await TextProvider.ResolveAsync(SupportCasesViewText.All);
         _staff = await TextProvider.ResolveAsync(SupportAcrossTeamsViewText.All);
+        _mail = await TextProvider.ResolveAsync(MailPreviewText.All);
     }
 
     protected override async Task OnParametersSetAsync()
@@ -139,6 +152,7 @@
         _shown = Case;
         _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
         _choice = AsStaff ? SupportCaseVisibilityChoice.None : await SupportCases.GetVisibilityChoiceAsync(Case.TeamKey, Case.Id) ?? SupportCaseVisibilityChoice.None;
+        _route = AsStaff ? await SupportAnswerPreview.RouteAsync(SupportCases, Case) : null;
 
         // Read once somebody is looking: an answer arriving to a page in the background stays unread until then.
         if (!AsStaff && Unread > 0)
@@ -169,6 +183,22 @@
         _files = [];
 
         if (!AsStaff) await Written.InvokeAsync(Case.Id);
+    }
+
+    private async Task PreviewAsync()
+    {
+        _busy = true;
+        MailPreview preview;
+        try
+        {
+            preview = await SupportCases.PreviewAnswerAsync(Case.TeamKey, Case.Id, string.Empty, _reply ?? string.Empty);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await SupportAnswerPreview.ShowAsync(DialogService, _mail, preview, _files);
     }
 
     private Task RequestHumanAsync() => ActAsync(() => SupportCases.RequestHumanAsync(Case.TeamKey, Case.Id));

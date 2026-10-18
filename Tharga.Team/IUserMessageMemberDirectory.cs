@@ -24,6 +24,15 @@ public interface IUserMessageMemberDirectory
     async Task<UserMessageMember[]> GetActiveMembershipsOfUserAsync(string userKey, CancellationToken cancellationToken = default)
         => [.. (await GetActiveMembersOfEveryTeamAsync(cancellationToken) ?? []).Where(x => x != null && string.Equals(x.UserKey, userKey, StringComparison.Ordinal))];
 
+    /// <summary>The active memberships of the users named, one per user and team; by default read from every team's, which a host's own directory may answer by reading only those users' teams.</summary>
+    async Task<UserMessageMember[]> GetActiveMembershipsOfUsersAsync(string[] userKeys, CancellationToken cancellationToken = default)
+    {
+        var wanted = (userKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).ToHashSet(StringComparer.Ordinal);
+        if (wanted.Count == 0) return [];
+
+        return [.. (await GetActiveMembersOfEveryTeamAsync(cancellationToken) ?? []).Where(x => x != null && x.UserKey != null && wanted.Contains(x.UserKey))];
+    }
+
     /// <summary>The tenant roles and access levels the members of every team hold, leaving out members with no access level; by default read from every team's active memberships, which a host's own directory may answer without reading its users.</summary>
     async Task<UserMessageRolesAndLevels> GetRolesAndLevelsAsync(CancellationToken cancellationToken = default)
     {

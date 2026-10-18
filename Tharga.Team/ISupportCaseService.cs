@@ -83,6 +83,22 @@ public interface ISupportCaseService
     Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Where support's answer to the case goes — the address it is mailed to and the mailbox it is sent from, and
+    /// what this environment's outbound mail policy does with it — or that it is shown on the site; null when the
+    /// team has no such case.
+    /// </summary>
+    /// <remarks>Authorized exactly as <see cref="AnswerCaseAsync(string, string, string, CancellationToken)"/> is: the address is shown to whoever may answer.</remarks>
+    Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A draft answer as the person who raised the case would receive it by mail, in the host's template and with the
+    /// conversation so far quoted, rendered without sending or storing anything; null when the answer would not be
+    /// mailed or the team has no such case.
+    /// </summary>
+    /// <remarks>Authorized exactly as answering; the draft is sanitized and derived as an answer is. Files are not rendered.</remarks>
+    Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Has the assistant answer the newest message on a case, and appends what it says.
     /// </summary>
     /// <remarks>

@@ -48,12 +48,16 @@ internal sealed class UserMailFixture
 
     public UserMailUnsubscribeToken Tokens => new(DataProtection, Wrapped);
 
+    public MailTemplate Template { get; set; }
+
+    public UserMailFooter Footer(ITextResolver texts = null) => new(Tokens, Wrapped, new UserMailText(texts));
+
     public UserMailPreferences Preferences => new(Categories, Store, new CompositeAuditLogger([Audit], Microsoft.Extensions.Options.Options.Create(new AuditOptions())), new AuditEntryFactory(null));
 
     public UserMailQueue Queue => new(Categories, Outbox, Wrapped, Time);
 
     public UserMailDispatcher Dispatcher(ITextResolver texts = null)
-        => new(Outbox, Categories, Preferences, Recipients, Mail, Policy, new UserMailFooter(Tokens, Wrapped, new UserMailText(texts)), Wrapped, Time);
+        => new(Outbox, Categories, Preferences, Recipients, Mail, Policy, Footer(texts), Wrapped, Time, null, Template);
 
     public Task<UserMailQueued> QueueAsync(string category = News, string dedup = null, UserMailAttachment[] attachments = null)
         => Queue.QueueAsync(new UserMail

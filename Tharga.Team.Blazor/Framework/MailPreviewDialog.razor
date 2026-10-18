@@ -1,0 +1,77 @@
+@inject DialogService DialogService
+
+@* What a recipient receives, as the service rendered it: the headers they see, then the body in a sandboxed frame. The
+   frame takes the mail's HTML as srcdoc and is sandboxed with no permissions, so the host template's styles stay
+   inside it and nothing in it can run, reach the page or navigate it. *@
+
+<RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem" Style="height: 100%;" data-mail-preview>
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" Style="flex: 1 1 auto; min-height: 0;">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.125rem">
+            @foreach (var (key, label, value) in Headers())
+            {
+                <RadzenStack @key="key" Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap" data-preview-header="@key">
+                    <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0" Style="min-width: 6rem;">@label</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="overflow-wrap: anywhere;">@value</RadzenText>
+                </RadzenStack>
+            }
+        </RadzenStack>
+
+        @if (!string.IsNullOrEmpty(Preview?.Html))
+        {
+            <iframe sandbox="" srcdoc="@Preview.Html" title="@_text[MailPreviewText.Frame]" referrerpolicy="no-referrer"
+                    style="width: 100%; flex: 1 1 auto; min-height: 20rem; border: 1px solid var(--rz-base-300); border-radius: 4px; background: #ffffff;"
+                    data-mail-frame></iframe>
+        }
+        else
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-text-only>@_text[MailPreviewText.TextOnly]</RadzenText>
+            <pre style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; padding: 0.75rem; border: 1px solid var(--rz-base-300); border-radius: 4px; font-family: inherit;"
+                 data-mail-text>@Preview?.Text</pre>
+        }
+    </RadzenStack>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+        <RadzenButton Text="@_text[MailPreviewText.Close]" ButtonStyle="ButtonStyle.Light" Click="@(() => DialogService.Close())" data-close-preview />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    /// <summary>The mail as the service rendered it.</summary>
+    [Parameter, EditorRequired] public MailPreview Preview { get; set; }
+
+    /// <summary>The names of the files the mail would carry; the preview renders none of them.</summary>
+    [Parameter] public IReadOnlyList<string> FileNames { get; set; } = [];
+
+    /// <summary>For a mail to many, how many it reaches; shown in place of an address.</summary>
+    [Parameter] public int? RecipientCount { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(MailPreviewText.All);
+    }
+
+    /// <summary>Opens the preview in a dialog sized for reading a mail.</summary>
+    public static Task ShowAsync(DialogService dialogs, string title, MailPreview preview, IEnumerable<string> fileNames = null, int? recipientCount = null)
+        => dialogs.OpenAsync<MailPreviewDialog>(title, new Dictionary<string, object>
+        {
+            [nameof(Preview)] = preview,
+            [nameof(FileNames)] = (IReadOnlyList<string>)[.. fileNames ?? []],
+            [nameof(RecipientCount)] = recipientCount
+        }, new DialogOptions { Width = "min(52rem, 95vw)", Height = "85vh", Resizable = true, Draggable = true });
+
+    private IEnumerable<(string Key, string Label, string Value)> Headers()
+    {
+        if (Preview == null) yield break;
+
+        if (!string.IsNullOrWhiteSpace(Preview.From)) yield return ("from", _text[MailPreviewText.From], Preview.From);
+        if (!string.IsNullOrWhiteSpace(Preview.To)) yield return ("to", _text[MailPreviewText.To], Preview.To);
+        else if (RecipientCount is { } count) yield return ("to", _text[MailPreviewText.To], _text.Format(MailPreviewText.ToMany, count));
+        if (!string.IsNullOrWhiteSpace(Preview.ReplyTo)) yield return ("reply-to", _text[MailPreviewText.ReplyTo], Preview.ReplyTo);
+        yield return ("subject", _text[MailPreviewText.Subject], Preview.Subject);
+        if (FileNames is { Count: > 0 }) yield return ("files", _text[MailPreviewText.Files], string.Join(", ", FileNames));
+    }
+}

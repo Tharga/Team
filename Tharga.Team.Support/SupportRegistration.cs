@@ -150,6 +150,7 @@ public static class SupportRegistration
         {
             // The transport is wrapped rather than changed, so it stays ignorant of Team types (Tharga/Team#290).
             services.AddOutboundMailPolicy();
+            services.AddMailTemplate();
             services.TryAddScoped<MailClient>();
             services.TryAddScoped<IMailClient>(sp => new PolicyGovernedMailClient(
                 sp.GetRequiredService<MailClient>(),

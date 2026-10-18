@@ -18,6 +18,7 @@ public static class InvitationMailRegistration
         if (configure != null) services.Configure(configure);
 
         services.AddOutboundMailPolicy();
+        services.AddMailTemplate();
         services.TryAddScoped<ITeamEmailSender, InvitationMailSender>();
 
         return services;

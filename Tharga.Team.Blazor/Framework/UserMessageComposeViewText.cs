@@ -9,6 +9,12 @@ public static class UserMessageComposeViewText
     /// <summary>One sentence above the form.</summary>
     public static readonly TextKey Explanation = new("team.userMessage.compose.explanation", "Write to users of the teams you choose. Each of them receives it as a mail.");
 
+    /// <summary>The heading of the framed filter.</summary>
+    public static readonly TextKey Filter = new("team.userMessage.compose.filter", "Filter");
+
+    /// <summary>What the filter does, under its heading.</summary>
+    public static readonly TextKey FilterExplanation = new("team.userMessage.compose.filterExplanation", "Everyone the filter matches in the chosen teams is on the list.");
+
     /// <summary>Names the choice of teams.</summary>
     public static readonly TextKey Teams = new("team.userMessage.compose.teams", "Teams");
 
@@ -33,17 +39,41 @@ public static class UserMessageComposeViewText
     /// <summary>The placeholder of the role picker.</summary>
     public static readonly TextKey ChooseRoles = new("team.userMessage.compose.chooseRoles", "Choose roles");
 
-    /// <summary>Names the choice of specific users.</summary>
-    public static readonly TextKey Users = new("team.userMessage.compose.users", "Specific users");
+    /// <summary>The heading over the search that adds users one by one.</summary>
+    public static readonly TextKey Users = new("team.userMessage.compose.users", "Add users");
+
+    /// <summary>What adding a user does, under its heading.</summary>
+    public static readonly TextKey AddedExplanation = new("team.userMessage.compose.addedExplanation", "A user added is on the list whatever the filter says, in any team.");
 
     /// <summary>The placeholder of the box that searches for users.</summary>
     public static readonly TextKey SearchUsers = new("team.userMessage.compose.searchUsers", "Search by name or address");
 
-    /// <summary>When no user in the chosen teams matches the search.</summary>
+    /// <summary>When no user matches the search.</summary>
     public static readonly TextKey NoUserMatches = new("team.userMessage.compose.noUserMatches", "No user matches.");
 
-    /// <summary>The label of the button that takes a chosen user off the message; <c>{0}</c> is their name.</summary>
+    /// <summary>The label of the button that takes an added user off the message; <c>{0}</c> is their name.</summary>
     public static readonly TextKey RemoveUser = new("team.userMessage.compose.removeUser", "Remove {0}");
+
+    /// <summary>The heading of the list of who receives the message.</summary>
+    public static readonly TextKey RecipientList = new("team.userMessage.compose.recipientList", "Recipients");
+
+    /// <summary>Marks a recipient the filter selected.</summary>
+    public static readonly TextKey ByFilter = new("team.userMessage.compose.byFilter", "By filter");
+
+    /// <summary>Marks a recipient added by name.</summary>
+    public static readonly TextKey Added = new("team.userMessage.compose.added", "Added");
+
+    /// <summary>Marks a recipient who turned the category off.</summary>
+    public static readonly TextKey OptedOut = new("team.userMessage.compose.optedOut", "Will not receive it");
+
+    /// <summary>Why an opted-out recipient will not receive it; <c>{0}</c> is the category's name.</summary>
+    public static readonly TextKey OptedOutDetail = new("team.userMessage.compose.optedOutDetail", "Has turned off {0}.");
+
+    /// <summary>When the selection reaches nobody.</summary>
+    public static readonly TextKey NoRecipients = new("team.userMessage.compose.noRecipients", "Nobody is on the list.");
+
+    /// <summary>The button that reads the next page of the list.</summary>
+    public static readonly TextKey MoreRecipients = new("team.userMessage.compose.moreRecipients", "Show more");
 
     /// <summary>Names the category picker.</summary>
     public static readonly TextKey Category = new("team.userMessage.compose.category", "Category");
@@ -54,8 +84,8 @@ public static class UserMessageComposeViewText
     /// <summary>Names the message editor.</summary>
     public static readonly TextKey Body = new("team.userMessage.compose.body", "Message");
 
-    /// <summary>Asks for teams before anything can be counted.</summary>
-    public static readonly TextKey NoTeams = new("team.userMessage.compose.noTeams", "Choose the teams to write within, or all teams.");
+    /// <summary>Asks for a selection before anything can be listed.</summary>
+    public static readonly TextKey NoTeams = new("team.userMessage.compose.noTeams", "Choose teams and who in them, or add users, to see who receives it.");
 
     /// <summary>How many the selection reaches; <c>{0}</c> is the count.</summary>
     public static readonly TextKey Reaches = new("team.userMessage.compose.reaches", "Reaches {0} people.");
@@ -87,7 +117,9 @@ public static class UserMessageComposeViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        NotPermitted, Explanation, Teams, AllTeams, ChooseTeams, Who, Everyone, AccessLevels, Roles, ChooseRoles, Users, SearchUsers, NoUserMatches, RemoveUser,
-        Category, Subject, Body, NoTeams, Reaches, LeftOut, Send, ConfirmTitle, ConfirmBody, ConfirmSend, ConfirmCancel, Sent, SendFailed
+        NotPermitted, Explanation, Filter, FilterExplanation, Teams, AllTeams, ChooseTeams, Who, Everyone, AccessLevels, Roles, ChooseRoles,
+        Users, AddedExplanation, SearchUsers, NoUserMatches, RemoveUser, RecipientList, ByFilter, Added, OptedOut, OptedOutDetail, NoRecipients,
+        MoreRecipients, Category, Subject, Body, NoTeams, Reaches, LeftOut, Send, ConfirmTitle, ConfirmBody, ConfirmSend, ConfirmCancel, Sent,
+        SendFailed
     ];
 }

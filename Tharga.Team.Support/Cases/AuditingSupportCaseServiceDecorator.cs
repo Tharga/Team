@@ -207,6 +207,14 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default)
         => inner.GetAttachmentLimitsAsync(cancellationToken);
 
+    /// <remarks>A read, and not audited; a refusal is still the authorizing decorator's to throw.</remarks>
+    public Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => inner.GetAnswerRouteAsync(teamKey, caseId, cancellationToken);
+
+    /// <remarks>Renders a draft and changes nothing, so it is not audited; the answer is, when it is sent.</remarks>
+    public Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+        => inner.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, cancellationToken);
+
     public async Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();

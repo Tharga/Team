@@ -69,11 +69,17 @@ else
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {
+                                <SupportAnswerRouteLine Route="_route" />
                                 <RichTextEditor @bind-Value="_answer" Label="@_text[SupportQueueViewText.AnswerLabel]" Disabled="_busy" Height="8rem" />
                                 <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                     <RadzenButton Text="@_text[SupportQueueViewText.AnswerLabel]" Click="AnswerAsync"
                                                   Disabled="@(NothingToSend || _busy)" data-answer="@_selected.Id" />
+                                    @if (_route?.ByMail == true)
+                                    {
+                                        <RadzenButton Text="@_mail[MailPreviewText.Open]" Icon="preview" ButtonStyle="ButtonStyle.Light" Click="PreviewAsync"
+                                                      Disabled="_busy" data-preview-answer="@_selected.Id" />
+                                    }
                                     <RadzenButton Text="@_text[SupportQueueViewText.Close]" ButtonStyle="ButtonStyle.Light"
                                                   Click="CloseAsync" Disabled="_busy" />
                                 </RadzenStack>
@@ -97,6 +103,7 @@ else
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
+    private TextSet _mail = TextSet.Empty;
     private bool _ready;
     private bool _busy;
 
@@ -107,11 +114,13 @@ else
 
     private SupportCase[] _cases = [];
     private SupportCase _selected;
+    private SupportAnswerRoute _route;
     private SupportMessage[] _messages = [];
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(SupportQueueViewText.All);
+        _mail = await TextProvider.ResolveAsync(MailPreviewText.All);
 
         _teamKey = TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key;
 
@@ -170,6 +179,24 @@ else
         {
             _busy = false;
         }
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (_selected == null) return;
+
+        _busy = true;
+        MailPreview preview;
+        try
+        {
+            preview = await SupportCases.PreviewAnswerAsync(_teamKey, _selected.Id, string.Empty, _answer ?? string.Empty);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await SupportAnswerPreview.ShowAsync(DialogService, _mail, preview, _files);
     }
 
     private async Task ResendAsync(SupportMessage message)
@@ -242,6 +269,7 @@ else
         if (_selected?.Id == caseId)
         {
             _selected = null;
+            _route = null;
             _messages = [];
             return;
         }
@@ -253,6 +281,7 @@ else
     {
         _selected = await SupportCases.GetCaseAsync(_teamKey, caseId);
         _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, caseId)).Items;
+        _route = await SupportAnswerPreview.RouteAsync(SupportCases, _selected);
     }
 
     private async Task ReloadAsync()

@@ -1,6 +1,7 @@
 @using Tharga.Team.Support.Cases
 @using Tharga.Team.Blazor.Framework
 @inject ISupportCaseService SupportCases
+@inject DialogService DialogService
 
 @* One case that belongs to no team, opened inside its card: the transcript, the answer, and giving it a team.
    Rendered only while the card is open, so a closed card reads no messages. *@
@@ -13,11 +14,17 @@
 
     @if (Case.Status == SupportCaseStatus.Open)
     {
+        <SupportAnswerRouteLine Route="_route" />
         <RichTextEditor @bind-Value="_answer" Label="@_text[SupportUnassignedViewText.AnswerLabel]" Disabled="_busy" Height="8rem" />
         <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
             <RadzenButton Text="@_text[SupportUnassignedViewText.AnswerLabel]" Icon="send" Click="AnswerAsync"
                           Disabled="@(NothingToSend || _busy)" data-answer="@Case.Id" />
+            @if (_route?.ByMail == true)
+            {
+                <RadzenButton Text="@_mail[MailPreviewText.Open]" Icon="preview" ButtonStyle="ButtonStyle.Light" Click="PreviewAsync"
+                              Disabled="_busy" data-preview-answer="@Case.Id" />
+            }
             <RadzenButton Text="@_text[SupportUnassignedViewText.Close]" Icon="check" ButtonStyle="ButtonStyle.Light"
                           Click="CloseAsync" Disabled="_busy" data-close="@Case.Id" />
         </RadzenStack>
@@ -97,8 +104,10 @@
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
+    private TextSet _mail = TextSet.Empty;
 
     private SupportCase _shown;
+    private SupportAnswerRoute _route;
     private SupportMessage[] _messages = [];
     private string _answer;
     private IReadOnlyList<SupportAttachmentUpload> _files = [];
@@ -118,6 +127,7 @@
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(SupportUnassignedViewText.All);
+        _mail = await TextProvider.ResolveAsync(MailPreviewText.All);
     }
 
     protected override async Task OnParametersSetAsync()
@@ -126,6 +136,7 @@
 
         _shown = Case;
         _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
+        _route = await SupportAnswerPreview.RouteAsync(SupportCases, Case);
     }
 
     private bool IsListed(string teamKey) => (Teams ?? []).Any(x => x.Key == teamKey);
@@ -146,6 +157,22 @@
         await ActAsync(() => SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files));
         _answer = null;
         _files = [];
+    }
+
+    private async Task PreviewAsync()
+    {
+        _busy = true;
+        MailPreview preview;
+        try
+        {
+            preview = await SupportCases.PreviewAnswerAsync(Case.TeamKey, Case.Id, string.Empty, _answer ?? string.Empty);
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await SupportAnswerPreview.ShowAsync(DialogService, _mail, preview, _files);
     }
 
     private Task CloseAsync() => ActAsync(() => SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id));

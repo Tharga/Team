@@ -64,6 +64,17 @@ internal sealed class MongoUserMessageMemberDirectory<TUserEntity, TTeamEntity, 
         return await ActiveAsync(found, userKey);
     }
 
+    /// <remarks>Reads only the teams those users are in, and only their own records.</remarks>
+    public async Task<UserMessageMember[]> GetActiveMembershipsOfUsersAsync(string[] userKeys, CancellationToken cancellationToken = default)
+    {
+        string[] keys = [.. (userKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)];
+        if (keys.Length == 0) return [];
+
+        var wanted = keys.ToHashSet(StringComparer.Ordinal);
+
+        return await ActiveAsync([.. Memberships(await teams.GetTeamsByUsersAsync(keys) ?? []).Where(x => wanted.Contains(x.Member.Key))]);
+    }
+
     /// <remarks>Reads the teams and nothing else: no user is read, so a role held only by a disabled user may be offered and reach nobody.</remarks>
     public async Task<UserMessageRolesAndLevels> GetRolesAndLevelsAsync(CancellationToken cancellationToken = default)
     {
@@ -130,9 +141,11 @@ internal sealed class MongoUserMessageMemberDirectory<TUserEntity, TTeamEntity, 
         }
     }
 
-    private async Task<UserMessageMember[]> ActiveAsync(IEnumerable<TTeamEntity> found, string onlyUserKey = null)
+    private Task<UserMessageMember[]> ActiveAsync(IEnumerable<TTeamEntity> found, string onlyUserKey = null)
+        => ActiveAsync([.. Memberships(found).Where(x => onlyUserKey == null || string.Equals(x.Member.Key, onlyUserKey, StringComparison.Ordinal))]);
+
+    private async Task<UserMessageMember[]> ActiveAsync((TTeamEntity Team, TMember Member)[] memberships)
     {
-        var memberships = Memberships(found).Where(x => onlyUserKey == null || string.Equals(x.Member.Key, onlyUserKey, StringComparison.Ordinal)).ToArray();
         var enabled = (await users.GetByKeysAsync([.. memberships.Select(x => x.Member.Key).Distinct(StringComparer.Ordinal)]))
             .Where(x => x.DisabledAt == null)
             .GroupBy(x => x.Key, StringComparer.Ordinal)

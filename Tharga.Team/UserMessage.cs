@@ -1,29 +1,33 @@
 namespace Tharga.Team;
 
-/// <summary>Who a message goes to: the teams it applies within, and within them the users chosen by key, role, access level or all of them, with duplicates removed.</summary>
+/// <summary>Who a message goes to: a filter — the teams, and within them everyone, the roles or the access levels — and users added by key whatever the filter says, together and with duplicates removed.</summary>
 /// <remarks>
+/// <b>Either part is enough:</b> teams with whom in them, users added by key, or both. A selection naming neither teams
+/// nor users is refused.
+/// <para>
 /// <b>Only active members count:</b> a member who has accepted, is not suspended, has a user record that is not
 /// disabled, in a team that is not deleted. Invited and rejected members, suspended members, disabled accounts and
-/// deleted teams are left out.
+/// deleted teams are left out; an added user is reached when they are an active member of any team.
+/// </para>
 /// </remarks>
 public sealed record UserMessageRecipients
 {
-    /// <summary>The teams the selection applies within; ignored when <see cref="AllTeams"/> is set.</summary>
+    /// <summary>The teams the filter applies within; ignored when <see cref="AllTeams"/> is set.</summary>
     public string[] TeamKeys { get; init; } = [];
 
-    /// <summary>Whether the selection applies within every team.</summary>
+    /// <summary>Whether the filter applies within every team.</summary>
     public bool AllTeams { get; init; }
 
-    /// <summary>Users chosen by key, reached where they are an active member of one of the teams.</summary>
+    /// <summary>Users added by key, reached whatever the filter says, in whichever teams they are active.</summary>
     public string[] UserKeys { get; init; } = [];
 
-    /// <summary>Everyone in the teams holding any of these tenant roles.</summary>
+    /// <summary>Everyone in the filter's teams holding any of these tenant roles.</summary>
     public string[] Roles { get; init; } = [];
 
-    /// <summary>Everyone in the teams at any of these access levels.</summary>
+    /// <summary>Everyone in the filter's teams at any of these access levels.</summary>
     public AccessLevel[] AccessLevels { get; init; } = [];
 
-    /// <summary>Whether everyone in the teams is reached.</summary>
+    /// <summary>Whether everyone in the filter's teams is reached.</summary>
     public bool EveryMember { get; init; }
 }
 
@@ -57,6 +61,44 @@ public sealed record UserMessagePreview
 
     /// <summary>How many of them turned the category off and will not receive it; always zero for a required category.</summary>
     public required int LeftOut { get; init; }
+}
+
+/// <summary>One user a selection reaches, as the list before sending shows them.</summary>
+public sealed record UserMessageAddressee
+{
+    /// <summary>The user's key.</summary>
+    public required string UserKey { get; init; }
+
+    /// <summary>The user's name, or null.</summary>
+    public string Name { get; init; }
+
+    /// <summary>The address the mail would go to now, from the user record, or null when it holds none.</summary>
+    public string EMail { get; init; }
+
+    /// <summary>The teams that brought them in: those of the filter they matched in, and for an added user every team they are active in.</summary>
+    public string[] TeamKeys { get; init; } = [];
+
+    /// <summary>Whether the filter selected them.</summary>
+    public bool ByFilter { get; init; }
+
+    /// <summary>Whether they were added by key.</summary>
+    public bool Added { get; init; }
+
+    /// <summary>Whether they turned the category off and will not receive it; never for a required category.</summary>
+    public bool OptedOut { get; init; }
+}
+
+/// <summary>One page of the users a selection reaches, by name, with the counts <see cref="IUserMessageService.PreviewAsync"/> gives.</summary>
+public sealed record UserMessageAddresseePage
+{
+    /// <summary>The users on this page.</summary>
+    public UserMessageAddressee[] Items { get; init; } = [];
+
+    /// <summary>How many distinct users the selection reaches in all.</summary>
+    public int Total { get; init; }
+
+    /// <summary>How many of them turned the category off.</summary>
+    public int LeftOut { get; init; }
 }
 
 /// <summary>What a message may be written to and in: the teams, the roles and access levels within them, the categories and the limits.</summary>

@@ -22,11 +22,11 @@ public class UserMessageServiceTests
     }
 
     [Fact]
-    public async Task SpecificUsers_AreReachedOnlyWithinTheChosenTeams()
+    public async Task UsersAdded_AreReachedWhateverTheFilterSays_InAnyTeam()
     {
         var reached = await ReachedAsync(new UserMessageFixture(), new UserMessageRecipients { TeamKeys = [UserMessageFixture.Alpha], UserKeys = ["cia", "dan"] });
 
-        Assert.Equal(["cia"], reached);
+        Assert.Equal(["cia", "dan"], reached);
     }
 
     [Fact]

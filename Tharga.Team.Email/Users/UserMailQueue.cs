@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Options;
 using MimeKit;
-using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Email.Users;
 
@@ -159,12 +158,8 @@ internal sealed class UserMailQueue(
         var o = options.Value;
         var category = categories.Get(categoryKey, parameterName);
 
-        var subject = OneLine(subjectLine);
+        var (subject, body, html) = UserMailComposer.Draft(subjectLine, bodyText, bodyHtml);
         if (subject.Length == 0) throw new ArgumentException("A mail to a user has a subject.", parameterName);
-
-        var html = SafeHtml.Sanitize(bodyHtml);
-        var body = string.IsNullOrWhiteSpace(bodyText) ? null : bodyText.Replace("\r\n", "\n").Trim();
-        body ??= html == null ? null : HtmlText.ToPlainText(html);
 
         if (string.IsNullOrWhiteSpace(body)) throw new ArgumentException("A mail to a user has a body, as text or as HTML with something readable in it.", parameterName);
         if (body.Length + (html?.Length ?? 0) > o.MaxBodyLength) throw new ArgumentException($"The mail's body is longer than the {o.MaxBodyLength} characters allowed.", parameterName);

@@ -27,7 +27,9 @@ internal sealed class UserMessageService(
     IUserService userService = null,
     CompositeAuditLogger auditLogger = null,
     IAuditEntryFactory auditEntryFactory = null,
-    ILogger<UserMessageService> logger = null) : IUserMessageService
+    ILogger<UserMessageService> logger = null,
+    UserMailFooter footer = null,
+    MailTemplate template = null) : IUserMessageService
 {
     private const int MaxPageSize = 100;
 
@@ -76,9 +78,72 @@ internal sealed class UserMessageService(
     {
         var allowed = StaffCategory(category);
         var reached = await ReachAsync(recipients, cancellationToken);
+        var optedOut = await OptedOutAsync(allowed, reached, cancellationToken);
 
-        return new UserMessagePreview { Recipients = reached.Length, LeftOut = await LeftOutAsync(allowed, reached, cancellationToken) };
+        return new UserMessagePreview { Recipients = reached.Length, LeftOut = optedOut.Count };
     }
+
+    /// <remarks>Ordered by name, then address, then key; the names and addresses on a page are read from the user records as sending reads them, falling back to the membership's.</remarks>
+    public async Task<UserMessageAddresseePage> GetAddresseesAsync(UserMessageRecipients selection, string category, int skip = 0, int take = 50, CancellationToken cancellationToken = default)
+    {
+        var allowed = StaffCategory(category);
+        var reached = await ReachAsync(selection, cancellationToken);
+        var optedOut = await OptedOutAsync(allowed, reached, cancellationToken);
+
+        var page = reached
+            .OrderBy(x => x.Member.Name ?? x.Member.EMail ?? x.UserKey, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(x => x.Member.EMail, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.UserKey, StringComparer.Ordinal)
+            .Skip(Math.Max(0, skip))
+            .Take(Math.Clamp(take, 1, MaxPageSize))
+            .ToArray();
+
+        var records = (await recipients.FindManyAsync([.. page.Select(x => x.UserKey)], cancellationToken) ?? [])
+            .Where(x => x?.Key != null)
+            .GroupBy(x => x.Key, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+
+        return new UserMessageAddresseePage
+        {
+            Items = [.. page.Select(x => Addressee(x, records.GetValueOrDefault(x.UserKey), optedOut.Contains(x.UserKey)))],
+            Total = reached.Length,
+            LeftOut = optedOut.Count
+        };
+    }
+
+    /// <remarks>Composed by the code that composes each mail sent, for a recipient nobody in particular: the unsubscribe link it shows unsubscribes nobody.</remarks>
+    public async Task<MailPreview> PreviewMailAsync(UserMessage message, CancellationToken cancellationToken = default)
+    {
+        if (message == null) throw new ArgumentException("There is no message to preview.", nameof(message));
+
+        var category = StaffCategory(message.Category);
+        var (subject, body, html) = UserMailComposer.Draft(message.Subject, message.Body, message.BodyHtml);
+        var composed = await Composer().ComposeAsync(subject, body, html, null, category);
+        var o = mailOptions.Value;
+
+        return new MailPreview
+        {
+            From = UserMailComposer.Sender(o),
+            ReplyTo = string.IsNullOrWhiteSpace(o.ReplyTo) ? null : o.ReplyTo.Trim(),
+            Subject = subject,
+            Html = composed.BodyHtml,
+            Text = composed.Body
+        };
+    }
+
+    private UserMailComposer Composer()
+        => new(footer ?? throw new InvalidOperationException($"Previewing a message needs the user mail footer, which {nameof(UserMailRegistration.AddThargaUserMail)} registers."), template);
+
+    private static UserMessageAddressee Addressee(UserMessageReached reached, UserMailRecipient record, bool optedOut) => new()
+    {
+        UserKey = reached.UserKey,
+        Name = !string.IsNullOrWhiteSpace(reached.Member.Name) ? reached.Member.Name : record?.Name,
+        EMail = !string.IsNullOrWhiteSpace(record?.EMail) ? record.EMail.Trim() : reached.Member.EMail,
+        TeamKeys = reached.TeamKeys,
+        ByFilter = reached.ByFilter,
+        Added = reached.Added,
+        OptedOut = optedOut
+    };
 
     public async Task<SentUserMessage> SendAsync(UserMessage message, CancellationToken cancellationToken = default)
     {
@@ -203,7 +268,7 @@ internal sealed class UserMessageService(
 
         var category = StaffCategory(message.Category);
         var reached = await ReachAsync(message.Recipients, cancellationToken);
-        if (reached.Length == 0) throw new ArgumentException("The selection reaches nobody: no active member of the chosen teams matches it.", nameof(message));
+        if (reached.Length == 0) throw new ArgumentException("The selection reaches nobody: no active member of the chosen teams matches it, and no user added is an active member of any team.", nameof(message));
 
         var queued = await queue.QueueBatchAsync(new UserMailBatch
         {
@@ -242,24 +307,31 @@ internal sealed class UserMessageService(
         return ToSent(entry, new UserMailOutcomes { Queued = queued.Recipients });
     }
 
-    private async Task<UserMessageMember[]> ReachAsync(UserMessageRecipients selection, CancellationToken cancellationToken)
+    /// <summary>Who the selection reaches: the filter read only when it has teams and someone to reach in them, the added users only when there are some.</summary>
+    private async Task<UserMessageReached[]> ReachAsync(UserMessageRecipients selection, CancellationToken cancellationToken)
     {
-        var teams = UserMessageAudience.TeamsOf(selection);
+        var teams = UserMessageAudience.FilterTeamsOf(selection);
+        var added = UserMessageAudience.AddedOf(selection);
 
-        var memberships = selection.AllTeams
+        var filter = teams == null
             ? await members.GetActiveMembersOfEveryTeamAsync(cancellationToken)
-            : await members.GetActiveMembersAsync(teams, cancellationToken);
+            : teams.Length == 0 ? [] : await members.GetActiveMembersAsync(teams, cancellationToken);
+        var byKey = added.Length == 0 ? [] : await members.GetActiveMembershipsOfUsersAsync(added, cancellationToken);
 
-        return UserMessageAudience.Select(memberships ?? [], selection);
+        return UserMessageAudience.Select(filter ?? [], byKey ?? [], selection);
     }
 
-    private async Task<int> LeftOutAsync(UserMailCategory category, UserMessageMember[] reached, CancellationToken cancellationToken)
+    /// <summary>The users reached who turned the category off; none for a required category.</summary>
+    private async Task<HashSet<string>> OptedOutAsync(UserMailCategory category, UserMessageReached[] reached, CancellationToken cancellationToken)
     {
-        if (category.Required || reached.Length == 0) return 0;
+        if (category.Required || reached.Length == 0) return new HashSet<string>(StringComparer.Ordinal);
 
         var stored = await preferences.GetChoicesForCategoryAsync(category.Key, [.. reached.Select(x => x.UserKey)], cancellationToken) ?? new Dictionary<string, bool>();
 
-        return reached.Count(x => !category.Receives(stored.TryGetValue(x.UserKey, out var receives) ? receives : null));
+        return reached
+            .Where(x => !category.Receives(stored.TryGetValue(x.UserKey, out var receives) ? receives : null))
+            .Select(x => x.UserKey)
+            .ToHashSet(StringComparer.Ordinal);
     }
 
     private IEnumerable<UserMailCategory> StaffCategories()

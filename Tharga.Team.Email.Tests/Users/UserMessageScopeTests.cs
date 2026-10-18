@@ -53,6 +53,8 @@ public class UserMessageScopeTests
         Assert.Equal(5, (await service.GetRecipientsAsync(sent.Id, cancellationToken: TestContext.Current.CancellationToken)).Items.Length);
         Assert.NotEmpty((await service.GetChoicesAsync(TestContext.Current.CancellationToken)).Teams);
         Assert.NotEmpty(await service.SearchUsersAsync(new UserMessageUserSearch { Text = "anna", AllTeams = true }, TestContext.Current.CancellationToken));
+        Assert.Equal(5, (await service.GetAddresseesAsync(Everyone, UserMailFixture.News, 0, 50, TestContext.Current.CancellationToken)).Items.Length);
+        Assert.Contains("unsubscribe", (await service.PreviewMailAsync(UserMessageFixture.Message(Everyone), TestContext.Current.CancellationToken)).Html);
     }
 
     [Fact]
@@ -82,6 +84,8 @@ public class UserMessageScopeTests
         var service = Resolve(UserMessageFixture.Staff(new Claim(TeamClaimTypes.SystemScope, SystemMessageScopes.Send)));
 
         await service.PreviewAsync(Everyone, UserMailFixture.News, TestContext.Current.CancellationToken);
+        await service.GetAddresseesAsync(Everyone, UserMailFixture.News, 0, 50, TestContext.Current.CancellationToken);
+        await service.PreviewMailAsync(UserMessageFixture.Message(Everyone), TestContext.Current.CancellationToken);
         await service.SendAsync(UserMessageFixture.Message(Everyone), TestContext.Current.CancellationToken);
 
         var entry = Assert.Single(_audit.Entries);
@@ -145,6 +149,8 @@ public class UserMessageScopeTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetSentMessageAsync("any", ct));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetRecipientsAsync("any", cancellationToken: ct));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.SearchUsersAsync(new UserMessageUserSearch { Text = "anna", AllTeams = true }, ct));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetAddresseesAsync(Everyone, UserMailFixture.News, 0, 50, ct));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.PreviewMailAsync(UserMessageFixture.Message(Everyone), ct));
     }
 
     private sealed class FixedPrincipal(ClaimsPrincipal principal) : ITeamPrincipalAccessor

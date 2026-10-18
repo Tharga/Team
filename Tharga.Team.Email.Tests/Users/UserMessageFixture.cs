@@ -56,7 +56,10 @@ internal sealed class UserMessageFixture
         Mail.Time,
         Users,
         new CompositeAuditLogger([Mail.Audit], Microsoft.Extensions.Options.Options.Create(new AuditOptions())),
-        new AuditEntryFactory(null));
+        new AuditEntryFactory(null),
+        null,
+        Mail.Footer(),
+        Mail.Template);
 
     public static ClaimsPrincipal Staff(params Claim[] extra)
         => new(new ClaimsIdentity([new Claim(ClaimTypes.Name, "Sam Staff"), new Claim(ClaimTypes.NameIdentifier, "sam"), .. extra], "Test"));
