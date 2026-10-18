@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Linq.Expressions;
 using MongoDB.Driver;
 using MongoDB.Driver.Linq;
 using Tharga.MongoDB;
@@ -10,12 +10,10 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
     where TMember : TeamMemberBase
 {
     private readonly ITeamRepositoryCollection<TTeamEntity, TMember> _collection;
-    private readonly ILogger<TeamRepository<TTeamEntity, TMember>> _logger;
 
-    public TeamRepository(ITeamRepositoryCollection<TTeamEntity, TMember> collection, ILogger<TeamRepository<TTeamEntity, TMember>> logger = null)
+    public TeamRepository(ITeamRepositoryCollection<TTeamEntity, TMember> collection)
     {
         _collection = collection;
-        _logger = logger;
     }
 
     public IAsyncEnumerable<TTeamEntity> GetTeamsByUserAsync(string userKey)
@@ -71,7 +69,7 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         var update = new UpdateDefinitionBuilder<TTeamEntity>()
             .Set(x => x.Members.FirstMatchingElement().LastSeen, utcNow);
 
-        return _collection.UpdateOneAsync(filter, update, OneOption<TTeamEntity>.FirstOrDefault);
+        return UpdateMemberAsync(filter, update);
     }
 
     /// <summary>The team, live, with a member of that key; the positional update writes the first such member.</summary>
@@ -93,35 +91,22 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         return _collection.UpdateOneAsync(filter, update);
     }
 
-    public async Task RemoveMemberAsync(string teamKey, string userKey)
+    /// <summary>Removes every row of that member from the team; no-op when the team or the member is missing.</summary>
+    /// <remarks>
+    /// A <c>$pull</c>, not the remaining members written back, so a change to another member saved meanwhile
+    /// survives (Tharga/Team#338). Dropping every row with the key is what the read-and-filter version did.
+    /// </remarks>
+    public Task RemoveMemberAsync(string teamKey, string userKey)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
-        var members = team.Members.Where(x => x.Key != userKey).ToArray();
-
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        await _collection.UpdateOneAsync(filter, update);
+        return UpdateMemberAsync(TeamFilter(teamKey), PullMember(userKey));
     }
 
-    public async Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
+    public Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
+        var update = Builders<TTeamEntity>.Update
+            .Set(x => x.Members.FirstMatchingElement().AccessLevel, accessLevel);
 
-        var target = team.Members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
-        if (target == null) return;
-
-        var updated = target with { AccessLevel = accessLevel };
-        var members = team.Members.ReplaceByReference(target, updated);
-
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        await _collection.UpdateOneAsync(filter, update);
+        return UpdateMemberAsync(MemberFilter(teamKey, userKey), update);
     }
 
     /// <remarks>
@@ -141,140 +126,67 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         return matches.Length == 1 ? matches[0] : null;
     }
 
-    public async Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
+    public Task SetInvitationExpiryAsync(string teamKey, string inviteKey, DateTime? expiresAt)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
+        // Only the expiry is written, so InviteKey -- and with it every link already mailed -- is untouched.
+        var update = Builders<TTeamEntity>.Update
+            .Set(x => x.Members.FirstMatchingElement().Invitation.ExpiresAt, expiresAt);
 
-        var target = team?.Members.PickOneOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey, _logger, teamKey, inviteKey);
-        if (target == null) return;
-
-        // The invitation is replaced whole rather than the expiry set in place, because Invitation is a
-        // record with required members -- and InviteKey is copied across unchanged, which is the property
-        // that makes an already-mailed link survive an extension.
-        var updated = target with { Invitation = target.Invitation with { ExpiresAt = expiresAt } };
-        var members = team.Members.ReplaceByReference(target, updated);
-
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        await _collection.UpdateOneAsync(filter, update);
+        return UpdateMemberAsync(InvitationFilter(teamKey, inviteKey), update);
     }
 
-    public async Task SetMemberSuspendedAsync(string teamKey, string userKey, DateTime? suspendedAt, string suspendedBy)
+    public Task SetMemberSuspendedAsync(string teamKey, string userKey, DateTime? suspendedAt, string suspendedBy)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
-
-        var target = team.Members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
-        if (target == null) return;
-
         // State is deliberately left at Member. GetTeamsByUserAsync filters on it, so changing it here
         // would drop the team out of the member's selector -- the opposite of what suspension is for.
-        var updated = target with { SuspendedAt = suspendedAt, SuspendedBy = suspendedBy };
-        var members = team.Members.ReplaceByReference(target, updated);
+        var update = Builders<TTeamEntity>.Update.Combine(
+            SetOrUnset(x => x.Members.FirstMatchingElement().SuspendedAt, suspendedAt),
+            SetOrUnset(x => x.Members.FirstMatchingElement().SuspendedBy, suspendedBy));
 
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        await _collection.UpdateOneAsync(filter, update);
+        return UpdateMemberAsync(MemberFilter(teamKey, userKey), update);
     }
 
-    public async Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles)
+    public Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
-
-        var target = team.Members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
-        if (target == null) return;
-
-        var updated = target with { TenantRoles = tenantRoles };
-        var members = team.Members.ReplaceByReference(target, updated);
-
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        await _collection.UpdateOneAsync(filter, update);
+        var update = SetOrUnset(x => x.Members.FirstMatchingElement().TenantRoles, tenantRoles);
+        return UpdateMemberAsync(MemberFilter(teamKey, userKey), update);
     }
 
-    public async Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides)
+    public Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
-
-        var target = team.Members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
-        if (target == null) return;
-
-        var updated = target with { ScopeOverrides = scopeOverrides };
-        var members = team.Members.ReplaceByReference(target, updated);
-
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        await _collection.UpdateOneAsync(filter, update);
+        var update = SetOrUnset(x => x.Members.FirstMatchingElement().ScopeOverrides, scopeOverrides);
+        return UpdateMemberAsync(MemberFilter(teamKey, userKey), update);
     }
 
-    public async Task SetMemberNameAsync(string teamKey, string userKey, string name)
+    public Task SetMemberNameAsync(string teamKey, string userKey, string name)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
-
-        var target = team.Members.PickOneOrDefault(x => x.Key == userKey, _logger, teamKey, userKey);
-        if (target == null) return;
-
         var trimmed = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
-        var updated = target with { Name = trimmed };
-        var members = team.Members.ReplaceByReference(target, updated);
+        var update = Builders<TTeamEntity>.Update
+            .Set(x => x.Members.FirstMatchingElement().Name, trimmed);
 
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        await _collection.UpdateOneAsync(filter, update);
+        return UpdateMemberAsync(MemberFilter(teamKey, userKey), update);
     }
 
+    /// <summary>
+    /// Records the answer on the invitation's row and returns the team as it is afterwards, or null when no
+    /// invitation of that code is on the team.
+    /// </summary>
     public async Task<ITeam> SetInvitationResponseAsync(string teamKey, string userKey, string inviteKey, bool accept)
     {
-        var team = await _collection.GetOneAsync(x => x.Key == teamKey);
+        var update = Builders<TTeamEntity>.Update
+            .Set(x => x.Members.FirstMatchingElement().Key, userKey)
+            .Set(x => x.Members.FirstMatchingElement().LastSeen, DateTime.UtcNow)
+            .Set(x => x.Members.FirstMatchingElement().State, accept ? MembershipState.Member : MembershipState.Rejected);
 
-        var target = team.Members.PickOneOrDefault(x => x.Invitation != null && x.Invitation.InviteKey == inviteKey, _logger, teamKey, inviteKey);
-        if (target == null) return null;
-
-        TMember updated;
         if (accept)
         {
-            updated = target with
-            {
-                Key = userKey,
-                Name = null,
-                Invitation = null,
-                LastSeen = DateTime.UtcNow,
-                State = MembershipState.Member
-            };
-        }
-        else
-        {
-            updated = target with
-            {
-                Key = userKey,
-                LastSeen = DateTime.UtcNow,
-                State = MembershipState.Rejected
-            };
+            update = update
+                .Set(x => x.Members.FirstMatchingElement().Name, null)
+                .Set(x => x.Members.FirstMatchingElement().Invitation, null);
         }
 
-        var members = team.Members.ReplaceByReference(target, updated);
-
-        var filter = new FilterDefinitionBuilder<TTeamEntity>()
-            .Eq(x => x.Key, teamKey);
-        var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members, members);
-
-        var response = await _collection.UpdateOneAsync(filter, update);
-        return await response.GetAfterAsync();
+        var result = await UpdateMemberAsync(InvitationFilter(teamKey, inviteKey), update);
+        return result?.Before == null ? null : await result.GetAfterAsync();
     }
 
     public async Task<int> RemoveMemberFromAllTeamsAsync(string userKey)
@@ -282,18 +194,66 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         var count = 0;
         await foreach (var team in _collection.GetAsync(x => x.Members.Any(y => y.Key == userKey)))
         {
-            var members = team.Members.Where(x => x.Key != userKey).ToArray();
-
-            var filter = new FilterDefinitionBuilder<TTeamEntity>()
-                .Eq(x => x.Key, team.Key);
-            var update = new UpdateDefinitionBuilder<TTeamEntity>()
-                .Set(x => x.Members, members);
-
-            await _collection.UpdateOneAsync(filter, update);
+            await UpdateMemberAsync(TeamFilter(team.Key), PullMember(userKey));
             count++;
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// Every member write goes through here: one update of only what changes, never the member list read and
+    /// written back, so two overlapping writes to one team both survive (Tharga/Team#338). Before, an edit to
+    /// one member could put back a member another administrator had just removed, or undo a suspension.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="EMode.FirstOrDefault"/> is required by the positional writes, for the reason given on
+    /// <see cref="SetLastSeenAsync"/>, and keeps each write to one <c>findAndModify</c>.
+    /// </remarks>
+    private Task<EntityChangeResult<TTeamEntity>> UpdateMemberAsync(FilterDefinition<TTeamEntity> filter, UpdateDefinition<TTeamEntity> update)
+    {
+        return _collection.UpdateOneAsync(filter, update, OneOption<TTeamEntity>.FirstOrDefault);
+    }
+
+    private static FilterDefinition<TTeamEntity> TeamFilter(string teamKey)
+    {
+        return Builders<TTeamEntity>.Filter.Eq(x => x.Key, teamKey);
+    }
+
+    /// <summary>The team with a member of that key; a positional update writes the first such member.</summary>
+    internal static FilterDefinition<TTeamEntity> MemberFilter(string teamKey, string userKey)
+    {
+        var builder = Builders<TTeamEntity>.Filter;
+        return builder.And(
+            builder.Eq(x => x.Key, teamKey),
+            builder.ElemMatch(x => x.Members, m => m.Key == userKey));
+    }
+
+    /// <summary>The team with an invitation of that code; a positional update writes the first such member.</summary>
+    internal static FilterDefinition<TTeamEntity> InvitationFilter(string teamKey, string inviteKey)
+    {
+        var builder = Builders<TTeamEntity>.Filter;
+        return builder.And(
+            builder.Eq(x => x.Key, teamKey),
+            builder.ElemMatch(x => x.Members, m => m.Invitation != null && m.Invitation.InviteKey == inviteKey));
+    }
+
+    private static UpdateDefinition<TTeamEntity> PullMember(string userKey)
+    {
+        return Builders<TTeamEntity>.Update.PullFilter(x => x.Members, m => m.Key == userKey);
+    }
+
+    /// <summary>Sets the field, or removes it when the value is null.</summary>
+    /// <remarks>
+    /// For member fields marked <c>[BsonIgnoreIfNull]</c>. Writing the whole member left a null one absent rather
+    /// than stored as null, and readers rely on the difference: an access level that was never set is found with
+    /// <c>$exists: false</c>. A positional write keeps the same shape.
+    /// </remarks>
+    private static UpdateDefinition<TTeamEntity> SetOrUnset<TField>(Expression<Func<TTeamEntity, TField>> field, TField value)
+    {
+        return value == null
+            ? Builders<TTeamEntity>.Update.Unset(new ExpressionFieldDefinition<TTeamEntity>(field))
+            : Builders<TTeamEntity>.Update.Set(field, value);
     }
 
     public Task DeleteAsync(string teamKey)
