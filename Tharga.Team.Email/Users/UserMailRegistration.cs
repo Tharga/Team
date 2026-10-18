@@ -31,7 +31,7 @@ public static class UserMailRegistration
         var options = new UserMailOptions();
         configure?.Invoke(options);
 
-        var categories = UserMailCategoryRegistry.Create(options.Categories);
+        var categories = UserMailCategoryRegistry.Create(options.Categories, options.ServiceRequired);
         Validate(options, categories);
 
         services.TryAddSingleton(Options.Create(options));
@@ -55,7 +55,8 @@ public static class UserMailRegistration
             sp.GetRequiredService<UserMailPreferences>(),
             sp.GetRequiredService<UserMailCategoryRegistry>(),
             sp.GetRequiredService<TeamAuthorizer>(),
-            sp.GetRequiredService<IUserService>()));
+            sp.GetRequiredService<IUserService>(),
+            sp.GetRequiredService<IOptions<UserMailOptions>>().Value));
 
         services.TryAddScoped<IUserMailQueue>(sp => new UserMailQueue(
             sp.GetRequiredService<UserMailCategoryRegistry>(),
@@ -140,6 +141,8 @@ public static class UserMailRegistration
         if (string.IsNullOrWhiteSpace(options.UnsubscribePath) || !options.UnsubscribePath.StartsWith('/'))
             throw new InvalidOperationException($"{nameof(UserMailOptions)}.{nameof(UserMailOptions.UnsubscribePath)} must start with '/'.");
 
+        RequireSitePathOrWebAddress(options.TermsUrl, nameof(UserMailOptions.TermsUrl));
+
         if (options.MaxAttachmentBytes < 0 || options.MaxAttachmentBytes > UserMailOptions.AttachmentBytesCeiling)
             throw new InvalidOperationException($"{nameof(UserMailOptions)}.{nameof(UserMailOptions.MaxAttachmentBytes)} must be between 0 and {UserMailOptions.AttachmentBytesCeiling}, so a queued mail fits in one stored document.");
 
@@ -152,4 +155,14 @@ public static class UserMailRegistration
 
     private static bool IsWebAddress(string value)
         => Uri.TryCreate(value, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp);
+
+    /// <exception cref="InvalidOperationException">The value is set and is neither a path on the site nor an absolute http or https address.</exception>
+    private static void RequireSitePathOrWebAddress(string value, string name)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return;
+        if (value.StartsWith('/') && !value.StartsWith("//", StringComparison.Ordinal)) return;
+        if (IsWebAddress(value)) return;
+
+        throw new InvalidOperationException($"{nameof(UserMailOptions)}.{name} '{value}' is neither a path on the site, starting with '/', nor an absolute http or https address.");
+    }
 }

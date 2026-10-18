@@ -27,11 +27,15 @@ internal sealed partial class UserMailCategoryRegistry
     public UserMailCategory Get(string key, string parameterName)
         => Find(key) ?? throw new ArgumentException($"'{key}' is not a registered mail category. Register it with {nameof(UserMailOptions)}.{nameof(UserMailOptions.AddCategory)}.", parameterName);
 
-    /// <summary>The built-in categories followed by the host's, refusing a malformed, unnamed, repeated or reserved key.</summary>
+    /// <summary>The built-in categories followed by the host's, refusing a malformed, unnamed, repeated or reserved key; service messages are optional, on by default, unless <paramref name="serviceRequired"/>.</summary>
     /// <exception cref="InvalidOperationException">A category is not acceptable.</exception>
-    public static UserMailCategoryRegistry Create(IEnumerable<UserMailCategory> hostCategories)
+    public static UserMailCategoryRegistry Create(IEnumerable<UserMailCategory> hostCategories, bool serviceRequired = true)
     {
-        var all = new List<UserMailCategory>(UserMailCategories.BuiltIn);
+        var all = new List<UserMailCategory>
+        {
+            UserMailCategories.Account,
+            serviceRequired ? UserMailCategories.Service : UserMailCategories.Service with { Required = false, OnByDefault = true }
+        };
 
         foreach (var category in hostCategories ?? [])
         {

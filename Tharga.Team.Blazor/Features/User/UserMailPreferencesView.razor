@@ -45,7 +45,16 @@
                         }
                         @if (category.Required)
                         {
-                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-required="@category.Key">@_text[UserMailPreferencesViewText.Required]</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-required="@category.Key">
+                                @if (_termsUrl != null)
+                                {
+                                    <a href="@_termsUrl">@_text[UserMailText.AlwaysSent]</a>
+                                }
+                                else
+                                {
+                                    @_text[UserMailText.AlwaysSent]
+                                }
+                            </RadzenText>
                         }
                     </RadzenStack>
                 </RadzenStack>
@@ -68,6 +77,7 @@
     private bool _permitted = true;
     private bool _busy;
     private int _revision;
+    private string _termsUrl;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -77,6 +87,7 @@
         _ready = false;
         _permitted = true;
         _choices = [];
+        _termsUrl = Preferences.GetTermsUrl();
 
         _userKey = string.IsNullOrWhiteSpace(UserKey) ? (await UserService.GetCurrentUserAsync())?.Key : UserKey;
 
@@ -92,7 +103,7 @@
             }
         }
 
-        _text = await TextProvider.ResolveAsync([.. UserMailPreferencesViewText.All, .. _choices.SelectMany(x => CategoryKeys(x.Category))]);
+        _text = await TextProvider.ResolveAsync([.. UserMailPreferencesViewText.All, UserMailText.AlwaysSent, .. _choices.SelectMany(x => CategoryKeys(x.Category))]);
         _ready = true;
     }
 

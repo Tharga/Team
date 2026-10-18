@@ -69,4 +69,10 @@ public static class UserMailTexts
 
     /// <summary>The text of an invitation sent as mail to users; <c>{0}</c> is the invited person's name, <c>{1}</c> the team's name and <c>{2}</c> the link that accepts it.</summary>
     public const string InvitationBody = "Hi {0},\n\nYou have been invited to join the team \"{1}\".\n\nClick the link below to accept the invitation:\n{2}\n\nIf you did not expect this invitation, you can safely ignore this email.";
+
+    /// <summary>The key of <see cref="AlwaysSent"/>.</summary>
+    public const string AlwaysSentKey = "team.userMail.alwaysSent";
+
+    /// <summary>Beside a required category, wherever it is shown to a user, saying why it cannot be turned off; a link to the terms of use when the host has them.</summary>
+    public const string AlwaysSent = "Always sent: part of the terms of use";
 }

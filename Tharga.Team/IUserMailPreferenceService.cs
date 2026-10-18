@@ -15,6 +15,9 @@ public interface IUserMailPreferenceService
     /// <summary>Every registered category, built-in ones first and then in the order the host registered them.</summary>
     IReadOnlyList<UserMailCategory> GetCategories();
 
+    /// <summary>Where the host's terms of use are, a site path or an absolute address, which a required category links to as the reason it is always sent; null when the host has none.</summary>
+    string GetTermsUrl() => null;
+
     /// <summary>The user's effective choice for every registered category, in the order of <see cref="GetCategories"/>.</summary>
     /// <exception cref="UnauthorizedAccessException">The caller is not this user and does not hold <c>users:manage</c>.</exception>
     Task<IReadOnlyList<UserMailChoice>> GetChoicesAsync(string userKey, CancellationToken cancellationToken = default);

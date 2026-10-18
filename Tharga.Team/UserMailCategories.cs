@@ -1,9 +1,11 @@
 namespace Tharga.Team;
 
-/// <summary>The two required categories every host has, so mail the toolkit itself sends always has a category to go in.</summary>
+/// <summary>The two built-in categories every host has, so mail the toolkit itself sends always has a category to go in.</summary>
 /// <remarks>
-/// Their keys are reserved: a host registers its own categories beside them and cannot redefine them. Neither can be
-/// turned off, so no choice is ever stored for them and neither mail carries an unsubscribe link.
+/// Their keys are reserved: a host registers its own categories beside them and cannot redefine them. Account can never
+/// be turned off, so no choice is ever stored for it and its mail carries no unsubscribe link. Service messages are
+/// required too, unless the host sets <c>UserMailOptions.ServiceRequired</c> to false: then each user may turn them off,
+/// on until they do, and their mail carries an unsubscribe link like any optional category's.
 /// </remarks>
 public static class UserMailCategories
 {

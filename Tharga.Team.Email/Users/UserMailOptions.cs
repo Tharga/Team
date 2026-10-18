@@ -58,6 +58,13 @@ public class UserMailOptions
     /// <summary>The most characters the HTML and text bodies of one mail may hold together, default 200 000.</summary>
     public int MaxBodyLength { get; set; } = 200_000;
 
+    /// <summary>Whether the built-in service messages category is required, default true; false lets each user turn it off — on until they do — with an unsubscribe link in its mail, as any optional category.</summary>
+    /// <remarks>The account category is always required. Making service messages optional makes <see cref="BaseUrl"/> required, as any optional category does.</remarks>
+    public bool ServiceRequired { get; set; } = true;
+
+    /// <summary>Where the terms of use are, as a site path such as <c>/terms</c> or an absolute address; a required category reads as always sent, part of the terms of use, linking here, and says the same with no link when unset.</summary>
+    public string TermsUrl { get; set; }
+
     /// <summary>The host's own categories, in the order they were added; the built-in ones in <see cref="UserMailCategories"/> come first and are not listed here.</summary>
     public IReadOnlyList<UserMailCategory> Categories => _categories;
 

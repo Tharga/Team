@@ -48,6 +48,9 @@ public static class UserMailText
     /// <summary>The text of an invitation sent as mail to users; <c>{0}</c> is the name, <c>{1}</c> the team, <c>{2}</c> the link.</summary>
     public static readonly TextKey InvitationBody = new(UserMailTexts.InvitationBodyKey, UserMailTexts.InvitationBody);
 
+    /// <summary>Beside a required category, in the preferences view and on the unsubscribe page; a link to the terms of use when the host has them.</summary>
+    public static readonly TextKey AlwaysSent = new(UserMailTexts.AlwaysSentKey, UserMailTexts.AlwaysSent);
+
     /// <summary>Every key here.</summary>
-    public static readonly TextKey[] All = [FooterReason, FooterUnsubscribe, PageTitle, PageQuestion, PageConfirm, PageDone, PageDoneDetail, PageInvalid, PageInvalidDetail, AccountName, AccountDescription, ServiceName, ServiceDescription, InvitationSubject, InvitationBody];
+    public static readonly TextKey[] All = [FooterReason, FooterUnsubscribe, PageTitle, PageQuestion, PageConfirm, PageDone, PageDoneDetail, PageInvalid, PageInvalidDetail, AccountName, AccountDescription, ServiceName, ServiceDescription, InvitationSubject, InvitationBody, AlwaysSent];
 }

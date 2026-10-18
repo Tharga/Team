@@ -27,12 +27,12 @@ public class UserMailPreferencesViewRenderTests : BunitContext
         new() { Category = Digest, Receives = false, IsDefault = true }
     ];
 
-    private IRenderedComponent<UserMailPreferencesView> Render(string userKey = null, IThargaTextProvider texts = null)
+    private IRenderedComponent<UserMailPreferencesView> Render(string userKey = null, IThargaTextProvider texts = null, IReadOnlyList<UserMailChoice> choices = null)
     {
         var user = new Mock<IUser>();
         user.SetupGet(x => x.Key).Returns(Me);
         _users.Setup(x => x.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>())).ReturnsAsync(user.Object);
-        _preferences.Setup(x => x.GetChoicesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Choices());
+        _preferences.Setup(x => x.GetChoicesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(choices ?? Choices());
         _preferences.Setup(x => x.SetChoiceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string _, string category, bool receives, CancellationToken _) => new UserMailChoice { Category = category == News.Key ? News : Digest, Receives = receives, IsDefault = false });
 
@@ -70,10 +70,52 @@ public class UserMailPreferencesViewRenderTests : BunitContext
         Assert.Contains("rz-switch-checked", account.ClassName);
         Assert.Contains("rz-state-disabled", account.ClassName);
         Assert.NotNull(view.Find("[data-required=\"account\"]"));
-        Assert.Contains("Always sent, because you need it to use the service.", view.Find("[data-required=\"account\"]").TextContent);
+        Assert.Contains("Always sent: part of the terms of use", view.Find("[data-required=\"account\"]").TextContent);
 
         Assert.DoesNotContain("rz-state-disabled", Switch(view, "news").ClassName);
         Assert.Empty(view.FindAll("[data-required=\"news\"]"));
+    }
+
+    [Fact]
+    public void WithoutTermsOfUse_TheAlwaysSentLine_IsNoLink()
+    {
+        var view = Render();
+
+        Assert.Empty(view.FindAll("[data-required=\"account\"] a"));
+    }
+
+    [Fact]
+    public void WithTermsOfUse_TheAlwaysSentLine_LinksToThem()
+    {
+        _preferences.Setup(x => x.GetTermsUrl()).Returns("/terms");
+
+        var view = Render();
+
+        var link = view.Find("[data-required=\"account\"] a");
+        Assert.Equal("/terms", link.GetAttribute("href"));
+        Assert.Equal("Always sent: part of the terms of use", link.TextContent);
+    }
+
+    [Fact]
+    public void ServiceMessagesTheHostMadeOptional_AreASwitch_WithNoAlwaysSentLine()
+    {
+        var view = Render(choices:
+        [
+            new UserMailChoice { Category = UserMailCategories.Account, Receives = true, IsDefault = true },
+            new UserMailChoice { Category = UserMailCategories.Service with { Required = false }, Receives = true, IsDefault = true }
+        ]);
+
+        Assert.DoesNotContain("rz-state-disabled", Switch(view, "service").ClassName);
+        Assert.Empty(view.FindAll("[data-required=\"service\"]"));
+        Assert.Single(view.FindAll("[data-required]"));
+    }
+
+    [Fact]
+    public void TheAlwaysSentLine_IsTranslatedThroughTheTextProvider()
+    {
+        var view = Render(texts: new Translating(new Dictionary<string, string> { [UserMailText.AlwaysSent.Key] = "Skickas alltid: en del av användarvillkoren" }));
+
+        Assert.Contains("Skickas alltid: en del av användarvillkoren", view.Find("[data-required=\"account\"]").TextContent);
     }
 
     [Fact]

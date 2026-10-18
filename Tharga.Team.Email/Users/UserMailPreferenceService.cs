@@ -8,9 +8,12 @@ internal sealed class UserMailPreferenceService(
     UserMailPreferences preferences,
     UserMailCategoryRegistry categories,
     TeamAuthorizer authorizer,
-    IUserService userService) : IUserMailPreferenceService
+    IUserService userService,
+    UserMailOptions options = null) : IUserMailPreferenceService
 {
     public IReadOnlyList<UserMailCategory> GetCategories() => categories.All;
+
+    public string GetTermsUrl() => string.IsNullOrWhiteSpace(options?.TermsUrl) ? null : options.TermsUrl.Trim();
 
     public async Task<IReadOnlyList<UserMailChoice>> GetChoicesAsync(string userKey, CancellationToken cancellationToken = default)
     {

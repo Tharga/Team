@@ -9,9 +9,6 @@ public static class UserMailPreferencesViewText
     /// <summary>One sentence above the list.</summary>
     public static readonly TextKey Explanation = new("team.userMail.preferences.explanation", "Choose which mail you want. A change is saved at once.");
 
-    /// <summary>Beside a required category's switch, saying why it cannot be turned off.</summary>
-    public static readonly TextKey Required = new("team.userMail.preferences.required", "Always sent, because you need it to use the service.");
-
     /// <summary>When a change could not be saved.</summary>
     public static readonly TextKey SaveFailed = new("team.userMail.preferences.saveFailed", "Your choice could not be saved.");
 
@@ -21,6 +18,6 @@ public static class UserMailPreferencesViewText
     /// <summary>When nobody is signed in and no user was named.</summary>
     public static readonly TextKey NoUser = new("team.userMail.preferences.noUser", "Sign in to choose which mail you receive.");
 
-    /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Title, Explanation, Required, SaveFailed, NotPermitted, NoUser];
+    /// <summary>Every key here, for the component building its <see cref="TextSet"/>; a required category's line is <see cref="UserMailText.AlwaysSent"/>, shared with the unsubscribe page.</summary>
+    public static readonly TextKey[] All = [Title, Explanation, SaveFailed, NotPermitted, NoUser];
 }

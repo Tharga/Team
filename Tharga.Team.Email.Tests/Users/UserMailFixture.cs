@@ -27,7 +27,7 @@ internal sealed class UserMailFixture
         Options.AddCategory(new UserMailCategory { Key = Digest, Name = "Weekly digest", OnByDefault = false });
         configure?.Invoke(Options);
 
-        Categories = UserMailCategoryRegistry.Create(Options.Categories);
+        Categories = UserMailCategoryRegistry.Create(Options.Categories, Options.ServiceRequired);
         Recipients.Add(new UserMailRecipient { Key = UserKey, EMail = Address, Name = "Anna Andersson" });
         Policy.Decide(Arg.Any<string>(), Arg.Any<string>()).Returns(x => new OutboundMailDecision(OutboundMailAction.Deliver, x.ArgAt<string>(0), x.ArgAt<string>(1)));
         Audit = new RecordingAuditLogger();
