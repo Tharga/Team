@@ -8,7 +8,13 @@ namespace Tharga.Team.Email.Users;
 /// </remarks>
 public class ContactMessageOptions
 {
+    /// <summary>The highest <see cref="MaxAddressees"/> accepted, so the log of one message, which keeps its list, fits in one stored document.</summary>
+    public const int AddresseesCeiling = 50_000;
+
     private readonly List<ContactMailCategory> _categories = [];
+
+    /// <summary>The most rows one list of addressees may hold; at most 50 000, default 10 000.</summary>
+    public int MaxAddressees { get; set; } = 10_000;
 
     /// <summary>The address contact mail is sent from; null uses <see cref="MailOptions.FromAddress"/> of mail to users. Use an address a reply reaches.</summary>
     public string FromAddress { get; set; }
