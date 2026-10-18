@@ -481,7 +481,7 @@ else
                 Category = _category,
                 Subject = subject,
                 BodyHtml = _bodyHtml,
-                Attachments = await AttachmentsAsync()
+                Attachments = await MailAttachmentUploads.ReadAsync(_files)
             });
 
             NotificationService.Notify(NotificationSeverity.Success, _text.Format(UserMessageComposeViewText.Sent, sent.RecipientCount));
@@ -504,20 +504,5 @@ else
         {
             _busy = false;
         }
-    }
-
-    private async Task<UserMailAttachment[]> AttachmentsAsync()
-    {
-        var attachments = new List<UserMailAttachment>();
-
-        foreach (var file in SupportAttachmentPicker.Rewound(_files))
-        {
-            using var content = new MemoryStream();
-            await file.Content.CopyToAsync(content);
-
-            attachments.Add(new UserMailAttachment { FileName = file.FileName, ContentType = file.ContentType, Content = content.ToArray(), Size = content.Length });
-        }
-
-        return [.. attachments];
     }
 }

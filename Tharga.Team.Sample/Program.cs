@@ -166,7 +166,7 @@ builder.AddThargaTeam(o =>
         // until 4.0; mapping it here is what keeps it after that (Tharga/Team#323).
         //
         // messages:send lets a Developer write to users of any team from /messages and read what was sent.
-        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send);
+        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send, SystemContactScopes.Send);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at
@@ -361,6 +361,14 @@ builder.Services.AddThargaMailTemplate(o =>
 
 // Messages staff write to users of chosen teams, in service messages and product news but never in tips.
 builder.Services.AddThargaUserMessages(o => o.StaffMessageCategories = [UserMailCategories.ServiceKey, "news"]);
+
+// Mail staff write to contacts: people who are not users, listed by the host from its own records. Every mail says who
+// sends it and carries an unsubscribe link that opts the address out of offers, or of all of it.
+builder.Services.AddThargaContactMessages(o =>
+{
+    o.SenderLine = "Example Ltd, 1 Example Street, Example Town";
+    o.AddCategory(new ContactMailCategory { Key = "offers", Name = "Offers", Description = "What we think may be of interest to your organisation." });
+});
 
 // Automatic notices, raised from server code through IUserNoticeRaiser. Each user chooses on their profile, each team
 // administrator sets the team's defaults, and turning "Notices about my work" off stops them all.

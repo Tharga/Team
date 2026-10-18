@@ -92,6 +92,9 @@ public class TextCoverageTests
         "Features/Messages/UserMessageComposeView.razor",
         "Features/Messages/UserMessageLogView.razor",
         "Features/Messages/UserMessageDetails.razor",
+        "Features/Messages/ContactMessageComposeView.razor",
+        "Features/Messages/ContactMessageLogView.razor",
+        "Features/Messages/ContactMessageDetails.razor",
         "Features/User/UserNoticePreferencesView.razor",
         "Features/Team/UserNoticeTeamDefaultsView.razor",
     ];
@@ -270,6 +273,9 @@ public class TextCoverageTests
         Assert.All(UserMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserMessageComposeViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserMessageLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(ContactMessageComposeViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(ContactMessageLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(ContactMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserNoticePreferencesViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserNoticeTeamDefaultsViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(UserNoticeText.All, key => Assert.Contains(all, k => k.Key == key.Key));

@@ -48,6 +48,8 @@ public class ComponentDependencyResolutionTests
         "IUserMailHistoryService",
         // Registered by AddThargaUserMessages in Tharga.Team.Email; only a host whose staff write to users places the views.
         "IUserMessageService",
+        // Registered by AddThargaContactMessages in Tharga.Team.Email; only a host whose staff write to contacts places the views.
+        "IContactMessageService",
         // Registered by AddThargaUserNotices in Tharga.Team.Email; only a host with automatic notices places the views.
         "IUserNoticePreferenceService",
         "IUserNoticeTeamService"

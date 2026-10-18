@@ -1,0 +1,331 @@
+@using Tharga.Team.Blazor.Features.Support
+@inject IContactMessageService Contacts
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@* Staff write to the contacts the host lists, beside the host's own filter. The list is the host's; the view shows what
+   the service makes of it in the chosen category - each address once, who opted out, which rows are left out and why -
+   and the service checks the scope, the category and every opt-out again when the message is sent. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[ContactMessageComposeViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem" data-contact-compose>
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[ContactMessageComposeViewText.Explanation]</RadzenText>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-recipient-list>
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0">@_text[ContactMessageComposeViewText.RecipientList]</RadzenText>
+                @if (_listError != null)
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-list-failed>@_text.Format(ContactMessageComposeViewText.ListFailed, _listError)</RadzenText>
+                }
+                else if (_list is { Items.Length: 0 })
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-addressees>@_text[ContactMessageComposeViewText.NoAddressees]</RadzenText>
+                }
+                else if (_list != null)
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-reaches="@_list.Reached">@_text.Format(ContactMessageComposeViewText.Reaches, _list.Reached)</RadzenText>
+                    @if (_list.OptedOut > 0)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-opted-out-count="@_list.OptedOut">@_text.Format(ContactMessageComposeViewText.OptedOutCount, _list.OptedOut)</RadzenText>
+                    }
+                    @if (_list.LeftOut > 0)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-left-out-count="@_list.LeftOut">@_text.Format(ContactMessageComposeViewText.LeftOutCount, _list.LeftOut)</RadzenText>
+                    }
+                }
+            </RadzenStack>
+
+            @if (_list is { Items.Length: > 0 })
+            {
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="max-height: 28rem; overflow-y: auto;" data-addressees>
+                    @foreach (var addressee in _list.Items.Take(_shown))
+                    {
+                        <RadzenStack @key="addressee.Address" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween"
+                                     Gap="0.5rem" Wrap="FlexWrap.Wrap" Style="padding: 0.375rem 0; border-bottom: 1px solid var(--rz-base-200);"
+                                     data-addressee="@addressee.Address" data-status="@addressee.Status">
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="min-width: 0; flex: 1 1 14rem;">
+                                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="@(addressee.Status == ContactAddresseeStatus.Reached ? null : "text-decoration: line-through;")">
+                                    <strong>@(string.IsNullOrWhiteSpace(addressee.Name) ? addressee.Address : addressee.Name)</strong>
+                                </RadzenText>
+                                @if (!string.IsNullOrWhiteSpace(addressee.Name))
+                                {
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="overflow-wrap: anywhere;" data-addressee-address>@addressee.Address</RadzenText>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(addressee.Detail))
+                                {
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-addressee-detail>@addressee.Detail</RadzenText>
+                                }
+                            </RadzenStack>
+                            @if (addressee.Status == ContactAddresseeStatus.OptedOut)
+                            {
+                                <RadzenBadge Text="@_text[ContactMessageComposeViewText.OptedOut]" BadgeStyle="BadgeStyle.Warning" title="@OptedOutDetail(addressee)" data-opted-out />
+                            }
+                            else if (addressee.Status == ContactAddresseeStatus.LeftOut)
+                            {
+                                <RadzenBadge Text="@LeftOutText(addressee)" BadgeStyle="BadgeStyle.Light" data-left-out />
+                            }
+                        </RadzenStack>
+                    }
+                </RadzenStack>
+
+                @if (_shown < _list.Items.Length)
+                {
+                    <div>
+                        <RadzenButton Text="@_text[ContactMessageComposeViewText.MoreRecipients]" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                      Click="@(() => _shown += RecipientPageSize)" data-more-addressees />
+                    </div>
+                }
+            }
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[ContactMessageComposeViewText.Category]</RadzenText>
+            <RadzenDropDown TValue="string" Data="@_categoryOptions" TextProperty="@nameof(Choice.Text)" ValueProperty="@nameof(Choice.Value)"
+                            Value="@_category" ValueChanged="@((string value) => ChangeCategoryAsync(value))" Disabled="@_busy"
+                            aria-label="@_text[ContactMessageComposeViewText.Category]" Style="width: 100%;" data-category />
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[ContactMessageComposeViewText.Subject]</RadzenText>
+            <RadzenTextBox @bind-Value="_subject" Disabled="@_busy" MaxLength="250" aria-label="@_text[ContactMessageComposeViewText.Subject]"
+                           Style="width: 100%;" data-subject />
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[ContactMessageComposeViewText.Body]</RadzenText>
+            <RichTextEditor Value="@_bodyHtml" ValueChanged="@(value => _bodyHtml = value)" Disabled="@_busy" Label="@_text[ContactMessageComposeViewText.Body]" Height="14rem" />
+            <SupportAttachmentPicker Files="@_files" FilesChanged="@(files => _files = files)" Disabled="@_busy" Limits="@_limits" />
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenButton Text="@_mail[MailPreviewText.Open]" Icon="preview" ButtonStyle="ButtonStyle.Light" Disabled="@(_busy || string.IsNullOrWhiteSpace(_category))"
+                          Click="PreviewAsync" data-preview-mail />
+            <RadzenButton Text="@_text[ContactMessageComposeViewText.Send]" Icon="send" ButtonStyle="ButtonStyle.Primary" Disabled="@(!CanSend)" Click="SendAsync" data-send />
+        </RadzenStack>
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>The people to write to, as the host's own filter chose them; each row may carry a detail line, a reference returned with the outcome, and a reason the host leaves it out.</summary>
+    [Parameter] public IReadOnlyList<ContactAddressee> Addressees { get; set; } = [];
+
+    /// <summary>Raised with the message as the log records it once it is queued, every listed address with where it stands and its references, so a host can record it on its own records.</summary>
+    [Parameter] public EventCallback<SentContactMessage> MessageSent { get; set; }
+
+    /// <summary>How many rows of the list are shown at a time; more are shown on request.</summary>
+    [Parameter] public int RecipientPageSize { get; set; } = 50;
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private TextSet _mail = TextSet.Empty;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+
+    private ContactMessageChoices _choices;
+    private Choice[] _categoryOptions = [];
+    private SupportAttachmentLimits _limits;
+
+    private string _category;
+    private string _subject;
+    private string _bodyHtml;
+    private IReadOnlyList<SupportAttachmentUpload> _files = [];
+
+    private IReadOnlyList<ContactAddressee> _checked;
+    private ContactAddresseeList _list;
+    private string _listError;
+    private int _listVersion;
+    private int _shown;
+
+    private sealed record Choice(string Value, string Text);
+
+    private bool CanSend
+        => !_busy
+           && _list is { Reached: > 0 }
+           && !string.IsNullOrWhiteSpace(_category)
+           && !string.IsNullOrWhiteSpace(_subject)
+           && !RichTextEditor.IsEmpty(_bodyHtml);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _choices = await Contacts.GetChoicesAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+
+        var categories = _choices?.Categories ?? [];
+        _text = await TextProvider.ResolveAsync([.. ContactMessageComposeViewText.All, .. categories.Select(x => new TextKey(x.NameKey, x.Name))]);
+        _mail = await TextProvider.ResolveAsync(MailPreviewText.All);
+
+        if (_choices != null)
+        {
+            _categoryOptions = [.. categories.Select(x => new Choice(x.Key, CategoryName(x.Key)))];
+            _category = categories.FirstOrDefault()?.Key;
+            _limits = new SupportAttachmentLimits
+            {
+                MaxCount = _choices.Limits.MaxAttachmentCount,
+                MaxFileBytes = _choices.Limits.MaxAttachmentBytes,
+                MaxTotalBytes = _choices.Limits.MaxAttachmentBytes
+            };
+        }
+
+        _ready = true;
+    }
+
+    /// <remarks>The list is checked again whenever the host hands over another one.</remarks>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_ready || !_permitted || ReferenceEquals(_checked, Addressees)) return;
+
+        _checked = Addressees;
+        await CheckAsync();
+    }
+
+    private string CategoryName(string key)
+        => _choices?.Categories.FirstOrDefault(x => x.Key == key) is { } category ? _text[new TextKey(category.NameKey, category.Name)] : key;
+
+    private string OptedOutDetail(ContactAddresseeCheck addressee)
+        => addressee.OptedOutOfAll ? _text[ContactMessageComposeViewText.OptedOutOfAllDetail] : _text.Format(ContactMessageComposeViewText.OptedOutDetail, CategoryName(_category));
+
+    private string LeftOutText(ContactAddresseeCheck addressee)
+        => addressee.InvalidAddress ? _text[ContactMessageComposeViewText.InvalidAddress] : _text.Format(ContactMessageComposeViewText.LeftOut, addressee.ExcludedReason);
+
+    private ContactAddressee[] Rows() => [.. (Addressees ?? []).Where(x => x != null)];
+
+    private async Task ChangeCategoryAsync(string category)
+    {
+        _category = category;
+        await CheckAsync();
+    }
+
+    /// <remarks>A check asked for before a later change is dropped when it arrives, so the list always describes the category and rows on screen.</remarks>
+    private async Task CheckAsync()
+    {
+        var version = ++_listVersion;
+        _listError = null;
+        _shown = Math.Max(1, RecipientPageSize);
+
+        if (string.IsNullOrWhiteSpace(_category))
+        {
+            _list = null;
+            return;
+        }
+
+        try
+        {
+            var list = await Contacts.GetAddresseesAsync(Rows(), _category);
+            if (version == _listVersion) _list = list;
+        }
+        catch (ArgumentException e)
+        {
+            if (version != _listVersion) return;
+
+            _list = null;
+            _listError = e.Message;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_category)) return;
+
+        _busy = true;
+        MailPreview preview = null;
+        try
+        {
+            preview = await Contacts.PreviewMailAsync(new ContactMessage
+            {
+                Addressees = [],
+                Category = _category,
+                Subject = _subject ?? string.Empty,
+                BodyHtml = _bodyHtml
+            });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[ContactMessageComposeViewText.NotPermitted]);
+        }
+        catch (ArgumentException e)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _mail.Format(MailPreviewText.Failed, e.Message));
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        if (preview != null)
+            await MailPreviewDialog.ShowAsync(DialogService, _mail[MailPreviewText.Title], preview, _files.Select(x => x.FileName), _list?.Reached);
+    }
+
+    private async Task SendAsync()
+    {
+        if (!CanSend) return;
+
+        var subject = _subject.Trim();
+        var question = _text.Format(ContactMessageComposeViewText.ConfirmBody, subject, _list.Reached);
+        if (_list.OptedOut > 0) question = $"{question} {_text.Format(ContactMessageComposeViewText.OptedOutCount, _list.OptedOut)}";
+
+        var confirmed = await DialogService.Confirm(question, _text[ContactMessageComposeViewText.ConfirmTitle], new ConfirmOptions
+        {
+            OkButtonText = _text[ContactMessageComposeViewText.ConfirmSend],
+            CancelButtonText = _text[ContactMessageComposeViewText.ConfirmCancel]
+        });
+
+        if (confirmed != true) return;
+
+        _busy = true;
+        try
+        {
+            var sent = await Contacts.SendAsync(new ContactMessage
+            {
+                Addressees = Rows(),
+                Category = _category,
+                Subject = subject,
+                BodyHtml = _bodyHtml,
+                Attachments = await MailAttachmentUploads.ReadAsync(_files)
+            });
+
+            NotificationService.Notify(NotificationSeverity.Success, _text.Format(ContactMessageComposeViewText.Sent, sent.RecipientCount));
+
+            _subject = null;
+            _bodyHtml = null;
+            _files = [];
+
+            await MessageSent.InvokeAsync(sent);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[ContactMessageComposeViewText.NotPermitted]);
+        }
+        catch (ArgumentException e)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text.Format(ContactMessageComposeViewText.SendFailed, e.Message));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
