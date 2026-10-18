@@ -33,7 +33,7 @@ public class ConsentedTeamReadTests
 
     private sealed record FakeMember(
         string Key,
-        AccessLevel AccessLevel,
+        AccessLevel? AccessLevel,
         string[] TenantRoles = null,
         DateTime? SuspendedAt = null) : ITeamMember
     {
@@ -70,7 +70,7 @@ public class ConsentedTeamReadTests
             => Task.FromResult<IReadOnlyList<TenantRoleDefinition>>([]);
 
         public Task<IReadOnlyList<string>> GetEffectiveScopesAsync(
-            string teamKey, AccessLevel accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
+            string teamKey, AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
         {
             var scopes = roleNames != null && roleNames.Contains(ReaderRole)
                 ? (IReadOnlyList<string>)[TeamScopes.Read]

@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Options;
 using Tharga.Team;
 
 namespace Tharga.Team.Service;
@@ -11,17 +12,15 @@ namespace Tharga.Team.Service;
 /// </summary>
 public class ApiKeyManagementService : IApiKeyManagementService
 {
-    // Matches Tharga.Team.Blazor.Framework.Roles.Developer (not referenceable from this assembly). Legacy
-    // oversight only: SystemApiKeyScopes.Oversee replaces it, and it is removed in 4.0.
-    private const string DeveloperRole = "Developer";
-
     private readonly IApiKeyAdministrationService _inner;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ApiKeyOwnership _ownership;
 
-    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null)
+    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null)
     {
         _inner = inner;
         _httpContextAccessor = httpContextAccessor;
+        _ownership = options?.Value?.TeamKeys ?? ApiKeyOwnership.Both;
     }
 
     public async IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false)
@@ -48,13 +47,15 @@ public class ApiKeyManagementService : IApiKeyManagementService
                 continue;
             }
 
-            // PrivateKeyScope.All — own + oversight (apikeys:oversee, or Developer until 4.0) + privileged (when the host opted in).
+            // PrivateKeyScope.All — own + oversight (apikeys:oversee) + privileged (when the host opted in).
             if (isOwner || canOversee || privilegedAllowed) yield return key;
         }
     }
 
     public Task<IApiKey> CreateKeyAsync(string teamKey, string name, AccessLevel accessLevel, string[] roles = null, string[] scopeOverrides = null, DateTime? expiryDate = null, IReadOnlyList<Tag> tags = null, bool ownerScoped = false)
     {
+        ownerScoped = ApplyOwnership(_ownership, ownerScoped, "team");
+
         string ownerMemberKey = null;
         if (ownerScoped)
         {
@@ -123,23 +124,42 @@ public class ApiKeyManagementService : IApiKeyManagementService
         throw new UnauthorizedAccessException("This API key is private to another member and can only be managed by its owner.");
     }
 
+    /// <summary>
+    /// Whether a new key is personal, once the host's <see cref="ApiKeyOwnership"/> has had its say.
+    /// </summary>
+    /// <remarks>
+    /// <b>Asymmetric on purpose; both directions fail safe.</b> Under <see cref="ApiKeyOwnership.Personal"/> a
+    /// shared request becomes personal, which can only hide the key from others. Under
+    /// <see cref="ApiKeyOwnership.Shared"/> a personal request is refused rather than quietly made shared,
+    /// which would show the key to everyone its creator meant to keep it from.
+    /// </remarks>
+    internal static bool ApplyOwnership(ApiKeyOwnership ownership, bool personal, string kind)
+    {
+        return ownership switch
+        {
+            ApiKeyOwnership.Personal => true,
+            ApiKeyOwnership.Shared when personal => throw new InvalidOperationException($"Personal {kind} API keys are turned off on this site."),
+            _ => personal,
+        };
+    }
+
     private string GetCallerMemberKey()
         => _httpContextAccessor?.HttpContext?.User?.FindFirst(TeamClaimTypes.MemberKey)?.Value;
 
     /// <summary>
     /// Whether the caller may see and manage other members' private keys: the
-    /// <see cref="SystemApiKeyScopes.Oversee"/> system scope, or — until 4.0 — the <c>Developer</c> role.
+    /// <see cref="SystemApiKeyScopes.Oversee"/> system scope.
     /// </summary>
     /// <remarks>
     /// The scope is read as a <i>system</i> grant (<see cref="TeamClaimTypes.SystemScope"/>), never as a team
-    /// scope, so a team role cannot be configured to reach other members' keys. The role is kept so hosts
-    /// that relied on it do not lose oversight silently on upgrade (Tharga/Team#323).
+    /// scope, so a team role cannot be configured to reach other members' keys. Before 4.0 the <c>Developer</c>
+    /// role also granted this, hard-coded; a host that wants that back maps the scope to the role.
     /// </remarks>
     private bool CanOversee()
     {
         var user = _httpContextAccessor?.HttpContext?.User;
         if (user == null) return false;
-        return user.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee) || user.IsInRole(DeveloperRole);
+        return user.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee);
     }
 
     private bool IsPrivileged()

@@ -29,7 +29,7 @@ public class AccessSimulationStateTargetsTests
     /// the picker shipped unusable for a caller without <c>users:manage</c>. See
     /// <see cref="AccessSimulationMemberNameTests"/>.
     /// </remarks>
-    private sealed record FakeMember(string Key, AccessLevel AccessLevel, string[] TenantRoles, string[] ScopeOverrides) : ITeamMember
+    private sealed record FakeMember(string Key, AccessLevel? AccessLevel, string[] TenantRoles, string[] ScopeOverrides) : ITeamMember
     {
         public string Name { get; init; }
         public Invitation Invitation => null;

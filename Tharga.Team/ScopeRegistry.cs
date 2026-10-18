@@ -62,8 +62,13 @@ public class ScopeRegistry : IScopeRegistry
         _scopes.Add(definition);
     }
 
-    public IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel accessLevel)
+    public IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel? accessLevel)
     {
+        // First, and explicit. The lifted comparisons below already fail closed for null, but by accident: an
+        // accident that happens to be correct is not a guarantee, and before 4.0 this value was Owner.
+        if (accessLevel is null)
+            return Array.Empty<string>();
+
         // Custom grants no base scopes — effective scopes come solely from roles and overrides.
         // Explicit guard so the invariant holds even if a scope is ever registered at Custom level.
         if (accessLevel == AccessLevel.Custom)
@@ -83,8 +88,11 @@ public class ScopeRegistry : IScopeRegistry
             .ToList();
     }
 
-    public IReadOnlyList<string> GetEffectiveScopes(AccessLevel accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
+    public IReadOnlyList<string> GetEffectiveScopes(AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
     {
+        if (accessLevel is null)
+            return Array.Empty<string>();
+
         var accessLevelScopes = GetScopesForAccessLevel(accessLevel);
 
         var roleScopes = _roleRegistry != null && roleNames != null

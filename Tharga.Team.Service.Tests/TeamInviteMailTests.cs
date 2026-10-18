@@ -1,8 +1,12 @@
 namespace Tharga.Team.Service.Tests;
 
 /// <summary>
-/// The invitation overload that carries the team key, and the default that keeps older senders working.
+/// An invitation carries the team key as well as its name, so a sender can look the team up by key.
 /// </summary>
+/// <remarks>
+/// Before 4.0 this also covered the default member that forwarded to a four-string overload; that overload was
+/// removed in 4.0 and <see cref="ITeamEmailSender.SendInviteAsync(TeamInviteMail)"/> is the only member.
+/// </remarks>
 public class TeamInviteMailTests
 {
     private static readonly TeamInviteMail Mail = new()
@@ -14,49 +18,26 @@ public class TeamInviteMailTests
         TeamName = "Acme"
     };
 
-    /// <summary>A sender written before the overload existed receives exactly what it always did.</summary>
     [Fact]
-    public async Task ASenderWithOnlyTheOldOverload_ReceivesTheSameFourValues()
-    {
-        var sender = new OldSender();
-
-        await ((ITeamEmailSender)sender).SendInviteAsync(Mail);
-
-        Assert.Equal(("kund@example.com", "Kund", "https://example.com/i", "Acme"), sender.Received);
-    }
-
-    [Fact]
-    public async Task ASenderImplementingTheNewOverload_ReceivesTheTeamKey()
+    public async Task TheSender_ReceivesTheWholeInvitation_IncludingTheTeamKey()
     {
         var sender = new KeyedSender();
 
-        await ((ITeamEmailSender)sender).SendInviteAsync(Mail);
+        await sender.SendInviteAsync(Mail);
 
-        Assert.Equal("team-42", sender.Received?.TeamKey);
-        Assert.False(sender.OldOverloadCalled);
+        Assert.Equal(Mail, sender.Received);
     }
 
-    private sealed class OldSender : ITeamEmailSender
+    [Fact]
+    public void TheInterface_HasOneMember()
     {
-        public (string, string, string, string)? Received { get; private set; }
-
-        public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
-        {
-            Received = (recipientEmail, recipientName, inviteLink, teamName);
-            return Task.CompletedTask;
-        }
+        Assert.Equal([nameof(ITeamEmailSender.SendInviteAsync)], typeof(ITeamEmailSender).GetMethods().Select(m => m.Name));
+        Assert.Equal([typeof(TeamInviteMail)], typeof(ITeamEmailSender).GetMethods().Single().GetParameters().Select(p => p.ParameterType));
     }
 
     private sealed class KeyedSender : ITeamEmailSender
     {
         public TeamInviteMail Received { get; private set; }
-        public bool OldOverloadCalled { get; private set; }
-
-        public Task SendInviteAsync(string recipientEmail, string recipientName, string inviteLink, string teamName)
-        {
-            OldOverloadCalled = true;
-            return Task.CompletedTask;
-        }
 
         public Task SendInviteAsync(TeamInviteMail mail)
         {

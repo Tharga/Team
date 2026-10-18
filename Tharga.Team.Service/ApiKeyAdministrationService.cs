@@ -200,7 +200,19 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
     }
 
     /// <inheritdoc />
-    public async Task<IApiKey> CreateSystemKeyAsync(string name, string[] scopes, DateTime? expiryDate = null, string createdBy = null)
+    public Task<IApiKey> CreateSystemKeyAsync(string name, string[] scopes, DateTime? expiryDate = null, string createdBy = null)
+        => AddSystemKeyAsync(name, scopes, expiryDate, createdBy, ownerUserKey: null);
+
+    /// <inheritdoc />
+    public Task<IApiKey> CreatePersonalSystemKeyAsync(string name, string[] scopes, string ownerUserKey, DateTime? expiryDate = null, string createdBy = null)
+    {
+        if (string.IsNullOrEmpty(ownerUserKey))
+            throw new ArgumentException("A personal system key needs an owner.", nameof(ownerUserKey));
+
+        return AddSystemKeyAsync(name, scopes, expiryDate, createdBy, ownerUserKey);
+    }
+
+    private async Task<IApiKey> AddSystemKeyAsync(string name, string[] scopes, DateTime? expiryDate, string createdBy, string ownerUserKey)
     {
         expiryDate ??= GetDefaultExpiryDate();
 
@@ -211,7 +223,7 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
                 throw new InvalidOperationException($"Expiry date cannot exceed {_options.MaxExpiryDays} days from now.");
         }
 
-        var entity = BuildSystemKey(name, scopes ?? Array.Empty<string>(), expiryDate, createdBy);
+        var entity = BuildSystemKey(name, scopes ?? Array.Empty<string>(), expiryDate, createdBy, ownerUserKey);
         var created = await _repository.AddAsync(entity);
 
         if (_options.AutoLockKeys)
@@ -225,7 +237,7 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
     {
         var item = await _repository.GetAsync(key);
         VerifySystemKey(item);
-        var refreshed = BuildSystemKey(item.Name, item.SystemScopes ?? Array.Empty<string>(), item.ExpiryDate, item.CreatedBy, item.DisabledAt, item.DisabledBy);
+        var refreshed = BuildSystemKey(item.Name, item.SystemScopes ?? Array.Empty<string>(), item.ExpiryDate, item.CreatedBy, item.OwnerMemberKey, item.DisabledAt, item.DisabledBy);
         await _repository.UpdateAsync(key, refreshed);
 
         if (_options.AutoLockKeys)
@@ -318,7 +330,10 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
         };
     }
 
-    private ApiKeyEntity BuildSystemKey(string name, string[] scopes, DateTime? expiryDate, string createdBy, DateTime? disabledAt = null, string disabledBy = null)
+    // The owner is carried forward on a refresh for the same reason as the disabled state above: this
+    // builder rebuilds from a fixed field list, and a personal key that lost its owner here would become a
+    // shared key, visible and usable by everyone who manages system keys.
+    private ApiKeyEntity BuildSystemKey(string name, string[] scopes, DateTime? expiryDate, string createdBy, string ownerUserKey = null, DateTime? disabledAt = null, string disabledBy = null)
     {
         var apiKey = _apiKeyService.BuildApiKey("system", GenerateSecret);
         var encryptedApiKey = _apiKeyService.Encrypt(apiKey);
@@ -335,6 +350,7 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
             ExpiryDate = expiryDate,
             CreatedAt = DateTime.UtcNow,
             CreatedBy = createdBy,
+            OwnerMemberKey = ownerUserKey,
             DisabledAt = disabledAt,
             DisabledBy = disabledBy,
         };

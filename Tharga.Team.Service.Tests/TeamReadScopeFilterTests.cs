@@ -132,7 +132,7 @@ public class TeamReadScopeFilterTests
     {
         public string Key { get; init; }
         public string Name { get; init; }
-        public AccessLevel AccessLevel { get; init; }
+        public AccessLevel? AccessLevel { get; init; }
         public Invitation Invitation { get; init; }
         public MembershipState? State { get; init; }
         public DateTime? LastSeen { get; init; }

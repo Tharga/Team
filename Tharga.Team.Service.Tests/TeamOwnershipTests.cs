@@ -14,7 +14,7 @@ namespace Tharga.Team.Service.Tests;
 /// </remarks>
 public class TeamOwnershipTests
 {
-    private sealed record Member(string Key, AccessLevel AccessLevel) : ITeamMember
+    private sealed record Member(string Key, AccessLevel? AccessLevel) : ITeamMember
     {
         public string Name => null;
         public string[] TenantRoles => null;

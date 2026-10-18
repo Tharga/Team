@@ -130,15 +130,21 @@ internal sealed class TeamGrantResolver
     /// <c>ITeamManagementService</c>'s reads came to ignore tenant roles and consent alike
     /// (Tharga/Team#248). Refetching the member instead would answer correctly but turn one list into one
     /// query per team.
+    /// <para>
+    /// <b>A member with no access level resolves to null too</b>, exactly like a suspended one: no scopes, no
+    /// level claim, not marked as in the team. Tenant roles and scope overrides do not rescue them — an unset
+    /// level is a record nobody finished, and granting its extras would make it worth something.
+    /// </para>
     /// </remarks>
     public async Task<TeamGrant> ResolveFromMemberAsync(string teamKey, ITeamMember member)
     {
         if (member == null || member.SuspendedAt != null) return null;
+        if (member.AccessLevel is not { } level) return null;
 
         var scopes = _tenantRoleService != null
-            ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, member.AccessLevel, member.TenantRoles, member.ScopeOverrides)
-            : _scopeRegistry?.GetEffectiveScopes(member.AccessLevel, member.TenantRoles, member.ScopeOverrides) ?? [];
+            ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, level, member.TenantRoles, member.ScopeOverrides)
+            : _scopeRegistry?.GetEffectiveScopes(level, member.TenantRoles, member.ScopeOverrides) ?? [];
 
-        return new TeamGrant(member.AccessLevel, [.. scopes], member.Key, IsMember: true);
+        return new TeamGrant(level, [.. scopes], member.Key, IsMember: true);
     }
 }

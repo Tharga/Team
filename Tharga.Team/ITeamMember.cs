@@ -7,7 +7,12 @@ public interface ITeamMember
     public Invitation Invitation { get; }
     public DateTime? LastSeen { get; }
     public MembershipState? State { get; }
-    public AccessLevel AccessLevel { get; }
+    /// <summary>
+    /// The member's level in the team, or null when none was ever set. <b>Null grants nothing</b>: no scopes, no
+    /// <c>AccessLevel</c> claim, and it ranks below every level. Before 4.0 an unset level read as <see cref="Tharga.Team.AccessLevel.Owner"/>,
+    /// the enum's zero value.
+    /// </summary>
+    public AccessLevel? AccessLevel { get; }
     public string[] TenantRoles { get; }
     public string[] ScopeOverrides { get; }
 

@@ -278,7 +278,10 @@ public static class ThargaBlazorRegistration
                 sp.GetRequiredService<ITeamService>(),
                 sp.GetService<IUserDirectoryService>(),
                 o.WriteNameToDirectory,
-                sp.GetService<IUserIdentityDirectory>()));
+                sp.GetService<IUserIdentityDirectory>(),
+                sp.GetService<IApiKeyAdministrationService>(),
+                sp.GetService<IOptions<ApiKeyOptions>>()?.Value?.OwnerRemovedAction ?? PrivateKeyOwnerRemovedAction.Delete,
+                sp.GetService<ILogger<UserManagementService>>()));
 
             // Server-side claims enrichment — always registered, reads selected_team_id cookie.
             // The membership/consent claim computation is shared with the in-circuit revalidator below.

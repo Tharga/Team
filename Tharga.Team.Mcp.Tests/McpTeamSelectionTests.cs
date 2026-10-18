@@ -28,7 +28,7 @@ public class McpTeamSelectionTests
 
     private sealed record FakeUser(string Key, string Identity, string EMail) : IUser;
 
-    private sealed record FakeMember(string Key, AccessLevel AccessLevel) : ITeamMember
+    private sealed record FakeMember(string Key, AccessLevel? AccessLevel) : ITeamMember
     {
         public string Name => null;
         public Invitation Invitation => null;

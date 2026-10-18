@@ -95,4 +95,63 @@ public class TenantRoleManagerModelTests
 
         Assert.Empty(model.Validate(["Developer"]));
     }
+
+    // Scopes hidden for the team by ITeamScopeVisibilityProvider (Tharga/Team#334)
+
+    private static readonly IReadOnlySet<string> AtlasHidden = new HashSet<string> { "atlas:read", "atlas:manage" };
+
+    [Fact]
+    public void A_hidden_scope_is_left_out_of_the_editor()
+    {
+        var model = new TenantRoleManagerModel();
+        model.Load([new TenantRoleDefinition("Analyst", ["case:read", "atlas:manage"])], AtlasHidden);
+
+        Assert.Equal(["case:read"], Assert.Single(model.Roles).Scopes);
+    }
+
+    /// <summary>Switching a feature off must not strip its scopes from the team's roles when one is edited.</summary>
+    [Fact]
+    public void Saving_keeps_a_hidden_scope_the_role_held()
+    {
+        var model = new TenantRoleManagerModel();
+        model.Load([new TenantRoleDefinition("Analyst", ["case:read", "atlas:manage"])], AtlasHidden);
+
+        var role = Assert.Single(model.Roles);
+        role.Scopes = ["case:read", "case:write"];
+
+        Assert.Equal(["case:read", "case:write", "atlas:manage"], Assert.Single(model.ToDefinitions()).Scopes);
+    }
+
+    [Fact]
+    public void Removing_every_visible_scope_still_keeps_the_hidden_ones()
+    {
+        var model = new TenantRoleManagerModel();
+        model.Load([new TenantRoleDefinition("Analyst", ["case:read", "atlas:manage"])], AtlasHidden);
+
+        Assert.Single(model.Roles).Scopes = [];
+
+        Assert.Equal(["atlas:manage"], Assert.Single(model.ToDefinitions()).Scopes);
+    }
+
+    [Fact]
+    public void A_new_role_has_no_hidden_scopes_to_keep()
+    {
+        var model = new TenantRoleManagerModel();
+        model.Load([], AtlasHidden);
+        var added = model.AddNew();
+        added.Name = "Reader";
+        added.Scopes = ["case:read"];
+
+        Assert.Equal(["case:read"], Assert.Single(model.ToDefinitions()).Scopes);
+    }
+
+    [Fact]
+    public void Nothing_hidden_round_trips_unchanged()
+    {
+        var model = new TenantRoleManagerModel();
+        model.Load([new TenantRoleDefinition("Analyst", ["case:read", "atlas:manage"])], hiddenScopes: null);
+
+        Assert.Equal(["case:read", "atlas:manage"], Assert.Single(model.Roles).Scopes);
+        Assert.Equal(["case:read", "atlas:manage"], Assert.Single(model.ToDefinitions()).Scopes);
+    }
 }

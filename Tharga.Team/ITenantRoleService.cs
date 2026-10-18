@@ -18,6 +18,7 @@ public interface ITenantRoleService
     /// <summary>
     /// Effective scopes for a member of the given team: access-level scopes ∪ code-role scopes ∪
     /// custom-role scopes (for the role names the member holds) ∪ explicit scope overrides.
+    /// <b>Empty for a null level</b>, roles and overrides included, as <see cref="IScopeRegistry.GetEffectiveScopes"/>.
     /// </summary>
-    Task<IReadOnlyList<string>> GetEffectiveScopesAsync(string teamKey, AccessLevel accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null);
+    Task<IReadOnlyList<string>> GetEffectiveScopesAsync(string teamKey, AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null);
 }

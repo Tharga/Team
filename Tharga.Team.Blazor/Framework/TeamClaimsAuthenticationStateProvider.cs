@@ -73,23 +73,25 @@ internal class TeamClaimsAuthenticationStateProvider : AuthenticationStateProvid
 
         var user = await _userService.GetCurrentUserAsync(principal);
         var member = await _teamService.GetTeamMemberAsync(teamKey, user?.Key);
-        if (member != null)
+        // A member with no access level gets no claims at all, as TeamGrantResolver answers for them: emitting
+        // the rest would issue a "Team" role and an empty AccessLevel claim for a record nobody finished.
+        if (member is { AccessLevel: { } level })
         {
             identity.AddClaim(new Claim(TeamClaimTypes.TeamKey, teamKey));
             identity.AddClaim(new Claim(ClaimTypes.Role, Roles.TeamMember));
-            identity.AddClaim(new Claim(ClaimTypes.Role, $"Team{member.AccessLevel}"));
-            identity.AddClaim(new Claim(TeamClaimTypes.AccessLevel, member.AccessLevel.ToString()));
+            identity.AddClaim(new Claim(ClaimTypes.Role, $"Team{level}"));
+            identity.AddClaim(new Claim(TeamClaimTypes.AccessLevel, level.ToString()));
 
             if (_tenantRoleService != null)
             {
-                foreach (var scope in await _tenantRoleService.GetEffectiveScopesAsync(teamKey, member.AccessLevel, member.TenantRoles, member.ScopeOverrides))
+                foreach (var scope in await _tenantRoleService.GetEffectiveScopesAsync(teamKey, level, member.TenantRoles, member.ScopeOverrides))
                 {
                     identity.AddClaim(new Claim(TeamClaimTypes.Scope, scope));
                 }
             }
             else if (_scopeRegistry != null)
             {
-                foreach (var scope in _scopeRegistry.GetEffectiveScopes(member.AccessLevel, member.TenantRoles, member.ScopeOverrides))
+                foreach (var scope in _scopeRegistry.GetEffectiveScopes(level, member.TenantRoles, member.ScopeOverrides))
                 {
                     identity.AddClaim(new Claim(TeamClaimTypes.Scope, scope));
                 }

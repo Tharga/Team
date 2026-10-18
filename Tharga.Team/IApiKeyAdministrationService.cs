@@ -74,6 +74,24 @@ public interface IApiKeyAdministrationService
     /// <param name="createdBy">Identity of the user creating the key (for audit).</param>
     Task<IApiKey> CreateSystemKeyAsync(string name, string[] scopes, DateTime? expiryDate = null, string createdBy = null);
 
+    /// <summary>
+    /// Creates a personal system-level API key, owned by <paramref name="ownerUserKey"/>: hidden from others
+    /// in the UI, manageable only by its owner (or an <see cref="SystemApiKeyScopes.Oversee"/> holder), and
+    /// refused at authentication once its owner no longer exists or is disabled.
+    /// </summary>
+    /// <param name="name">Human-readable name for the key.</param>
+    /// <param name="scopes">Explicit scopes granted to this key. Not resolved through AccessLevel/roles.</param>
+    /// <param name="ownerUserKey">The owning user's key, stored in <see cref="IApiKey.OwnerMemberKey"/>.</param>
+    /// <param name="expiryDate">Optional expiry date.</param>
+    /// <param name="createdBy">Identity of the user creating the key (for audit).</param>
+    /// <remarks>
+    /// <b>A default implementation that throws, so a host's own key store keeps compiling</b> after the 4.1
+    /// upgrade. Such a store supports every other operation as before; implement this to support personal
+    /// system keys, and keep <see cref="IApiKey.OwnerMemberKey"/> across <see cref="RefreshSystemKeyAsync"/>.
+    /// </remarks>
+    Task<IApiKey> CreatePersonalSystemKeyAsync(string name, string[] scopes, string ownerUserKey, DateTime? expiryDate = null, string createdBy = null)
+        => throw new NotSupportedException("This API key store does not support personal system keys. Implement IApiKeyAdministrationService.CreatePersonalSystemKeyAsync, or set ApiKeyOptions.SystemKeys to ApiKeyOwnership.Shared.");
+
     /// <summary>Regenerates a system key's raw value. Returns the entity with the raw key visible once.</summary>
     Task<IApiKey> RefreshSystemKeyAsync(string key);
 

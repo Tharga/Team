@@ -90,6 +90,8 @@ For infrastructure-level credentials that aren't tied to a team (MCP gatekeepers
 
 Create and manage them via the `<SystemApiKeyView />` component in `Tharga.Team.Blazor` (gated by the `Developer` role), or programmatically via `IApiKeyAdministrationService.CreateSystemKeyAsync(name, scopes, expiryDate, createdBy)`.
 
+A system key can also be **personal** (4.1): owned by the user who created it, seen and managed only by them (or an `apikeys:oversee` holder), and refused once its owner is deleted or disabled. Create one with `ISystemApiKeyManagementService.CreateSystemKeyAsync(..., personal: true)` or `IApiKeyAdministrationService.CreatePersonalSystemKeyAsync(name, scopes, ownerUserKey)`. `ApiKeyOptions.SystemKeys` (and `TeamKeys` for team keys) chooses whether people can create shared keys, personal keys, or both (the default). A custom `IApiKeyAdministrationService` keeps compiling; `CreatePersonalSystemKeyAsync` throws `NotSupportedException` until it is implemented.
+
 System keys authenticate through the same `X-API-KEY` header. The principal they produce carries the `IsSystemKey=true` claim and the explicit scopes granted at creation time — no `TeamKey` claim.
 
 Protect system-only endpoints with the system policy:

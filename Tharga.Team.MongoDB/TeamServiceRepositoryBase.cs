@@ -145,6 +145,14 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
     {
         var memberModel = await CreateTeamMember(model);
 
+        // CreateTeamMember is the host's override, and forgetting to copy the level still compiles. Before 4.0
+        // that silently produced an Owner; now it would produce a member who can do nothing. Both are wrong, so
+        // say so at the invite rather than leave a dead member for someone to puzzle over.
+        if (memberModel.AccessLevel is null)
+            throw new InvalidOperationException(
+                $"{GetType().Name}.CreateTeamMember returned a member with no AccessLevel. " +
+                "Copy it from the invitation: AccessLevel = model.AccessLevel.");
+
         // Auto-generate Member.Key if not set by the consumer (typical for invited members
         // that don't yet correspond to a User document)
         if (string.IsNullOrEmpty(memberModel.Key))

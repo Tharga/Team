@@ -313,6 +313,9 @@ else
     private ITenantRoleRegistry _tenantRoleRegistry;
     private ITenantRoleVisibilityProvider _roleVisibilityProvider;
     private readonly Dictionary<string, IReadOnlyList<TenantRoleDefinition>> _visibleRolesByTeam = new();
+    private ITeamScopeVisibilityProvider _scopeVisibilityProvider;
+    private readonly Dictionary<string, IReadOnlySet<string>> _hiddenScopesByTeam = new();
+    private static readonly IReadOnlySet<string> NoHiddenScopes = new HashSet<string>();
 
     private RadzenDataGrid<ITeam<TMember>> _teamGrid;
 
@@ -372,6 +375,7 @@ else
         _tenantRoleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
         _tenantRoleService = ServiceProvider.GetService<ITenantRoleService>();
         _roleVisibilityProvider = ServiceProvider.GetService<ITenantRoleVisibilityProvider>();
+        _scopeVisibilityProvider = ServiceProvider.GetService<ITeamScopeVisibilityProvider>();
 
         _allowTeamCreation = BlazorOptions.Value.AllowTeamCreation;
         _createTeamPath = BlazorOptions.Value.CreateTeamPath;
@@ -413,7 +417,8 @@ else
         var roleScopes = codeRoleScopes.Concat(customRoleScopes).ToHashSet(StringComparer.Ordinal);
         var overrides = member.ScopeOverrides ?? Array.Empty<string>();
 
-        var allScopes = accessLevelScopes.Concat(roleScopes).Concat(overrides).Distinct();
+        var hidden = GetHiddenScopes(team.Key);
+        var allScopes = accessLevelScopes.Concat(roleScopes).Concat(overrides).Distinct().Where(s => !hidden.Contains(s));
         var lines = new List<string>();
         foreach (var scope in allScopes.OrderBy(s => s, StringComparer.Ordinal))
         {
@@ -789,17 +794,21 @@ else
                             <Template>
                                 @if (_user.Key == context.Key || context.AccessLevel == AccessLevel.Owner) //Cannot change self or owner.
                                 {
-                                    <RadzenText>@context.AccessLevel</RadzenText>
+                                    <RadzenText>@(context.AccessLevel?.ToString() ?? _text[TeamComponentText.NoAccessLevel])</RadzenText>
                                 }
                                 else if (CanManageMembers(team))
                                 {
                                     // Custom hidden until #76 adds member scope/role editing (see InviteUserDialog).
+                                    // Nullable so a member with no level shows the placeholder and can be given one;
+                                    // there is no clearing back to null, which would be a way to strip access silently.
                                     var accessLevels = _memberAccessLevels;
-                                    <RadzenDropDown TValue="AccessLevel" Value="@context.AccessLevel" ValueChanged="@(x => ChangeRole(team, context.Key, x))" Data="@accessLevels"/>
+                                    <RadzenDropDown TValue="AccessLevel?" Value="@context.AccessLevel" Data="@accessLevels"
+                                                    Placeholder="@_text[TeamComponentText.NoAccessLevel]"
+                                                    ValueChanged="@(async x => { if (x is { } level) await ChangeRole(team, context.Key, level); })" />
                                 }
                                 else
                                 {
-                                    <RadzenText>@context.AccessLevel</RadzenText>
+                                    <RadzenText>@(context.AccessLevel?.ToString() ?? _text[TeamComponentText.NoAccessLevel])</RadzenText>
                                 }
                             </Template>
                         </RadzenDataGridColumn>
@@ -825,11 +834,12 @@ else
                                                          Descriptions="_scopeDescriptions"
                                                          InheritedScopes="@_scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.TenantRoles, null)"
                                                          Overrides="@(context.ScopeOverrides ?? Array.Empty<string>())"
+                                                         HiddenScopes="@GetHiddenScopes(team.Key)"
                                                          OverridesChanged="@(o => ChangeScopeOverrides(team, context.Key, o))" />
                                 }
                                 else
                                 {
-                                    <RadzenText>@(string.Join(", ", context.ScopeOverrides ?? Array.Empty<string>()))</RadzenText>
+                                    <RadzenText>@(string.Join(", ", (context.ScopeOverrides ?? Array.Empty<string>()).Where(s => !GetHiddenScopes(team.Key).Contains(s))))</RadzenText>
                                 }
                             </Template>
                         </RadzenDataGridColumn>
@@ -1120,8 +1130,10 @@ else
     private bool HasAccessLevel(ITeam<TMember> team, AccessLevel accessLevel)
     {
         var member = team.Members.PickOneOrDefault(x => x.Key == _user.Key, Logger, team.Key, _user.Key);
-        if (member == null) return false;
-        return member.AccessLevel <= accessLevel;
+        // Explicit rather than left to the lifted <=, which is false for null by accident: an unset level is
+        // below every level, and before 4.0 it read as Owner.
+        if (member?.AccessLevel is not { } level) return false;
+        return level <= accessLevel;
     }
 
     private void OnMemberRowRender(RowRenderEventArgs<TMember> args)
@@ -1462,6 +1474,7 @@ else
         _teams = teams.OrderBy(x => x.Name).ToArray();
         _shownTeams = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
         await BuildVisibleRolesAsync();
+        await BuildHiddenScopesAsync();
 
         // Only a caller who can request somewhere has requests to find, and finding them reads every team.
         _myAccessRequests = _canSeeAllTeams && TeamAccessRequestGate.CanRequest(false, _callerRoles, _consentRoles)
@@ -1520,6 +1533,23 @@ else
 
     private IReadOnlyList<TenantRoleDefinition> GetVisibleRoles(string teamKey)
         => _visibleRolesByTeam.TryGetValue(teamKey, out var roles) ? roles : _roleDefinitions;
+
+    // The scope counterpart of BuildVisibleRolesAsync: per team, the registered scopes its
+    // ITeamScopeVisibilityProvider hides. The pickers leave those out and keep any already held.
+    private async Task BuildHiddenScopesAsync()
+    {
+        _hiddenScopesByTeam.Clear();
+        if (_teams == null || _scopeRegistry == null || _scopeVisibilityProvider == null) return;
+
+        var scopes = _scopeRegistry.All.Select(s => s.Name).ToArray();
+        foreach (var team in _teams)
+        {
+            _hiddenScopesByTeam[team.Key] = await ScopeVisibility.HiddenAsync(_scopeVisibilityProvider, team.Key, scopes);
+        }
+    }
+
+    private IReadOnlySet<string> GetHiddenScopes(string teamKey)
+        => _hiddenScopesByTeam.TryGetValue(teamKey, out var hidden) ? hidden : NoHiddenScopes;
 
     private async Task CopyInvitationLink(ITeam<TMember> team, string userKey)
     {

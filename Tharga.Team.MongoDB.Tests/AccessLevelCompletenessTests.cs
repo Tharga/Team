@@ -7,8 +7,8 @@ using MongoDB.Driver;
 namespace Tharga.Team.MongoDB.Tests;
 
 /// <summary>
-/// Finding members that carry no stored access level, and are therefore being treated as
-/// <see cref="AccessLevel.Owner"/>.
+/// Finding members that carry no stored access level. Since 4.0 they read as null and are granted nothing;
+/// before it they were treated as <see cref="AccessLevel.Owner"/>.
 /// </summary>
 /// <remarks>
 /// <b>These tests are database-free on purpose, and the argument they make is in three parts.</b> There is
@@ -23,10 +23,10 @@ namespace Tharga.Team.MongoDB.Tests;
 /// Together those pin the behaviour more precisely than a round-trip against a server would, because they
 /// name <i>why</i> each case falls where it does.
 /// <para>
-/// <b>The second one is the test that earns its place.</b> The whole difficulty of this defect is that a
-/// missing field and a stored <c>Owner</c> are indistinguishable once deserialized, so an implementation
-/// that looked at <c>ITeamMember.AccessLevel</c> would flag every genuine owner in the system. That test is
-/// what fails if anyone rewrites this as a typed predicate.
+/// <b>The second one is the test that earns its place.</b> Before 4.0 a missing field and a stored
+/// <c>Owner</c> were indistinguishable once deserialized, which is why the check reads the store rather than
+/// the members. Since 4.0 they deserialize apart (null versus Owner), but the store query stays: it finds the
+/// affected members without loading every team.
 /// </para>
 /// </remarks>
 public class AccessLevelCompletenessTests
@@ -85,15 +85,15 @@ public class AccessLevelCompletenessTests
         Assert.False(legacy.Contains(AccessLevelField));
 
         var deserialized = BsonSerializer.Deserialize<TestMember>(legacy);
-        Assert.Equal(AccessLevel.Owner, deserialized.AccessLevel);
+        Assert.Null(deserialized.AccessLevel);
     }
 
     /// <summary>
-    /// The trap this whole feature exists to avoid, stated as a test: after deserialization the two cases
-    /// are the same value, so nothing downstream of the store can tell them apart.
+    /// The trap that made this check necessary, now closed: before 4.0 the two cases deserialized to the
+    /// same value, so nothing downstream of the store could tell them apart. Since 4.0 they do not.
     /// </summary>
     [Fact]
-    public void OnceDeserialized_AMissingLevelIsIndistinguishableFromAStoredOwner()
+    public void OnceDeserialized_AMissingLevelIsDistinguishableFromAStoredOwner()
     {
         var missing = BsonSerializer.Deserialize<TestMember>(
             new BsonDocument { { "Key", "member-1" } });
@@ -101,7 +101,8 @@ public class AccessLevelCompletenessTests
         var storedOwner = BsonSerializer.Deserialize<TestMember>(
             new BsonDocument { { "Key", "member-2" }, { AccessLevelField, "Owner" } });
 
-        Assert.Equal(missing.AccessLevel, storedOwner.AccessLevel);
+        Assert.Null(missing.AccessLevel);
+        Assert.Equal(AccessLevel.Owner, storedOwner.AccessLevel);
     }
 
     /// <summary>
