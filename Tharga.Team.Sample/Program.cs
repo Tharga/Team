@@ -316,6 +316,11 @@ builder.Services.AddThargaUserMail(o =>
     // Unsubscribe links in optional mail are built on this, so it must be the address users reach the site at.
     o.BaseUrl = builder.Configuration["UserMail:BaseUrl"] ?? "https://localhost:7291";
 
+    // The unsubscribe page links to the mail settings on the profile page, and offers sign-in to anyone not signed in
+    // as the user the link is for.
+    o.PreferencesPath = "/account";
+    o.SignInPath = "/login";
+
     o.AddCategory(new UserMailCategory { Key = "news", Name = "Product news", Description = "What is new in the product, a few times a year." });
     o.AddCategory(new UserMailCategory { Key = "tips", Name = "Tips", Description = "Ways to get more out of the product.", OnByDefault = false });
     o.AddCategory(new UserMailCategory { Key = "work", Name = "Notices about my work", Description = "Automatic notices about what happens in your teams." });

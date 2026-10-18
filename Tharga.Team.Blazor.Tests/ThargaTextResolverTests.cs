@@ -13,9 +13,9 @@ public class ThargaTextResolverTests
     public async Task AKey_IsAnsweredByTheRegisteredTextProvider()
     {
         var provider = new Mock<IThargaTextProvider>();
-        provider.Setup(x => x.GetAsync(new TextKey(UserMailTexts.PageConfirmKey, UserMailTexts.PageConfirm))).ReturnsAsync("Avsluta");
+        provider.Setup(x => x.GetAsync(new TextKey(UserMailTexts.FooterUnsubscribeKey, UserMailTexts.FooterUnsubscribe))).ReturnsAsync("Avsluta");
 
-        Assert.Equal("Avsluta", await new ThargaTextResolver(provider.Object).GetAsync(UserMailTexts.PageConfirmKey, UserMailTexts.PageConfirm));
+        Assert.Equal("Avsluta", await new ThargaTextResolver(provider.Object).GetAsync(UserMailTexts.FooterUnsubscribeKey, UserMailTexts.FooterUnsubscribe));
     }
 
     [Fact]

@@ -15,14 +15,32 @@ public static class UserMailText
     /// <summary>What the unsubscribe page asks; <c>{0}</c> is the category's name.</summary>
     public static readonly TextKey PageQuestion = new(UserMailTexts.PageQuestionKey, UserMailTexts.PageQuestion);
 
-    /// <summary>The unsubscribe page's button.</summary>
-    public static readonly TextKey PageConfirm = new(UserMailTexts.PageConfirmKey, UserMailTexts.PageConfirm);
+    /// <summary>Under the question, what the change does and does not do; <c>{0}</c> is the category's name, <c>{1}</c> the product's.</summary>
+    public static readonly TextKey PageOnlyThis = new(UserMailTexts.PageOnlyThisKey, UserMailTexts.PageOnlyThis);
+
+    /// <summary>The unsubscribe page's button; <c>{0}</c> is the category's name.</summary>
+    public static readonly TextKey PageStop = new(UserMailTexts.PageStopKey, UserMailTexts.PageStop);
 
     /// <summary>What the unsubscribe page says once done; <c>{0}</c> is the category's name.</summary>
     public static readonly TextKey PageDone = new(UserMailTexts.PageDoneKey, UserMailTexts.PageDone);
 
-    /// <summary>Where the choice can be undone.</summary>
-    public static readonly TextKey PageDoneDetail = new(UserMailTexts.PageDoneDetailKey, UserMailTexts.PageDoneDetail);
+    /// <summary>How the category is turned on again.</summary>
+    public static readonly TextKey PageTurnBackOn = new(UserMailTexts.PageTurnBackOnKey, UserMailTexts.PageTurnBackOn);
+
+    /// <summary>Above every category and its state, for the signed-in user the link is for.</summary>
+    public static readonly TextKey PageYourMail = new(UserMailTexts.PageYourMailKey, UserMailTexts.PageYourMail);
+
+    /// <summary>The state of a category the user receives.</summary>
+    public static readonly TextKey PageOn = new(UserMailTexts.PageOnKey, UserMailTexts.PageOn);
+
+    /// <summary>The state of a category the user turned off.</summary>
+    public static readonly TextKey PageOff = new(UserMailTexts.PageOffKey, UserMailTexts.PageOff);
+
+    /// <summary>The link to the host's mail settings.</summary>
+    public static readonly TextKey PageSettings = new(UserMailTexts.PageSettingsKey, UserMailTexts.PageSettings);
+
+    /// <summary>The link to sign in, for anyone not signed in as the user the link is for.</summary>
+    public static readonly TextKey PageSignIn = new(UserMailTexts.PageSignInKey, UserMailTexts.PageSignIn);
 
     /// <summary>What the unsubscribe page says for a link it cannot read.</summary>
     public static readonly TextKey PageInvalid = new(UserMailTexts.PageInvalidKey, UserMailTexts.PageInvalid);
@@ -73,5 +91,9 @@ public static class UserMailText
     public static readonly TextKey[] Frequency = [FrequencyNone, FrequencyNoneRecently, FrequencyUnderOneAYear, FrequencyPerYear, FrequencyPerMonth, FrequencyPerWeek];
 
     /// <summary>Every key here.</summary>
-    public static readonly TextKey[] All = [FooterReason, FooterUnsubscribe, PageTitle, PageQuestion, PageConfirm, PageDone, PageDoneDetail, PageInvalid, PageInvalidDetail, AccountName, AccountDescription, ServiceName, ServiceDescription, InvitationSubject, InvitationBody, AlwaysSent, .. Frequency];
+    public static readonly TextKey[] All =
+    [
+        FooterReason, FooterUnsubscribe, PageTitle, PageQuestion, PageOnlyThis, PageStop, PageDone, PageTurnBackOn, PageYourMail, PageOn, PageOff, PageSettings, PageSignIn,
+        PageInvalid, PageInvalidDetail, AccountName, AccountDescription, ServiceName, ServiceDescription, InvitationSubject, InvitationBody, AlwaysSent, .. Frequency
+    ];
 }

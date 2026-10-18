@@ -121,7 +121,13 @@ public static class UserMailRegistration
     }
 
     /// <summary>Maps the unsubscribe link's route at <see cref="UserMailOptions.UnsubscribePath"/>: GET shows a page that asks, POST unsubscribes, both without sign-in.</summary>
-    /// <remarks>The token in the link authorizes the one change it names, so a host denying unauthenticated requests by default must allow this path, and POST takes no antiforgery token because a one-click request (RFC 8058) has none.</remarks>
+    /// <remarks>
+    /// The token in the link authorizes the one change it names, so a host denying unauthenticated requests by default must
+    /// allow this path, and POST takes no antiforgery token because a one-click request (RFC 8058) has none. A request
+    /// signed in as the user the link is for — the host's authentication runs before the route, and
+    /// <see cref="IUserService"/> resolves the same user key — also sees every category and its state; anyone else is
+    /// offered <see cref="UserMailOptions.SignInPath"/>.
+    /// </remarks>
     public static IEndpointRouteBuilder MapThargaMailUnsubscribe(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -149,6 +155,11 @@ public static class UserMailRegistration
             throw new InvalidOperationException($"{nameof(UserMailOptions)}.{nameof(UserMailOptions.UnsubscribePath)} must start with '/'.");
 
         RequireSitePathOrWebAddress(options.TermsUrl, nameof(UserMailOptions.TermsUrl));
+        RequireSitePathOrWebAddress(options.PreferencesPath, nameof(UserMailOptions.PreferencesPath));
+        RequireSitePathOrWebAddress(options.SignInPath, nameof(UserMailOptions.SignInPath));
+
+        if (options.PageCss?.Contains("</", StringComparison.Ordinal) == true)
+            throw new InvalidOperationException($"{nameof(UserMailOptions)}.{nameof(UserMailOptions.PageCss)} may hold style rules alone; '</' would end the page's style element.");
 
         if (options.MaxAttachmentBytes < 0 || options.MaxAttachmentBytes > UserMailOptions.AttachmentBytesCeiling)
             throw new InvalidOperationException($"{nameof(UserMailOptions)}.{nameof(UserMailOptions.MaxAttachmentBytes)} must be between 0 and {UserMailOptions.AttachmentBytesCeiling}, so a queued mail fits in one stored document.");
@@ -167,8 +178,10 @@ public static class UserMailRegistration
     private static void RequireSitePathOrWebAddress(string value, string name)
     {
         if (string.IsNullOrWhiteSpace(value)) return;
-        if (value.StartsWith('/') && !value.StartsWith("//", StringComparison.Ordinal)) return;
-        if (IsWebAddress(value)) return;
+
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith('/') && !trimmed.StartsWith("//", StringComparison.Ordinal) && !trimmed.Contains('\\')) return;
+        if (IsWebAddress(trimmed)) return;
 
         throw new InvalidOperationException($"{nameof(UserMailOptions)}.{name} '{value}' is neither a path on the site, starting with '/', nor an absolute http or https address.");
     }

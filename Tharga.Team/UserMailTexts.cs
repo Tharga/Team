@@ -28,11 +28,17 @@ public static class UserMailTexts
     /// <summary>What the unsubscribe page asks before anything changes; <c>{0}</c> is the category's name.</summary>
     public const string PageQuestion = "Stop receiving {0}?";
 
-    /// <summary>The key of <see cref="PageConfirm"/>.</summary>
-    public const string PageConfirmKey = "team.userMail.unsubscribe.confirm";
+    /// <summary>The key of <see cref="PageOnlyThis"/>.</summary>
+    public const string PageOnlyThisKey = "team.userMail.unsubscribe.onlyThis";
 
-    /// <summary>The button that unsubscribes.</summary>
-    public const string PageConfirm = "Unsubscribe";
+    /// <summary>Under the question, what the change does and does not do; <c>{0}</c> is the category's name, <c>{1}</c> the product's.</summary>
+    public const string PageOnlyThis = "This only turns off {0}. Other mail from {1} is not affected.";
+
+    /// <summary>The key of <see cref="PageStop"/>.</summary>
+    public const string PageStopKey = "team.userMail.unsubscribe.stop";
+
+    /// <summary>The button that turns the category off; <c>{0}</c> is the category's name.</summary>
+    public const string PageStop = "Stop sending me {0}";
 
     /// <summary>The key of <see cref="PageDone"/>.</summary>
     public const string PageDoneKey = "team.userMail.unsubscribe.done";
@@ -40,11 +46,41 @@ public static class UserMailTexts
     /// <summary>What the unsubscribe page says once the category is off; <c>{0}</c> is the category's name.</summary>
     public const string PageDone = "You will no longer receive {0}.";
 
-    /// <summary>The key of <see cref="PageDoneDetail"/>.</summary>
-    public const string PageDoneDetailKey = "team.userMail.unsubscribe.doneDetail";
+    /// <summary>The key of <see cref="PageTurnBackOn"/>.</summary>
+    public const string PageTurnBackOnKey = "team.userMail.unsubscribe.turnBackOn";
 
-    /// <summary>Where the choice can be undone.</summary>
-    public const string PageDoneDetail = "You can turn it back on at any time in your profile.";
+    /// <summary>How the category is turned on again.</summary>
+    public const string PageTurnBackOn = "You can turn it back on at any time in your mail settings.";
+
+    /// <summary>The key of <see cref="PageYourMail"/>.</summary>
+    public const string PageYourMailKey = "team.userMail.unsubscribe.yourMail";
+
+    /// <summary>Above every category and its state, shown to the signed-in user the link is for.</summary>
+    public const string PageYourMail = "The mail you get";
+
+    /// <summary>The key of <see cref="PageOn"/>.</summary>
+    public const string PageOnKey = "team.userMail.unsubscribe.on";
+
+    /// <summary>The state of a category the user receives.</summary>
+    public const string PageOn = "On";
+
+    /// <summary>The key of <see cref="PageOff"/>.</summary>
+    public const string PageOffKey = "team.userMail.unsubscribe.off";
+
+    /// <summary>The state of a category the user turned off.</summary>
+    public const string PageOff = "Off";
+
+    /// <summary>The key of <see cref="PageSettings"/>.</summary>
+    public const string PageSettingsKey = "team.userMail.unsubscribe.settings";
+
+    /// <summary>The link to the host's mail settings.</summary>
+    public const string PageSettings = "Change your mail settings";
+
+    /// <summary>The key of <see cref="PageSignIn"/>.</summary>
+    public const string PageSignInKey = "team.userMail.unsubscribe.signIn";
+
+    /// <summary>The link to sign in, shown instead of the categories to anyone not signed in as the user the link is for.</summary>
+    public const string PageSignIn = "Sign in to see all the mail you get and choose what you want";
 
     /// <summary>The key of <see cref="PageInvalid"/>.</summary>
     public const string PageInvalidKey = "team.userMail.unsubscribe.invalid";

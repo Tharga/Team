@@ -31,6 +31,18 @@ public class UserMailOptions
     /// <summary>The version written into unsubscribe links; raising it makes every link already sent invalid, default 1.</summary>
     public int UnsubscribeTokenVersion { get; set; } = 1;
 
+    /// <summary>The product's name, as the unsubscribe page says other mail from it is not affected; null uses <see cref="MailOptions.FromName"/> on <see cref="Mail"/>, then its sending address.</summary>
+    public string ProductName { get; set; }
+
+    /// <summary>Where the host's mail settings are, a site path such as <c>/profile/mail</c> or an absolute address; the unsubscribe page links there, and returns there after sign-in. Null shows no such link.</summary>
+    public string PreferencesPath { get; set; }
+
+    /// <summary>Where a user signs in, a site path or an absolute address; the unsubscribe page links there with <c>returnUrl</c> set to <see cref="PreferencesPath"/> for anyone not signed in as the user the link is for. Null shows no such link.</summary>
+    public string SignInPath { get; set; }
+
+    /// <summary>Style rules the unsubscribe page adds after its own, inside its one inline style element, so it looks like the host; the page's policy loads nothing from elsewhere, so no images or fonts by address.</summary>
+    public string PageCss { get; set; }
+
     /// <summary>How many times sending one mail is attempted before it is given up, default 5.</summary>
     public int MaxAttempts { get; set; } = 5;
 
