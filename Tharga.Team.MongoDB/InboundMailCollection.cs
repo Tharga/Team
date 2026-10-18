@@ -23,11 +23,16 @@ public class InboundMailCollection : DiskRepositoryCollectionBase<InboundMailEnt
     /// <remarks>
     /// The mail id is unique and never expires: it is what makes reading a mailbox twice harmless, so unlike the
     /// support ledger it is kept for as long as the mail is.
+    /// <para>
+    /// <c>TeamKey_Outcome_ReceivedAt</c> serves every list and count that names an outcome, in the order they page:
+    /// the postmaster's held and archived mail (no team, and no outcome or archived) and a team's unhandled mail.
+    /// </para>
     /// </remarks>
     public override IEnumerable<CreateIndexModel<InboundMailEntity>> Indices =>
     [
         new(Builders<InboundMailEntity>.IndexKeys.Ascending(x => x.MailId), new CreateIndexOptions { Unique = true, Name = "MailId" }),
         new(Builders<InboundMailEntity>.IndexKeys.Ascending(x => x.TeamKey).Descending(x => x.ReceivedAt).Ascending(x => x.MailId), new CreateIndexOptions { Name = "TeamKey_ReceivedAt" }),
+        new(Builders<InboundMailEntity>.IndexKeys.Ascending(x => x.TeamKey).Ascending(x => x.Outcome).Descending(x => x.ReceivedAt).Ascending(x => x.MailId), new CreateIndexOptions { Name = "TeamKey_Outcome_ReceivedAt" }),
         new(Builders<InboundMailEntity>.IndexKeys.Ascending(x => x.ReceivedAt), new CreateIndexOptions { Name = "ReceivedAt" })
     ];
 }

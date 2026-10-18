@@ -1,12 +1,13 @@
 @using Tharga.Team.Blazor.Framework
+@using Tharga.Blazor
 @implements IDisposable
 @inject IPostmasterService Postmaster
 @inject ITeamMailNotifier Notifier
-@inject NotificationService NotificationService
 
 @* Mail that reached the shared mailbox at an address no team owns. Everything goes through IPostmasterService,
    which needs a system scope: a host that places this where an ordinary member can reach it gets a refusal,
-   not a leak. The listing is deliberately thin; opening a mail is the audited act. *@
+   not a leak. Each mail is a card whose header is all the listing reveals; opening the card is the audited open,
+   and inside it the mail is routed to a team, archived, or, when archived, restored. *@
 
 @if (!_ready)
 {
@@ -20,66 +21,66 @@ else if (!_permitted)
 }
 else
 {
-    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
-        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center">
-            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[PostmasterViewText.Title]</RadzenText>
-            @if (_count > 0)
-            {
-                <RadzenBadge Text="@($"{_count} {_text[PostmasterViewText.Held]}")" BadgeStyle="BadgeStyle.Warning" />
-            }
-        </RadzenStack>
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+        @if (ShowTitle)
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center" data-title="true">
+                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[PostmasterViewText.Title]</RadzenText>
+                @if (_count > 0)
+                {
+                    <RadzenBadge Text="@($"{_count} {_text[PostmasterViewText.Held]}")" BadgeStyle="BadgeStyle.Warning" data-count="@_count" />
+                }
+            </RadzenStack>
+        }
+
+        <RadzenSelectBar TValue="PostmasterMailState" Value="@_state" Size="ButtonSize.Small" Change="@((PostmasterMailState v) => ChooseAsync(v))"
+                         aria-label="@_text[PostmasterViewText.StateLabel]" data-state="@_state">
+            <Items>
+                <RadzenSelectBarItem Text="@_text[PostmasterViewText.StateHeld]" Value="PostmasterMailState.Held" />
+                <RadzenSelectBarItem Text="@_text[PostmasterViewText.StateArchived]" Value="PostmasterMailState.Archived" />
+            </Items>
+        </RadzenSelectBar>
 
         @if (_items.Count == 0)
         {
-            <RadzenText TextStyle="TextStyle.Body2">@_text[PostmasterViewText.None]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-empty="@_state">
+                @(_state == PostmasterMailState.Archived ? _text[PostmasterViewText.NoneArchived] : _text[PostmasterViewText.None])
+            </RadzenText>
         }
         else
         {
-            <RadzenText TextStyle="TextStyle.Caption">@_text[PostmasterViewText.OpeningIsRecorded]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[PostmasterViewText.OpeningIsRecorded]</RadzenText>
 
             foreach (var item in _items)
             {
-                <RadzenCard Variant="Variant.Outlined">
-                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                        <RadzenButton Text="@SubjectOf(item.Subject)" Variant="Variant.Text" Size="ButtonSize.Small" Click="@(() => ToggleAsync(item.Id))" />
-                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@item.From</RadzenText>
-                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@Time(item.ReceivedAt)</RadzenText>
-                        <RadzenBadge Text="@ReasonText(item.Reason)" BadgeStyle="BadgeStyle.Light" />
-                    </RadzenStack>
-
-                    @if (_opened?.Id == item.Id)
-                    {
-                        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" class="rz-mt-3">
-                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.From]:</strong> @FromOf(_opened.Envelope)</RadzenText>
-                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.To]:</strong> @string.Join(", ", _opened.Envelope.To)</RadzenText>
-                            @if (_opened.Envelope.Cc.Length > 0)
+                <div @key="item.Id" data-mail="@item.Id">
+                    <ExpandableCard Text="@SubjectOf(item.Subject)" Icon="@(item.ArchivedAt == null ? "mail" : "archive")" AllowSaveState="false">
+                        <TopMenu>
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-sender="@item.Id">
+                                @_text[PostmasterViewText.From] @item.From
+                            </RadzenText>
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-time="@item.Id">
+                                @Time(item.ReceivedAt)
+                            </RadzenText>
+                            <RadzenBadge Text="@ReasonText(item.Reason)" BadgeStyle="BadgeStyle.Light" data-reason="@item.Id" />
+                            @if (item.ArchivedAt is { } archivedAt)
                             {
-                                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.Cc]:</strong> @string.Join(", ", _opened.Envelope.Cc)</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-archived="@item.Id">
+                                    @ArchivedText(item) @Time(archivedAt)
+                                </RadzenText>
                             }
-                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.DeliveredTo]:</strong> @_opened.Envelope.DeliveredTo</RadzenText>
-                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.Received]:</strong> @Time(_opened.ReceivedAt)</RadzenText>
-
-                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-                                @if (_teams.Count > 0)
-                                {
-                                    <RadzenDropDown TValue="string" Data="@_teams" TextProperty="Value" ValueProperty="Key" @bind-Value="_routeTo"
-                                                    AllowFiltering="true" Placeholder="@_text[PostmasterViewText.RouteTo]" aria-label="@_text[PostmasterViewText.RouteTo]" Style="min-width: 16rem;" />
-                                }
-                                else
-                                {
-                                    <RadzenTextBox @bind-Value="_routeTo" Placeholder="@_text[PostmasterViewText.RouteTo]" aria-label="@_text[PostmasterViewText.RouteTo]" />
-                                }
-                                <RadzenButton Text="@_text[PostmasterViewText.Route]" Icon="forward_to_inbox" Click="RouteAsync" Disabled="@(string.IsNullOrWhiteSpace(_routeTo) || _busy)" />
-                            </RadzenStack>
-                        </RadzenStack>
-                    }
-                </RadzenCard>
+                        </TopMenu>
+                        <ChildContent>
+                            <PostmasterMail Summary="item" Teams="_teams" TimeTemplate="TimeTemplate" Changed="OnChangedAsync" />
+                        </ChildContent>
+                    </ExpandableCard>
+                </div>
             }
 
             @if (_nextCursor != null)
             {
                 <div>
-                    <RadzenButton Text="@_text[PostmasterViewText.LoadMore]" ButtonStyle="ButtonStyle.Light" Click="LoadMoreAsync" Disabled="_busy" />
+                    <RadzenButton Text="@_text[PostmasterViewText.LoadMore]" ButtonStyle="ButtonStyle.Light" Click="LoadMoreAsync" Disabled="_busy" data-more="true" />
                 </div>
             }
         }
@@ -95,15 +96,20 @@ else
     /// <summary>Renders a moment; the host may supply its own, otherwise the local time is shown.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 
+    /// <summary>
+    /// Whether the view shows its own title and the count of held mail. Turn it off when the host places the view in
+    /// a tab or card whose header already names it and shows the count — <see cref="IPostmasterService.GetCountAsync"/>.
+    /// </summary>
+    [Parameter] public bool ShowTitle { get; set; } = true;
+
     private TextSet _text = TextSet.Empty;
     private bool _ready;
     private bool _permitted = true;
     private bool _busy;
     private int _count;
+    private PostmasterMailState _state = PostmasterMailState.Held;
     private string _nextCursor;
     private List<PostmasterMailSummary> _items = [];
-    private InboundMailItem _opened;
-    private string _routeTo;
     private Dictionary<string, string> _teams = new();
 
     protected override async Task OnInitializedAsync()
@@ -117,31 +123,52 @@ else
 
     public void Dispose() => Notifier.MailUpdated -= OnMailUpdated;
 
+    /// <summary>
+    /// Reads the list and the count again. For a host that hears of a change the in-process notifier cannot carry —
+    /// one made on another instance; an open card keeps what it opened.
+    /// </summary>
+    public Task RefreshAsync() => InvokeAsync(async () =>
+    {
+        await ReloadAsync();
+        StateHasChanged();
+    });
+
+    /// <remarks>
+    /// The postmaster's own changes are announced with no team; routing names the team the mail went to, and is
+    /// how a mail leaves this list.
+    /// </remarks>
     private void OnMailUpdated(object sender, TeamMailUpdatedEventArgs e)
     {
         if (e.TeamKey != null && e.Change != TeamMailChange.Rerouted) return;
 
-        _ = InvokeAsync(async () =>
-        {
-            await ReloadAsync();
-            StateHasChanged();
-        });
+        _ = RefreshAsync();
     }
 
     private async Task ReloadAsync()
     {
         try
         {
-            var page = await Postmaster.ListAsync(null, PageSize);
+            var page = await Postmaster.ListAsync(_state, null, PageSize);
             _items = [.. page.Items];
             _nextCursor = page.NextCursor;
             _count = await Postmaster.GetCountAsync();
-            if (_opened != null && _items.All(x => x.Id != _opened.Id)) _opened = null;
+            _permitted = true;
         }
         catch (UnauthorizedAccessException)
         {
+            _items = [];
+            _nextCursor = null;
+            _count = 0;
             _permitted = false;
         }
+    }
+
+    private async Task ChooseAsync(PostmasterMailState state)
+    {
+        if (state == _state) return;
+
+        _state = state;
+        await ReloadAsync();
     }
 
     private async Task LoadMoreAsync()
@@ -149,7 +176,7 @@ else
         _busy = true;
         try
         {
-            var page = await Postmaster.ListAsync(_nextCursor, PageSize);
+            var page = await Postmaster.ListAsync(_state, _nextCursor, PageSize);
             _items.AddRange(page.Items.Where(x => _items.All(y => y.Id != x.Id)));
             _nextCursor = page.NextCursor;
         }
@@ -159,35 +186,7 @@ else
         }
     }
 
-    private async Task ToggleAsync(string mailId)
-    {
-        if (_opened?.Id == mailId)
-        {
-            _opened = null;
-            return;
-        }
-
-        _routeTo = null;
-        _opened = await Postmaster.OpenAsync(mailId);
-    }
-
-    private async Task RouteAsync()
-    {
-        if (_opened == null || string.IsNullOrWhiteSpace(_routeTo)) return;
-
-        _busy = true;
-        try
-        {
-            var routed = await Postmaster.RouteAsync(_opened.Id, _routeTo.Trim());
-            NotificationService.Notify(routed == null ? NotificationSeverity.Warning : NotificationSeverity.Success, routed == null ? _text[PostmasterViewText.AlreadyGone] : _text[PostmasterViewText.Routed]);
-            _opened = null;
-            await ReloadAsync();
-        }
-        finally
-        {
-            _busy = false;
-        }
-    }
+    private Task OnChangedAsync(string mailId) => ReloadAsync();
 
     /// <remarks>
     /// Team names are a convenience: listing teams is its own system grant, and without it the reader types the
@@ -211,9 +210,10 @@ else
 
     private string SubjectOf(string subject) => string.IsNullOrWhiteSpace(subject) ? _text[PostmasterViewText.NoSubject] : subject;
 
-    private static string FromOf(MailEnvelope envelope) => string.IsNullOrWhiteSpace(envelope.FromName) ? envelope.From : $"{envelope.FromName} <{envelope.From}>";
-
     private string ReasonText(MailRouteReason reason) => reason == MailRouteReason.RetiredKey ? _text[PostmasterViewText.ReasonRetiredKey] : _text[PostmasterViewText.ReasonUnknownAddress];
+
+    private string ArchivedText(PostmasterMailSummary item)
+        => string.IsNullOrWhiteSpace(item.ArchivedBy) ? _text[PostmasterViewText.ArchivedWhen] : _text.Format(PostmasterViewText.ArchivedBy, item.ArchivedBy);
 
     private RenderFragment Time(DateTime value)
         => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));

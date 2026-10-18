@@ -54,20 +54,49 @@ internal sealed class MongoTeamMailStore(IInboundMailCollection collection) : IT
         ToItem(await collection.GetOneAsync(Unrouted(mailId)));
 
     public Task<InboundMailPage> ListUnroutedAsync(string cursor, int pageSize, CancellationToken cancellationToken = default) =>
-        PageAsync(Filter.Exists(x => x.TeamKey, false), cursor, pageSize);
+        ListUnroutedAsync(PostmasterMailState.Held, cursor, pageSize, cancellationToken);
+
+    public Task<InboundMailPage> ListUnroutedAsync(PostmasterMailState state, string cursor, int pageSize, CancellationToken cancellationToken = default) =>
+        PageAsync(InState(state), cursor, pageSize);
 
     public async Task<int> CountUnroutedAsync(CancellationToken cancellationToken = default) =>
-        (int)await collection.CountAsync(Filter.Exists(x => x.TeamKey, false));
+        (int)await collection.CountAsync(InState(PostmasterMailState.Held));
 
+    /// <remarks>Any outcome goes with the move: an archived mail routed to a team arrives there unhandled.</remarks>
     public async Task<InboundMailItem> RouteAsync(string mailId, string teamKey, CancellationToken cancellationToken = default)
     {
         var update = Builders<InboundMailEntity>.Update
             .Set(x => x.TeamKey, teamKey)
             .Set(x => x.Reason, MailRouteReason.Rerouted)
-            .Unset(x => x.KeyRetiresAt);
+            .Unset(x => x.KeyRetiresAt)
+            .Unset(x => x.Outcome)
+            .Unset(x => x.HandledAt)
+            .Unset(x => x.HandledBy);
 
         var result = await collection.UpdateOneAsync(Unrouted(mailId), update);
         return result?.Before == null ? null : await GetAsync(teamKey, mailId, cancellationToken);
+    }
+
+    public async Task<InboundMailItem> ArchiveUnroutedAsync(string mailId, string archivedBy, DateTime archivedAt, CancellationToken cancellationToken = default)
+    {
+        var update = Builders<InboundMailEntity>.Update
+            .Set(x => x.Outcome, PostmasterMailOutcome.Archived)
+            .Set(x => x.HandledAt, archivedAt);
+        update = archivedBy == null ? update.Unset(x => x.HandledBy) : update.Set(x => x.HandledBy, archivedBy);
+
+        var result = await collection.UpdateOneAsync(Filter.And(Unrouted(mailId), Filter.Exists(x => x.Outcome, false)), update);
+        return result?.Before == null ? null : await GetUnroutedAsync(mailId, cancellationToken);
+    }
+
+    public async Task<InboundMailItem> RestoreUnroutedAsync(string mailId, CancellationToken cancellationToken = default)
+    {
+        var update = Builders<InboundMailEntity>.Update
+            .Unset(x => x.Outcome)
+            .Unset(x => x.HandledAt)
+            .Unset(x => x.HandledBy);
+
+        var result = await collection.UpdateOneAsync(Filter.And(Unrouted(mailId), Filter.Eq(x => x.Outcome, PostmasterMailOutcome.Archived)), update);
+        return result?.Before == null ? null : await GetUnroutedAsync(mailId, cancellationToken);
     }
 
     public Task<string[]> DeleteUnroutedReceivedBeforeAsync(DateTime receivedBefore, CancellationToken cancellationToken = default) =>
@@ -136,6 +165,11 @@ internal sealed class MongoTeamMailStore(IInboundMailCollection collection) : IT
 
     private static FilterDefinition<InboundMailEntity> Unrouted(string mailId) =>
         Filter.And(Filter.Exists(x => x.TeamKey, false), Filter.Eq(x => x.MailId, mailId));
+
+    /// <summary>Held is postmaster mail with no outcome; archived, postmaster mail marked archived.</summary>
+    internal static FilterDefinition<InboundMailEntity> InState(PostmasterMailState state) => Filter.And(
+        Filter.Exists(x => x.TeamKey, false),
+        state == PostmasterMailState.Archived ? Filter.Eq(x => x.Outcome, PostmasterMailOutcome.Archived) : Filter.Exists(x => x.Outcome, false));
 
     internal static InboundMailEntity ToEntity(InboundMailItem item) => new()
     {

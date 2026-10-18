@@ -68,6 +68,22 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.ReplyToCaseAsync(teamKey, caseId, body, cancellationToken);
     }
 
+    /// <remarks>Authorized exactly as a reply without files: the files are part of what is written.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "reply to", CaseAccessKind.Write);
+
+        await inner.ReplyToCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
+    }
+
+    /// <remarks>Authorized exactly as a plain reply: the formatting is part of what is written.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "reply to", CaseAccessKind.Write);
+
+        await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
+    }
+
     /// <remarks>
     /// A support grant and nothing else: authorship lets a member reply to their own case, never answer it as
     /// support, or anybody could clear their own case from the queue by answering it.
@@ -77,6 +93,62 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await RequireSupportAnswerAsync(teamKey, caseId);
 
         await inner.AnswerCaseAsync(teamKey, caseId, body, cancellationToken);
+    }
+
+    /// <remarks>Authorized exactly as an answer without files.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        await inner.AnswerCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
+    }
+
+    /// <remarks>Authorized exactly as a plain answer.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        await inner.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
+    }
+
+    /// <remarks>
+    /// Authorized exactly as reading the transcript is — the team's support read grant, the unassigned read grant
+    /// for a case with no team, the cross-team grant, or authorship, with per-case visibility applied — because a
+    /// file is part of what was said.
+    /// </remarks>
+    public async Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "open a file of", CaseAccessKind.Read);
+
+        return await inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+    }
+
+    /// <remarks>Never refused: the limits are configuration, and say nothing about any case.</remarks>
+    public Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default)
+        => inner.GetAttachmentLimitsAsync(cancellationToken);
+
+    /// <remarks>Authorized as answering is: sending an entry again speaks on the channel exactly as answering does.</remarks>
+    public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        return await inner.ResendAsync(teamKey, caseId, sequence, cancellationToken);
+    }
+
+    /// <remarks>Authorized as answering is: where an answer goes, the correspondent's address included, is shown to whoever may send one.</remarks>
+    public async Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        return await inner.GetAnswerRouteAsync(teamKey, caseId, cancellationToken);
+    }
+
+    /// <remarks>Authorized as answering is: a preview is the answer, with the conversation so far quoted, before it is sent.</remarks>
+    public async Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        return await inner.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, cancellationToken);
     }
 
     public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)

@@ -48,6 +48,7 @@ public class PersistedEnumRepresentationTests
         Assert.Contains("TeamMemberBase.AccessLevel", found);
         Assert.Contains("TeamMemberBase.State", found);
         Assert.Contains("IconEntity.Kind", found);
+        Assert.Contains("UserMailEntity.Status", found);
 
         // Embedded documents, which the sweep missed entirely until the closure walk replaced the
         // derives-from check. If these drop out, the walk has regressed to roots only.
@@ -61,6 +62,12 @@ public class PersistedEnumRepresentationTests
         // Nullable, and therefore the shape most likely to slip past a sweep that forgets to unwrap.
         Assert.Contains("SupportMessageEntity.Source", found);
         Assert.Contains("SupportCaseEntity.Visibility", found);
+        Assert.Contains("SupportCaseEntity.SuggestionReason", found);
+        Assert.Contains("UserNoticeEntity.Status", found);
+        Assert.Contains("UserNoticeItemEntity.Status", found);
+        Assert.Contains("UserNoticeItemEntity.Delivery", found);
+        Assert.Contains("UserNoticePreferenceEntity.Delivery", found);
+        Assert.Contains("UserNoticeTeamDefaultEntity.Delivery", found);
     }
 
     /// <summary>

@@ -56,7 +56,7 @@ public class MailOptions
     /// </summary>
     /// <remarks>
     /// <b>For one mailbox serving more than one site.</b> Two products can share a mailbox — one receiving
-    /// <c>fortdocs.se</c> and the other <c>eplicta.se</c> — with each instance listing only its own and
+    /// <c>example.com</c> and the other <c>example.org</c> — with each instance listing only its own and
     /// ignoring the rest. A bare domain matches any local part; a full address matches only itself.
     /// <para>
     /// <b>Set this and the sending address must be covered by it</b>, or the instance discards every reply to
@@ -72,4 +72,21 @@ public class MailOptions
     /// </para>
     /// </remarks>
     public string[] Recipients { get; set; } = [];
+
+    /// <summary>Where a mailbox with no read position starts: only mail delivered on or after this date. Unset reads everything.</summary>
+    /// <remarks>
+    /// <b>Set it when connecting a mailbox that already holds mail</b>, or the first reads turn every message it
+    /// has ever received into work. It applies whenever reading starts from the beginning, which includes the
+    /// server announcing a new UID generation.
+    /// </remarks>
+    public DateTime? FirstReadSince { get; set; }
+
+    /// <summary>The largest file one mail may carry in or out, in bytes. Default 25 MB.</summary>
+    public long MaxAttachmentBytes { get; set; } = 25L * 1024 * 1024;
+
+    /// <summary>The most all files on one mail may add up to, in or out, in bytes. Default 50 MB.</summary>
+    public long MaxAttachmentTotalBytes { get; set; } = 50L * 1024 * 1024;
+
+    /// <summary>The most files one mail may carry in or out. Default 20.</summary>
+    public int MaxAttachmentCount { get; set; } = 20;
 }

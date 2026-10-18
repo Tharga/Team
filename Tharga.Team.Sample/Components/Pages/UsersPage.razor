@@ -20,16 +20,22 @@
 <UsersView TMember="TeamMember" ActionInvoked="OnUserActionAsync" ShowAuditLogButton="true">
     <ActionItems>
         <RadzenSplitButtonItem Text="Edit email" Value="@EditAction" Icon="alternate_email" />
+        <RadzenSplitButtonItem Text="Mail sent" Value="@MailAction" Icon="outgoing_mail" />
     </ActionItems>
 </UsersView>
 
 @code {
     private const string EditAction = "edit-email";
+    private const string MailAction = "mail-sent";
 
     private async Task OnUserActionAsync(UserRowAction action)
     {
         if (action.Action == EditAction) await EditUser(action.User);
+        if (action.Action == MailAction) await ShowMailAsync(action.User);
     }
+
+    private Task ShowMailAsync(UserViewModel u)
+        => DialogService.OpenAsync(u.Name, _ => @<UserMailHistoryView UserKey="@u.Key" />, new DialogOptions { Width = "640px", Resizable = true });
 
     private async Task EditUser(UserViewModel u)
     {

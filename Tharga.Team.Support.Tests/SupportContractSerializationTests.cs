@@ -32,7 +32,35 @@ public class SupportContractSerializationTests
             Source = SupportChannelType.Email
         };
 
-        Assert.Equal(message, RoundTrip(message));
+        var restored = RoundTrip(message);
+
+        Assert.Empty(restored.Attachments);
+        Assert.Equal(message, restored with { Attachments = message.Attachments });
+    }
+
+    /// <summary>Arrays compare by reference, so the files are asserted one by one rather than by record equality.</summary>
+    [Fact]
+    public void SupportMessage_RoundTrips_WithItsAttachments()
+    {
+        var attachment = new SupportAttachment { Id = "a1", FileName = "logo.png", ContentType = "image/png", Size = 2048, Inline = true, ContentId = "logo@example.com" };
+        var message = new SupportMessage
+        {
+            Sequence = 2,
+            Kind = SupportMessageKind.User,
+            Body = "See the picture.",
+            SentAt = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc),
+            Attachments = [attachment]
+        };
+
+        var restored = RoundTrip(message);
+
+        Assert.Equal(attachment, Assert.Single(restored.Attachments));
+    }
+
+    [Fact]
+    public void SupportAttachmentLimits_RoundTrip()
+    {
+        Assert.Equal(SupportAttachmentLimits.Default, RoundTrip(SupportAttachmentLimits.Default));
     }
 
     [Fact]
@@ -52,7 +80,7 @@ public class SupportContractSerializationTests
         var restored = RoundTrip(message);
 
         Assert.Null(restored.Source);
-        Assert.Equal(message, restored);
+        Assert.Equal(message, restored with { Attachments = message.Attachments });
     }
 
     [Fact]
@@ -64,6 +92,42 @@ public class SupportContractSerializationTests
 
             Assert.Equal(binding, RoundTrip(binding));
         }
+    }
+
+    /// <summary>
+    /// Arrays compare by reference, so the suggestions are asserted field by field rather than by record equality.
+    /// </summary>
+    [Fact]
+    public void SupportCase_RoundTrips_WithSuggestedTeams()
+    {
+        var supportCase = new SupportCase
+        {
+            Id = "case-1",
+            AuthorIdentity = null,
+            AuthorName = "anna@example.com",
+            Subject = "Export is empty",
+            Status = SupportCaseStatus.Open,
+            CreatedAt = new DateTime(2026, 10, 17, 9, 0, 0, DateTimeKind.Utc),
+            MessageCount = 1,
+            SuggestedTeams = [new SupportCaseTeam { Key = "acme", Name = "Acme" }],
+            SuggestionReason = SupportTeamSuggestionReason.SenderNotVerified
+        };
+
+        var restored = RoundTrip(supportCase);
+
+        Assert.Equal(supportCase.SuggestedTeams[0], Assert.Single(restored.SuggestedTeams));
+        Assert.Equal(SupportTeamSuggestionReason.SenderNotVerified, restored.SuggestionReason);
+    }
+
+    [Fact]
+    public void SupportSender_RoundTrips()
+    {
+        var sender = new SupportSender { Identity = "sub-1", Name = "Anna", Teams = [new SupportCaseTeam { Key = "acme", Name = "Acme" }] };
+
+        var restored = RoundTrip(sender);
+
+        Assert.Equal("sub-1", restored.Identity);
+        Assert.Equal(sender.Teams[0], Assert.Single(restored.Teams));
     }
 
     private static T RoundTrip<T>(T value)

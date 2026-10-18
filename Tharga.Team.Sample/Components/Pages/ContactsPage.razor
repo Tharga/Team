@@ -1,0 +1,59 @@
+@page "/contacts"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Tharga.Team.Blazor.Features.Messages
+
+<PageTitle>Contacts</PageTitle>
+
+@* Both contact message components, for a caller holding the contacts:send system scope; the sample maps it to Developer.
+   The host owns the records and the filter: the sample keeps a few contacts in memory and leaves out existing customers
+   unless asked, with a reason the list shows. A host records what was sent on its own records through each recipient's
+   references, which MessageSent hands back. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="2rem">
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Write to contacts</RadzenText>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-3">
+            <RadzenSwitch Value="@_includeCustomers" Change="@(value => Filter(value))" />
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">Include existing customers</RadzenText>
+        </RadzenStack>
+        <ContactMessageComposeView Addressees="@_addressees" MessageSent="@(_ => _log.RefreshAsync())" />
+    </RadzenCard>
+
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Sent</RadzenText>
+        <ContactMessageLogView @ref="_log" />
+    </RadzenCard>
+</RadzenStack>
+
+@code {
+    private sealed record Contact(string Key, string Name, string Address, string Organisation, bool Customer);
+
+    private static readonly Contact[] Records =
+    [
+        new("contact-1", "Kim Customer", "kim@customer.example", "Customer Ltd", false),
+        new("contact-2", "Lee Prospect", "lee@prospect.example", "Prospect Inc", false),
+        new("contact-3", "Max Buyer", "max@buyer.example", "Buyer AB", true),
+        new("contact-4", "Kim at home", "KIM@customer.example", "Customer Ltd", false)
+    ];
+
+    private ContactMessageLogView _log;
+    private bool _includeCustomers;
+    private IReadOnlyList<ContactAddressee> _addressees = [];
+
+    protected override void OnInitialized() => Filter(false);
+
+    private void Filter(bool includeCustomers)
+    {
+        _includeCustomers = includeCustomers;
+        _addressees = [.. Records.Select(x => new ContactAddressee
+        {
+            Address = x.Address,
+            Name = x.Name,
+            Detail = x.Organisation,
+            Reference = x.Key,
+            ExcludedReason = x.Customer && !includeCustomers ? "Already a customer" : null
+        })];
+    }
+}

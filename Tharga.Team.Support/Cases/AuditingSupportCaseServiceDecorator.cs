@@ -124,6 +124,97 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>Audited as a reply, with how many files it carried and never what they were called.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.ReplyToCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
+
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>Audited as an answer, with how many files it carried and never what they were called.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.AnswerCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
+
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>Audited as a reply, exactly as one without formatting.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
+
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>Audited as an answer, exactly as one without formatting.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
+
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>A read, and not audited, like every other read of a case.</remarks>
+    public Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+        => inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+
+    public Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default)
+        => inner.GetAttachmentLimitsAsync(cancellationToken);
+
+    /// <remarks>A read, and not audited; a refusal is still the authorizing decorator's to throw.</remarks>
+    public Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => inner.GetAnswerRouteAsync(teamKey, caseId, cancellationToken);
+
+    /// <remarks>Renders a draft and changes nothing, so it is not audited; the answer is, when it is sent.</remarks>
+    public Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+        => inner.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, cancellationToken);
+
     public async Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
@@ -137,6 +228,26 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         catch (Exception ex)
         {
             Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
+    public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var status = await inner.ResendAsync(teamKey, caseId, sequence, cancellationToken);
+
+            Log("resend", nameof(ResendAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.Delivery, status.ToString())));
+
+            return status;
+        }
+        catch (Exception ex)
+        {
+            Log("resend", nameof(ResendAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
                 Meta((SupportAuditMetadataKeys.CaseId, caseId)));
             throw;
         }
@@ -284,6 +395,9 @@ internal sealed class AuditingSupportCaseServiceDecorator(
 
         auditLogger.Log(entry);
     }
+
+    private static string CountOf(IReadOnlyList<SupportAttachmentUpload> attachments)
+        => (attachments?.Count(x => x != null) ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private static Dictionary<string, string> Meta(params (string Key, string Value)[] pairs)
     {

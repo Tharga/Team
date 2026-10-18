@@ -1,4 +1,10 @@
 @using Tharga.Team.Blazor.Features.User
+@using Tharga.Team.Service.Html
+@using Tharga.Team.Support.Cases
+@using Microsoft.JSInterop
+@inject ISupportCaseService SupportCases
+@inject IJSRuntime JsRuntime
+@implements IAsyncDisposable
 
 @* One case's conversation as a chat: the person who raised it on one side, everybody answering on the other. *@
 
@@ -38,7 +44,7 @@
                 }
             </div>
 
-            <div style="max-width: 75%; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
+            <div style="max-width: 75%; min-width: 0; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)" data-bubble="@message.Sequence">
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                     @if (message.Kind != SupportMessageKind.Assistant)
                     {
@@ -53,16 +59,82 @@
                         <RadzenBadge Text="@message.Source.ToString()" BadgeStyle="BadgeStyle.Light" />
                     }
                 </div>
-                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@message.Body</RadzenText>
+                @* Formatting only through the sanitizer, again at render, whatever was stored. *@
+                @if (message.BodyHtml != null)
+                {
+                    <RichTextView Html="@message.BodyHtml" Images="@ImagesOf(message)" Class="rz-text-body2" data-body-html="@message.Sequence" />
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@message.Body</RadzenText>
+                }
+
+                @* Opened only when the browser shows the type without running anything; every other file is saved. An image the formatting shows in place is not listed again. *@
+                @{ var listed = Listed(message); }
+                @if (listed.Length > 0)
+                {
+                    <div role="list" aria-label="@_files[SupportAttachmentText.Attached]" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem;" data-attachments="@message.Sequence">
+                        @foreach (var attachment in listed)
+                        {
+                            var opens = SupportAttachmentContentTypes.OpensInBrowser(attachment.ContentType);
+                            var label = _files.Format(opens ? SupportAttachmentText.Open : SupportAttachmentText.Save, attachment.FileName);
+                            <span role="listitem">
+                                <RadzenButton Icon="@(opens ? "open_in_new" : "download")" Size="ButtonSize.ExtraSmall" Variant="Variant.Text"
+                                              Text="@($"{attachment.FileName} ({SupportAttachmentSize.Format(attachment.Size)})")"
+                                              Disabled="@(CaseId == null || _opening.Contains(attachment.Id))"
+                                              Click="@(() => OpenAttachmentAsync(message, attachment))"
+                                              title="@label" aria-label="@label"
+                                              data-attachment="@attachment.Id" data-opens="@(opens ? "browser" : "save")" />
+                            </span>
+                        }
+                    </div>
+                    @foreach (var missing in message.Attachments.Where(x => _unavailable.Contains(x.Id)))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-danger);" data-attachment-unavailable="@missing.Id">
+                            @_files.Format(SupportAttachmentText.NotAvailable, missing.FileName)
+                        </RadzenText>
+                    }
+                }
+
+                @* Only an answer is followed to its channel; what the customer wrote reached us by definition. *@
+                @if (ShowDelivery && !fromAuthor && message.Kind == SupportMessageKind.User)
+                {
+                    if (message.Delivery == SupportMessageDelivery.Pending && HasChannels)
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0 rz-mt-1" Style="color: var(--rz-text-secondary-color);" data-delivery="pending">
+                            @_text[SupportTranscriptText.NotSentYet]
+                        </RadzenText>
+                    }
+                    else if (message.Delivery == SupportMessageDelivery.Failed)
+                    {
+                        <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.25rem;" data-delivery="failed">
+                            <RadzenIcon Icon="error_outline" Style="font-size: 1rem; color: var(--rz-danger);" />
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-weight: 600; color: var(--rz-danger);">@_text[SupportTranscriptText.NotDelivered]</RadzenText>
+                            @if (!string.IsNullOrWhiteSpace(message.DeliveryError))
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="overflow-wrap: anywhere;" data-delivery-error="@message.Sequence">@message.DeliveryError</RadzenText>
+                            }
+                            @if (Resend.HasDelegate)
+                            {
+                                <RadzenButton Text="@_text[SupportTranscriptText.SendAgain]" Icon="send" Size="ButtonSize.ExtraSmall"
+                                              ButtonStyle="ButtonStyle.Light" Disabled="@_resending.Contains(message.Sequence)"
+                                              Click="@(() => ResendAsync(message))" data-resend="@message.Sequence" />
+                            }
+                        </div>
+                    }
+                }
             </div>
         </div>
     }
 </div>
 
 @code {
-    private const string IconCircle = "display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: var(--rz-secondary-lighter); color: var(--rz-secondary);";
-    private const string RightBubble = "background: var(--rz-primary-lighter); border-bottom-right-radius: 0.25rem;";
-    private const string LeftBubble = "background: var(--rz-base-200); border-bottom-left-radius: 0.25rem;";
+    private const string IconCircle = ConversationBubble.IconCircle;
+    private const string RightBubble = ConversationBubble.Right;
+    private const string LeftBubble = ConversationBubble.Left;
+
+    /// <summary>The largest image shown in place; a larger one is named there and listed with the files.</summary>
+    public const long MaxInlineImageBytes = 2L * 1024 * 1024;
 
     /// <summary>The entries to render, oldest first.</summary>
     [Parameter] public SupportMessage[] Messages { get; set; } = [];
@@ -76,15 +148,184 @@
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 
+    /// <summary>
+    /// Whether answers say if they reached the case's channels. For support; the customer is reading the
+    /// answer on the site already.
+    /// </summary>
+    [Parameter] public bool ShowDelivery { get; set; }
+
+    /// <summary>
+    /// Whether the case is projected onto any channel. Without one an answer has nowhere to go, so its
+    /// Pending status says nothing worth showing.
+    /// </summary>
+    [Parameter] public bool HasChannels { get; set; }
+
+    /// <summary>
+    /// Sends an answer that did not arrive again. Offered only when set, so pass it only for a reader who may
+    /// answer the case.
+    /// </summary>
+    [Parameter] public EventCallback<SupportMessage> Resend { get; set; }
+
+    /// <summary>The team the case belongs to, or null for an unassigned case; files are opened through it.</summary>
+    [Parameter] public string TeamKey { get; set; }
+
+    /// <summary>The case the entries belong to; without it files are listed but cannot be opened.</summary>
+    [Parameter] public string CaseId { get; set; }
+
+    private readonly HashSet<int> _resending = [];
+    private readonly HashSet<string> _opening = [];
+    private readonly HashSet<string> _unavailable = [];
+    private SupportAttachmentFiles _browser;
+
+    private readonly Dictionary<string, HtmlImage> _images = [];
+    private readonly Dictionary<int, Func<string, HtmlImage>> _resolvers = [];
+    private readonly Dictionary<int, HashSet<string>> _inline = [];
+    private SupportMessage[] _imagesFor;
+    private string _imagesCase;
+
+    /// <summary>Reads once, through the service, each image a formatted entry names that is of a safe type and within <see cref="MaxInlineImageBytes"/>; its file name stands in its place until then, or when it cannot be read.</summary>
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReferenceEquals(_imagesFor, Messages) && _imagesCase == CaseId) return;
+
+        if (_imagesCase != CaseId)
+        {
+            _images.Clear();
+            _resolvers.Clear();
+            _imagesCase = CaseId;
+        }
+
+        _imagesFor = Messages;
+        _inline.Clear();
+
+        foreach (var message in (Messages ?? []).Where(x => x.BodyHtml != null))
+        {
+            var named = SafeHtml.ContentIds(message.BodyHtml);
+            var shown = (message.Attachments ?? [])
+                .Where(x => x.ContentId != null && named.Contains(x.ContentId) && SafeHtml.ImageMediaType(x.ContentType) != null && x.Size <= MaxInlineImageBytes)
+                .ToArray();
+
+            _inline[message.Sequence] = [.. shown.Select(x => x.Id)];
+        }
+
+        if (CaseId == null) return;
+
+        foreach (var message in (Messages ?? []).Where(x => _inline.TryGetValue(x.Sequence, out var ids) && ids.Count > 0))
+        {
+            var unread = message.Attachments.Where(x => _inline[message.Sequence].Contains(x.Id) && !_images.ContainsKey(ImageKey(message, x))).ToArray();
+            if (unread.Length == 0) continue;
+
+            foreach (var attachment in unread) _images[ImageKey(message, attachment)] = await ReadImageAsync(message, attachment);
+
+            _resolvers.Remove(message.Sequence);
+        }
+    }
+
+    private async Task<HtmlImage> ReadImageAsync(SupportMessage message, SupportAttachment attachment)
+    {
+        try
+        {
+            await using var content = await SupportCases.OpenAttachmentAsync(TeamKey, CaseId, message.Sequence, attachment.Id);
+            if (content?.Content == null) return null;
+
+            using var buffer = new MemoryStream();
+            var chunk = new byte[81920];
+            int read;
+
+            while ((read = await content.Content.ReadAsync(chunk)) > 0)
+            {
+                if (buffer.Length + read > MaxInlineImageBytes) return null;
+                buffer.Write(chunk, 0, read);
+            }
+
+            return HtmlImage.FromContent(attachment.ContentType, buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    /// <remarks>One delegate per entry, replaced once its images are read, so the view sanitizes again exactly then.</remarks>
+    private Func<string, HtmlImage> ImagesOf(SupportMessage message)
+    {
+        if (_resolvers.TryGetValue(message.Sequence, out var resolver)) return resolver;
+
+        return _resolvers[message.Sequence] = contentId =>
+        {
+            var attachment = (message.Attachments ?? []).FirstOrDefault(x => x.ContentId == contentId);
+            if (attachment == null) return null;
+
+            return _images.GetValueOrDefault(ImageKey(message, attachment)) ?? HtmlImage.Described(attachment.FileName);
+        };
+    }
+
+    /// <summary>The entry's files to list: all of them, but an image shown in place, unless it could not be read.</summary>
+    private SupportAttachment[] Listed(SupportMessage message)
+    {
+        var attachments = message.Attachments ?? [];
+        if (!_inline.TryGetValue(message.Sequence, out var inline) || inline.Count == 0) return attachments;
+
+        return [.. attachments.Where(x => !inline.Contains(x.Id) || CaseId == null || (_images.TryGetValue(ImageKey(message, x), out var image) && image == null))];
+    }
+
+    private static string ImageKey(SupportMessage message, SupportAttachment attachment) => $"{message.Sequence}/{attachment.Id}";
+
+    /// <remarks>Opened through the service, so reading a file is checked exactly as reading the case is.</remarks>
+    private async Task OpenAttachmentAsync(SupportMessage message, SupportAttachment attachment)
+    {
+        if (CaseId == null || !_opening.Add(attachment.Id)) return;
+
+        try
+        {
+            await using var content = await SupportCases.OpenAttachmentAsync(TeamKey, CaseId, message.Sequence, attachment.Id);
+
+            if (content?.Content == null)
+            {
+                _unavailable.Add(attachment.Id);
+                return;
+            }
+
+            _unavailable.Remove(attachment.Id);
+            _browser ??= new SupportAttachmentFiles(JsRuntime);
+            await _browser.OpenOrSaveAsync(content);
+        }
+        finally
+        {
+            _opening.Remove(attachment.Id);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_browser != null) await _browser.DisposeAsync();
+    }
+
+    private async Task ResendAsync(SupportMessage message)
+    {
+        if (!_resending.Add(message.Sequence)) return;
+
+        try
+        {
+            await Resend.InvokeAsync(message);
+        }
+        finally
+        {
+            _resending.Remove(message.Sequence);
+        }
+    }
+
     private RenderFragment Time(DateTime value)
         => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
+    private TextSet _files = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(SupportTranscriptText.All);
+        _files = await TextProvider.ResolveAsync(SupportAttachmentText.All);
     }
 }

@@ -68,6 +68,7 @@ else
                                     <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@TeamName(item)</RadzenText>
                                 </RadzenStack>
                             }
+                            <SupportMailboxAddress Case="item" />
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
                                 @Time(item.LastMessageAt ?? item.CreatedAt)
                             </RadzenText>

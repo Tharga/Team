@@ -59,10 +59,14 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
         => string.Join(' ', (text ?? string.Empty).Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
 
     public async Task<bool> PostAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
+        => (await PostWithResultAsync(binding, message, cancellationToken)).Delivered;
+
+    public async Task<SupportChannelPostResult> PostWithResultAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
         var channel = options.Value.SlackChannel;
 
-        if (string.IsNullOrWhiteSpace(channel) || binding?.ExternalId == null) return false;
+        if (string.IsNullOrWhiteSpace(channel)) return SupportChannelPostResult.Failed("No Slack channel is configured.");
+        if (binding?.ExternalId == null) return SupportChannelPostResult.Failed("The case has no Slack thread.");
 
         var text = message.Kind == SupportMessageKind.System
             ? $"_{SlackText.Escape(message.Body)}_"
@@ -70,6 +74,6 @@ internal sealed class SlackSupportChannel(ISlackClient slackClient, IOptions<Sup
 
         var result = await slackClient.PostAsync(channel, text, binding.ExternalId, cancellationToken);
 
-        return result.Success;
+        return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
     }
 }

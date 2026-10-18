@@ -1,0 +1,99 @@
+namespace Tharga.Team.Blazor.Framework;
+
+/// <summary>The keys of the text user mail carries outside components — the unsubscribe footer and page, the built-in categories and the invitation — listed here so a host can translate them from <see cref="ThargaTextKeys.All"/>.</summary>
+public static class UserMailText
+{
+    /// <summary>The footer sentence saying why the mail came; <c>{0}</c> is the category's name.</summary>
+    public static readonly TextKey FooterReason = new(UserMailTexts.FooterReasonKey, UserMailTexts.FooterReason);
+
+    /// <summary>The footer link that stops the category.</summary>
+    public static readonly TextKey FooterUnsubscribe = new(UserMailTexts.FooterUnsubscribeKey, UserMailTexts.FooterUnsubscribe);
+
+    /// <summary>The unsubscribe page's title in the browser.</summary>
+    public static readonly TextKey PageTitle = new(UserMailTexts.PageTitleKey, UserMailTexts.PageTitle);
+
+    /// <summary>What the unsubscribe page asks; <c>{0}</c> is the category's name.</summary>
+    public static readonly TextKey PageQuestion = new(UserMailTexts.PageQuestionKey, UserMailTexts.PageQuestion);
+
+    /// <summary>Under the question, what the change does and does not do; <c>{0}</c> is the category's name, <c>{1}</c> the product's.</summary>
+    public static readonly TextKey PageOnlyThis = new(UserMailTexts.PageOnlyThisKey, UserMailTexts.PageOnlyThis);
+
+    /// <summary>The unsubscribe page's button; <c>{0}</c> is the category's name.</summary>
+    public static readonly TextKey PageStop = new(UserMailTexts.PageStopKey, UserMailTexts.PageStop);
+
+    /// <summary>What the unsubscribe page says once done; <c>{0}</c> is the category's name.</summary>
+    public static readonly TextKey PageDone = new(UserMailTexts.PageDoneKey, UserMailTexts.PageDone);
+
+    /// <summary>How the category is turned on again.</summary>
+    public static readonly TextKey PageTurnBackOn = new(UserMailTexts.PageTurnBackOnKey, UserMailTexts.PageTurnBackOn);
+
+    /// <summary>Above every category and its state, for the signed-in user the link is for.</summary>
+    public static readonly TextKey PageYourMail = new(UserMailTexts.PageYourMailKey, UserMailTexts.PageYourMail);
+
+    /// <summary>The state of a category the user receives.</summary>
+    public static readonly TextKey PageOn = new(UserMailTexts.PageOnKey, UserMailTexts.PageOn);
+
+    /// <summary>The state of a category the user turned off.</summary>
+    public static readonly TextKey PageOff = new(UserMailTexts.PageOffKey, UserMailTexts.PageOff);
+
+    /// <summary>The link to the host's mail settings.</summary>
+    public static readonly TextKey PageSettings = new(UserMailTexts.PageSettingsKey, UserMailTexts.PageSettings);
+
+    /// <summary>The link to sign in, for anyone not signed in as the user the link is for.</summary>
+    public static readonly TextKey PageSignIn = new(UserMailTexts.PageSignInKey, UserMailTexts.PageSignIn);
+
+    /// <summary>What the unsubscribe page says for a link it cannot read.</summary>
+    public static readonly TextKey PageInvalid = new(UserMailTexts.PageInvalidKey, UserMailTexts.PageInvalid);
+
+    /// <summary>What to do instead when the link cannot be read.</summary>
+    public static readonly TextKey PageInvalidDetail = new(UserMailTexts.PageInvalidDetailKey, UserMailTexts.PageInvalidDetail);
+
+    /// <summary>The name of the built-in account and security category.</summary>
+    public static readonly TextKey AccountName = new(UserMailCategories.Account.NameKey, UserMailCategories.Account.Name);
+
+    /// <summary>The description of the built-in account and security category.</summary>
+    public static readonly TextKey AccountDescription = new(UserMailCategories.Account.DescriptionKey, UserMailCategories.Account.Description);
+
+    /// <summary>The name of the built-in service messages category.</summary>
+    public static readonly TextKey ServiceName = new(UserMailCategories.Service.NameKey, UserMailCategories.Service.Name);
+
+    /// <summary>The description of the built-in service messages category.</summary>
+    public static readonly TextKey ServiceDescription = new(UserMailCategories.Service.DescriptionKey, UserMailCategories.Service.Description);
+
+    /// <summary>The subject of an invitation sent as mail to users; <c>{0}</c> is the team's name.</summary>
+    public static readonly TextKey InvitationSubject = new(UserMailTexts.InvitationSubjectKey, UserMailTexts.InvitationSubject);
+
+    /// <summary>The text of an invitation sent as mail to users; <c>{0}</c> is the name, <c>{1}</c> the team, <c>{2}</c> the link.</summary>
+    public static readonly TextKey InvitationBody = new(UserMailTexts.InvitationBodyKey, UserMailTexts.InvitationBody);
+
+    /// <summary>Beside a required category, in the preferences view and on the unsubscribe page; a link to the terms of use when the host has them.</summary>
+    public static readonly TextKey AlwaysSent = new(UserMailTexts.AlwaysSentKey, UserMailTexts.AlwaysSent);
+
+    /// <summary>How often a category is sent, when none was sent in the past year.</summary>
+    public static readonly TextKey FrequencyNone = new(UserMailTexts.FrequencyNoneKey, UserMailTexts.FrequencyNone);
+
+    /// <summary>How often a category is sent, when none was sent in the shorter period the outbox keeps.</summary>
+    public static readonly TextKey FrequencyNoneRecently = new(UserMailTexts.FrequencyNoneRecentlyKey, UserMailTexts.FrequencyNoneRecently);
+
+    /// <summary>How often a category is sent, when it is less than once a year.</summary>
+    public static readonly TextKey FrequencyUnderOneAYear = new(UserMailTexts.FrequencyUnderOneAYearKey, UserMailTexts.FrequencyUnderOneAYear);
+
+    /// <summary>How often a category is sent, a few times a year; <c>{0}</c> is how many.</summary>
+    public static readonly TextKey FrequencyPerYear = new(UserMailTexts.FrequencyPerYearKey, UserMailTexts.FrequencyPerYear);
+
+    /// <summary>How often a category is sent, a few times a month; <c>{0}</c> is how many.</summary>
+    public static readonly TextKey FrequencyPerMonth = new(UserMailTexts.FrequencyPerMonthKey, UserMailTexts.FrequencyPerMonth);
+
+    /// <summary>How often a category is sent, about weekly or more; <c>{0}</c> is how many.</summary>
+    public static readonly TextKey FrequencyPerWeek = new(UserMailTexts.FrequencyPerWeekKey, UserMailTexts.FrequencyPerWeek);
+
+    /// <summary>Every phrase saying how often a category is sent, for a component resolving them together.</summary>
+    public static readonly TextKey[] Frequency = [FrequencyNone, FrequencyNoneRecently, FrequencyUnderOneAYear, FrequencyPerYear, FrequencyPerMonth, FrequencyPerWeek];
+
+    /// <summary>Every key here.</summary>
+    public static readonly TextKey[] All =
+    [
+        FooterReason, FooterUnsubscribe, PageTitle, PageQuestion, PageOnlyThis, PageStop, PageDone, PageTurnBackOn, PageYourMail, PageOn, PageOff, PageSettings, PageSignIn,
+        PageInvalid, PageInvalidDetail, AccountName, AccountDescription, ServiceName, ServiceDescription, InvitationSubject, InvitationBody, AlwaysSent, .. Frequency
+    ];
+}

@@ -18,28 +18,39 @@ namespace Tharga.Team.Email;
 /// </remarks>
 internal static partial class QuotedText
 {
-    public static string Trim(string body)
+    public static string Trim(string body) => Trim(body, out _);
+
+    /// <summary>Trims as <see cref="Trim(string)"/> does, and says whether anything was cut.</summary>
+    public static string Trim(string body, out bool cut)
     {
+        cut = false;
+
         if (string.IsNullOrWhiteSpace(body)) return string.Empty;
 
         var lines = body.Replace("\r\n", "\n").Split('\n');
-        var cut = lines.Length;
+        var cutAt = lines.Length;
 
         for (var i = 0; i < lines.Length; i++)
         {
             if (IsCutPoint(lines[i]))
             {
-                cut = i;
+                cutAt = i;
                 break;
             }
         }
 
-        var kept = string.Join('\n', lines.Take(cut)).TrimEnd();
+        var kept = string.Join('\n', lines.Take(cutAt)).TrimEnd();
 
         // Everything looked like a quote. The body is then more useful whole than empty, and an empty entry
         // in a transcript reads as the person having sent nothing.
-        return kept.Length == 0 ? body.Trim() : kept;
+        if (kept.Length == 0) return body.Trim();
+
+        cut = cutAt < lines.Length;
+        return kept;
     }
+
+    /// <summary>Whether a line is what a mail client writes above a quote, such as <c>On … wrote:</c>.</summary>
+    public static bool IsAttribution(string line) => !string.IsNullOrWhiteSpace(line) && AttributionLine().IsMatch(Whitespace().Replace(line, " ").Trim());
 
     private static bool IsCutPoint(string line)
     {
@@ -71,6 +82,9 @@ internal static partial class QuotedText
     /// </remarks>
     [GeneratedRegex(@"^(on|den|el|le)\b.{0,120}\b(wrote|skrev|schrieb|écrit|escribió)\b.{0,80}:\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex AttributionLine();
+
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex Whitespace();
 
     /// <summary>
     /// The drawn separators Outlook and others insert — a rule, or a header block introduced by

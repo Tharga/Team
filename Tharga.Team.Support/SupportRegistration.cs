@@ -91,6 +91,22 @@ public static class SupportRegistration
     /// storage is the host's decision and this package must not acquire a database dependency.
     /// </para>
     /// <para>
+    /// <b>Mail from a verified sender in one team opens in that team when an <see cref="ISupportSenderDirectory"/>
+    /// is registered</b> — <c>AddThargaTeamRepository</c> registers one when it has both the user and the team
+    /// repository. Without one, every new mail opens unassigned, as before.
+    /// </para>
+    /// <para>
+    /// <b>Files are kept through an <see cref="ISupportAttachmentStore"/></b> — <c>AddThargaTeamRepository</c>
+    /// registers the GridFS one. Without one, a mail's files are named in its message as not stored and a reply
+    /// carrying files is refused.
+    /// </para>
+    /// <para>
+    /// <b>Further mailboxes are added with <see cref="SupportCaseOptions.AddMailbox"/></b>; each is read on its own and answers the cases that came in through it.
+    /// </para>
+    /// <para>
+    /// <b>An answer mail names no staff member</b>: <see cref="SupportCaseOptions.Answers"/> sets the name earlier support entries are attributed to, the signature and the time zone of quoted dates.
+    /// </para>
+    /// <para>
     /// <b>Nothing else may be registered as <see cref="ISupportCaseService"/>.</b> The only registration is
     /// the authorizing decorator; the implementation it wraps is internal and unregistered by itself, so
     /// there is no unchecked instance in the container for a component to resolve by accident.
@@ -113,35 +129,48 @@ public static class SupportRegistration
             o.DefaultVisibility = caseOptions.DefaultVisibility;
             o.AssistantDefaultVisibility = caseOptions.AssistantDefaultVisibility;
             o.StaffCloseAfter = caseOptions.StaffCloseAfter;
+            CopySettable(caseOptions.Answers, o.Answers);
         });
 
         // Projected onto its own options type for the same reason the Slack section is: the mail transport
         // depends on what it needs rather than on the whole module, and a later section cannot widen it.
         services.Configure<MailOptions>(o => CopyMail(caseOptions.Email, o));
 
-        RequireSendingAddressIsAccepted(caseOptions.Email);
+        RequireSendingAddressIsAccepted(caseOptions.Email, SupportCaseOptions.PrimaryMailboxName);
+
+        SupportMailbox[] additionalMailboxes = [.. caseOptions.AdditionalMailboxes.Select(x => new SupportMailbox(x.Name, CopyOf(x.Options)))];
+        foreach (var mailbox in additionalMailboxes) RequireSendingAddressIsAccepted(mailbox.Options, mailbox.Name);
+
+        services.TryAddSingleton(sp => new SupportMailboxes(sp.GetRequiredService<IOptions<MailOptions>>().Value, additionalMailboxes));
+
+        _ = SupportAnswerFrame.Zone(caseOptions.Answers.TimeZoneId);
+        services.TryAddSingleton(caseOptions.Answers);
+
+        MailOptions[] everyMailbox = [caseOptions.Email, .. additionalMailboxes.Select(x => x.Options)];
 
         // Mail, when a mailbox is configured. Dormant otherwise: a host that has not set a server resolves
         // no channel and runs no poller, which is the site-only shape rather than a broken email one.
         //
         // TryAddEnumerable, so email and Slack are both live -- a case holds a binding facing the customer
         // and one facing support at the same time.
-        if (caseOptions.Email.Imap.IsConfigured || caseOptions.Email.Smtp.IsConfigured)
+        if (everyMailbox.Any(x => x.Imap.IsConfigured || x.Smtp.IsConfigured))
         {
             // The transport is wrapped rather than changed, so it stays ignorant of Team types (Tharga/Team#290).
             services.AddOutboundMailPolicy();
+            services.AddMailTemplate();
             services.TryAddScoped<MailClient>();
             services.TryAddScoped<IMailClient>(sp => new PolicyGovernedMailClient(
                 sp.GetRequiredService<MailClient>(),
                 sp.GetRequiredService<IOutboundMailPolicy>(),
                 sp.GetService<ILogger<PolicyGovernedMailClient>>()));
+            services.TryAddScoped<ISupportMailClients, SupportMailClients>();
             services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportChannel, EmailSupportChannel>());
         }
 
         // Only with a mailbox to read. Sending without reading is a legitimate configuration -- a host that
         // mails replies out and takes them in on the site -- and it must not start a poller against a
         // server that was never configured.
-        if (caseOptions.Email.Imap.IsConfigured)
+        if (everyMailbox.Any(x => x.Imap.IsConfigured))
         {
             services.TryAddScoped<EmailEventHandler>();
             services.AddSingleton<IHostedService, SupportMailPoller>();
@@ -245,7 +274,9 @@ public static class SupportRegistration
                     sp.GetService<ITeamDirectoryService>(),
                     sp.GetService<IUserService>(),
                     caseOptions.DefaultVisibility,
-                    caseOptions.AssistantDefaultVisibility),
+                    caseOptions.AssistantDefaultVisibility,
+                    sp.GetService<ISupportAttachmentStore>(),
+                    sp.GetService<SupportMailboxes>()?.AnswerLimits() ?? SupportAttachmentLimitCheck.LimitsOf(sp.GetService<IOptions<MailOptions>>()?.Value)),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,
@@ -281,6 +312,13 @@ public static class SupportRegistration
         CopySettable(from.Smtp, to.Smtp);
     }
 
+    private static MailOptions CopyOf(MailOptions from)
+    {
+        var to = new MailOptions();
+        CopyMail(from, to);
+        return to;
+    }
+
     private static void CopySettable<T>(T from, T to) where T : class
     {
         foreach (var property in typeof(T).GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -303,7 +341,7 @@ public static class SupportRegistration
     /// the message instead of an hour later with none.
     /// </para>
     /// </remarks>
-    private static void RequireSendingAddressIsAccepted(MailOptions email)
+    private static void RequireSendingAddressIsAccepted(MailOptions email, string mailboxName)
     {
         var filter = new RecipientFilter(email.Recipients);
 
@@ -311,7 +349,7 @@ public static class SupportRegistration
         if (filter.Accepts(email.FromAddress)) return;
 
         throw new InvalidOperationException(
-            $"Support email is configured to send from '{email.FromAddress}', which its own recipient filter " +
+            $"The support mailbox '{mailboxName}' is configured to send from '{email.FromAddress}', which its own recipient filter " +
             $"({string.Join(", ", email.Recipients)}) does not accept. Every reply would be discarded. Add the " +
             "address or its domain to the filter, or send from an address the filter already covers.");
     }

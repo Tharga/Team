@@ -1,4 +1,7 @@
+using System.Globalization;
+using Tharga.Team.Email;
 using Tharga.Team.Service;
+using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -23,8 +26,12 @@ internal sealed class SupportCaseService(
     ITeamDirectoryService teamDirectory = null,
     IUserService userService = null,
     SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private,
-    SupportCaseVisibility? assistantDefaultVisibility = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportCaseVisibility? assistantDefaultVisibility = null,
+    ISupportAttachmentStore attachmentStore = null,
+    SupportAttachmentLimits attachmentLimits = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
+    private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
+
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
     /// Slack faces support, so a case can hold a binding for each — which is what
@@ -32,6 +39,9 @@ internal sealed class SupportCaseService(
     /// 3.18, so configuring both silently used whichever registered first.
     /// </remarks>
     private readonly ISupportChannel[] _channels = channels?.ToArray() ?? [];
+
+    /// <summary>The mail channel's own composition of an answer, so the route and preview shown are what posting sends.</summary>
+    private ISupportAnswerMail AnswerMail => _channels.OfType<ISupportAnswerMail>().FirstOrDefault();
 
     public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
     {
@@ -159,10 +169,106 @@ internal sealed class SupportCaseService(
     }
 
     public Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, asSupport: false, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, null, [], asSupport: false, cancellationToken);
+
+    public Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, null, attachments, asSupport: false, cancellationToken);
+
+    public Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: false, cancellationToken);
 
     public Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
-        => WriteAsync(teamKey, caseId, body, asSupport: true, cancellationToken);
+        => WriteAsync(teamKey, caseId, body, null, [], asSupport: true, cancellationToken);
+
+    public Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, null, attachments, asSupport: true, cancellationToken);
+
+    public Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: true, cancellationToken);
+
+    /// <remarks>
+    /// The entry is read by its sequence and the attachment found on it, so an id belonging to another entry or
+    /// another case finds nothing even before the store compares the case it was saved for.
+    /// </remarks>
+    public async Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        if (attachmentStore == null || sequence < 1 || string.IsNullOrWhiteSpace(attachmentId)) return null;
+
+        var page = await store.GetMessagesAsync(teamKey, caseId, (sequence - 1).ToString(CultureInfo.InvariantCulture), 1, cancellationToken);
+        var attachment = page?.Items?.FirstOrDefault(x => x.Sequence == sequence)?.Attachments?.FirstOrDefault(x => x.Id == attachmentId);
+        if (attachment == null) return null;
+
+        var opened = await attachmentStore.OpenAsync(caseId, attachmentId, cancellationToken);
+
+        return opened == null ? null : new SupportAttachmentContent { Attachment = attachment, Content = opened.Content };
+    }
+
+    public Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(_attachmentLimits);
+
+    public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken)
+            ?? throw new InvalidOperationException($"No case '{caseId}' on team '{teamKey}'.");
+
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+        var message = messages.FirstOrDefault(x => x.Sequence == sequence)
+            ?? throw new InvalidOperationException($"Support case '{caseId}' has no entry {sequence}.");
+
+        if (message.Delivery is not (SupportMessageDelivery.Failed or SupportMessageDelivery.Pending)) return message.Delivery;
+
+        var status = await DeliverAsync(teamKey, caseId, supportCase, message, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.DeliveryChanged);
+
+        return status;
+    }
+
+    /// <remarks>The binding an answer is posted into is the first mail binding, as delivering takes it; a case with none, or a host that mails nothing, is answered on the site. A mail channel of the host's own is described by the address alone.</remarks>
+    public async Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        if (supportCase == null) return null;
+
+        var binding = MailBindingOf(supportCase);
+
+        if (binding == null) return SupportAnswerRoute.Site;
+
+        return AnswerMail?.RouteOf(supportCase, binding) ?? new SupportAnswerRoute { ByMail = true, To = binding.Address };
+    }
+
+    /// <remarks>The draft becomes the entry answering would append — the writer's name, the next sequence, sanitized and derived as written — and is mailed nowhere.</remarks>
+    public async Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        var binding = supportCase == null || AnswerMail == null ? null : MailBindingOf(supportCase);
+        if (binding == null) return null;
+
+        (body, bodyHtml) = Content(body, bodyHtml);
+
+        var draft = new SupportMessage
+        {
+            Sequence = supportCase.MessageCount + 1,
+            Kind = SupportMessageKind.User,
+            AuthorIdentity = await authorizer.GetSubjectAsync(),
+            AuthorName = await DisplayNameAsync(),
+            Body = body ?? string.Empty,
+            BodyHtml = bodyHtml,
+            SentAt = timeProvider.GetUtcNow().UtcDateTime,
+            AsSupport = true
+        };
+
+        return await AnswerMail.PreviewAsync(supportCase, binding, draft, cancellationToken);
+    }
+
+    private SupportChannelBinding MailBindingOf(SupportCase supportCase)
+    {
+        if (_channels.All(x => x.ChannelType != SupportChannelType.Email)) return null;
+
+        var binding = supportCase.Bindings?.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email);
+
+        return string.IsNullOrWhiteSpace(binding?.Address) ? null : binding;
+    }
 
     public async Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
     {
@@ -171,9 +277,13 @@ internal sealed class SupportCaseService(
         return string.IsNullOrEmpty(subject) ? [] : await store.GetUnreadByCaseAsync(teamKey, subject, cancellationToken);
     }
 
-    private async Task WriteAsync(string teamKey, string caseId, string body, bool asSupport, CancellationToken cancellationToken)
+    private async Task WriteAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken)
     {
+        (body, bodyHtml) = Content(body, bodyHtml);
         RequireWithinLength(body);
+
+        var uploads = (attachments ?? []).Where(x => x != null).ToArray();
+        RequireAttachable(uploads);
 
         // Costs a read before the write, and is worth it: the caller learns the case is full before typing
         // is discarded, and the limit is checked in the domain so a second adapter inherits it rather than
@@ -184,6 +294,9 @@ internal sealed class SupportCaseService(
                 $"Support case '{caseId}' already holds {existing.MessageCount} messages, which is the limit of " +
                 $"{SupportCaseLimits.MaxMessagesPerCase}. Raise a new case rather than extending this one.");
 
+        if (uploads.Length > 0 && existing == null)
+            throw new InvalidOperationException($"No case '{caseId}' on team '{teamKey}' to attach files to.");
+
         // Writing to a closed case means it is not over: it opens again rather than refusing what was written.
         if (existing?.Status == SupportCaseStatus.Closed)
         {
@@ -192,6 +305,7 @@ internal sealed class SupportCaseService(
         }
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
+        var stored = await StoreAttachmentsAsync(caseId, uploads, cancellationToken);
 
         var message = new SupportMessage
         {
@@ -199,12 +313,23 @@ internal sealed class SupportCaseService(
             Kind = SupportMessageKind.User,
             AuthorIdentity = await authorizer.GetSubjectAsync(),
             AuthorName = await DisplayNameAsync(),
-            Body = body,
+            Body = body ?? string.Empty,
+            BodyHtml = bodyHtml,
             SentAt = now,
-            AsSupport = asSupport
+            AsSupport = asSupport,
+            Attachments = stored
         };
 
-        await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+        try
+        {
+            await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
+        }
+        catch
+        {
+            await DiscardAsync(caseId, stored);
+            throw;
+        }
+
         var sequence = (existing?.MessageCount ?? 0) + 1;
 
         // An answer is unread for whoever raised the case, even when the one answering raised it too.
@@ -222,6 +347,105 @@ internal sealed class SupportCaseService(
         }
 
         Notify(teamKey, caseId, SupportCaseChange.Replied);
+    }
+
+    /// <summary>
+    /// The entry's text and formatting from what the caller wrote: HTML sanitized here whatever the caller did, and
+    /// the text derived from it, so the two can never say different things.
+    /// </summary>
+    /// <remarks>
+    /// Images go: a file written on the site travels as an attachment, so a <c>cid:</c> reference here could only
+    /// point at nothing. HTML with no formatting beyond paragraphs and line breaks, or longer than
+    /// <see cref="SupportCaseLimits.MaxMessageHtmlLength"/>, is kept as its text alone; HTML with nothing readable
+    /// leaves <paramref name="body"/> as written.
+    /// </remarks>
+    internal static (string Body, string BodyHtml) Content(string body, string bodyHtml)
+    {
+        var html = SafeHtml.Sanitize(bodyHtml, _ => null);
+        if (html == null) return (body, null);
+
+        var text = HtmlText.ToPlainText(html);
+
+        return SafeHtml.IsFormatted(html) && html.Length <= SupportCaseLimits.MaxMessageHtmlLength ? (text, html) : (text, null);
+    }
+
+    /// <summary>Refuses files the limits or a missing store rule out, before anything is written.</summary>
+    private void RequireAttachable(IReadOnlyList<SupportAttachmentUpload> uploads)
+    {
+        if (uploads.Count == 0) return;
+
+        if (attachmentStore == null)
+            throw new InvalidOperationException($"Files cannot be attached: no {nameof(ISupportAttachmentStore)} is registered.");
+
+        SupportAttachmentLimitCheck.RequireWithin(uploads, _attachmentLimits);
+    }
+
+    /// <summary>
+    /// Stores each file under the case, measured as it is read, and returns what was stored; on any failure the
+    /// files already stored are removed again and the failure stands.
+    /// </summary>
+    /// <remarks>
+    /// The name is sanitized and the content type normalized here, so nothing a caller declares reaches the
+    /// transcript as given.
+    /// </remarks>
+    private async Task<SupportAttachment[]> StoreAttachmentsAsync(string caseId, IReadOnlyList<SupportAttachmentUpload> uploads, CancellationToken cancellationToken)
+    {
+        if (uploads.Count == 0) return [];
+
+        var stored = new List<SupportAttachment>();
+        long total = 0;
+
+        try
+        {
+            foreach (var upload in uploads)
+            {
+                var contentType = AttachmentContentType.Normalize(upload.ContentType);
+                var fileName = AttachmentFileName.Sanitize(upload.FileName, contentType);
+                var allowed = Math.Min(_attachmentLimits.MaxFileBytes, _attachmentLimits.MaxTotalBytes - total);
+                var measured = new LimitedReadStream(upload.Content, allowed);
+
+                try
+                {
+                    var saved = await attachmentStore.SaveAsync(caseId, new SupportAttachmentUpload
+                    {
+                        FileName = fileName,
+                        ContentType = contentType,
+                        Content = measured
+                    }, cancellationToken);
+
+                    stored.Add(saved);
+                    total += saved.Size;
+                }
+                catch (Exception) when (measured.Exceeded)
+                {
+                    throw measured.BytesRead > _attachmentLimits.MaxFileBytes
+                        ? SupportAttachmentLimitCheck.TooLarge(fileName, measured.BytesRead, _attachmentLimits)
+                        : SupportAttachmentLimitCheck.TooLargeTogether(_attachmentLimits);
+                }
+            }
+        }
+        catch
+        {
+            await DiscardAsync(caseId, stored);
+            throw;
+        }
+
+        return [.. stored];
+    }
+
+    /// <summary>Removes files stored for an entry that was never written; best effort, since the failure that led here is the one to report.</summary>
+    private async Task DiscardAsync(string caseId, IReadOnlyList<SupportAttachment> stored)
+    {
+        foreach (var attachment in stored)
+        {
+            try
+            {
+                await attachmentStore.DeleteAsync(caseId, attachment.Id, CancellationToken.None);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+            }
+        }
     }
 
     /// <remarks>
@@ -268,7 +492,7 @@ internal sealed class SupportCaseService(
         }
 
         await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence,
-            opened ? SupportMessageDelivery.Sent : SupportMessageDelivery.Pending, cancellationToken);
+            opened ? SupportMessageDelivery.Sent : SupportMessageDelivery.Pending, cancellationToken: cancellationToken);
     }
 
     /// <summary>Posts a reply into every projection the case has.</summary>
@@ -282,13 +506,17 @@ internal sealed class SupportCaseService(
     /// post is Failed, which is a thing that went wrong. A reply that reached one channel and was refused by
     /// another counts as Sent: the entry is one field, and it did reach somebody.
     /// </para>
+    /// <para>
+    /// A Failed entry keeps the first reason a channel gave, which is the one somebody fixing it starts from.
+    /// </para>
     /// </remarks>
-    private async Task DeliverAsync(string teamKey, string caseId, SupportCase existing, SupportMessage message, CancellationToken cancellationToken)
+    private async Task<SupportMessageDelivery> DeliverAsync(string teamKey, string caseId, SupportCase existing, SupportMessage message, CancellationToken cancellationToken)
     {
-        if (_channels.Length == 0) return;
+        if (_channels.Length == 0) return message.Delivery;
 
         var attempted = false;
         var delivered = false;
+        string error = null;
 
         foreach (var channel in _channels)
         {
@@ -297,7 +525,9 @@ internal sealed class SupportCaseService(
             if (binding == null) continue;
 
             attempted = true;
-            delivered |= await channel.PostAsync(binding, message, cancellationToken);
+            var result = await channel.PostWithResultAsync(binding, message, cancellationToken);
+            delivered |= result?.Delivered == true;
+            if (result?.Delivered != true) error ??= result?.Error;
         }
 
         var status = !attempted
@@ -306,7 +536,9 @@ internal sealed class SupportCaseService(
                 ? SupportMessageDelivery.Sent
                 : SupportMessageDelivery.Failed;
 
-        await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence, status, cancellationToken);
+        await store.SetMessageDeliveryAsync(teamKey, caseId, message.Sequence, status, status == SupportMessageDelivery.Failed ? error : null, cancellationToken);
+
+        return status;
     }
 
     public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)

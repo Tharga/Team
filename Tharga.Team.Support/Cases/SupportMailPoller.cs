@@ -7,7 +7,7 @@ using Tharga.Team.Email;
 namespace Tharga.Team.Support.Cases;
 
 /// <summary>
-/// Reads the support mailbox on an interval and applies what arrives.
+/// Reads every support mailbox on its own interval, from its own position, and applies what arrives.
 /// </summary>
 /// <remarks>
 /// <b>A loop around <see cref="EmailEventHandler"/>, and deliberately nothing more.</b> Every decision that
@@ -22,7 +22,10 @@ namespace Tharga.Team.Support.Cases;
 /// <b>The position is kept per deployment, not per mailbox.</b> Two sites sharing one <c>support@</c> address
 /// must not share a position, or the first to poll advances past a message addressed to the second and the
 /// second never sees it. The key is derived from the recipients this instance answers for, which is exactly
-/// what makes the two different — see <see cref="PositionKey"/>.
+/// what makes the two different — see <see cref="PositionKey(MailOptions)"/>.
+/// </para>
+/// <para>
+/// <b>Each mailbox is read on its own</b>, so a wrong password or a server that is down holds back that mailbox alone.
 /// </para>
 /// <para>
 /// <b>It never sets <c>\Seen</c> and never moves a message.</b> That is the transport's guarantee rather than
@@ -33,10 +36,10 @@ namespace Tharga.Team.Support.Cases;
 internal sealed class SupportMailPoller(
     IServiceScopeFactory scopeFactory,
     IOptions<MailOptions> options,
-    ILogger<SupportMailPoller> logger = null) : BackgroundService
+    ILogger<SupportMailPoller> logger = null,
+    SupportMailboxes mailboxes = null) : BackgroundService
 {
-    private SupportMailPosition _position = SupportMailPosition.Start;
-    private bool _positionLoaded;
+    private readonly MailboxReader[] _readers = [.. (mailboxes ?? new SupportMailboxes(options.Value)).All.Select(x => new MailboxReader(x))];
     private bool _warnedAboutMissingStore;
 
     /// <summary>
@@ -63,13 +66,20 @@ internal sealed class SupportMailPoller(
         return $"{options.Folder ?? "INBOX"}|{scope}";
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    /// <summary>The primary mailbox keeps the key it always had, and every other mailbox's key carries its name.</summary>
+    internal static string PositionKey(SupportMailbox mailbox)
+        => mailbox.IsPrimary ? PositionKey(mailbox.Options) : $"mailbox:{mailbox.Name.Trim().ToLowerInvariant()}|{PositionKey(mailbox.Options)}";
+
+    protected override Task ExecuteAsync(CancellationToken stoppingToken)
+        => Task.WhenAll(_readers.Where(x => x.Mailbox.Options.Imap.IsConfigured).Select(x => ReadOnIntervalAsync(x, stoppingToken)));
+
+    private async Task ReadOnIntervalAsync(MailboxReader reader, CancellationToken stoppingToken)
     {
-        var interval = options.Value.PollInterval;
+        var interval = reader.Mailbox.Options.PollInterval;
 
         if (interval <= TimeSpan.Zero)
         {
-            logger?.LogInformation("The support mailbox is not polled: the interval is not positive.");
+            logger?.LogInformation("The support mailbox {Mailbox} is not polled: its interval is not positive.", reader.Mailbox.Name);
             return;
         }
 
@@ -83,7 +93,7 @@ internal sealed class SupportMailPoller(
             {
                 if (!await timer.WaitForNextTickAsync(stoppingToken)) return;
 
-                await PollAsync(stoppingToken);
+                await PollAsync(reader, stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -93,9 +103,29 @@ internal sealed class SupportMailPoller(
             {
                 // The loop outlives any single failure. A mail server that is down, a database that is
                 // unreachable: the next tick tries again, and the position means nothing is skipped.
-                logger?.LogError(e, "A support mailbox poll failed. The next one will retry from the same position.");
+                logger?.LogError(e, "A poll of the support mailbox {Mailbox} failed. The next one will retry from the same position.", reader.Mailbox.Name);
             }
         }
+    }
+
+    /// <summary>Reads every mailbox once, each on its own, so one that fails costs the others nothing.</summary>
+    internal async Task<int> PollAsync(CancellationToken cancellationToken)
+    {
+        var applied = 0;
+
+        foreach (var reader in _readers)
+        {
+            try
+            {
+                applied += await PollAsync(reader, cancellationToken);
+            }
+            catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                logger?.LogError(e, "A poll of the support mailbox {Mailbox} failed. The next one will retry from the same position.", reader.Mailbox.Name);
+            }
+        }
+
+        return applied;
     }
 
     /// <remarks>
@@ -103,22 +133,22 @@ internal sealed class SupportMailPoller(
     /// client all live per request in the ordinary graph, and a background service holding one of them for
     /// the process lifetime is the classic captive-dependency bug.
     /// </remarks>
-    internal async Task<int> PollAsync(CancellationToken cancellationToken)
+    private async Task<int> PollAsync(MailboxReader reader, CancellationToken cancellationToken)
     {
         using var scope = scopeFactory.CreateScope();
+        using var logScope = logger?.BeginScope(new Dictionary<string, object> { ["SupportMailbox"] = reader.Mailbox.Name });
 
-        var client = scope.ServiceProvider.GetService<IMailClient>();
+        var client = ClientFor(scope.ServiceProvider, reader.Mailbox);
 
         if (client == null || !client.CanRead) return 0;
 
         var handler = scope.ServiceProvider.GetRequiredService<EmailEventHandler>();
         var positions = scope.ServiceProvider.GetService<ISupportMailPositionStore>();
-        var key = PositionKey(options.Value);
 
-        if (!_positionLoaded)
+        if (!reader.Loaded)
         {
-            _position = positions == null ? SupportMailPosition.Start : await positions.GetAsync(key, cancellationToken);
-            _positionLoaded = true;
+            reader.Position = positions == null ? SupportMailPosition.Start : await positions.GetAsync(reader.Key, cancellationToken);
+            reader.Loaded = true;
 
             if (positions == null && !_warnedAboutMissingStore)
             {
@@ -131,13 +161,19 @@ internal sealed class SupportMailPoller(
             }
         }
 
-        var result = await client.FetchAsync(new MailFetchPosition(_position.UidValidity, _position.LastUid), cancellationToken);
+        var result = await client.FetchAsync(new MailFetchPosition(reader.Position.UidValidity, reader.Position.LastUid), cancellationToken);
+
+        if (result.Error != null)
+        {
+            logger?.LogWarning("The support mailbox {Mailbox} could not be read: {Error} The other mailboxes are read as usual, and this one is tried again at its next poll.", reader.Mailbox.Name, result.Error);
+            return 0;
+        }
 
         if (result.Rescanned)
         {
             logger?.LogInformation(
-                "The support mailbox reported a new UID generation, so the stored position was discarded and it is being read again. " +
-                "Mail already handled is recognised by the event ledger.");
+                "The support mailbox {Mailbox} reported a new UID generation, so the stored position was discarded and it is being read again. " +
+                "Mail already handled is recognised by the event ledger.", reader.Mailbox.Name);
         }
 
         var applied = 0;
@@ -149,27 +185,41 @@ internal sealed class SupportMailPoller(
             // holding it back would re-read the whole batch to hit the same message again.
             try
             {
-                var outcome = await handler.HandleAsync(mail, cancellationToken);
+                var outcome = await handler.HandleAsync(mail, reader.Mailbox, cancellationToken);
 
                 if (outcome.WasApplied) applied++;
             }
             catch (Exception e)
             {
-                logger?.LogError(e, "A received mail could not be applied to a support case.");
+                logger?.LogError(e, "A mail received in the support mailbox {Mailbox} could not be applied to a support case.", reader.Mailbox.Name);
             }
         }
 
-        var moved = result.Position.LastUid != _position.LastUid || result.Position.UidValidity != _position.UidValidity;
+        var moved = result.Position.LastUid != reader.Position.LastUid || result.Position.UidValidity != reader.Position.UidValidity;
 
-        _position = new SupportMailPosition(result.Position.UidValidity, result.Position.LastUid);
+        reader.Position = new SupportMailPosition(result.Position.UidValidity, result.Position.LastUid);
 
         // Written after the mail is handled, never before. The other order would advance past a message this
         // instance had not yet applied, and a crash in between would lose it.
-        if (moved && positions != null) await positions.SetAsync(key, _position, cancellationToken);
+        if (moved && positions != null) await positions.SetAsync(reader.Key, reader.Position, cancellationToken);
 
         if (result.Mails.Count > 0)
-            logger?.LogDebug("Read {Count} mail from the support mailbox, {Applied} of which reached a case.", result.Mails.Count, applied);
+            logger?.LogDebug("Read {Count} mail from the support mailbox {Mailbox}, {Applied} of which reached a case.", result.Mails.Count, reader.Mailbox.Name, applied);
 
         return applied;
+    }
+
+    private static IMailClient ClientFor(IServiceProvider services, SupportMailbox mailbox)
+        => services.GetService<ISupportMailClients>()?.For(mailbox) ?? (mailbox.IsPrimary ? services.GetService<IMailClient>() : null);
+
+    private sealed class MailboxReader(SupportMailbox mailbox)
+    {
+        public SupportMailbox Mailbox { get; } = mailbox;
+
+        public string Key { get; } = PositionKey(mailbox);
+
+        public SupportMailPosition Position { get; set; } = SupportMailPosition.Start;
+
+        public bool Loaded { get; set; }
     }
 }

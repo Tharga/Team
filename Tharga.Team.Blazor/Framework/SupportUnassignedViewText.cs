@@ -12,6 +12,7 @@ namespace Tharga.Team.Blazor.Framework;
 /// </remarks>
 public static class SupportUnassignedViewText
 {
+    /// <summary>The queue's name, for a host that labels the place it shows it; the view itself carries no heading.</summary>
     public static readonly TextKey Title = new("team.support.unassigned.title", "Unassigned support cases");
 
     /// <summary>
@@ -26,6 +27,15 @@ public static class SupportUnassignedViewText
         "These arrived without a team — usually by email from a sender whose team could not be determined. Answer them here, and give one a team only when you know which it is.");
 
     public static readonly TextKey NoCases = new("team.support.unassigned.none", "Nothing is waiting without a team.");
+
+    /// <summary>Shown when there are cases but the filter hides every one.</summary>
+    public static readonly TextKey NoneMatch = new("team.support.unassigned.noneMatch", "No case matches the filter.");
+
+    /// <summary>Follows the number of open cases whose newest entry is from the sender.</summary>
+    public static readonly TextKey Awaiting = new("team.support.unassigned.awaiting", "awaiting an answer");
+
+    /// <summary>Marks a case whose newest entry is from the sender, so support sees what to answer.</summary>
+    public static readonly TextKey NeedsAnswer = new("team.support.unassigned.needsAnswer", "Needs an answer");
 
     public static readonly TextKey From = new("team.support.unassigned.from", "from");
 
@@ -62,10 +72,34 @@ public static class SupportUnassignedViewText
     public static readonly TextKey NotPermitted = new("team.support.unassigned.notPermitted",
         "You do not have access to support cases that belong to no team.");
 
+    /// <summary>Heads the teams the sender's address matched.</summary>
+    public static readonly TextKey Suggested = new("team.support.unassigned.suggested", "Suggested teams");
+
+    /// <summary>Why the suggestions are not the case's team: the sender belongs to several.</summary>
+    /// <remarks>
+    /// Each reason says what was <i>not</i> established, because that is what the reader has to supply. A
+    /// suggestion without its reason reads as the toolkit's recommendation, and an operator who trusts it is
+    /// back to guessing.
+    /// </remarks>
+    public static readonly TextKey ReasonSeveralTeams = new("team.support.unassigned.reason.severalTeams",
+        "The sender is verified and belongs to more than one team.");
+
+    /// <summary>Why the suggestions are not the case's team: the mail could not be verified.</summary>
+    public static readonly TextKey ReasonSenderNotVerified = new("team.support.unassigned.reason.notVerified",
+        "The sender's address belongs to these teams, but the mail could not be verified as coming from it.");
+
+    /// <summary>Why the suggestions are not the case's team: more than one account holds the address.</summary>
+    public static readonly TextKey ReasonSharedAddress = new("team.support.unassigned.reason.sharedAddress",
+        "More than one user account has the sender's address.");
+
+    /// <summary>The one-click action giving the case a suggested team; <c>{0}</c> is the team's name.</summary>
+    public static readonly TextKey AssignToSuggested = new("team.support.unassigned.suggested.assign", "Assign to {0}");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, Explanation, NoCases, From, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
-        AssignLabel, AssignAction, AlreadyAssigned, CannotListTeams, NotPermitted
+        Title, Explanation, NoCases, NoneMatch, Awaiting, NeedsAnswer, From, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
+        AssignLabel, AssignAction, AlreadyAssigned, CannotListTeams, NotPermitted,
+        Suggested, ReasonSeveralTeams, ReasonSenderNotVerified, ReasonSharedAddress, AssignToSuggested
     ];
 }

@@ -43,6 +43,12 @@ public interface ISupportCaseService
     /// <summary>Appends a reply to an open case.</summary>
     Task ReplyToCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
 
+    /// <summary>Appends a reply carrying files to an open case, authorized exactly as a reply without files.</summary>
+    Task ReplyToCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
+    /// <summary>Appends a formatted reply with any files, authorized as a plain reply: <paramref name="bodyHtml"/> is sanitized, its images become their alt text, the text is derived from it, and <paramref name="body"/> is used only when it holds nothing readable.</summary>
+    Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
     /// <summary>
     /// Answers a case from the support side. The answer counts as support's whoever writes it, so it takes the
     /// case out of the waiting count and is unread for the person who raised it until they open it.
@@ -53,6 +59,44 @@ public interface ISupportCaseService
     /// <see cref="SystemSupportScopes.Manage"/>. Having raised the case confers nothing here.
     /// </remarks>
     Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default);
+
+    /// <summary>Answers a case from the support side with files, authorized exactly as an answer without files.</summary>
+    Task AnswerCaseAsync(string teamKey, string caseId, string body, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
+    /// <summary>Answers a case from the support side with formatted text and any files, authorized as a plain answer and sanitized and derived as the formatted reply is.</summary>
+    Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
+
+    /// <summary>Opens a file carried by one entry of a case, authorized exactly as reading its transcript, or returns null when that entry carries no attachment with this id; the caller disposes it and serves it as <see cref="SupportAttachmentContentTypes.ServedAs"/> says.</summary>
+    Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default);
+
+    /// <summary>How many files, and how large, a reply or answer may carry, so a component offers what the service accepts.</summary>
+    Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sends one transcript entry to the case's channels again, and returns where it stands now.
+    /// </summary>
+    /// <remarks>
+    /// Only an entry that is <see cref="SupportMessageDelivery.Failed"/> or <see cref="SupportMessageDelivery.Pending"/>
+    /// is sent; any other is left alone and its status returned, so pressing the button again after it went
+    /// through sends nothing twice. Authorized exactly as <see cref="AnswerCaseAsync(string, string, string, CancellationToken)"/> is.
+    /// </remarks>
+    Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Where support's answer to the case goes — the address it is mailed to and the mailbox it is sent from, and
+    /// what this environment's outbound mail policy does with it — or that it is shown on the site; null when the
+    /// team has no such case.
+    /// </summary>
+    /// <remarks>Authorized exactly as <see cref="AnswerCaseAsync(string, string, string, CancellationToken)"/> is: the address is shown to whoever may answer.</remarks>
+    Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// A draft answer as the person who raised the case would receive it by mail, in the host's template and with the
+    /// conversation so far quoted, rendered without sending or storing anything; null when the answer would not be
+    /// mailed or the team has no such case.
+    /// </summary>
+    /// <remarks>Authorized exactly as answering; the draft is sanitized and derived as an answer is. Files are not rendered.</remarks>
+    Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Has the assistant answer the newest message on a case, and appends what it says.

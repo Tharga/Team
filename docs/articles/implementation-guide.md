@@ -245,6 +245,16 @@ builder.AddThargaAuth(o =>
 });
 ```
 
+#### Where signing in returns
+
+`/login` returns to the site root, unless it is given **`returnUrl`, a path on this site**:
+`/login?returnUrl=%2Fprofile%2Fmail` signs in and lands on `/profile/mail`. Since 4.2. That is what the
+[unsubscribe page](user-mail.md#unsubscribing) links to with `SignInPath = "/login"`.
+
+Only a local path is honoured, so the endpoint is no open redirect: it must start with a single `/`. A scheme
+(`https://…`), a second slash (`//host`), a backslash after the slash (`/\host`) or a control character anywhere
+— which a browser drops, turning `/<tab>/host` into `//host` — returns to the root as before.
+
 #### Signing out ends the provider session
 
 **`FederatedSignOut` is on by default and should stay on.** Signing out clears the local cookie *and* sends
@@ -1790,7 +1800,7 @@ o.AddEmailService<MyEmailSender>();          // any ITeamEmailSender
 o.Email = new EmailOptions
 {
     SmtpHost = "smtp.example.com",
-    FromAddress = "no-reply@example.com",
+    FromAddress = "hello@example.com",   // an address a reply reaches
     // FromName falls back to the application Title when unset.
 };
 builder.Services.AddThargaEmailInvitations();
@@ -1814,6 +1824,11 @@ On the granular path set these on `AddThargaTeamBlazor`; on the facade set them 
 > Before 3.10, `AddThargaTeamBlazor` could not register a sender at all, so a granular host hit this state
 > without having chosen it (Tharga/Team#176).
 
+**A fourth way, since 4.2: [mail to users](user-mail.md#invitations).** With `AddThargaUserMail` registered,
+invitations are sent through its outbox instead of option 2 — from `UserMailOptions.Mail`, in one immediate
+attempt, recorded in the invited person's mail history and marked bounced when they come back. Option 1, a
+sender of your own, still wins.
+
 ### Mail outside production
 
 **Outside production, the toolkit mails only your own people** (Tharga/Team#290). The same build deployed to a
@@ -1824,7 +1839,7 @@ toolkit sends — invitations and support mail alike — goes through one policy
 |---|---|---|
 | Production | anyone | Sent unchanged |
 | Not production | in an allowed domain | Sent unchanged |
-| Not production | anyone else, override address set | Sent to the override address instead; the subject says who it was for: `[Staging -> kund@kommun.se] You've been invited…` |
+| Not production | anyone else, override address set | Sent to the override address instead; the subject says who it was for: `[Staging -> customer@example.org] You've been invited…` |
 | Not production | anyone else, no override address | **Not sent**, and logged |
 
 ```json
@@ -1849,7 +1864,8 @@ Or in code: `builder.Services.Configure<OutboundMailPolicyOptions>(o => o.Addres
 - **At startup, outside production**, the log states the policy in force, and warns when everything is being
   withheld.
 - **A withheld invitation still exists**; its link can be copied from the team page. A withheld support reply is
-  recorded as not delivered.
+  recorded as not delivered. A withheld [mail to a user](user-mail.md) is recorded as failed with the reason, and
+  an invitation sent as mail to users then says it could not be sent.
 
 > [!IMPORTANT]
 > **Upgrading changes what a test environment sends.** A staging or test deployment that mailed everyone before
@@ -3024,7 +3040,7 @@ public class ClaimedJobWorker(
     public async Task RunAsync(Job job, CancellationToken cancellationToken)
     {
         using var _ = auditContext.Push(new AuditActor(
-            Identity: "fortdocs-worker",
+            Identity: "archive-worker",
             CorrelationId: job.Id));       // groups every entry this job writes
 
         auditLogger.Log(auditEntryFactory.Create("job", "claim", teamKey: job.TeamKey));

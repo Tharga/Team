@@ -289,6 +289,25 @@ public class SupportCaseListRenderTests : BunitContext
         Assert.Equal(["second", "first"], view.FindAll("[data-case]").Select(x => x.GetAttribute("data-case")).ToArray());
     }
 
+    /// <summary>Search and leaving out the kind are asked for by a list; these two lists ask for neither.</summary>
+    [Fact]
+    public void TheTeamListsKeepTheKindOfConversation_AndOfferNoSearch()
+    {
+        var staff = RenderStaff(out _, [Case("waiting", 5)]);
+
+        Assert.Empty(staff.FindAll("input[data-search]"));
+        Assert.Single(staff.FindComponents<RadzenSelectBar<IEnumerable<SupportAssistance>>>());
+    }
+
+    [Fact]
+    public void TheMembersList_KeepsTheKindOfConversation_AndOffersNoSearch()
+    {
+        var view = RenderCases(out _);
+
+        Assert.Empty(view.FindAll("input[data-search]"));
+        Assert.Single(view.FindComponents<RadzenSelectBar<IEnumerable<SupportAssistance>>>());
+    }
+
     [Fact]
     public void Staff_AreNotOfferedClose_BeforeTheWindowHasPassed()
     {

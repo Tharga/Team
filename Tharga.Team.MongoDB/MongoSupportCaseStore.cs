@@ -79,7 +79,9 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Visibility = supportCase.Visibility,
             CreatedAt = supportCase.CreatedAt,
             Messages = [ToEntity(firstMessage)],
-            Bindings = [],
+            Bindings = [.. (supportCase.Bindings ?? []).Select(ToEntity)],
+            SuggestedTeams = supportCase.SuggestedTeams is { Length: > 0 } suggested ? [.. suggested.Select(ToEntity)] : null,
+            SuggestionReason = supportCase.SuggestedTeams is { Length: > 0 } ? supportCase.SuggestionReason : null,
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
@@ -473,12 +475,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     {
         var entity = await RequireCaseAsync(teamKey, caseId);
 
-        var added = new SupportChannelBindingEntity
-        {
-            ChannelType = binding.ChannelType,
-            ExternalId = binding.ExternalId,
-            Address = binding.Address
-        };
+        var added = ToEntity(binding);
 
         // Cases written before this always started with an empty list store it as null, which $push refuses.
         var update = entity.Bindings == null
@@ -493,17 +490,23 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     /// positional operator - the sequence is its position, and rewriting the whole array would race with a
     /// reply arriving at the same moment.
     /// </remarks>
-    public async Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default)
+    public async Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, string error = null, CancellationToken cancellationToken = default)
     {
         var entity = await RequireCaseAsync(teamKey, caseId);
 
         var index = Array.FindIndex(entity.Messages, x => x.Sequence == sequence);
         if (index < 0) return;
 
-        var update = Builders<SupportCaseEntity>.Update
-            .Set($"Messages.{index}.Delivery", delivery.ToString());
+        await UpdateAsync(teamKey, caseId, DeliveryUpdate(index, delivery, error));
+    }
 
-        await UpdateAsync(teamKey, caseId, update);
+    private static UpdateDefinition<SupportCaseEntity> DeliveryUpdate(int index, SupportMessageDelivery delivery, string error)
+    {
+        var update = Builders<SupportCaseEntity>.Update.Set($"Messages.{index}.Delivery", delivery.ToString());
+
+        return delivery == SupportMessageDelivery.Failed && !string.IsNullOrWhiteSpace(error)
+            ? update.Set($"Messages.{index}.DeliveryError", error)
+            : update.Unset($"Messages.{index}.DeliveryError");
     }
 
     public async Task<int> DeleteCasesForTeamAsync(string teamKey, CancellationToken cancellationToken = default)
@@ -596,6 +599,11 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             throw new InvalidOperationException(
                 $"A support message is {message.Body.Length} characters, which exceeds the limit of " +
                 $"{SupportCaseLimits.MaxMessageLength}. Attach or link long content instead of pasting it.");
+
+        if (message.BodyHtml != null && message.BodyHtml.Length > SupportCaseLimits.MaxMessageHtmlLength)
+            throw new InvalidOperationException(
+                $"A support message's formatting is {message.BodyHtml.Length} characters, which exceeds the limit of " +
+                $"{SupportCaseLimits.MaxMessageHtmlLength}. Keep it as plain text instead.");
     }
 
     private static int ParseSequence(string cursor) =>
@@ -620,32 +628,88 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Visibility = entity.Visibility,
         Bindings = entity.Bindings == null
             ? []
-            : [.. entity.Bindings.Select(x => new SupportChannelBinding { ChannelType = x.ChannelType, ExternalId = x.ExternalId, Address = x.Address })]
+            : [.. entity.Bindings.Select(ToBinding)],
+        SuggestedTeams = entity.SuggestedTeams == null
+            ? []
+            : [.. entity.SuggestedTeams.Select(x => new SupportCaseTeam { Key = x.Key, Name = x.Name })],
+        SuggestionReason = entity.SuggestionReason
     };
 
-    private static SupportMessage ToMessage(SupportMessageEntity entity) => new()
+    private static SupportCaseTeamEntity ToEntity(SupportCaseTeam team) => new()
+    {
+        Key = team.Key,
+        Name = team.Name
+    };
+
+    private static SupportChannelBinding ToBinding(SupportChannelBindingEntity entity) => new()
+    {
+        ChannelType = entity.ChannelType,
+        ExternalId = entity.ExternalId,
+        Address = entity.Address,
+        MessageSequence = entity.MessageSequence,
+        Mailbox = entity.Mailbox,
+        MailboxAddress = entity.MailboxAddress
+    };
+
+    private static SupportChannelBindingEntity ToEntity(SupportChannelBinding binding) => new()
+    {
+        ChannelType = binding.ChannelType,
+        ExternalId = binding.ExternalId,
+        Address = binding.Address,
+        MessageSequence = binding.MessageSequence,
+        Mailbox = binding.Mailbox,
+        MailboxAddress = binding.MailboxAddress
+    };
+
+    internal static SupportMessage ToMessage(SupportMessageEntity entity) => new()
     {
         Sequence = entity.Sequence,
         Kind = entity.Kind,
         AuthorIdentity = entity.AuthorIdentity,
         AuthorName = entity.AuthorName,
         Body = entity.Body,
+        BodyHtml = entity.BodyHtml,
         SentAt = entity.SentAt,
         Delivery = entity.Delivery,
+        DeliveryError = entity.Delivery == SupportMessageDelivery.Failed ? entity.DeliveryError : null,
         Source = entity.Source,
-        AsSupport = entity.AsSupport
+        AsSupport = entity.AsSupport,
+        Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)]
     };
 
-    private static SupportMessageEntity ToEntity(SupportMessage message) => new()
+    internal static SupportMessageEntity ToEntity(SupportMessage message) => new()
     {
         Sequence = message.Sequence,
         Kind = message.Kind,
         AuthorIdentity = message.AuthorIdentity,
         AuthorName = message.AuthorName,
         Body = message.Body,
+        BodyHtml = message.BodyHtml,
         SentAt = message.SentAt,
         Delivery = message.Delivery,
+        DeliveryError = message.Delivery == SupportMessageDelivery.Failed ? message.DeliveryError : null,
         Source = message.Source,
-        AsSupport = message.AsSupport
+        AsSupport = message.AsSupport,
+        Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null
+    };
+
+    private static SupportAttachment ToAttachment(SupportAttachmentEntity entity) => new()
+    {
+        Id = entity.Id,
+        FileName = entity.FileName,
+        ContentType = entity.ContentType,
+        Size = entity.Size,
+        Inline = entity.Inline,
+        ContentId = entity.ContentId
+    };
+
+    private static SupportAttachmentEntity ToEntity(SupportAttachment attachment) => new()
+    {
+        Id = attachment.Id,
+        FileName = attachment.FileName,
+        ContentType = attachment.ContentType,
+        Size = attachment.Size,
+        Inline = attachment.Inline,
+        ContentId = attachment.ContentId
     };
 }

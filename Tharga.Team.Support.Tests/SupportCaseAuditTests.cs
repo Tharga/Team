@@ -88,6 +88,39 @@ public class SupportCaseAuditTests
         Assert.Contains("member of that team", entry.ErrorMessage);
     }
 
+    /// <summary>How many files went with a reply is worth recording; what they were called is the customer's, as the body is.</summary>
+    [Fact]
+    public async Task AReplyWithFiles_IsAuditedWithHowMany_AndNeverTheirNames()
+    {
+        var (service, sink) = Build(TeamA, Alice);
+        var raised = await service.RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        await service.ReplyToCaseAsync(TeamA, raised.Id, "Attached.",
+            [new SupportAttachmentUpload { FileName = "salaries-2026.xlsx", ContentType = "application/octet-stream", Content = new MemoryStream([1]) }]);
+
+        var entry = sink.Entries.Last();
+        Assert.Equal("reply", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal("1", entry.Metadata[SupportAuditMetadataKeys.AttachmentCount]);
+        Assert.DoesNotContain(entry.Metadata.Values, x => x.Contains("salaries", StringComparison.Ordinal));
+    }
+
+    /// <summary>A formatted reply is the same fact as a plain one, and neither its text nor its formatting is recorded.</summary>
+    [Fact]
+    public async Task AFormattedReply_IsAuditedAsAReply_AndNeverItsContent()
+    {
+        var (service, sink) = Build(TeamA, Alice);
+        var raised = await service.RaiseCaseAsync(TeamA, "Subject", "Body");
+
+        await service.ReplyToCaseAsync(TeamA, raised.Id, null, "<p>My password is <b>hunter2</b></p>", []);
+
+        var entry = sink.Entries.Last();
+        Assert.Equal("reply", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal("0", entry.Metadata[SupportAuditMetadataKeys.AttachmentCount]);
+        Assert.DoesNotContain(entry.Metadata.Values, x => x != null && x.Contains("hunter2", StringComparison.Ordinal));
+    }
+
     private static (ISupportCaseService Service, CollectingAuditLogger Sink) Build(string memberOfTeam, string subject)
     {
         var claims = new List<Claim>
@@ -105,7 +138,7 @@ public class SupportCaseAuditTests
 
         var service = new AuditingSupportCaseServiceDecorator(
             new AuthorizationSupportCaseServiceDecorator(
-                new SupportCaseService(new InMemorySupportCaseStore(), authorizer, TimeProvider.System),
+                new SupportCaseService(new InMemorySupportCaseStore(), authorizer, TimeProvider.System, attachmentStore: new InMemorySupportAttachmentStore()),
                 authorizer),
             composite,
             new AuditEntryFactory(null));

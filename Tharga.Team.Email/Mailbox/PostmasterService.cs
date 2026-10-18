@@ -1,3 +1,5 @@
+using Tharga.Team.Service;
+
 namespace Tharga.Team.Email.Mailbox;
 
 /// <summary>
@@ -10,22 +12,29 @@ internal sealed class PostmasterService : IPostmasterService
     private readonly ITeamMailNotifier _notifier;
     private readonly IInboundMailContentStore _content;
     private readonly ITeamService _teams;
+    private readonly ITeamPrincipalAccessor _principal;
+    private readonly TimeProvider _time;
 
-    public PostmasterService(ITeamMailStore mail, ITeamMailNotifier notifier, IInboundMailContentStore content = null, ITeamService teams = null)
+    public PostmasterService(ITeamMailStore mail, ITeamMailNotifier notifier, IInboundMailContentStore content = null, ITeamService teams = null, ITeamPrincipalAccessor principal = null, TimeProvider time = null)
     {
         _mail = mail;
         _notifier = notifier;
         _content = content;
         _teams = teams;
+        _principal = principal;
+        _time = time ?? TimeProvider.System;
     }
 
-    public async Task<PostmasterPage> ListAsync(string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+    public Task<PostmasterPage> ListAsync(string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+        => ListAsync(PostmasterMailState.Held, cursor, pageSize, cancellationToken);
+
+    public async Task<PostmasterPage> ListAsync(PostmasterMailState state, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
     {
-        var page = await _mail.ListUnroutedAsync(cursor, pageSize, cancellationToken);
+        var page = await _mail.ListUnroutedAsync(state, cursor, pageSize, cancellationToken);
 
         return new PostmasterPage
         {
-            Items = [.. page.Items.Select(x => new PostmasterMailSummary { Id = x.Id, From = x.Envelope.From, Subject = x.Envelope.Subject, ReceivedAt = x.ReceivedAt, Reason = x.Reason })],
+            Items = [.. page.Items.Select(Summary)],
             NextCursor = page.NextCursor
         };
     }
@@ -39,6 +48,20 @@ internal sealed class PostmasterService : IPostmasterService
         if (await _mail.GetUnroutedAsync(mailId, cancellationToken) == null) return null;
 
         return await TeamMailboxService.ContentOfAsync(_content, mailId, cancellationToken);
+    }
+
+    public async Task<ReceivedMailBody> GetBodyAsync(string mailId, CancellationToken cancellationToken = default)
+    {
+        var content = await GetContentAsync(mailId, cancellationToken);
+
+        return content == null ? null : ReceivedMailReader.Body(mailId, content.Raw);
+    }
+
+    public async Task<SupportAttachmentContent> OpenAttachmentAsync(string mailId, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        var content = await GetContentAsync(mailId, cancellationToken);
+
+        return content == null ? null : ReceivedMailReader.Open(content.Raw, attachmentId);
     }
 
     /// <remarks>
@@ -55,4 +78,46 @@ internal sealed class PostmasterService : IPostmasterService
 
         return routed;
     }
+
+    /// <remarks>
+    /// The store writes only when the mail is still held, so two people archiving at once record the first; the
+    /// second is handed the mail as the first left it, and only one change is announced.
+    /// </remarks>
+    public async Task<InboundMailItem> ArchiveAsync(string mailId, CancellationToken cancellationToken = default)
+    {
+        var mail = await _mail.GetUnroutedAsync(mailId, cancellationToken);
+        if (mail == null || IsArchived(mail)) return mail;
+
+        var archivedBy = _principal == null ? null : await new TeamAuthorizer(_principal).GetDisplayNameAsync();
+        var archived = await _mail.ArchiveUnroutedAsync(mailId, archivedBy, _time.GetUtcNow().UtcDateTime, cancellationToken);
+        if (archived == null) return await _mail.GetUnroutedAsync(mailId, cancellationToken);
+
+        _notifier.Notify(new TeamMailUpdatedEventArgs { TeamKey = null, MailId = mailId, Change = TeamMailChange.Archived });
+        return archived;
+    }
+
+    public async Task<InboundMailItem> RestoreAsync(string mailId, CancellationToken cancellationToken = default)
+    {
+        var mail = await _mail.GetUnroutedAsync(mailId, cancellationToken);
+        if (mail == null || !IsArchived(mail)) return mail;
+
+        var restored = await _mail.RestoreUnroutedAsync(mailId, cancellationToken);
+        if (restored == null) return await _mail.GetUnroutedAsync(mailId, cancellationToken);
+
+        _notifier.Notify(new TeamMailUpdatedEventArgs { TeamKey = null, MailId = mailId, Change = TeamMailChange.Restored });
+        return restored;
+    }
+
+    private static bool IsArchived(InboundMailItem mail) => mail.Outcome == PostmasterMailOutcome.Archived;
+
+    private static PostmasterMailSummary Summary(InboundMailItem item) => new()
+    {
+        Id = item.Id,
+        From = item.Envelope.From,
+        Subject = item.Envelope.Subject,
+        ReceivedAt = item.ReceivedAt,
+        Reason = item.Reason,
+        ArchivedAt = IsArchived(item) ? item.HandledAt : null,
+        ArchivedBy = IsArchived(item) ? item.HandledBy : null
+    };
 }

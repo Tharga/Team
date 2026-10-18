@@ -72,7 +72,7 @@ public class SupportChannelHandOverTests
         await service.ReplyToCaseAsync(TeamKey, raised.Id, "Second to a person.");
 
         await channel.ReceivedWithAnyArgs(1).OpenAsync(default, default, default);
-        await channel.Received(1).PostAsync(Arg.Any<SupportChannelBinding>(), Arg.Is<SupportMessage>(x => x.Body == "Second to a person."), Arg.Any<CancellationToken>());
+        await channel.Received(1).PostWithResultAsync(Arg.Any<SupportChannelBinding>(), Arg.Is<SupportMessage>(x => x.Body == "Second to a person."), Arg.Any<CancellationToken>());
     }
 
     private static async Task<SupportCase> Only(ISupportCaseService service)

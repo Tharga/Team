@@ -31,9 +31,9 @@ A case belongs to a **team** — or to no team at all — and has an author, a s
 
 | | |
 |---|---|
-| `SupportCase` | Header: id, team, author, subject, status, timestamps, message count, channel bindings |
-| `SupportMessage` | One transcript entry: sequence, kind (user or system), author, body, timestamp |
-| `SupportChannelBinding` | A projection onto an external system: the Slack thread, the mail conversation. Carries the correspondent's address where there is one |
+| `SupportCase` | Header: id, team, author, subject, status, timestamps, message count, channel bindings, and for mail that opened without a team the teams it may belong to |
+| `SupportMessage` | One transcript entry: sequence, kind (user or system), author, body as text and as sanitized HTML, files, timestamp, and whether it reached its channels |
+| `SupportChannelBinding` | A projection onto an external system: the Slack thread, the mail conversation. Carries the correspondent's address where there is one, the support mailbox it came in through, and for a mailed answer which entry it was |
 
 **The team owns the case; the author is a link that may dangle.** A case is raised by a person but is about
 the team's account, and the team is what still exists a year later. Deleting a user removes their membership
@@ -323,8 +323,26 @@ they cannot.
 **`SupportCasesView`** has two tabs — the cases first, then where help is asked for. `Tab` names the one to
 show (`SupportCasesView.CasesTab` or `NewCaseTab`) and `TabChanged` reports a change, so a page can keep its
 address in step and link straight to either. Cases are expandable cards; each conversation loads when its card
-opens. Both lists share a filter — status and kind of conversation, open support cases by default — remembered
-in the browser under `StorageKey`, and both read every page of the listing rather than the first.
+opens. Every case list shares one filter — status and kind of conversation, open support cases by default —
+remembered in the browser under `StorageKey`, and every list reads every page of the listing rather than the
+first. `SupportCaseFilter` also takes `ShowSearch` — a search over the subject, who wrote, the case id, the team
+and suggested teams, the address a case corresponds with and the support address it came in to, which is not
+remembered — and `ShowKinds`, to leave the kind out where no assistant answers.
+
+**`SupportUnassignedView`** reads like the cases view: each case an expandable card with the sender, status,
+*Needs an answer* and last activity in its header, whose conversation is read only while it is open; waiting
+cases first, then the newest activity, with the count awaiting an answer beside the filter (with search, and
+without kinds, since no assistant answers a case without a team). It takes `TimeTemplate` and `StorageKey`
+(default `Tharga.Team.Support.Unassigned.Filter`), and `RefreshAsync()` for a host that relays changes from other
+instances over its own backplane. **It carries no heading**; `SupportUnassignedViewText.Title` is there for a
+host that labels the tab or card it sits in.
+
+Every answer box in these views takes formatting ([`RichTextEditor`](#formatting)) and files
+([`SupportAttachmentPicker`](#attachments)), and every staff view shows the support address a case came in to
+and whether each answer was delivered. Above each support answer box, `SupportAnswerRouteLine` says **where the
+answer goes** — the address it is mailed to and the support address it is sent from, or that it is shown on the
+site — and beside the button that answers, **Preview** opens the mail as the person who raised the case would
+receive it; see [Where the answer goes, and its preview](#where-the-answer-goes-and-its-preview).
 
 **Closing asks first.** The team's dialog offers who may read the case from now on, under `PerCase`, with
 `Private` offered only where `GetVisibilityChoiceAsync` allows it; the staff dialog says it is better left to the
@@ -387,7 +405,10 @@ silently sees one twice or misses one.
 | Limit | Value | Why |
 |---|---|---|
 | `SupportCaseLimits.MaxMessageLength` | 10,000 characters | Support text is where somebody pastes a log file |
+| `SupportCaseLimits.MaxMessageHtmlLength` | 10,000 characters | Longer formatting is dropped and the message kept as its text |
 | `SupportCaseLimits.MaxMessagesPerCase` | 500 | The transcript is embedded in one document |
+
+Files are not in the case document; see [Attachments](#attachments) for their limits.
 
 Exceeding either throws with a message naming the limit. At their product the transcript is roughly 5 MB
 against MongoDB's 16 MB document limit, so a case of maximum-length messages still has headroom.
@@ -403,7 +424,9 @@ Raise, reply and close are three distinct audited facts under the `support` feat
 reach another team's case is worth knowing about.
 
 **Message bodies are never recorded.** An audit entry has more readers, longer retention and easier export
-than the case itself.
+than the case itself. Neither are file names: a reply or an answer carrying files records how many
+(`support.message.attachments`). Sending an entry again is audited as `resend`, with where it stands afterwards
+(`support.message.delivery`).
 
 ## Slack threads
 
@@ -591,10 +614,21 @@ logged:
 | `NotApplicable` | The case has no channel — nothing to deliver to |
 | `Pending` | Written, not confirmed sent. Retryable, and worth reminding about |
 | `Sent` | The channel took it. A reply arriving *from* Slack is `Sent` by definition |
-| `Failed` | The channel refused it or was unreachable |
+| `Failed` | The channel refused it, was unreachable, or the mail bounced — with the reason in `DeliveryError` |
 
 **A channel being down never blocks a case.** The case is written first and is authoritative; projecting it
 comes after. If Slack refuses, the case still exists and the entry is `Pending`.
+
+**"Not delivered" says why.** A recipient the server refused, a bounce saying the sending domain failed SPF and
+the outbound policy withholding mail outside production are three different fixes, so the reason is kept on the
+entry. A channel of your own reports it by overriding `ISupportChannel.PostWithResultAsync`; the default wraps
+`PostAsync` and reports no reason. A bounce that names a mailed answer marks that answer `Failed` with the
+receiving server's words, and raises `SupportCaseChange.DeliveryChanged`.
+
+**Send it again.** `ResendAsync(teamKey, caseId, sequence)` sends a `Failed` or `Pending` entry to the case's
+channels again and returns where it stands; any other entry is left alone, so pressing the button twice sends
+nothing twice. It is authorized as answering is and audited as `resend` with `support.message.delivery`. The
+support views show *Not sent yet*, *Not delivered* with the reason, and **Send again** under such an answer.
 
 ## Email
 
@@ -633,14 +667,48 @@ and a Slack binding facing support, and an answer reaches both.
 
 ### Which team does an emailed case belong to?
 
-**None, until somebody says otherwise.** A `From:` header does not say which tenant a problem concerns, and
-every way of guessing — a fallback team, the sender's only team, a configured default — is the guess that
-puts one customer's problem in another customer's list.
+**Only the one the sender provably belongs to, and otherwise none until somebody says.** A `From:` header does
+not say which tenant a problem concerns, and every way of guessing — a fallback team, a configured default — is
+the guess that puts one customer's problem in another customer's list.
 
-So an inbound case is created **unassigned and unattributed**: no team, no author identity, the sender's
-address as the display name. An operator holding `support:unassigned:manage` assigns a team when they know
-which it is, and **leaving it unassigned forever is a supported state, not a backlog.** The assignment is
-recorded in the transcript, because which tenant a case belongs to is part of its history.
+**A mail opens in a team only when all of this holds:**
+
+- **The sender is verified.** Every mail read is checked by DKIM: a signature that verifies, signs `From` and the
+  whole body, and whose domain is the `From` address's domain or a parent of it. The key is looked up in DNS,
+  cached for ten minutes (a miss for one) and cut off after five seconds; anything that goes wrong means *not
+  verified*, never an error. The result is `InboundMail.SenderVerified` and `SenderDomain`.
+- **Exactly one user account holds the address**, compared trimmed and ignoring case.
+- **That account is an active member of exactly one team**: accepted, not suspended, with an access level, the
+  account enabled. A membership with no access level grants nothing since 4.0, so mail neither opens there nor
+  suggests it.
+
+Then the case opens in that team with that user as its author, exactly as if they had raised it on the site.
+
+**Anything short of that opens unassigned**, with the teams the address matched in `SupportCase.SuggestedTeams`
+and why they are only suggestions in `SuggestionReason`:
+
+| `SupportTeamSuggestionReason` | |
+|---|---|
+| `SeveralTeams` | The sender is verified and an active member of more than one team |
+| `SenderNotVerified` | The address belongs to members of these teams, but the mail could not be verified as coming from it |
+| `SharedAddress` | More than one user account holds the address |
+
+An unknown sender opens unassigned with no suggestions. `SupportUnassignedView` shows the suggestions with their
+reason and assigns to one in a click; that goes through `AssignCaseAsync` like any other assignment.
+
+**Verified vouches for the domain's mail system, not for a person.** A large mail provider signs only what its own
+account holder sent, so there it amounts to the address; a company domain signs whatever its servers relay, so it
+is only as strict as that company is about who may send as whom.
+
+**The address compared is the one on the user record**, which comes from the sign-in provider's e-mail claim.
+Who a sender is comes from `ISupportSenderDirectory`, which `AddThargaTeamRepository` registers when it has both
+the user and the team repository. If your sign-in provider issues addresses it has not verified, register one of
+your own that finds nobody before it, and every mail opens unassigned without suggestions, as it did before 4.2.
+
+An unassigned case is **unattributed**: no team, no author identity, the sender's address as the display name. An
+operator holding `support:unassigned:manage` assigns a team when they know which it is, and **leaving it
+unassigned forever is a supported state, not a backlog.** The assignment is recorded in the transcript, because
+which tenant a case belongs to is part of its history.
 
 Assignment is conditional: two operators triaging the same queue cannot both assign a case, and
 `AssignCaseAsync` returns `false` to the one who lost rather than silently doing nothing.
@@ -664,7 +732,7 @@ Assignment is conditional: two operators triaging the same queue cannot both ass
 ### One mailbox, two sites
 
 ```csharp
-o.Email.Recipients = ["fortdocs.se"];        // this instance answers for this domain only
+o.Email.Recipients = ["example.com"];       // this instance answers for this domain only
 ```
 
 A bare domain matches any local part; a full address matches only itself; matching is case-insensitive and
@@ -692,23 +760,234 @@ store registered the poller keeps its position in memory and says so once at sta
 A mailbox that reports a new UID generation is re-read from the start, for the same reason: the stored UIDs
 now refer to different messages, so trusting them is the one thing that could lose mail.
 
+**Connecting a mailbox that already holds mail?** Set `FirstReadSince` to a date, and a mailbox with no read
+position starts there instead of turning every message it ever received into a case. It applies whenever reading
+starts from the beginning, including after a new UID generation.
+
+A mailbox that cannot be read is logged with its name and the server's reason (`MailFetchResult.Error`, never the
+password), and tried again on the next interval.
+
 ### What is trimmed
 
 Quoted history and signatures are cut on unambiguous markers only, and the whole body is kept when nothing is
-recognised — reading too much is untidy, cutting too much silently loses what somebody wrote. HTML is
-flattened to text. Attachments are **not stored**, and the entry says so rather than misrepresenting the
-conversation.
+recognised — reading too much is untidy, cutting too much silently loses what somebody wrote. A mail's HTML is
+kept, sanitized and cut at the same point — see [Formatting](#formatting) — and its files are stored — see
+[Attachments](#attachments).
 
 Mail longer than `MaxMessageLength` is **trimmed rather than refused**, unlike a reply typed into a form:
 there is nobody to tell, and the message id has already been recorded, so refusing would discard what a
 customer sent and never ask again.
 
+### The thread
+
+**An answer carries the conversation.** It is sent `In-Reply-To` the newest mail of the case, with every earlier
+`Message-ID` in `References`, and quotes the conversation so far, newest first, under the answer — so the
+customer's mail program threads it, and whoever reads it on a phone sees what it answers.
+
+**Every message id is recorded** — the mail that opened the case, every reply, every answer sent — so a reply to
+any of them finds its case, whichever one the customer's mail program chose to answer.
+
+**Outside production, a reply from the override address counts as the customer's.** The outbound policy sends
+every answer to the override address, so the person testing answers from there; that reply is accepted on the
+case as if the customer had written it.
+
+### How an answer speaks for support
+
+**An answer mail names no staff member.** It starts with the answer itself, with no author heading; the host's
+signature follows it, before the conversation it quotes, the way a mail program places a signature; and every
+earlier entry written by support — a person answering from the support side, or the assistant — is attributed to
+**support's name**, never the person. The customer's own entries keep the name they were written under.
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Answers.SupportName = "Example Support";                  // default: the text key team.support.mail.supportName, "Support"
+    o.Answers.Signature = ["Kind regards,", "Example Support"];  // default: none
+    o.Answers.TimeZoneId = "Europe/Stockholm";                  // default: UTC
+});
+```
+
+- **The signature** is plain text lines: in the text body after a blank line, and in the HTML one paragraph,
+  `<p class="signature">`, its lines encoded and joined by `<br>`, so a template can style it. Without one nothing
+  is added.
+- **Each quoted entry** is introduced by one translatable line, `team.support.mail.wrote` — "On {0}, {1} wrote:",
+  `{0}` when and `{1}` who. The time is `yyyy-MM-dd HH:mm` in `TimeZoneId`, followed by `UTC` only when that is UTC.
+  An unknown zone is refused at registration.
+- **A frame of its own.** With `MailTemplateOptions.SupportHtml` set, answers and their previews go out in it rather
+  than in the template for mail to users — see [the mail template](user-mail.md#the-mail-template). Its
+  `{{footer}}` is always empty.
+- **The language is the culture of whoever answers**, as the request runs in it; there is no per-recipient
+  language yet.
+
+### Where the answer goes, and its preview
+
+Staff answering a mailed case see **the address the answer is mailed to** and **the support address it is sent
+from** — not only the author's name, which for a sender nobody knows is "Unknown". A case with no mail thread,
+raised on the site, says the answer is shown there instead. Outside production, when the
+[outbound mail policy](implementation-guide.md#mail-outside-production) would not deliver to that address, it says
+so plainly: *In this environment the answer is redirected to {override}*, or *…is not sent*. In production, or
+for an address in an allowed domain, nothing more is added.
+
+```csharp
+var route = await cases.GetAnswerRouteAsync(teamKey, caseId);          // null for no such case
+var preview = await cases.PreviewAnswerAsync(teamKey, caseId, body: null, bodyHtml: draft);  // null when not mailed
+```
+
+- **`GetAnswerRouteAsync`** returns a `SupportAnswerRoute`: `ByMail`, `To`, `From` and `Mailbox` (the mailbox the
+  case came in through, or the primary when that one is no longer configured), and `Effect` —
+  `MailPolicyEffect.None`, `Redirect` with `RedirectedTo`, or `Withhold` — from `IOutboundMailPolicy.Decide`.
+  `SupportAnswerRoute.Site` is a case answered on the site: one with no mail thread, or a host that mails nothing.
+- **`PreviewAnswerAsync`** returns the draft as a `MailPreview` — `From`, `To`, `ReplyTo` (the per-case address
+  when the mailbox uses one), `Subject`, the `Html` in the host's [mail template](user-mail.md#the-mail-template) —
+  its support frame when it has one — with the signature and the conversation so far quoted, and the `Text`
+  alternative — **composed by the code that sends the answer**,
+  without sending or storing anything. The draft is sanitized and derived exactly as an answer is, and written as
+  by the caller. Files are not rendered; the dialog names them.
+- **Both are authorized exactly as answering**, since they show the correspondent's address to whoever may write to
+  it; neither is audited, as reads are not — the answer is, when it is sent.
+
+The components show them: `SupportAnswerRouteLine` (`Route`) and `MailPreviewDialog` (in `Tharga.Team.Blazor`'s
+framework, `Preview`, `FileNames`), which renders the mail in an `iframe` given the HTML as `srcdoc` and sandboxed
+with no permissions, so the template's styles stay inside it and nothing in it runs. A reader who may not answer
+is shown no route and no preview. Their texts are `team.support.answerRoute.*` and `team.mailPreview.*`.
+
+### Several mailboxes
+
+`o.Email` is the **primary** mailbox. Add more with `AddMailbox`, each with a whole `MailOptions` of its own — its
+own IMAP and SMTP account, sending address, folder, interval, recipient filter, `PerCaseReplyTo` and file limits:
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Email.Imap.Host = "imap.example.com";            // the primary, as before
+    o.Email.FromAddress = "support@example.com";
+
+    o.AddMailbox("billing", m =>
+    {
+        m.Imap.Host = "imap.example.com";
+        m.Smtp.Host = "smtp.example.com";
+        m.FromAddress = "billing@example.com";
+    });
+
+    // Or one per configuration section: Support:Mailboxes:{name}
+    foreach (var section in builder.Configuration.GetSection("Support:Mailboxes").GetChildren())
+        o.AddMailbox(section.Key, m => section.Bind(m));
+});
+```
+
+- **The name is a stable key stored on every case** that comes in through the mailbox. It must be non-empty and
+  unique ignoring case, and `primary` is reserved: the primary is stored under that name, and its read position
+  is unchanged, so there is nothing to migrate. Renaming a mailbox re-reads it from the start and sends its old
+  cases from the primary.
+- **Each mailbox is read on its own**, by its own loop at its own interval, from its own position. One failing is
+  logged by name and leaves the others reading.
+- **The same mail in two mailboxes opens one case.** One ledger covers every mailbox, so a mail sent to both
+  addresses becomes one case, bound to whichever mailbox read it first. Mail from any of our own addresses is
+  never read back as a customer's.
+- **A case is answered from the mailbox it came in through** — its account, its sending address and its reply
+  address rules, behind the same outbound policy. A case whose mailbox is no longer configured is answered from
+  the primary, with a warning naming it. A mailbox that reads but cannot send leaves its cases' answers *not
+  delivered* rather than borrowing another mailbox's account.
+- **Staff see which address a case came in to**, in the unassigned, across-teams and team queues
+  (`SupportMailboxAddress`, "to {0}"), and the filter's search matches it.
+- **A hosted mailbox works as any other**, over IMAP and SMTP — for example with an app password where the
+  provider requires one.
+
+Cases from before 4.2 show no support address and are answered from the primary.
+
+### Bounces
+
+A mail that cannot be delivered comes back to the address it was sent from as a delivery status notification.
+When it names a support answer, that answer becomes **not delivered**, with the receiving server's reason; a bounce
+never opens a case. A bounce that names no support answer is handed to every registered `IMailBounceHandler` until
+one recognises it — that is how [mail to users](user-mail.md#bounces) sent from a support address is marked
+bounced. One that nobody recognises is logged at Debug, without addresses.
+
 ### Invitation mail is separate, deliberately
 
 `ThargaTeamOptions.Email` configures invitation delivery and nothing else. It is not a fallback for support
-mail and support mail is not a fallback for it: an invitation is usually sent from `noreply@`, while support
-mail must come from an address replies return to. Inheriting one for the other would send support mail from a
-no-reply address and lose every reply. Bind both from the same configuration section if you want one mailbox.
+mail and support mail is not a fallback for it: each sends from the address it is configured with, and every one
+of them should be an address a reply reaches, because a no-reply address loses every reply. Bind both from the
+same configuration section if you want one mailbox. With [mail to users](user-mail.md#invitations) registered,
+invitations go through its outbox and its address instead.
+
+## Attachments
+
+A support message carries files both ways: what a customer's mail brought, and what support or the customer
+attaches to an answer or a reply.
+
+- **In:** a mail's attachments, the images shown inside its body (with their Content-ID), and forwarded mail as
+  an `.eml` file. Signatures carry none, and neither does a bounce.
+- **Out:** an answer's files are mailed with it; an inline image is mailed beside the HTML that shows it.
+- **Kept outside the case**, through `ISupportAttachmentStore`, keyed by case. `AddThargaTeamRepository` registers
+  one over a GridFS bucket (`SupportAttachment`, `ThargaTeamOptions.SupportAttachmentBucketName`); register your
+  own before it to keep files in blob storage. Without a store, a mail's files are named in its message as not
+  stored, and a reply carrying files is refused.
+- **Limits apply both ways**, per mailbox, on `MailOptions`: `MaxAttachmentBytes` (25 MB a file),
+  `MaxAttachmentTotalBytes` (50 MB a message) and `MaxAttachmentCount` (20). A file over a limit, or one the store
+  refuses, is left out with a note in the message, and the mail is kept. An answer is held to the strictest
+  limits of the mailboxes that can send.
+- **File names are sanitized** — no path, no control characters, never empty — and the declared content type is
+  kept as data, never trusted.
+
+```csharp
+await cases.AnswerCaseAsync(teamKey, caseId, "Here is the report.",
+    [new SupportAttachmentUpload { FileName = "report.pdf", ContentType = "application/pdf", Content = stream }]);
+
+await using var file = await cases.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId);
+```
+
+`ReplyToCaseAsync` and `AnswerCaseAsync` take files in their overloads, authorized exactly as without them; the
+upload is measured while it is stored and every file of a refused message is discarded again. `OpenAttachmentAsync`
+is authorized **exactly as reading the transcript** and returns null for an id that entry does not carry; you
+dispose what it returns. `GetAttachmentLimitsAsync()` says what an answer may carry, so a form offers what the
+service accepts.
+
+**Serve a file as `SupportAttachmentContentTypes.ServedAs` says, never as its declared type.** A file opened from
+your application runs in its origin, so only PDF, PNG, JPEG, GIF, WebP and plain text may open in the browser;
+everything else is served as `application/octet-stream` and saved. The transcript does exactly this.
+
+Reading a file is not audited; a reply or answer records how many files it carried
+(`support.message.attachments`), never their names. Purging a team removes its files first.
+
+`SupportAttachmentPicker` is the file chooser the answer boxes use: `Files`/`FilesChanged`, `Disabled`, and
+`Limits` (the support service's when not set).
+
+## Formatting
+
+Messages carry formatting: answers are written in a small rich-text editor, a mail's HTML is kept, and both are
+shown formatted — through **one sanitizer**, on every way in and again at every render.
+
+- **`SupportMessage.Body` is always the plain text**, which every reader can use: Slack, the notification, the
+  mail's text part. **`BodyHtml` is the sanitized HTML beside it**, or null for a plain message. Formatting that
+  is only paragraphs, or longer than `SupportCaseLimits.MaxMessageHtmlLength` (10 000), is not kept; the message
+  is kept as its text.
+- **The allow-list** (`SafeHtml`, in `Tharga.Team.Service`): paragraphs, line breaks, headings to `h4`, bold,
+  italic, underline, strike-through, lists, quotes, preformatted text and code, tables, links and images.
+  Links are http, https or mailto only, and open in a new window with `noopener noreferrer`. Images are shown
+  only by `cid:` from the message's own files, or from data the caller read — a remote image becomes its alt
+  text, so a mail cannot track who opened it. Scripts, styles, forms, frames, media and hidden text are removed
+  with their content.
+- **Inbound HTML is cut at the quoted thread** — on the markers the common mail programs write — and dropped
+  when the text lost a quote the HTML did not, when it carries no formatting, or when it is too long.
+- **Inline images show in place** in the transcript: PNG, JPEG, GIF and WebP up to 2 MB, read through
+  `OpenAttachmentAsync`. An image shown in place is not listed again among the files; one that cannot be shown is.
+- **A formatted answer is mailed as HTML** beside the same text as before (`multipart/alternative`), with the
+  earlier conversation in quotes. With a [mail template](user-mail.md#the-mail-template) it is framed in it, and a
+  plain answer is mailed as HTML too — its escaped text, the conversation in quotes — beside the same text.
+
+```csharp
+await cases.AnswerCaseAsync(teamKey, caseId, body: null, bodyHtml: "<p>Fixed in <b>2.4</b>.</p>", attachments: []);
+```
+
+The HTML overloads of `ReplyToCaseAsync` and `AnswerCaseAsync` sanitize on the server, turn images into their alt
+text, and derive the text from the HTML; `body` is used only when the HTML holds nothing readable.
+
+For your own pages: **`RichTextEditor`** (`Value`/`ValueChanged`, `Disabled`, `Label`, `Height`) writes HTML and
+sanitizes what is pasted into it, and **`RichTextView`** (`Html`, `Images`, `Class`) is the only way the toolkit
+renders markup — it sanitizes whatever it is given, so a stored value is never shown as stored. `SafeHtml` and
+`HtmlImage` are public for server code, and `HtmlText` in `Tharga.Team.Email` renders HTML as the plain text
+the toolkit uses.
 
 ## An assistant answering first
 
@@ -944,8 +1223,138 @@ A custom store that does not implement them returns nothing, so the worker simpl
 |---|---|
 | The author is deleted, or leaves the team | **Cases and transcripts are kept**, and stay readable with the name they were written with. Nobody then satisfies the authorship check, so such a case is reachable through `support:read` / `support:manage` |
 | The team is soft-deleted | **Cases remain readable to a caller whose team claim still names it.** See the limitation below. Restoring the team is unaffected |
-| The team is **purged** | **Cases are destroyed with it**, by a purge participant |
+| The team is **purged** | **Cases are destroyed with it**, by a purge participant — their files first |
 
 > **One known limitation.** A soft-deleted team's cases are still readable to a caller whose `TeamKey` claim
 > still names it, which is inconsistent with every other team read — all of which exclude soft-deleted teams.
 > Purge is unaffected: it destroys the cases either way.
+
+## Over REST
+
+The toolkit ships no REST endpoints for support cases; a host with its own surface calls `ISupportCaseService` and
+nothing else. Since 4.2 that surface needs a few more endpoints to keep up with the components: answering and
+replying with files and an optional `bodyHtml`, downloading a file, sending an answer again, and where an answer
+goes and what it will look like.
+
+```csharp
+[HttpPost("{teamKey}/cases/{caseId}/answers")]
+public async Task AnswerAsync(string teamKey, string caseId, [FromForm] string body, [FromForm] string bodyHtml, [FromForm] IFormFileCollection files)
+{
+    var uploads = files.Select(f => new SupportAttachmentUpload { FileName = f.FileName, ContentType = f.ContentType, Content = f.OpenReadStream() }).ToArray();
+    try
+    {
+        await cases.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, uploads, HttpContext.RequestAborted);
+    }
+    finally
+    {
+        foreach (var upload in uploads) await upload.Content.DisposeAsync();
+    }
+}
+
+[HttpGet("{teamKey}/cases/{caseId}/messages/{sequence:int}/attachments/{attachmentId}")]
+public async Task<IActionResult> AttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId)
+{
+    var file = await cases.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, HttpContext.RequestAborted);
+    if (file == null) return NotFound();
+
+    Response.Headers["X-Content-Type-Options"] = "nosniff";
+    var type = SupportAttachmentContentTypes.ServedAs(file.Attachment.ContentType);
+
+    return SupportAttachmentContentTypes.OpensInBrowser(file.Attachment.ContentType)
+        ? File(file.Content, type)
+        : File(file.Content, type, file.Attachment.FileName);
+}
+
+[HttpPost("{teamKey}/cases/{caseId}/messages/{sequence:int}/resend")]
+public Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence)
+    => cases.ResendAsync(teamKey, caseId, sequence, HttpContext.RequestAborted);
+
+[HttpGet("{teamKey}/cases/{caseId}/answer-route")]
+public Task<SupportAnswerRoute> AnswerRouteAsync(string teamKey, string caseId)
+    => cases.GetAnswerRouteAsync(teamKey, caseId, HttpContext.RequestAborted);
+
+[HttpPost("{teamKey}/cases/{caseId}/answers/preview")]
+public Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, [FromForm] string body, [FromForm] string bodyHtml)
+    => cases.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, HttpContext.RequestAborted);
+```
+
+A client showing `MailPreview.Html` shows it isolated — a sandboxed frame without scripts — never as markup in its
+own page: it carries the host template's styles.
+
+A case's `SuggestedTeams`, `SuggestionReason` and its bindings' `MailboxAddress`, and a message's `BodyHtml`,
+`Attachments` and `DeliveryError`, are worth exposing in what you return. `BodyHtml` is sanitized already; a client
+showing it should still sanitize it again, as `RichTextView` does.
+
+## Moving to 4.2
+
+Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](implementation-guide.md) first.
+
+> [!IMPORTANT]
+> **Mail from a known sender can now open in their team.** Before 4.2 every mail opened unassigned. Now a mail
+> whose DKIM-verified sender is the one account holding the address, active in exactly one team, opens in that
+> team with that user as its author, and anything short of that opens unassigned with suggestions. To keep the
+> old behaviour, register an `ISupportSenderDirectory` that finds nobody before `AddThargaTeamRepository`.
+> Reading mail now looks up DKIM keys in DNS, so the host needs outbound DNS; without it nothing is verified.
+
+> [!IMPORTANT]
+> **Mail attachments are now stored**, in the GridFS bucket `SupportAttachment` in your database, up to 25 MB a
+> file, 50 MB and 20 files a mail. Lower the limits on `MailOptions`, or register your own
+> `ISupportAttachmentStore` before `AddThargaTeamRepository` to keep files elsewhere.
+
+**For implementers and decorators:**
+
+- **`ISupportCaseService` gained nine members**: `ReplyToCaseAsync` and `AnswerCaseAsync` with files, and with
+  HTML and files; `OpenAttachmentAsync`, `GetAttachmentLimitsAsync`, `ResendAsync`, `GetAnswerRouteAsync` and
+  `PreviewAnswerAsync`. A host implementing or decorating it adds them; the last two are authorized as answering.
+- **`ISupportCaseStore.SetMessageDeliveryAsync` gained `string error = null` before the cancellation token.** A
+  host's own store changes its signature and keeps the error only with `Failed`; a caller passing the token
+  positionally names it.
+- **`ISupportChannel.PostWithResultAsync`** is a default member; a channel of your own keeps compiling and may
+  override it to say why a post failed.
+- **`SupportCaseChange.DeliveryChanged` is new**, so a switch over changes handles it.
+
+**For hosts with their own store or REST surface:**
+
+- **`SupportMessage` gained `BodyHtml`, `DeliveryError` and `Attachments`; `SupportCase` gained `SuggestedTeams`
+  and `SuggestionReason`; `SupportChannelBinding` gained `MessageSequence`, `Mailbox` and `MailboxAddress`.** A
+  store of your own persists them. The built-in store reads documents without them as before; nothing to migrate.
+- **`SupportMessage` and `SupportCase` now hold arrays**, so record equality between two of them compares the
+  arrays by reference. Compare fields instead.
+- **Add the endpoints above** — files, `bodyHtml`, download, resend, the answer's route and its preview — to keep
+  up with the components. `SupportAnswerRoute`, `MailPolicyEffect` and `MailPreview` are new contracts in
+  `Tharga.Team`.
+
+**Behaviour:**
+
+- **A formatted answer is mailed as HTML** beside the same text, and a mail's HTML is kept, sanitized; the shipped
+  answer boxes call the HTML overloads, so a test verifying their calls updates them.
+- **An answer carries the whole thread and quotes the conversation**; every message id is recorded.
+- **A bounce marks the answer it names as not delivered**; one naming no answer goes to the registered
+  `IMailBounceHandler`s.
+- **With a [mail template](user-mail.md#the-mail-template) registered, every answer is framed in it**, a plain one
+  included — in `SupportHtml` when that is set. Without one, answers are mailed as before.
+- **An answer names no staff member.** It no longer starts with "{author}:", earlier support entries it quotes are
+  attributed to `SupportCaseOptions.Answers.SupportName`, and each quote is introduced by "On {date}, {name} wrote:"
+  instead of "{date} UTC, {name}:"; the host's signature follows the answer. See
+  [How an answer speaks for support](#how-an-answer-speaks-for-support). A test matching the old text updates.
+- **The support answer boxes** — in `SupportUnassignedView`, `SupportAcrossTeamsView` and `SupportQueueView` —
+  show where the answer goes and offer a Preview; they call `GetAnswerRouteAsync` when a case opens and
+  `PreviewAnswerAsync` on Preview, so a test verifying their calls expects them. A member's own reply box in
+  `SupportCasesView` shows neither.
+- **`SupportUnassignedView` carries no heading** — add your own from `SupportUnassignedViewText.Title` — and reads
+  every page rather than the first twenty. Pass it the same `TimeTemplate` you give `SupportAcrossTeamsView`.
+- **`SupportTranscript` injects `ISupportCaseService`**, to open files; a page using it directly has support
+  cases registered already.
+- **The registration's refusal of a sending address its own filter rejects now names the mailbox.**
+
+**New text keys**, all in `ThargaTextKeys.All`: `team.support.filter.search`;
+`team.support.transcript.notSentYet|notDelivered|sendAgain`;
+`team.support.unassigned.noneMatch|awaiting|needsAnswer|suggested|suggested.assign|reason.severalTeams|reason.notVerified|reason.sharedAddress`;
+`team.support.mailbox.cameInTo` ("to {0}");
+`team.support.mail.wrote` ("On {0}, {1} wrote:") and `team.support.mail.supportName` ("Support"), in
+`SupportMailText`, resolved through `ITextResolver` when an answer is mailed;
+`team.support.answerRoute.mailed|mailedTo|site|redirected|withheld`;
+`team.mailPreview.open|title|from|replyTo|to|toMany|subject|files|textOnly|frame|close|failed`;
+`team.support.attachments.*` (attach, remove, chosen, attached, open, save, notAvailable, tooMany, tooLarge,
+tooLargeTogether, unreadable); and `team.richText.*` (bold, italic, underline, bulletedList, numberedList, link,
+linkAddress, linkText, linkNewWindow, linkOk, linkCancel, removeFormatting, undo, redo). No key was removed.

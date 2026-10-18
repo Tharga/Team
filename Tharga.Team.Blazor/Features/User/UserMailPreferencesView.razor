@@ -1,0 +1,196 @@
+@using Microsoft.AspNetCore.Components.Rendering
+@using Tharga.Team.Blazor.Framework
+@inject IUserMailPreferenceService Preferences
+@inject IUserService UserService
+@inject NotificationService NotificationService
+
+@* Which categories of mail a user receives, and how often each is sent. A required category shows as always on with
+   why; an optional one is a switch that saves at once. The service checks that the reader is this user or holds
+   users:manage. *@
+
+@if (Framed)
+{
+    <RadzenCard>
+        @((RenderFragment)RenderContent)
+    </RadzenCard>
+}
+else
+{
+    @((RenderFragment)RenderContent)
+}
+
+@code {
+    private void RenderContent(RenderTreeBuilder __builder)
+    {
+        if (!_ready)
+        {
+            <Loading />
+        }
+        else if (_userKey == null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @_text[UserMailPreferencesViewText.NoUser]
+            </RadzenAlert>
+        }
+        else if (!_permitted)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @_text[UserMailPreferencesViewText.NotPermitted]
+            </RadzenAlert>
+        }
+        else
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+                @if (Framed)
+                {
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserMailPreferencesViewText.Title]</RadzenText>
+                }
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMailPreferencesViewText.Explanation]</RadzenText>
+
+                @foreach (var choice in _choices)
+                {
+                    var category = choice.Category;
+                    var description = Description(category);
+                    var frequency = Frequency(category);
+
+                    <RadzenStack @key="@($"{category.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-category="@category.Key">
+                        <RadzenSwitch Value="@choice.Receives" Disabled="@(category.Required || _busy)" Change="@(value => SetAsync(category, value))"
+                                      aria-label="@Name(category)" />
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                            <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(category)</strong></RadzenText>
+                            @if (description != null)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@description</RadzenText>
+                            }
+                            @if (frequency != null)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-frequency="@category.Key">@frequency</RadzenText>
+                            }
+                            @if (category.Required)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-required="@category.Key">
+                                    @if (_termsUrl != null)
+                                    {
+                                        <a href="@_termsUrl">@_text[UserMailText.AlwaysSent]</a>
+                                    }
+                                    else
+                                    {
+                                        @_text[UserMailText.AlwaysSent]
+                                    }
+                                </RadzenText>
+                            }
+                        </RadzenStack>
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        }
+    }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    /// <summary>Whose choices are shown and changed; the signed-in user's when not set, and another user's only with <c>users:manage</c>.</summary>
+    [Parameter] public string UserKey { get; set; }
+
+    /// <summary>Whether the view draws its own card and title; false leaves both to the host, such as a tab named for it, and shows the rest as it is.</summary>
+    [Parameter] public bool Framed { get; set; } = true;
+
+    private TextSet _text = TextSet.Empty;
+    private IReadOnlyList<UserMailChoice> _choices = [];
+    private string _loadedFor;
+    private string _userKey;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+    private int _revision;
+    private string _termsUrl;
+    private IReadOnlyDictionary<string, UserMailCategoryFrequency> _frequencies = new Dictionary<string, UserMailCategoryFrequency>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_ready && _loadedFor == UserKey) return;
+
+        _loadedFor = UserKey;
+        _ready = false;
+        _permitted = true;
+        _choices = [];
+        _termsUrl = Preferences.GetTermsUrl();
+
+        _userKey = string.IsNullOrWhiteSpace(UserKey) ? (await UserService.GetCurrentUserAsync())?.Key : UserKey;
+
+        if (_userKey != null)
+        {
+            try
+            {
+                _choices = await Preferences.GetChoicesAsync(_userKey);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _permitted = false;
+            }
+        }
+
+        if (_choices.Count > 0) _frequencies = await FrequenciesAsync();
+
+        _text = await TextProvider.ResolveAsync([.. UserMailPreferencesViewText.All, UserMailText.AlwaysSent, .. UserMailText.Frequency, .. _choices.SelectMany(x => CategoryKeys(x.Category))]);
+        _ready = true;
+    }
+
+    // How often is a help to the reader, never a reason the choices cannot be shown.
+    private async Task<IReadOnlyDictionary<string, UserMailCategoryFrequency>> FrequenciesAsync()
+    {
+        try
+        {
+            return (await Preferences.GetCategoryFrequenciesAsync() ?? [])
+                .Where(x => x?.Category != null)
+                .GroupBy(x => x.Category, StringComparer.Ordinal)
+                .ToDictionary(x => x.Key, x => x.First(), StringComparer.Ordinal);
+        }
+        catch (Exception)
+        {
+            return new Dictionary<string, UserMailCategoryFrequency>();
+        }
+    }
+
+    private string Frequency(UserMailCategory category)
+    {
+        if (!_frequencies.TryGetValue(category.Key, out var frequency)) return null;
+
+        var phrase = frequency.Phrase;
+        return phrase.Format(_text[new TextKey(phrase.Key, phrase.English)]);
+    }
+
+    private async Task SetAsync(UserMailCategory category, bool receives)
+    {
+        _busy = true;
+        try
+        {
+            var changed = await Preferences.SetChoiceAsync(_userKey, category.Key, receives);
+            _choices = [.. _choices.Select(x => x.Category.Key == category.Key ? changed : x)];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _revision++;
+            NotificationService.Notify(NotificationSeverity.Warning, _text[UserMailPreferencesViewText.NotPermitted]);
+        }
+        catch (Exception)
+        {
+            _revision++;
+            NotificationService.Notify(NotificationSeverity.Error, _text[UserMailPreferencesViewText.SaveFailed]);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string Name(UserMailCategory category) => _text[new TextKey(category.NameKey, category.Name)];
+
+    private string Description(UserMailCategory category)
+        => string.IsNullOrWhiteSpace(category.Description) ? null : _text[new TextKey(category.DescriptionKey, category.Description)];
+
+    private static IEnumerable<TextKey> CategoryKeys(UserMailCategory category)
+    {
+        yield return new TextKey(category.NameKey, category.Name);
+        if (!string.IsNullOrWhiteSpace(category.Description)) yield return new TextKey(category.DescriptionKey, category.Description);
+    }
+}

@@ -36,4 +36,20 @@ public record SupportChannelBinding
     /// </para>
     /// </remarks>
     public string Address { get; init; }
+
+    /// <summary>
+    /// The transcript entry this external id was sent for, when it was recorded for an outgoing message —
+    /// the <c>Message-ID</c> of a mailed answer. <c>null</c> for an id that opened or replied to the thread.
+    /// </summary>
+    /// <remarks>
+    /// A bounce names the mail it bounces by its id and nothing else, so this is what lets one mark the
+    /// right answer as not delivered rather than only the case.
+    /// </remarks>
+    public int? MessageSequence { get; init; }
+
+    /// <summary>The name of the support mailbox the case's mail came in through and is answered from; <c>null</c> means the primary mailbox.</summary>
+    public string Mailbox { get; init; }
+
+    /// <summary>The address of that mailbox when the mail came in, for showing staff which address they answer from; <c>null</c> when not recorded.</summary>
+    public string MailboxAddress { get; init; }
 }

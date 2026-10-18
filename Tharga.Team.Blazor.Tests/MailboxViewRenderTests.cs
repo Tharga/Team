@@ -12,7 +12,7 @@ using Tharga.Team.Blazor.Framework;
 namespace Tharga.Team.Blazor.Tests;
 
 /// <summary>
-/// The team's mail address, and the postmaster's view of mail that belongs to no team.
+/// The team's mail address. The postmaster's view has tests of its own, in <see cref="PostmasterViewRenderTests"/>.
 /// </summary>
 public class MailboxViewRenderTests : BunitContext
 {
@@ -21,16 +21,6 @@ public class MailboxViewRenderTests : BunitContext
 
     private static readonly TeamMailKey Primary = new() { Key = "8fjgthitwne3", Role = MailKeyRole.Primary, Address = "8fjgthitwne3-case@fortdocs.app", CreatedAt = Now };
     private static readonly TeamMailKey Retiring = new() { Key = "oldkey000000", Role = MailKeyRole.Secondary, Address = "oldkey000000-case@fortdocs.app", CreatedAt = Now.AddDays(-200), RetiresAt = Now.AddDays(30) };
-
-    private static readonly PostmasterMailSummary Unrouted = new() { Id = "mail-1", From = "anna@example.org", Subject = "Begäran om handling", ReceivedAt = Now, Reason = MailRouteReason.RetiredKey };
-
-    private static readonly InboundMailItem Opened = new()
-    {
-        Id = "mail-1",
-        Envelope = new MailEnvelope { MessageId = "<m1@example.org>", From = "anna@example.org", FromName = "Anna", To = ["oldkey000000-case@fortdocs.app"], DeliveredTo = "oldkey000000-case@fortdocs.app", Subject = "Begäran om handling" },
-        Reason = MailRouteReason.RetiredKey,
-        ReceivedAt = Now
-    };
 
     private void Common()
     {
@@ -59,22 +49,6 @@ public class MailboxViewRenderTests : BunitContext
         Common();
 
         return Render<TeamMailAddressView>(p => p.Add(x => x.AllowChange, allowChange));
-    }
-
-    private IRenderedComponent<PostmasterView> RenderPostmaster(out Mock<IPostmasterService> postmaster, bool permitted = true)
-    {
-        postmaster = new Mock<IPostmasterService>();
-        if (permitted) postmaster.Setup(x => x.ListAsync(null, 50, default)).ReturnsAsync(new PostmasterPage { Items = [Unrouted] });
-        else postmaster.Setup(x => x.ListAsync(null, 50, default)).ThrowsAsync(new UnauthorizedAccessException());
-        postmaster.Setup(x => x.GetCountAsync(default)).ReturnsAsync(1);
-        postmaster.Setup(x => x.OpenAsync("mail-1", default)).ReturnsAsync(Opened);
-        postmaster.Setup(x => x.RouteAsync("mail-1", "acme", default)).ReturnsAsync(Opened with { TeamKey = "acme", Reason = MailRouteReason.Rerouted });
-
-        Services.AddSingleton(postmaster.Object);
-        Services.AddSingleton(Mock.Of<ITeamMailNotifier>());
-        Common();
-
-        return Render<PostmasterView>();
     }
 
     [Fact]
@@ -142,52 +116,6 @@ public class MailboxViewRenderTests : BunitContext
         var view = Render<TeamMailAddressView>();
 
         Assert.Contains("You do not have access to the team's mail address.", view.Markup);
-    }
-
-    [Fact]
-    public void ThePostmaster_ListsWhoAboutWhatAndWhy_WithoutOpeningAnything()
-    {
-        var view = RenderPostmaster(out var postmaster);
-
-        Assert.Contains("Begäran om handling", view.Markup);
-        Assert.Contains("anna@example.org", view.Markup);
-        Assert.Contains("Sent to a retired address", view.Markup);
-        Assert.Contains("1 unrouted", view.Markup);
-        Assert.Contains("Opening a mail is recorded", view.Markup);
-        postmaster.Verify(x => x.OpenAsync(It.IsAny<string>(), default), Times.Never);
-    }
-
-    [Fact]
-    public async Task OpeningAMail_ShowsItsEnvelope()
-    {
-        var view = RenderPostmaster(out var postmaster);
-
-        await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Begäran om handling")).Click());
-
-        postmaster.Verify(x => x.OpenAsync("mail-1", default), Times.Once);
-        Assert.Contains("Anna &lt;anna@example.org&gt;", view.Markup);
-        Assert.Contains("Delivered to", view.Markup);
-    }
-
-    [Fact]
-    public async Task AMailIsRoutedToTheTeamTheReaderNames()
-    {
-        var view = RenderPostmaster(out var postmaster);
-        await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Begäran om handling")).Click());
-
-        await view.InvokeAsync(() => view.FindComponent<RadzenTextBox>().Instance.ValueChanged.InvokeAsync("acme"));
-        await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Trim() == "Route" || b.TextContent.Contains("Route") && !b.TextContent.Contains("team")).Click());
-
-        postmaster.Verify(x => x.RouteAsync("mail-1", "acme", default), Times.Once);
-    }
-
-    [Fact]
-    public void WithoutTheSystemGrant_ThePostmasterIsRefused_NotShown()
-    {
-        var view = RenderPostmaster(out _, permitted: false);
-
-        Assert.Contains("You do not have access to mail that belongs to no team.", view.Markup);
-        Assert.DoesNotContain("Begäran om handling", view.Markup);
     }
 
     [Fact]

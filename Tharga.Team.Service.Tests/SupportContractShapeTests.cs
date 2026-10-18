@@ -66,12 +66,14 @@ public class SupportContractShapeTests
         Assert.True(offenders.Count == 0, string.Join(Environment.NewLine, offenders));
     }
 
-    [Fact]
-    public void ThePort_HasNoGenericMethodsAndNoStreamingReturns()
+    [Theory]
+    [InlineData(typeof(ISupportCaseStore))]
+    [InlineData(typeof(ISupportSenderDirectory))]
+    public void ThePort_HasNoGenericMethodsAndNoStreamingReturns(Type port)
     {
         var offenders = new List<string>();
 
-        foreach (var method in typeof(ISupportCaseStore).GetMethods())
+        foreach (var method in port.GetMethods())
         {
             if (method.IsGenericMethodDefinition)
                 offenders.Add($"{method.Name} is generic");
@@ -92,11 +94,11 @@ public class SupportContractShapeTests
     /// Rule 4: the port speaks the domain's language. Nothing storage-shaped may appear in it — not as a
     /// base interface, not as a parameter, not as a return type.
     /// </summary>
-    [Fact]
-    public void ThePort_MentionsNoStorageType()
+    [Theory]
+    [InlineData(typeof(ISupportCaseStore))]
+    [InlineData(typeof(ISupportSenderDirectory))]
+    public void ThePort_MentionsNoStorageType(Type port)
     {
-        var port = typeof(ISupportCaseStore);
-
         Assert.Empty(port.GetInterfaces());
 
         var mentioned = port.GetMethods()

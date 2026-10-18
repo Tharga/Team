@@ -110,6 +110,14 @@ public record SupportCaseEntity : EntityBase
     /// <summary>How far each participant has read. Absent until somebody opens the case.</summary>
     [BsonIgnoreIfNull]
     public SupportCaseReadEntity[] Reads { get; init; }
+
+    /// <summary>Teams the sender's address matched when the case opened unassigned. Absent when none did.</summary>
+    [BsonIgnoreIfNull]
+    public SupportCaseTeamEntity[] SuggestedTeams { get; init; }
+
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.String)]
+    public SupportTeamSuggestionReason? SuggestionReason { get; init; }
 }
 
 /// <summary>How far one person has read a case's transcript.</summary>
@@ -154,10 +162,17 @@ public record SupportMessageEntity
 
     public required string Body { get; init; }
 
+    /// <summary>The entry's sanitized HTML; absent on a plain entry, as on every entry written before formatting was kept.</summary>
+    [BsonIgnoreIfNull]
+    public string BodyHtml { get; init; }
+
     public required DateTime SentAt { get; init; }
 
     [BsonRepresentation(BsonType.String)]
     public SupportMessageDelivery Delivery { get; init; }
+
+    [BsonIgnoreIfNull]
+    public string DeliveryError { get; init; }
 
     [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.String)]
@@ -165,6 +180,10 @@ public record SupportMessageEntity
 
     [BsonIgnoreIfDefault]
     public bool AsSupport { get; init; }
+
+    /// <summary>The files the entry carries, metadata only; absent when it carries none, as on every entry written before files were kept.</summary>
+    [BsonIgnoreIfNull]
+    public SupportAttachmentEntity[] Attachments { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system.</summary>
@@ -177,4 +196,15 @@ public record SupportChannelBindingEntity
 
     [BsonIgnoreIfNull]
     public string Address { get; init; }
+
+    [BsonIgnoreIfNull]
+    public int? MessageSequence { get; init; }
+
+    /// <summary>The support mailbox's name; absent for the primary mailbox's cases written before mailboxes were named.</summary>
+    [BsonIgnoreIfNull]
+    public string Mailbox { get; init; }
+
+    /// <summary>The support mailbox's address when the mail came in; absent where it was not recorded.</summary>
+    [BsonIgnoreIfNull]
+    public string MailboxAddress { get; init; }
 }

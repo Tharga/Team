@@ -33,8 +33,52 @@ public static class ThargaTeamRegistration
         // nothing -- but one seam should cover every per-team store, not the ones somebody remembered.
         services.AddTransient<ITeamPurgeParticipant, IconPurgeParticipant>();
 
+        // Mail to users: each user's choices, and the queue the sender drains. Neither depends on the user or team
+        // entity types. TryAdd so a host keeping them elsewhere wins.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddTransient<IUserMailPreferenceCollection, UserMailPreferenceCollection>();
+        services.TrackMongoCollection(typeof(IUserMailPreferenceCollection), typeof(UserMailPreferenceCollection));
+        services.TryAddScoped<IUserMailPreferenceStore, MongoUserMailPreferenceStore>();
+        services.AddTransient<IUserMailCollection, UserMailCollection>();
+        services.TrackMongoCollection(typeof(IUserMailCollection), typeof(UserMailCollection));
+        services.AddTransient<IUserMailBatchCollection, UserMailBatchCollection>();
+        services.TrackMongoCollection(typeof(IUserMailBatchCollection), typeof(UserMailBatchCollection));
+        services.TryAddScoped<IUserMailOutbox, MongoUserMailOutbox>();
+
+        // The log of messages staff sent to users; TryAdd so a host keeping it elsewhere wins.
+        services.AddTransient<IUserMessageCollection, UserMessageCollection>();
+        services.TrackMongoCollection(typeof(IUserMessageCollection), typeof(UserMessageCollection));
+        services.TryAddScoped<IUserMessageLog, MongoUserMessageLog>();
+
+        // Addresses that opted out of contact mail, kept for good, and the log of messages to contacts; TryAdd so a host
+        // keeping them elsewhere wins.
+        services.AddTransient<IContactMailSuppressionCollection, ContactMailSuppressionCollection>();
+        services.TrackMongoCollection(typeof(IContactMailSuppressionCollection), typeof(ContactMailSuppressionCollection));
+        services.TryAddScoped<IContactMailSuppressionStore, MongoContactMailSuppressionStore>();
+        services.AddTransient<IContactMessageCollection, ContactMessageCollection>();
+        services.TrackMongoCollection(typeof(IContactMessageCollection), typeof(ContactMessageCollection));
+        services.TryAddScoped<IContactMessageLog, MongoContactMessageLog>();
+
+        // Automatic notices: occurrences until distributed, each user's notices and streams until mailed, and the
+        // choices and team defaults that differ from a default. TryAdd so a host keeping them elsewhere wins.
+        services.AddTransient<IUserNoticeCollection, UserNoticeCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeCollection), typeof(UserNoticeCollection));
+        services.AddTransient<IUserNoticeItemCollection, UserNoticeItemCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeItemCollection), typeof(UserNoticeItemCollection));
+        services.AddTransient<IUserNoticeStreamCollection, UserNoticeStreamCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeStreamCollection), typeof(UserNoticeStreamCollection));
+        services.TryAddScoped<IUserNoticeOutbox, MongoUserNoticeOutbox>();
+        services.AddTransient<IUserNoticePreferenceCollection, UserNoticePreferenceCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticePreferenceCollection), typeof(UserNoticePreferenceCollection));
+        services.AddTransient<IUserNoticeTeamDefaultCollection, UserNoticeTeamDefaultCollection>();
+        services.TrackMongoCollection(typeof(IUserNoticeTeamDefaultCollection), typeof(UserNoticeTeamDefaultCollection));
+        services.TryAddScoped<IUserNoticePreferenceStore, MongoUserNoticePreferenceStore>();
+
         if (o._userEntity != null)
         {
+            // Where a user mail goes, read from the user record when it is sent.
+            services.TryAddScoped(typeof(IUserMailRecipientDirectory), typeof(MongoUserMailRecipientDirectory<>).MakeGenericType(o._userEntity));
+
             var userEntityType = o._userEntity;
 
             var userRepositoryInterfaceType = typeof(IUserRepository<>).MakeGenericType(userEntityType);
@@ -69,6 +113,11 @@ public static class ThargaTeamRegistration
             services.AddTransient<ISupportCaseRepositoryCollection, SupportCaseRepositoryCollection>();
             services.TrackMongoCollection(typeof(ISupportCaseRepositoryCollection), typeof(SupportCaseRepositoryCollection));
             services.TryAddScoped<ISupportCaseStore, MongoSupportCaseStore>();
+
+            // The files support messages carry, in GridFS beside the cases rather than inside them. TryAdd so a
+            // host keeping files in blob storage wins.
+            services.TryAddScoped<ISupportAttachmentStore>(sp => new MongoSupportAttachmentStore(
+                new GridFsSupportAttachmentBucket(sp.GetRequiredService<IMongoDbServiceFactory>(), sp.GetService<IOptions<ThargaTeamOptions>>())));
 
             // Deduplicates inbound channel events. Shared across instances by virtue of being in the same
             // database as the cases, with a unique index making the record-or-refuse decision atomic.
@@ -108,6 +157,17 @@ public static class ThargaTeamRegistration
                 var checkType = typeof(AccessLevelCompletenessCheck<,>).MakeGenericType(teamEntityType, teamMemberModelType);
                 services.AddSingleton(typeof(IHostedService), checkType);
             }
+        }
+
+        // Who a support mail's sender is. Needs both stores; without them support mail opens unassigned as it
+        // always did. TryAdd so a host substituting its own wins.
+        if (o._userEntity != null && o._teamEntity != null && o._teamMemberModel != null)
+        {
+            var directoryType = typeof(MongoSupportSenderDirectory<,,>).MakeGenericType(o._userEntity, o._teamEntity, o._teamMemberModel);
+            services.TryAddScoped(typeof(ISupportSenderDirectory), directoryType);
+
+            // Who a staff message or a notice may reach: the active members of the teams it is written or raised in.
+            services.TryAddScoped(typeof(IUserMessageMemberDirectory), typeof(MongoUserMessageMemberDirectory<,,>).MakeGenericType(o._userEntity, o._teamEntity, o._teamMemberModel));
         }
     }
 }

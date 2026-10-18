@@ -19,6 +19,8 @@ using Tharga.Team.Service.Audit;
 using Microsoft.Extensions.AI;
 using Tharga.Team.Support;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Email;
+using Tharga.Team.Email.Users;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -162,7 +164,9 @@ builder.AddThargaTeam(o =>
         // apikeys:oversee lets a Developer see and manage other members' private API keys -- to investigate
         // an incident, or retire a departed person's keys. The Developer role still has this on its own
         // until 4.0; mapping it here is what keeps it after that (Tharga/Team#323).
-        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee);
+        //
+        // messages:send lets a Developer write to users of any team from /messages and read what was sent.
+        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send, SystemContactScopes.Send);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at
@@ -278,14 +282,123 @@ builder.Services.AddThargaSupportCases(o =>
     o.Email.Smtp.UserName = builder.Configuration["Support:Mail:Smtp:UserName"];
     o.Email.Smtp.Password = builder.Configuration["Support:Mail:Smtp:Password"];
 
-    // The address replies come back to. Not the invitation sender's noreply@ address: support mail has to
-    // come from somewhere a customer can answer, which is why the two configurations stay separate.
+    // The address replies come back to, and where bounces of mail to users sent from it are read.
     o.Email.FromAddress = builder.Configuration["Support:Mail:FromAddress"];
 
     // One mailbox can serve two sites. Each instance takes only the mail addressed to its own domain, and
     // leaves the rest where the other instance will find it -- nothing is flagged or moved, so a drop is
     // invisible to the other reader. Unset means every address is accepted.
     o.Email.Recipients = builder.Configuration.GetSection("Support:Mail:Recipients").Get<string[]>() ?? [];
+
+    // Further mailboxes under Support:Mailboxes:{name}, each with the keys of one mailbox; the name is stored on its cases.
+    foreach (var mailbox in builder.Configuration.GetSection("Support:Mailboxes").GetChildren())
+        o.AddMailbox(mailbox.Key, m => mailbox.Bind(m));
+
+    // An answer names no staff member: support signs it, and earlier support entries it quotes are attributed to support.
+    o.Answers.SupportName = "Tharga Team Sample Support";
+    o.Answers.Signature = ["Kind regards,", "Tharga Team Sample Support"];
+    o.Answers.TimeZoneId = "Europe/Stockholm";
+});
+
+// Mail to users: categories each user chooses from on their profile, and a queue sent in the background by
+// whichever instance claims each mail. On the same terms as support mail: with no UserMail settings nothing is
+// sent -- queued mail waits, which is logged once -- so the wiring and the "Mail I receive" view work with
+// nothing checked in. The sending address is the host's own, answerable one; there is no no-reply default.
+builder.Services.AddThargaUserMail(o =>
+{
+    o.Mail.Smtp.Host = builder.Configuration["UserMail:Smtp:Host"];
+    o.Mail.Smtp.UserName = builder.Configuration["UserMail:Smtp:UserName"];
+    o.Mail.Smtp.Password = builder.Configuration["UserMail:Smtp:Password"];
+    o.Mail.FromAddress = builder.Configuration["UserMail:FromAddress"];
+    o.Mail.FromName = "Tharga Team Sample";
+    o.ReplyTo = builder.Configuration["UserMail:ReplyTo"];
+
+    // Unsubscribe links in optional mail are built on this, so it must be the address users reach the site at.
+    o.BaseUrl = builder.Configuration["UserMail:BaseUrl"] ?? "https://localhost:7291";
+
+    // The unsubscribe page links to the mail settings on the profile page, and offers sign-in to anyone not signed in
+    // as the user the link is for.
+    o.PreferencesPath = "/account";
+    o.SignInPath = "/login";
+
+    o.AddCategory(new UserMailCategory { Key = "news", Name = "Product news", Description = "What is new in the product, a few times a year." });
+    o.AddCategory(new UserMailCategory { Key = "tips", Name = "Tips", Description = "Ways to get more out of the product.", OnByDefault = false });
+    o.AddCategory(new UserMailCategory { Key = "work", Name = "Notices about my work", Description = "Automatic notices about what happens in your teams." });
+});
+
+// One HTML frame for every mail the toolkit sends -- support answers, messages, notices and invitations -- and for
+// the previews staff open before sending. The template is the host's own markup and is used as written; what is
+// placed into it is sanitized. A mail with text alone gets its text as paragraphs, so the frame always applies.
+builder.Services.AddThargaMailTemplate(o =>
+{
+    o.Html = """
+    <!doctype html>
+    <html>
+    <head><meta charset="utf-8"><title>{{subject}}</title></head>
+    <body style="margin:0;padding:24px;background:#f3f4f6;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;">
+    <div style="display:none;max-height:0;overflow:hidden;">{{preheader}}</div>
+    <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:8px;padding:24px;">
+    <div style="font-weight:600;font-size:18px;margin-bottom:16px;">Tharga Team Sample</div>
+    {{content}}
+    <div style="margin-top:24px;font-size:12px;color:#6b7280;">{{footer}}</div>
+    </div>
+    </body>
+    </html>
+    """;
+
+    // Support answers in a plainer frame of their own: a person writing back, with the signature styled.
+    o.SupportHtml = """
+    <!doctype html>
+    <html>
+    <head><meta charset="utf-8"><title>{{subject}}</title><style>.signature{color:#6b7280}</style></head>
+    <body style="margin:0;padding:24px;font-family:Segoe UI,Arial,sans-serif;color:#1f2937;">
+    <div style="display:none;max-height:0;overflow:hidden;">{{preheader}}</div>
+    <div style="max-width:640px;">{{content}}</div>
+    </body>
+    </html>
+    """;
+});
+
+// Messages staff write to users of chosen teams, in service messages and product news but never in tips.
+builder.Services.AddThargaUserMessages(o => o.StaffMessageCategories = [UserMailCategories.ServiceKey, "news"]);
+
+// Mail staff write to contacts: people who are not users, listed by the host from its own records. Every mail says who
+// sends it and carries an unsubscribe link that opts the address out of offers, or of all of it.
+builder.Services.AddThargaContactMessages(o =>
+{
+    o.SenderLine = "Example Ltd, 1 Example Street, Example Town";
+    o.AddCategory(new ContactMailCategory { Key = "offers", Name = "Offers", Description = "What we think may be of interest to your organisation." });
+});
+
+// Automatic notices, raised from server code through IUserNoticeRaiser. Each user chooses on their profile, each team
+// administrator sets the team's defaults, and turning "Notices about my work" off stops them all.
+builder.Services.AddThargaUserNotices(o =>
+{
+    o.DigestTime = new TimeOnly(7, 0);
+    o.TimeZoneId = "Europe/Stockholm";
+
+    o.Add(new UserNoticeType
+    {
+        Key = "member.joined",
+        Name = "Someone joins a team I administer",
+        Description = "When an invited person accepts and becomes a member.",
+        Category = "work",
+        Audience = UserNoticeAudience.AtLeast(AccessLevel.Administrator),
+        Deliveries = [UserNoticeDelivery.AtOnce, UserNoticeDelivery.Digest],
+        Subject = "{name} joined {subject}",
+        Body = "<p><b>{name}</b> accepted the invitation and is now a member of {subject}.</p>",
+        Placeholders = ["name"]
+    });
+
+    o.Add(new UserNoticeType
+    {
+        Key = "apikey.expiring",
+        Name = "An API key of mine is about to expire",
+        Category = "work",
+        Audience = UserNoticeAudience.NamedOnly,
+        Subject = "Your API key {subject} expires in {days} days",
+        Placeholders = ["days"]
+    });
 });
 
 var app = builder.Build();
@@ -307,6 +420,10 @@ app.UseThargaMcp();
 // Where Slack posts thread replies. Public and unauthenticated by design -- Slack cannot present a
 // credential, so the request signature is the credential, verified before the body is read.
 app.MapThargaSupportSlack();
+
+// Where unsubscribe links lead. Anonymous by design: the token in the link authorizes the one change it names, and
+// GET only asks -- the change is a POST, from the page's button or a mail provider's one-click request.
+app.MapThargaMailUnsubscribe();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

@@ -84,7 +84,8 @@ public class ThargaAuthEndpointBehaviourTests
 
     private static async Task<(DefaultHttpContext Context, RecordingAuthenticationService Auth)> InvokeAsync(
         string path,
-        Action<ThargaAuthOptions> configure = null)
+        Action<ThargaAuthOptions> configure = null,
+        QueryString query = default)
     {
         var builder = WebApplication.CreateBuilder();
         using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(ValidAzureAdConfig)))
@@ -107,6 +108,7 @@ public class ThargaAuthEndpointBehaviourTests
         services.AddSingleton<IAuthenticationService>(auth);
 
         var context = new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
+        context.Request.QueryString = query;
 
         await endpoint.RequestDelegate(context);
 
@@ -169,6 +171,53 @@ public class ThargaAuthEndpointBehaviourTests
 
         Assert.Equal(OpenIdConnectDefaults.AuthenticationScheme, challenge.Scheme);
         Assert.Equal("/", challenge.Properties?.RedirectUri);
+    }
+
+    /// <summary>A path on the site is where sign-in returns to, as a link that asked the visitor to sign in meant.</summary>
+    [Theory]
+    [InlineData("/profile/mail", "/profile/mail")]
+    [InlineData("/settings?tab=mail#top", "/settings?tab=mail#top")]
+    [InlineData("/", "/")]
+    public async Task Login_WithALocalReturnUrl_ReturnsThere(string returnUrl, string expected)
+    {
+        var (_, auth) = await InvokeAsync("/login", query: QueryString.Create("returnUrl", returnUrl));
+
+        Assert.Equal(expected, Assert.Single(auth.Challenges).Properties?.RedirectUri);
+    }
+
+    /// <summary>
+    /// <b>No open redirect.</b> Anything a browser could read as another host — a scheme, a second slash, a backslash,
+    /// or a control character it would drop to make one — returns to the start page as before.
+    /// </summary>
+    [Theory]
+    [InlineData("https://evil.example/")]
+    [InlineData("http://evil.example")]
+    [InlineData("//evil.example/path")]
+    [InlineData("/\\evil.example")]
+    [InlineData("\\\\evil.example")]
+    [InlineData("/\t/evil.example")]
+    [InlineData("/\n/evil.example")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("evil.example")]
+    [InlineData("profile/mail")]
+    [InlineData("")]
+    public async Task Login_WithAReturnUrlOffTheSite_ReturnsHome(string returnUrl)
+    {
+        var (_, auth) = await InvokeAsync("/login", query: QueryString.Create("returnUrl", returnUrl));
+
+        Assert.Equal("/", Assert.Single(auth.Challenges).Properties?.RedirectUri);
+    }
+
+    /// <summary>The account picker and the return path are independent: both reach the challenge.</summary>
+    [Fact]
+    public async Task Login_WithPromptAndReturnUrl_KeepsBoth()
+    {
+        var (_, auth) = await InvokeAsync("/login", o => o.PromptForAccount = true, QueryString.Create("returnUrl", "/profile"));
+
+        var challenge = Assert.Single(auth.Challenges);
+
+        Assert.Equal("/profile", challenge.Properties.RedirectUri);
+        Assert.Equal("select_account", challenge.Properties.Items["prompt"]);
     }
 
     /// <summary>

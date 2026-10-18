@@ -1,0 +1,508 @@
+@using Tharga.Team.Blazor.Features.Support
+@inject IUserMessageService Messages
+@inject NotificationService NotificationService
+@inject DialogService DialogService
+
+@* Staff write one message to chosen users. The selection is a filter — teams, and who in them — and users added by
+   name whatever the filter says; beside it, the list of who that reaches, each with whether they turned the category
+   off. The list and its counts come from the service, which resolves them exactly as sending does, and checks the
+   scope, the category and the selection again when the message is sent. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[UserMessageComposeViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem" data-compose>
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMessageComposeViewText.Explanation]</RadzenText>
+
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeLG="5">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="1rem" data-selection>
+                    <RadzenCard Variant="Variant.Outlined" data-filter>
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                                <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0">@_text[UserMessageComposeViewText.Filter]</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[UserMessageComposeViewText.FilterExplanation]</RadzenText>
+                            </RadzenStack>
+
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[UserMessageComposeViewText.Teams]</RadzenText>
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                    <RadzenSwitch Value="@_allTeams" Change="@(value => ChangeAsync(() => _allTeams = value))" Disabled="@_busy"
+                                                  aria-label="@_text[UserMessageComposeViewText.AllTeams]" data-all-teams />
+                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMessageComposeViewText.AllTeams]</RadzenText>
+                                </RadzenStack>
+                                @if (!_allTeams)
+                                {
+                                    <RadzenDropDown TValue="IEnumerable<string>" Data="@_teamOptions" TextProperty="@nameof(Choice<string>.Text)" ValueProperty="@nameof(Choice<string>.Value)"
+                                                    Multiple="true" Chips="true" AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                                    Value="@_teamKeys" ValueChanged="@(value => ChangeAsync(() => _teamKeys = [.. value ?? []]))" Disabled="@_busy"
+                                                    Placeholder="@_text[UserMessageComposeViewText.ChooseTeams]" aria-label="@_text[UserMessageComposeViewText.Teams]"
+                                                    Style="width: 100%;" data-teams />
+                                }
+                            </RadzenStack>
+
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[UserMessageComposeViewText.Who]</RadzenText>
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                    <RadzenSwitch Value="@_everyone" Change="@(value => ChangeAsync(() => _everyone = value))" Disabled="@_busy"
+                                                  aria-label="@_text[UserMessageComposeViewText.Everyone]" data-everyone />
+                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMessageComposeViewText.Everyone]</RadzenText>
+                                </RadzenStack>
+                                @if (!_everyone)
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMessageComposeViewText.AccessLevels]</RadzenText>
+                                    <RadzenCheckBoxList TValue="AccessLevel" Data="@_levelOptions" TextProperty="@nameof(Choice<AccessLevel>.Text)" ValueProperty="@nameof(Choice<AccessLevel>.Value)"
+                                                        Value="@_levels" ValueChanged="@(value => ChangeAsync(() => _levels = [.. value ?? []]))" Disabled="@_busy"
+                                                        Orientation="Orientation.Horizontal" data-levels />
+
+                                    @if (_choices.Roles.Length > 0)
+                                    {
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMessageComposeViewText.Roles]</RadzenText>
+                                        <RadzenDropDown TValue="IEnumerable<string>" Data="@_choices.Roles" Multiple="true" Chips="true" AllowFiltering="true"
+                                                        FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                                        Value="@_roles" ValueChanged="@(value => ChangeAsync(() => _roles = [.. value ?? []]))" Disabled="@_busy"
+                                                        Placeholder="@_text[UserMessageComposeViewText.ChooseRoles]" aria-label="@_text[UserMessageComposeViewText.Roles]"
+                                                        Style="width: 100%;" data-roles />
+                                    }
+                                }
+                            </RadzenStack>
+                        </RadzenStack>
+                    </RadzenCard>
+
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-add-users>
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0">@_text[UserMessageComposeViewText.Users]</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[UserMessageComposeViewText.AddedExplanation]</RadzenText>
+                        </RadzenStack>
+                        @if (_chosenUsers.Count > 0)
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" Wrap="FlexWrap.Wrap" data-chosen-users>
+                                @foreach (var user in _chosenUsers)
+                                {
+                                    <RadzenButton @key="user.UserKey" Text="@NameOf(user)" Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                                  Disabled="@_busy" Click="@(() => RemoveUserAsync(user.UserKey))"
+                                                  aria-label="@_text.Format(UserMessageComposeViewText.RemoveUser, NameOf(user))" data-chosen-user="@user.UserKey" />
+                                }
+                            </RadzenStack>
+                        }
+                        <RadzenTextBox Value="@_userSearch" @oninput="@(e => SearchUsersAsync(e.Value?.ToString()))" Disabled="@_busy"
+                                       Placeholder="@_text[UserMessageComposeViewText.SearchUsers]" aria-label="@_text[UserMessageComposeViewText.Users]"
+                                       Style="width: 100%;" data-user-search />
+                        @if (_matches.Length > 0)
+                        {
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0" AlignItems="AlignItems.Start" data-user-matches>
+                                @foreach (var match in _matches)
+                                {
+                                    <RadzenButton @key="match.UserKey" Text="@MatchText(match)" ButtonStyle="ButtonStyle.Base" Variant="Variant.Text" Size="ButtonSize.Small"
+                                                  Disabled="@(_busy || IsChosen(match.UserKey))" Click="@(() => ChooseUserAsync(match))" data-user-match="@match.UserKey" />
+                                }
+                            </RadzenStack>
+                        }
+                        else if (_searched)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-no-matches>@_text[UserMessageComposeViewText.NoUserMatches]</RadzenText>
+                        }
+                    </RadzenStack>
+                </RadzenStack>
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeLG="7">
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-recipient-list>
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" data-preview>
+                        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0">@_text[UserMessageComposeViewText.RecipientList]</RadzenText>
+                        @if (!HasSelection)
+                        {
+                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-teams>@_text[UserMessageComposeViewText.NoTeams]</RadzenText>
+                        }
+                        else if (_list != null)
+                        {
+                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-reaches="@_list.Total">@_text.Format(UserMessageComposeViewText.Reaches, _list.Total)</RadzenText>
+                            @if (_list.LeftOut > 0)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-left-out="@_list.LeftOut">@_text.Format(UserMessageComposeViewText.LeftOut, _list.LeftOut, CategoryName(_category))</RadzenText>
+                            }
+                        }
+                    </RadzenStack>
+
+                    @if (HasSelection && _list != null)
+                    {
+                        @if (_addressees.Count == 0)
+                        {
+                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-recipients>@_text[UserMessageComposeViewText.NoRecipients]</RadzenText>
+                        }
+
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="max-height: 28rem; overflow-y: auto;" data-addressees>
+                            @foreach (var addressee in _addressees)
+                            {
+                                <RadzenStack @key="addressee.UserKey" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween"
+                                             Gap="0.5rem" Wrap="FlexWrap.Wrap" Style="padding: 0.375rem 0; border-bottom: 1px solid var(--rz-base-200);"
+                                             data-addressee="@addressee.UserKey">
+                                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" Style="min-width: 0; flex: 1 1 14rem;">
+                                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="@(addressee.OptedOut ? "text-decoration: line-through;" : null)">
+                                            <strong>@AddresseeName(addressee)</strong>
+                                        </RadzenText>
+                                        @if (!string.IsNullOrWhiteSpace(addressee.EMail))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="overflow-wrap: anywhere;" data-addressee-address>@addressee.EMail</RadzenText>
+                                        }
+                                        @if (addressee.TeamKeys.Length > 0)
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-addressee-teams>@TeamNames(addressee.TeamKeys)</RadzenText>
+                                        }
+                                    </RadzenStack>
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem" Wrap="FlexWrap.Wrap">
+                                        @if (addressee.OptedOut)
+                                        {
+                                            <RadzenBadge Text="@_text[UserMessageComposeViewText.OptedOut]" BadgeStyle="BadgeStyle.Warning"
+                                                         title="@_text.Format(UserMessageComposeViewText.OptedOutDetail, CategoryName(_category))" data-opted-out />
+                                        }
+                                        @if (addressee.ByFilter)
+                                        {
+                                            <RadzenBadge Text="@_text[UserMessageComposeViewText.ByFilter]" BadgeStyle="BadgeStyle.Light" data-by-filter />
+                                        }
+                                        @if (addressee.Added)
+                                        {
+                                            <RadzenBadge Text="@_text[UserMessageComposeViewText.Added]" BadgeStyle="BadgeStyle.Info" data-added />
+                                            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Text" Size="ButtonSize.ExtraSmall"
+                                                          Disabled="@_busy" Click="@(() => RemoveUserAsync(addressee.UserKey))"
+                                                          title="@_text.Format(UserMessageComposeViewText.RemoveUser, AddresseeName(addressee))"
+                                                          aria-label="@_text.Format(UserMessageComposeViewText.RemoveUser, AddresseeName(addressee))" data-remove-added="@addressee.UserKey" />
+                                        }
+                                    </RadzenStack>
+                                </RadzenStack>
+                            }
+                        </RadzenStack>
+
+                        @if (_addressees.Count < _list.Total)
+                        {
+                            <div>
+                                <RadzenButton Text="@_text[UserMessageComposeViewText.MoreRecipients]" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                              Disabled="@_busy" Click="MoreAsync" data-more-addressees />
+                            </div>
+                        }
+                    }
+                </RadzenStack>
+            </RadzenColumn>
+        </RadzenRow>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[UserMessageComposeViewText.Category]</RadzenText>
+            <RadzenDropDown TValue="string" Data="@_categoryOptions" TextProperty="@nameof(Choice<string>.Text)" ValueProperty="@nameof(Choice<string>.Value)"
+                            Value="@_category" ValueChanged="@(value => ChangeAsync(() => _category = value))" Disabled="@_busy"
+                            aria-label="@_text[UserMessageComposeViewText.Category]" Style="width: 100%;" data-category />
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[UserMessageComposeViewText.Subject]</RadzenText>
+            <RadzenTextBox @bind-Value="_subject" Disabled="@_busy" MaxLength="250" aria-label="@_text[UserMessageComposeViewText.Subject]"
+                           Style="width: 100%;" data-subject />
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[UserMessageComposeViewText.Body]</RadzenText>
+            <RichTextEditor Value="@_bodyHtml" ValueChanged="@(value => _bodyHtml = value)" Disabled="@_busy" Label="@_text[UserMessageComposeViewText.Body]" Height="14rem" />
+            <SupportAttachmentPicker Files="@_files" FilesChanged="@(files => _files = files)" Disabled="@_busy" Limits="@_limits" />
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenButton Text="@_mail[MailPreviewText.Open]" Icon="preview" ButtonStyle="ButtonStyle.Light" Disabled="@(_busy || string.IsNullOrWhiteSpace(_category))"
+                          Click="PreviewAsync" data-preview-mail />
+            <RadzenButton Text="@_text[UserMessageComposeViewText.Send]" Icon="send" ButtonStyle="ButtonStyle.Primary" Disabled="@(!CanSend)" Click="SendAsync" data-send />
+        </RadzenStack>
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>Raised with the message as the log records it once it is queued, so a host can refresh its log.</summary>
+    [Parameter] public EventCallback<SentUserMessage> MessageSent { get; set; }
+
+    /// <summary>The most users one search shows, at most <see cref="UserMessageUserSearch.MaxLimit"/>.</summary>
+    [Parameter] public int UserSearchLimit { get; set; } = 20;
+
+    /// <summary>How many recipients the list reads at a time, at most 100; more are read on request.</summary>
+    [Parameter] public int RecipientPageSize { get; set; } = 25;
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private TextSet _mail = TextSet.Empty;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+
+    private UserMessageChoices _choices;
+    private Choice<string>[] _teamOptions = [];
+    private Choice<AccessLevel>[] _levelOptions = [];
+    private Choice<string>[] _categoryOptions = [];
+    private SupportAttachmentLimits _limits;
+
+    private bool _allTeams;
+    private string[] _teamKeys = [];
+    private bool _everyone;
+    private AccessLevel[] _levels = [];
+    private string[] _roles = [];
+    private List<UserMessageCandidate> _chosenUsers = [];
+    private string _userSearch;
+    private UserMessageCandidate[] _matches = [];
+    private bool _searched;
+    private int _searchVersion;
+    private string _category;
+    private string _subject;
+    private string _bodyHtml;
+    private IReadOnlyList<SupportAttachmentUpload> _files = [];
+
+    private UserMessageAddresseePage _list;
+    private List<UserMessageAddressee> _addressees = [];
+    private int _listVersion;
+
+    private sealed record Choice<T>(T Value, string Text);
+
+    private bool HasSelection => _allTeams || _teamKeys.Length > 0 || _chosenUsers.Count > 0;
+
+    private bool CanSend
+        => !_busy
+           && HasSelection
+           && _list is { Total: > 0 }
+           && !string.IsNullOrWhiteSpace(_category)
+           && !string.IsNullOrWhiteSpace(_subject)
+           && !RichTextEditor.IsEmpty(_bodyHtml);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _choices = await Messages.GetChoicesAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+
+        var categories = _choices?.Categories ?? [];
+        _text = await TextProvider.ResolveAsync([.. UserMessageComposeViewText.All, .. AccessLevelText.All, .. categories.Select(x => new TextKey(x.NameKey, x.Name))]);
+        _mail = await TextProvider.ResolveAsync(MailPreviewText.All);
+
+        if (_choices != null)
+        {
+            _teamOptions = [.. _choices.Teams.Select(x => new Choice<string>(x.Key, string.IsNullOrWhiteSpace(x.Name) ? x.Key : x.Name))];
+            _levelOptions = [.. _choices.AccessLevels.Select(x => new Choice<AccessLevel>(x, _text[AccessLevelText.For(x)]))];
+            _categoryOptions = [.. categories.Select(x => new Choice<string>(x.Key, CategoryName(x.Key)))];
+            _category = categories.FirstOrDefault()?.Key;
+            _limits = new SupportAttachmentLimits
+            {
+                MaxCount = _choices.Limits.MaxAttachmentCount,
+                MaxFileBytes = _choices.Limits.MaxAttachmentBytes,
+                MaxTotalBytes = _choices.Limits.MaxAttachmentBytes
+            };
+        }
+
+        _ready = true;
+    }
+
+    private string CategoryName(string key)
+        => _choices?.Categories.FirstOrDefault(x => x.Key == key) is { } category ? _text[new TextKey(category.NameKey, category.Name)] : key;
+
+    private static string NameOf(UserMessageCandidate user)
+        => !string.IsNullOrWhiteSpace(user.Name) ? user.Name : !string.IsNullOrWhiteSpace(user.EMail) ? user.EMail : user.UserKey;
+
+    private static string MatchText(UserMessageCandidate user)
+        => !string.IsNullOrWhiteSpace(user.Name) && !string.IsNullOrWhiteSpace(user.EMail) ? $"{user.Name} ({user.EMail})" : NameOf(user);
+
+    private static string AddresseeName(UserMessageAddressee addressee)
+        => !string.IsNullOrWhiteSpace(addressee.Name) ? addressee.Name : !string.IsNullOrWhiteSpace(addressee.EMail) ? addressee.EMail : addressee.UserKey;
+
+    private string TeamNames(IEnumerable<string> teamKeys)
+        => string.Join(", ", teamKeys.Select(key => _teamOptions.FirstOrDefault(x => x.Value == key)?.Text ?? key));
+
+    private bool IsChosen(string userKey) => _chosenUsers.Any(x => x.UserKey == userKey);
+
+    private UserMessageRecipients Selection() => new()
+    {
+        AllTeams = _allTeams,
+        TeamKeys = _allTeams ? [] : _teamKeys,
+        EveryMember = _everyone,
+        AccessLevels = _everyone ? [] : _levels,
+        Roles = _everyone ? [] : _roles,
+        UserKeys = [.. _chosenUsers.Select(x => x.UserKey)]
+    };
+
+    private async Task ChangeAsync(Action change)
+    {
+        change();
+        await RefreshListAsync();
+    }
+
+    /// <remarks>Searches every team, since a user added is reached whatever the filter says; an answer to an earlier text is dropped when it arrives.</remarks>
+    private async Task SearchUsersAsync(string text)
+    {
+        _userSearch = text;
+        var version = ++_searchVersion;
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _matches = [];
+            _searched = false;
+            return;
+        }
+
+        try
+        {
+            var found = await Messages.SearchUsersAsync(new UserMessageUserSearch { Text = text.Trim(), AllTeams = true, Limit = UserSearchLimit });
+            if (version != _searchVersion) return;
+
+            _matches = found ?? [];
+            _searched = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+    }
+
+    private async Task ChooseUserAsync(UserMessageCandidate user)
+    {
+        if (!IsChosen(user.UserKey)) _chosenUsers.Add(user);
+
+        _searchVersion++;
+        _userSearch = null;
+        _matches = [];
+        _searched = false;
+
+        await RefreshListAsync();
+    }
+
+    private async Task RemoveUserAsync(string userKey)
+    {
+        _chosenUsers.RemoveAll(x => x.UserKey == userKey);
+        await RefreshListAsync();
+    }
+
+    /// <remarks>A list asked for before a later change is dropped when it arrives, so the list always describes the selection on screen.</remarks>
+    private async Task RefreshListAsync()
+    {
+        var version = ++_listVersion;
+        _addressees = [];
+
+        if (string.IsNullOrWhiteSpace(_category) || !HasSelection)
+        {
+            _list = null;
+            return;
+        }
+
+        await ReadListAsync(version, 0);
+    }
+
+    private Task MoreAsync() => ReadListAsync(_listVersion, _addressees.Count);
+
+    private async Task ReadListAsync(int version, int skip)
+    {
+        try
+        {
+            var page = await Messages.GetAddresseesAsync(Selection(), _category, skip, RecipientPageSize);
+            if (version != _listVersion) return;
+
+            _list = page;
+            _addressees.AddRange((page?.Items ?? []).Where(x => _addressees.All(y => y.UserKey != x.UserKey)));
+        }
+        catch (ArgumentException)
+        {
+            if (version == _listVersion) _list = null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_category)) return;
+
+        _busy = true;
+        MailPreview preview = null;
+        try
+        {
+            preview = await Messages.PreviewMailAsync(new UserMessage
+            {
+                Recipients = Selection(),
+                Category = _category,
+                Subject = _subject ?? string.Empty,
+                BodyHtml = _bodyHtml
+            });
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[UserMessageComposeViewText.NotPermitted]);
+        }
+        catch (ArgumentException e)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _mail.Format(MailPreviewText.Failed, e.Message));
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        if (preview != null)
+            await MailPreviewDialog.ShowAsync(DialogService, _mail[MailPreviewText.Title], preview, _files.Select(x => x.FileName), _list?.Total);
+    }
+
+    private async Task SendAsync()
+    {
+        if (!CanSend) return;
+
+        var subject = _subject.Trim();
+        var question = _text.Format(UserMessageComposeViewText.ConfirmBody, subject, _list.Total);
+        if (_list.LeftOut > 0) question = $"{question} {_text.Format(UserMessageComposeViewText.LeftOut, _list.LeftOut, CategoryName(_category))}";
+
+        var confirmed = await DialogService.Confirm(question, _text[UserMessageComposeViewText.ConfirmTitle], new ConfirmOptions
+        {
+            OkButtonText = _text[UserMessageComposeViewText.ConfirmSend],
+            CancelButtonText = _text[UserMessageComposeViewText.ConfirmCancel]
+        });
+
+        if (confirmed != true) return;
+
+        _busy = true;
+        try
+        {
+            var sent = await Messages.SendAsync(new UserMessage
+            {
+                Recipients = Selection(),
+                Category = _category,
+                Subject = subject,
+                BodyHtml = _bodyHtml,
+                Attachments = await MailAttachmentUploads.ReadAsync(_files)
+            });
+
+            NotificationService.Notify(NotificationSeverity.Success, _text.Format(UserMessageComposeViewText.Sent, sent.RecipientCount));
+
+            _subject = null;
+            _bodyHtml = null;
+            _files = [];
+
+            await MessageSent.InvokeAsync(sent);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[UserMessageComposeViewText.NotPermitted]);
+        }
+        catch (ArgumentException e)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text.Format(UserMessageComposeViewText.SendFailed, e.Message));
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,44 @@
+@* Where support's answer goes, beside the answer box: the address it is mailed to and the support address it is sent
+   from, or that it is read on the site. Outside production it says plainly when the answer is redirected or not sent;
+   in production, when it goes where it says, nothing more is added. *@
+
+@if (Route != null)
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0" data-answer-route="@(Route.ByMail ? "mail" : "site")">
+        @if (!Route.ByMail)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-answer-site>@_text[SupportAnswerRouteText.Site]</RadzenText>
+        }
+        else
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-answer-to="@Route.To">@MailedText()</RadzenText>
+            @if (Route.Effect == MailPolicyEffect.Redirect)
+            {
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-warning);" data-answer-redirected="@Route.RedirectedTo">@_text.Format(SupportAnswerRouteText.Redirected, Route.RedirectedTo)</RadzenText>
+            }
+            else if (Route.Effect == MailPolicyEffect.Withhold)
+            {
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-danger);" data-answer-withheld>@_text[SupportAnswerRouteText.Withheld]</RadzenText>
+            }
+        }
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>Where the answer goes, from <c>ISupportCaseService.GetAnswerRouteAsync</c>; nothing is shown without one.</summary>
+    [Parameter] public SupportAnswerRoute Route { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportAnswerRouteText.All);
+    }
+
+    private string MailedText()
+        => string.IsNullOrWhiteSpace(Route.From)
+            ? _text.Format(SupportAnswerRouteText.MailedTo, Route.To)
+            : _text.Format(SupportAnswerRouteText.Mailed, Route.To, Route.From);
+}

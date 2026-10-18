@@ -1,0 +1,164 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using Tharga.Team.Support.Cases
+@inject IServiceProvider Services
+
+@* Files to send with an answer or a message: chosen in the browser, read in at once so a later choice cannot lose
+   them, and held to the limits given, or else to the support service's. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-attachment-picker>
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+        <label class="rz-button rz-button-sm rz-variant-flat rz-light rz-shade-default"
+               style="display: inline-flex; align-items: center; gap: 0.25rem; cursor: @(Unavailable ? "default" : "pointer"); position: relative; @(Unavailable ? "opacity: 0.6;" : "")">
+            <RadzenIcon Icon="attach_file" />
+            <span>@_text[SupportAttachmentText.Attach]</span>
+            <InputFile @key="_inputKey" OnChange="ChooseAsync" multiple disabled="@Unavailable" aria-label="@_text[SupportAttachmentText.Attach]"
+                       style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: inherit;" />
+        </label>
+
+        @if (Files is { Count: > 0 })
+        {
+            <div role="list" aria-label="@_text[SupportAttachmentText.Chosen]" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                @foreach (var file in Files)
+                {
+                    <span role="listitem" style="display: inline-flex; align-items: center; gap: 0.25rem;" data-chosen="@file.FileName">
+                        <RadzenIcon Icon="description" Style="font-size: 1rem;" />
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@file.FileName (@SupportAttachmentSize.Format(file.Content.Length))</RadzenText>
+                        <RadzenButton Icon="close" Size="ButtonSize.ExtraSmall" Variant="Variant.Text" ButtonStyle="ButtonStyle.Light"
+                                      Disabled="@Unavailable" Click="@(() => RemoveAsync(file))"
+                                      title="@_text.Format(SupportAttachmentText.Remove, file.FileName)"
+                                      aria-label="@_text.Format(SupportAttachmentText.Remove, file.FileName)" data-remove="@file.FileName" />
+                    </span>
+                }
+            </div>
+        }
+    </RadzenStack>
+
+    @foreach (var problem in _problems)
+    {
+        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-danger);" data-attachment-problem>@problem</RadzenText>
+    }
+</RadzenStack>
+
+@code {
+    /// <summary>The files chosen so far, each held in memory; send them with <see cref="Rewound"/>.</summary>
+    [Parameter] public IReadOnlyList<SupportAttachmentUpload> Files { get; set; } = [];
+
+    /// <summary>Raised with the new list whenever a file is added or removed.</summary>
+    [Parameter] public EventCallback<IReadOnlyList<SupportAttachmentUpload>> FilesChanged { get; set; }
+
+    /// <summary>Whether choosing and removing is off, as while an answer is being sent.</summary>
+    [Parameter] public bool Disabled { get; set; }
+
+    /// <summary>The limits the files are held to; when not set, the support service's limits for an answer.</summary>
+    [Parameter] public SupportAttachmentLimits Limits { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private SupportAttachmentLimits _limits = SupportAttachmentLimits.Default;
+    private readonly List<string> _problems = [];
+    private int _inputKey;
+    private bool _reading;
+
+    private bool Unavailable => Disabled || _reading;
+
+    /// <summary>The files read from their start again, so a send that failed can be tried again with the same files.</summary>
+    public static IReadOnlyList<SupportAttachmentUpload> Rewound(IReadOnlyList<SupportAttachmentUpload> files)
+    {
+        foreach (var file in files ?? [])
+        {
+            if (file.Content.CanSeek) file.Content.Position = 0;
+        }
+
+        return files ?? [];
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportAttachmentText.All);
+        _limits = Limits ?? await SupportLimitsAsync() ?? SupportAttachmentLimits.Default;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Limits != null) _limits = Limits;
+    }
+
+    /// <remarks>Resolved rather than injected, so the picker also serves a host that has no support cases.</remarks>
+    private async Task<SupportAttachmentLimits> SupportLimitsAsync()
+        => Services.GetService(typeof(ISupportCaseService)) is ISupportCaseService supportCases ? await supportCases.GetAttachmentLimitsAsync() : null;
+
+    private async Task ChooseAsync(InputFileChangeEventArgs e)
+    {
+        _problems.Clear();
+        _reading = true;
+
+        try
+        {
+            var chosen = (Files ?? []).ToList();
+
+            foreach (var file in e.GetMultipleFiles(Math.Max(e.FileCount, 1)))
+            {
+                if (chosen.Count >= _limits.MaxCount)
+                {
+                    _problems.Add(_text.Format(SupportAttachmentText.TooMany, _limits.MaxCount));
+                    break;
+                }
+
+                if (file.Size > _limits.MaxFileBytes)
+                {
+                    _problems.Add(_text.Format(SupportAttachmentText.TooLarge, file.Name, SupportAttachmentSize.Format(file.Size), SupportAttachmentSize.Format(_limits.MaxFileBytes)));
+                    continue;
+                }
+
+                if (chosen.Sum(x => x.Content.Length) + file.Size > _limits.MaxTotalBytes)
+                {
+                    _problems.Add(_text.Format(SupportAttachmentText.TooLargeTogether, file.Name, SupportAttachmentSize.Format(_limits.MaxTotalBytes)));
+                    continue;
+                }
+
+                var read = await ReadAsync(file);
+                if (read == null) _problems.Add(_text.Format(SupportAttachmentText.Unreadable, file.Name));
+                else chosen.Add(read);
+            }
+
+            await FilesChanged.InvokeAsync(chosen);
+        }
+        finally
+        {
+            _reading = false;
+            _inputKey++;
+        }
+    }
+
+    /// <remarks>
+    /// Read in at once because a browser's file is tied to the input it was chosen in, and the input is renewed
+    /// after every choice so the same file can be chosen again.
+    /// </remarks>
+    private async Task<SupportAttachmentUpload> ReadAsync(IBrowserFile file)
+    {
+        try
+        {
+            var content = new MemoryStream();
+            await using (var source = file.OpenReadStream(_limits.MaxFileBytes))
+            {
+                await source.CopyToAsync(content);
+            }
+
+            content.Position = 0;
+
+            return new SupportAttachmentUpload { FileName = file.Name, ContentType = file.ContentType, Content = content };
+        }
+        catch (Exception exception) when (exception is IOException or InvalidOperationException or JSException)
+        {
+            return null;
+        }
+    }
+
+    private async Task RemoveAsync(SupportAttachmentUpload file)
+    {
+        _problems.Clear();
+        await FilesChanged.InvokeAsync([.. (Files ?? []).Where(x => !ReferenceEquals(x, file))]);
+    }
+}

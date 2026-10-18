@@ -58,6 +58,15 @@ public record ThargaTeamOptions
     /// </summary>
     public string SupportMailPositionCollectionName { get; set; } = "SupportMailPosition";
 
+    /// <summary>The default for <see cref="SupportAttachmentBucketName"/>.</summary>
+    public const string DefaultSupportAttachmentBucketName = "SupportAttachment";
+
+    /// <summary>
+    /// GridFS bucket holding the files support messages carry, beside the support cases. Default
+    /// <c>SupportAttachment</c>.
+    /// </summary>
+    public string SupportAttachmentBucketName { get; set; } = DefaultSupportAttachmentBucketName;
+
     /// <summary>
     /// How long a handled event is remembered. Default 24 hours.
     /// </summary>
@@ -66,6 +75,84 @@ public record ThargaTeamOptions
     /// generous. Entries expire by TTL index rather than accumulating.
     /// </remarks>
     public TimeSpan SupportEventLedgerRetention { get; set; } = TimeSpan.FromHours(24);
+
+    /// <summary>The default for <see cref="UserMailPreferenceCollectionName"/>.</summary>
+    public const string DefaultUserMailPreferenceCollectionName = "UserMailPreference";
+
+    /// <summary>Collection holding users' mail choices that differ from a category's default, default <c>UserMailPreference</c>.</summary>
+    public string UserMailPreferenceCollectionName { get; set; } = DefaultUserMailPreferenceCollectionName;
+
+    /// <summary>The default for <see cref="UserMailCollectionName"/>.</summary>
+    public const string DefaultUserMailCollectionName = "UserMail";
+
+    /// <summary>Collection holding queued mail to users and what became of it, default <c>UserMail</c>.</summary>
+    public string UserMailCollectionName { get; set; } = DefaultUserMailCollectionName;
+
+    /// <summary>The default for <see cref="UserMailRetention"/>.</summary>
+    public static readonly TimeSpan DefaultUserMailRetention = TimeSpan.FromDays(90);
+
+    /// <summary>How long a mail to a user is kept once sent, skipped or given up, a batch once its last mail is, and a sent message from when it was sent; default 90 days.</summary>
+    public TimeSpan UserMailRetention { get; set; } = DefaultUserMailRetention;
+
+    /// <summary>The default for <see cref="UserMailBatchCollectionName"/>.</summary>
+    public const string DefaultUserMailBatchCollectionName = "UserMailBatch";
+
+    /// <summary>Collection holding the content one mail to many users shares, stored once, default <c>UserMailBatch</c>.</summary>
+    public string UserMailBatchCollectionName { get; set; } = DefaultUserMailBatchCollectionName;
+
+    /// <summary>The default for <see cref="UserMessageCollectionName"/>.</summary>
+    public const string DefaultUserMessageCollectionName = "UserMessage";
+
+    /// <summary>Collection holding the log of messages staff sent to users, default <c>UserMessage</c>.</summary>
+    public string UserMessageCollectionName { get; set; } = DefaultUserMessageCollectionName;
+
+    /// <summary>The default for <see cref="ContactMailSuppressionCollectionName"/>.</summary>
+    public const string DefaultContactMailSuppressionCollectionName = "ContactMailSuppression";
+
+    /// <summary>Collection holding the addresses that opted out of contact mail, kept for good, default <c>ContactMailSuppression</c>.</summary>
+    public string ContactMailSuppressionCollectionName { get; set; } = DefaultContactMailSuppressionCollectionName;
+
+    /// <summary>The default for <see cref="ContactMessageCollectionName"/>.</summary>
+    public const string DefaultContactMessageCollectionName = "ContactMessage";
+
+    /// <summary>Collection holding the log of messages staff sent to contacts, each with the list it was sent to, kept for <see cref="UserMailRetention"/>, default <c>ContactMessage</c>.</summary>
+    public string ContactMessageCollectionName { get; set; } = DefaultContactMessageCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeCollectionName"/>.</summary>
+    public const string DefaultUserNoticeCollectionName = "UserNotice";
+
+    /// <summary>Collection holding raised notice occurrences until they are distributed, default <c>UserNotice</c>.</summary>
+    public string UserNoticeCollectionName { get; set; } = DefaultUserNoticeCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeItemCollectionName"/>.</summary>
+    public const string DefaultUserNoticeItemCollectionName = "UserNoticeItem";
+
+    /// <summary>Collection holding each user's notices until and after they are mailed, default <c>UserNoticeItem</c>.</summary>
+    public string UserNoticeItemCollectionName { get; set; } = DefaultUserNoticeItemCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeStreamCollectionName"/>.</summary>
+    public const string DefaultUserNoticeStreamCollectionName = "UserNoticeStream";
+
+    /// <summary>Collection holding when each user's next notice mail is due, default <c>UserNoticeStream</c>.</summary>
+    public string UserNoticeStreamCollectionName { get; set; } = DefaultUserNoticeStreamCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticePreferenceCollectionName"/>.</summary>
+    public const string DefaultUserNoticePreferenceCollectionName = "UserNoticePreference";
+
+    /// <summary>Collection holding users' notice choices that differ from a default, default <c>UserNoticePreference</c>.</summary>
+    public string UserNoticePreferenceCollectionName { get; set; } = DefaultUserNoticePreferenceCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeTeamDefaultCollectionName"/>.</summary>
+    public const string DefaultUserNoticeTeamDefaultCollectionName = "UserNoticeTeamDefault";
+
+    /// <summary>Collection holding teams' notice defaults that differ from the catalogue's, default <c>UserNoticeTeamDefault</c>.</summary>
+    public string UserNoticeTeamDefaultCollectionName { get; set; } = DefaultUserNoticeTeamDefaultCollectionName;
+
+    /// <summary>The default for <see cref="UserNoticeRetention"/>.</summary>
+    public static readonly TimeSpan DefaultUserNoticeRetention = TimeSpan.FromDays(90);
+
+    /// <summary>How long a distributed occurrence and a mailed notice are kept, which is also how long an occurrence raised again is recognised and not sent twice; default 90 days.</summary>
+    public TimeSpan UserNoticeRetention { get; set; } = DefaultUserNoticeRetention;
 
     /// <summary>
     /// Whether to report, at startup, stored team members that carry no access level and therefore, since

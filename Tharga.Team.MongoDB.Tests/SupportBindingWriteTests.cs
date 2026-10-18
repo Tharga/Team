@@ -55,4 +55,20 @@ public class SupportBindingWriteTests
 
         Assert.Contains("$push", RenderedUpdate());
     }
+
+    [Fact]
+    public async Task ACaseOpenedFromAMail_KeepsItsMailBinding_SoAnAnswerCanBeMailedBack()
+    {
+        SupportCaseEntity added = null;
+        _collection.AddAsync(Arg.Do<SupportCaseEntity>(x => added = x));
+        var mail = new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = "<m1@example.org>", Address = "anna@example.org" };
+
+        await new MongoSupportCaseStore(_collection).AddCaseAsync(
+            new SupportCase { Id = "case-1", AuthorIdentity = null, MessageCount = 1, AuthorName = "anna@example.org", Subject = "Hej", Status = SupportCaseStatus.Open, CreatedAt = DateTime.UtcNow, Bindings = [mail] },
+            new SupportMessage { Sequence = 1, Kind = SupportMessageKind.User, AuthorName = "anna@example.org", Body = "Hej", SentAt = DateTime.UtcNow },
+            TestContext.Current.CancellationToken);
+
+        var binding = Assert.Single(added.Bindings);
+        Assert.Equal((SupportChannelType.Email, "<m1@example.org>", "anna@example.org"), (binding.ChannelType, binding.ExternalId, binding.Address));
+    }
 }

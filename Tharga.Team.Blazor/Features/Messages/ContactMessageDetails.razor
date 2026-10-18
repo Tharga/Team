@@ -1,0 +1,181 @@
+@inject IContactMessageService Contacts
+
+@* One message to contacts opened in the log: how many of its addresses stand where, and each address with what became
+   of the mail to it. Read when it is first shown, so a closed card costs nothing. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-contact-details="@Message.Id">
+    @if (Shown.AttachmentCount > 0)
+    {
+        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-attachments="@Shown.AttachmentCount">@Text.Format(ContactMessageLogViewText.Attachments, Shown.AttachmentCount)</RadzenText>
+    }
+
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" Wrap="FlexWrap.Wrap">
+        @foreach (var (key, label, count) in Outcomes())
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0" AlignItems="AlignItems.Center" data-outcome="@key">
+                <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@count</RadzenText>
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@label</RadzenText>
+            </RadzenStack>
+        }
+    </RadzenStack>
+
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-recipient-list>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@Text[ContactMessageLogViewText.RecipientList]</RadzenText>
+            <RadzenDropDown TValue="string" Data="@StatusOptions()" TextProperty="@nameof(StatusChoice.Text)" ValueProperty="@nameof(StatusChoice.Value)"
+                            Value="@_statusFilter" ValueChanged="@((string value) => FilterAsync(value))" Disabled="@_busy"
+                            aria-label="@Text[ContactMessageLogViewText.StatusFilter]" Style="min-width: 10rem;" data-status-filter />
+        </RadzenStack>
+
+        @if (_recipients.Count == 0 && _recipientsRead)
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-recipients>@Text[ContactMessageLogViewText.NoRecipients]</RadzenText>
+        }
+
+        @foreach (var recipient in _recipients)
+        {
+            <RadzenStack @key="recipient.Address" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem" Wrap="FlexWrap.Wrap" data-recipient="@recipient.Address">
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@(string.IsNullOrWhiteSpace(recipient.Name) ? recipient.Address : recipient.Name)</strong></RadzenText>
+                @if (!string.IsNullOrWhiteSpace(recipient.Name))
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-recipient-address>@recipient.Address</RadzenText>
+                }
+                @if (!string.IsNullOrWhiteSpace(recipient.Detail))
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-recipient-detail>@recipient.Detail</RadzenText>
+                }
+                <RadzenBadge Text="@StatusName(recipient.Status)" BadgeStyle="@StatusStyle(recipient.Status)" data-recipient-status="@recipient.Status" />
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-recipient-time>@Time(recipient.ChangedAt)</RadzenText>
+                @if (Why(recipient) is { } why)
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-recipient-reason>@why</RadzenText>
+                }
+            </RadzenStack>
+        }
+
+        @if (_nextCursor != null)
+        {
+            <RadzenButton Text="@Text[ContactMessageLogViewText.MoreRecipients]" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                          Disabled="@_busy" Click="MoreAsync" data-more-recipients />
+        }
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    /// <summary>The message as the log listed it; its addresses are read when this is first shown.</summary>
+    [Parameter, EditorRequired] public SentContactMessage Message { get; set; }
+
+    /// <summary>The log's resolved strings.</summary>
+    [Parameter] public TextSet Text { get; set; } = TextSet.Empty;
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>How many addresses one page reads.</summary>
+    [Parameter] public int RecipientPageSize { get; set; } = 20;
+
+    private const string AnyStatus = "";
+
+    private SentContactMessage _details;
+    private List<ContactMessageRecipient> _recipients = [];
+    private string _nextCursor;
+    private string _statusFilter = AnyStatus;
+    private bool _recipientsRead;
+    private bool _busy;
+
+    private sealed record StatusChoice(string Value, string Text);
+
+    private SentContactMessage Shown => _details ?? Message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _details = await Contacts.GetSentMessageAsync(Message.Id);
+            await ReadRecipientsAsync(null);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _details = null;
+        }
+    }
+
+    private async Task FilterAsync(string value)
+    {
+        _statusFilter = value ?? AnyStatus;
+        _recipients = [];
+        _nextCursor = null;
+
+        await GuardedAsync(() => ReadRecipientsAsync(null));
+    }
+
+    private Task MoreAsync() => GuardedAsync(() => ReadRecipientsAsync(_nextCursor));
+
+    private async Task GuardedAsync(Func<Task> read)
+    {
+        _busy = true;
+        try
+        {
+            await read();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _nextCursor = null;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReadRecipientsAsync(string cursor)
+    {
+        ContactRecipientStatus? status = Enum.TryParse<ContactRecipientStatus>(_statusFilter, out var parsed) ? parsed : null;
+        var page = await Contacts.GetRecipientsAsync(Message.Id, status, cursor, RecipientPageSize);
+
+        _recipients.AddRange((page?.Items ?? []).Where(x => _recipients.All(y => y.Address != x.Address)));
+        _nextCursor = page?.NextCursor;
+        _recipientsRead = true;
+    }
+
+    private IEnumerable<(string Key, string Label, int Count)> Outcomes()
+    {
+        yield return ("sent", Text[ContactMessageLogViewText.Sent], Shown.Outcomes.Sent);
+        yield return ("queued", Text[ContactMessageLogViewText.Queued], Shown.Outcomes.Queued);
+        yield return ("opted-out", Text[ContactMessageLogViewText.OptedOut], Shown.OptedOutCount + Shown.Outcomes.Skipped);
+        yield return ("failed", Text[ContactMessageLogViewText.Failed], Shown.Outcomes.Failed);
+        yield return ("bounced", Text[ContactMessageLogViewText.Bounced], Shown.Outcomes.Bounced);
+        yield return ("left-out", Text[ContactMessageLogViewText.LeftOut], Shown.LeftOutCount);
+    }
+
+    private StatusChoice[] StatusOptions()
+        => [new StatusChoice(AnyStatus, Text[ContactMessageLogViewText.AnyStatus]), .. Enum.GetValues<ContactRecipientStatus>().Select(x => new StatusChoice(x.ToString(), StatusName(x)))];
+
+    private string StatusName(ContactRecipientStatus status) => status switch
+    {
+        ContactRecipientStatus.Queued => Text[ContactMessageLogViewText.Queued],
+        ContactRecipientStatus.Sent => Text[ContactMessageLogViewText.Sent],
+        ContactRecipientStatus.OptedOut => Text[ContactMessageLogViewText.OptedOut],
+        ContactRecipientStatus.Failed => Text[ContactMessageLogViewText.Failed],
+        ContactRecipientStatus.Bounced => Text[ContactMessageLogViewText.Bounced],
+        ContactRecipientStatus.LeftOut => Text[ContactMessageLogViewText.LeftOut],
+        _ => status.ToString()
+    };
+
+    private static BadgeStyle StatusStyle(ContactRecipientStatus status) => status switch
+    {
+        ContactRecipientStatus.Sent => BadgeStyle.Success,
+        ContactRecipientStatus.Failed or ContactRecipientStatus.Bounced => BadgeStyle.Danger,
+        ContactRecipientStatus.OptedOut => BadgeStyle.Warning,
+        ContactRecipientStatus.LeftOut => BadgeStyle.Light,
+        _ => BadgeStyle.Info
+    };
+
+    private string Why(ContactMessageRecipient recipient)
+        => recipient.OptedOutOfAll ? Text[ContactMessageLogViewText.OfEveryCategory]
+            : recipient.InvalidAddress ? Text[ContactMessageLogViewText.InvalidAddress]
+            : string.IsNullOrWhiteSpace(recipient.Reason) ? null : recipient.Reason;
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
+}

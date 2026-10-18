@@ -25,6 +25,9 @@ public static class SupportCaseLimits
     /// </remarks>
     public const int MaxMessageLength = 10_000;
 
+    /// <summary>Longest formatting kept for a message, in characters of sanitized HTML; longer formatting is dropped and the message kept as its plain text.</summary>
+    public const int MaxMessageHtmlLength = 10_000;
+
     /// <summary>
     /// Most entries one case may hold, including system entries.
     /// </summary>

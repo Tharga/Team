@@ -36,6 +36,11 @@ public record SupportCase
     /// <b>An unassigned case is governed system-wide</b>, because a team scope has no team to be held
     /// against. See <see cref="Support.Cases.ISupportCaseService.AssignCaseAsync"/>.
     /// </para>
+    /// <para>
+    /// <b>The one mail that opens in a team</b> is one whose sender the transport verified and whose address
+    /// belongs to a single account that is an active member of a single team. A <c>From</c> header alone never
+    /// places a case; anything short of that opens here with <see cref="SuggestedTeams"/> instead.
+    /// </para>
     /// </remarks>
     public string TeamKey { get; init; }
 
@@ -120,4 +125,17 @@ public record SupportCase
     /// because nobody ever shared it.
     /// </remarks>
     public SupportCaseVisibility? Visibility { get; init; }
+
+    /// <summary>
+    /// Teams an unassigned case may belong to, found from the sender's address when it arrived by mail; empty
+    /// when nothing matched or the case opened in a team.
+    /// </summary>
+    /// <remarks>
+    /// <b>A suggestion, never an assignment.</b> Staff decide, and giving the case one of these goes through
+    /// <see cref="Support.Cases.ISupportCaseService.AssignCaseAsync"/> exactly as choosing any other team does.
+    /// </remarks>
+    public SupportCaseTeam[] SuggestedTeams { get; init; } = [];
+
+    /// <summary>Why <see cref="SuggestedTeams"/> are suggestions rather than the case's team; <c>null</c> when there are none.</summary>
+    public SupportTeamSuggestionReason? SuggestionReason { get; init; }
 }

@@ -1,0 +1,26 @@
+@page "/messages"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Authorization
+@using Tharga.Team.Blazor.Features.Messages
+
+<PageTitle>Messages</PageTitle>
+
+@* Both message components, for a caller holding the messages:send system scope; the sample maps it to Developer.
+   The compose view refreshes the log below once a message is on its way. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="2rem">
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Write to users</RadzenText>
+        <UserMessageComposeView MessageSent="@(_ => _log.RefreshAsync())" />
+    </RadzenCard>
+
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Sent</RadzenText>
+        <UserMessageLogView @ref="_log" />
+    </RadzenCard>
+</RadzenStack>
+
+@code {
+    private UserMessageLogView _log;
+}

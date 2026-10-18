@@ -355,8 +355,12 @@ public interface ISupportCaseStore
     /// A second write after the message itself, deliberately. The case is written first and is authoritative;
     /// the channel is a projection, so a channel that is slow or down must not delay or block the record of
     /// what somebody said.
+    /// <para>
+    /// <paramref name="error"/> is kept only with <see cref="SupportMessageDelivery.Failed"/>; any other status
+    /// clears it, so an entry sent again successfully stops explaining a failure it no longer has.
+    /// </para>
     /// </remarks>
-    Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default);
+    Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, string error = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Destroys every case belonging to a team. Backs the purge cascade.

@@ -9,10 +9,15 @@ namespace Tharga.Team;
 /// Support cases are the exception, and a deliberate one: <c>Tharga.Team.Support</c> reads and sends mail
 /// through its own transport, its own options and its own SMTP stack.
 /// <para>
-/// <b>They are not unified, and not given a fallback either.</b> An invitation is usually sent from
-/// <c>noreply@</c>, while support mail must come from an address replies return to — inheriting one for the
-/// other would send support mail from a no-reply address and lose every reply. A host wanting one mailbox
-/// for both binds them from the same configuration section, explicitly.
+/// <b>With mail to users registered</b> (<c>AddThargaUserMail</c> in <c>Tharga.Team.Email</c>), invitations are
+/// sent through its outbox instead, in the required account category and from its address, so each is recorded,
+/// shows in the invited person's mail history and is marked bounced when it comes back. A sender the host
+/// registered itself is left in place.
+/// </para>
+/// <para>
+/// <b>Not given a fallback to support's settings.</b> Each sends from the address it is configured with, and every
+/// one of them should be an address a reply reaches: a no-reply address loses every reply. A host wanting one
+/// mailbox for both binds them from the same configuration section, explicitly.
 /// </para>
 /// <para>
 /// When nothing is registered, the invite dialogs fall back to manual link copying rather than failing. That

@@ -12,8 +12,8 @@ namespace Tharga.Team.Support.Tests;
 /// </summary>
 public class SupportMailClientPolicyTests
 {
-    private const string Customer = "kund@kommun.se";
-    private const string Override = "test-inbox@eplicta.se";
+    private const string Customer = "kund@customer.example";
+    private const string Override = "test-inbox@example.org";
     private const string Subject = "Re: printer";
 
     private readonly IMailClient _inner = Substitute.For<IMailClient>();
@@ -75,18 +75,55 @@ public class SupportMailClientPolicyTests
 
         var entry = Assert.Single(logger.Entries);
         Assert.DoesNotContain(Customer, entry);
-        Assert.DoesNotContain("kommun.se", entry);
+        Assert.DoesNotContain("customer.example", entry);
+    }
+
+    /// <summary>
+    /// A redirect is said out loud, so somebody wondering where a test answer went can find out. It names the
+    /// override, which is configuration, and not the customer, which is personal data.
+    /// </summary>
+    [Fact]
+    public async Task Redirected_IsLoggedAsInformation_NamingWhereItWentButNotTheCustomer()
+    {
+        var policy = Substitute.For<IOutboundMailPolicy>();
+        policy.Decide(Arg.Any<string>(), Arg.Any<string>()).Returns(new OutboundMailDecision(OutboundMailAction.Redirect, Override, $"[Staging -> {Customer}] {Subject}"));
+        var logger = new CapturingLogger();
+
+        await new PolicyGovernedMailClient(_inner, policy, logger).SendAsync(Mail());
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(Microsoft.Extensions.Logging.LogLevel.Information, Assert.Single(logger.Levels));
+        Assert.Contains(Override, entry);
+        Assert.DoesNotContain(Customer, entry);
+        Assert.DoesNotContain("body", entry);
+    }
+
+    [Fact]
+    public async Task Delivered_LogsNothing()
+    {
+        var policy = Substitute.For<IOutboundMailPolicy>();
+        policy.Decide(Arg.Any<string>(), Arg.Any<string>()).Returns(new OutboundMailDecision(OutboundMailAction.Deliver, Customer, Subject));
+        var logger = new CapturingLogger();
+
+        await new PolicyGovernedMailClient(_inner, policy, logger).SendAsync(Mail());
+
+        Assert.Empty(logger.Entries);
     }
 
     private sealed class CapturingLogger : Microsoft.Extensions.Logging.ILogger<PolicyGovernedMailClient>
     {
         public List<string> Entries { get; } = [];
 
+        public List<Microsoft.Extensions.Logging.LogLevel> Levels { get; } = [];
+
         public IDisposable BeginScope<TState>(TState state) where TState : notnull => null;
         public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
 
         public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter)
-            => Entries.Add(formatter(state, exception));
+        {
+            Levels.Add(logLevel);
+            Entries.Add(formatter(state, exception));
+        }
     }
 
     [Fact]

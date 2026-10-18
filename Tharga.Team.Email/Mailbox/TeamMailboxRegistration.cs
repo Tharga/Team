@@ -12,8 +12,8 @@ public static class TeamMailboxRegistration
     private const string ReadDescription = "List and open the team's received mail, and see the team's mail addresses.";
     private const string HandleDescription = "Record what became of a received mail and what it belongs to.";
     private const string ManageDescription = "Issue and rotate the team's mail address. Rotating changes the address every sender knows; the old one keeps working until it retires.";
-    private const string PostmasterReadDescription = "List and open mail that reached the shared mailbox at an address no team owns. It may hold any team's material, so every open is audited.";
-    private const string PostmasterManageDescription = "Route a mail the postmaster holds to a team, which delivers it there marked as rerouted.";
+    private const string PostmasterReadDescription = "List and open mail that reached the shared mailbox at an address no team owns, and its files. It may hold any team's material, so every open is audited.";
+    private const string PostmasterManageDescription = "Route a mail the postmaster holds to a team, which delivers it there marked as rerouted, or archive it without routing it and restore it.";
 
     /// <summary>
     /// Registers <see cref="ITeamMailboxService"/> and its scopes, and reads the catch-all mailbox when

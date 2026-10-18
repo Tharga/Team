@@ -1,0 +1,305 @@
+@using Tharga.Team.Blazor.Features.Support
+@using Tharga.Team.Blazor.Features.User
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Service.Html
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject IPostmasterService Postmaster
+@inject DialogService DialogService
+@inject NotificationService NotificationService
+@inject IJSRuntime JsRuntime
+
+@* One mail the postmaster holds, opened inside its card: who it went to, the message as a conversation bubble with
+   its files, and what to do with it. Rendered only while the card is open, so a closed card opens nothing — the
+   open is the audited act, and it happens once per mail however often the list around it is read again. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-opened="@Summary.Id">
+    @if (!_loaded)
+    {
+        <Loading />
+    }
+    else if (_mail == null)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-gone="@Summary.Id">@_text[PostmasterViewText.AlreadyGone]</RadzenText>
+    }
+    else
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.125rem" data-envelope="@Summary.Id">
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.From]:</strong> @FromOf(_mail.Envelope)</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="overflow-wrap: anywhere;"><strong>@_text[PostmasterViewText.To]:</strong> @string.Join(", ", _mail.Envelope.To ?? [])</RadzenText>
+            @if (_mail.Envelope.Cc is { Length: > 0 })
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="overflow-wrap: anywhere;" data-cc="@Summary.Id"><strong>@_text[PostmasterViewText.Cc]:</strong> @string.Join(", ", _mail.Envelope.Cc)</RadzenText>
+            }
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.DeliveredTo]:</strong> @_mail.Envelope.DeliveredTo</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0"><strong>@_text[PostmasterViewText.Received]:</strong> @Time(_mail.ReceivedAt)</RadzenText>
+        </RadzenStack>
+
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end;" data-side="left">
+            <div style="flex: 0 0 auto;">
+                <span data-sender="author"><UserAvatar Name="@SenderName" Size="32px" /></span>
+            </div>
+
+            <div style="@ConversationBubble.Frame @ConversationBubble.Left" data-bubble="@Summary.Id">
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-weight: 600;">@SenderName</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-written="@Summary.Id">
+                        @Time(_mail.Envelope.SentAt ?? _mail.ReceivedAt)
+                    </RadzenText>
+                </div>
+
+                @if (_body == null)
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="font-style: italic;" data-content-unavailable="@Summary.Id">@_text[PostmasterViewText.ContentUnavailable]</RadzenText>
+                }
+                else if (_body.Html != null)
+                {
+                    @* Formatting only through the sanitizer, again at render, whatever the service returned. *@
+                    <RichTextView Html="@_body.Html" Images="_images" Class="rz-text-body2" data-body-html="@Summary.Id" />
+                }
+                else if (_paragraphs.Length > 0)
+                {
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;" data-body-text="@Summary.Id">
+                        @foreach (var paragraph in _paragraphs)
+                        {
+                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@paragraph</RadzenText>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="font-style: italic;" data-no-text="@Summary.Id">@_text[PostmasterViewText.NoText]</RadzenText>
+                }
+
+                @* Opened only when the browser shows the type without running anything; every other file is saved. An image shown in place is not listed again. *@
+                @if (_files.Length > 0)
+                {
+                    <div role="list" aria-label="@_attachments[SupportAttachmentText.Attached]" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem;" data-attachments="@Summary.Id">
+                        @foreach (var attachment in _files)
+                        {
+                            var opens = SupportAttachmentContentTypes.OpensInBrowser(attachment.ContentType);
+                            var label = _attachments.Format(opens ? SupportAttachmentText.Open : SupportAttachmentText.Save, attachment.FileName);
+                            <span role="listitem">
+                                <RadzenButton Icon="@(opens ? "open_in_new" : "download")" Size="ButtonSize.ExtraSmall" Variant="Variant.Text"
+                                              Text="@($"{attachment.FileName} ({SupportAttachmentSize.Format(attachment.Size)})")"
+                                              Disabled="@_opening.Contains(attachment.Id)"
+                                              Click="@(() => OpenAttachmentAsync(attachment))"
+                                              title="@label" aria-label="@label"
+                                              data-attachment="@attachment.Id" data-opens="@(opens ? "browser" : "save")" />
+                            </span>
+                        }
+                    </div>
+                    @foreach (var missing in _files.Where(x => _unavailable.Contains(x.Id)))
+                    {
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-danger);" data-attachment-unavailable="@missing.Id">
+                            @_attachments.Format(SupportAttachmentText.NotAvailable, missing.FileName)
+                        </RadzenText>
+                    }
+                }
+            </div>
+        </div>
+
+        @if (IsArchived)
+        {
+            <div>
+                <RadzenButton Text="@_text[PostmasterViewText.Restore]" Icon="unarchive" ButtonStyle="ButtonStyle.Light"
+                              Click="RestoreAsync" Disabled="_busy" data-restore="@Summary.Id" />
+            </div>
+        }
+        else
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+                @if (Teams is { Count: > 0 })
+                {
+                    <RadzenDropDown TValue="string" Data="@Teams" TextProperty="Value" ValueProperty="Key" @bind-Value="_routeTo"
+                                    AllowFiltering="true" Placeholder="@_text[PostmasterViewText.RouteTo]" aria-label="@_text[PostmasterViewText.RouteTo]" Style="min-width: 16rem;" />
+                }
+                else
+                {
+                    <RadzenTextBox @bind-Value="_routeTo" Placeholder="@_text[PostmasterViewText.RouteTo]" aria-label="@_text[PostmasterViewText.RouteTo]" />
+                }
+                <RadzenButton Text="@_text[PostmasterViewText.Route]" Icon="forward_to_inbox" Click="RouteAsync"
+                              Disabled="@(string.IsNullOrWhiteSpace(_routeTo) || _busy)" data-route="@Summary.Id" />
+                <RadzenButton Text="@_text[PostmasterViewText.Archive]" Icon="archive" ButtonStyle="ButtonStyle.Light"
+                              Click="ArchiveAsync" Disabled="_busy" data-archive="@Summary.Id" />
+            </RadzenStack>
+        }
+    }
+</RadzenStack>
+
+@code {
+    /// <summary>The mail shown, as the list has it; it is opened once for its id, however often the list is read again.</summary>
+    [Parameter, EditorRequired] public PostmasterMailSummary Summary { get; set; }
+
+    /// <summary>The teams a mail may be routed to, by key with the name to show; empty when the reader cannot list teams, who then types a key.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string> Teams { get; set; } = new Dictionary<string, string>();
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>Raised with the mail's id after it was routed, archived or restored here, so the list around it can read again.</summary>
+    [Parameter] public EventCallback<string> Changed { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private TextSet _attachments = TextSet.Empty;
+
+    private string _openedId;
+    private bool _loaded;
+    private InboundMailItem _mail;
+    private ReceivedMailBody _body;
+    private string[] _paragraphs = [];
+    private SupportAttachment[] _files = [];
+    private Func<string, HtmlImage> _images;
+    private string _routeTo;
+    private bool _busy;
+
+    private readonly HashSet<string> _opening = [];
+    private readonly HashSet<string> _unavailable = [];
+    private SupportAttachmentFiles _browser;
+
+    private bool IsArchived => Summary.ArchivedAt != null || _mail?.Outcome == PostmasterMailOutcome.Archived;
+
+    private string SenderName => string.IsNullOrWhiteSpace(_mail?.Envelope.FromName) ? _mail?.Envelope.From : _mail.Envelope.FromName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(PostmasterViewText.All);
+        _attachments = await TextProvider.ResolveAsync(SupportAttachmentText.All);
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_openedId == Summary.Id) return;
+
+        _openedId = Summary.Id;
+        _loaded = false;
+        _routeTo = null;
+        _unavailable.Clear();
+
+        _mail = await Postmaster.OpenAsync(Summary.Id);
+        Read(_mail == null ? null : await Postmaster.GetBodyAsync(Summary.Id));
+
+        _loaded = true;
+    }
+
+    /// <remarks>The images and the files to list are worked out once per read, so the view sanitizes the formatting once too.</remarks>
+    private void Read(ReceivedMailBody body)
+    {
+        _body = body;
+        _paragraphs = Paragraphs(body?.Text);
+
+        var shown = (body?.Images ?? []).ToDictionary(x => x.ContentId, StringComparer.Ordinal);
+        _files = [.. (body?.Attachments ?? []).Where(x => x.ContentId == null || !shown.ContainsKey(x.ContentId))];
+
+        var attachments = body?.Attachments ?? [];
+        _images = contentId =>
+        {
+            if (shown.TryGetValue(contentId, out var image)) return HtmlImage.FromContent(image.ContentType, image.Content);
+
+            var named = attachments.FirstOrDefault(x => x.ContentId == contentId);
+            return named == null ? null : HtmlImage.Described(named.FileName);
+        };
+    }
+
+    private static string[] Paragraphs(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return [];
+
+        return [.. System.Text.RegularExpressions.Regex.Split(text.Replace("\r\n", "\n").Trim(), @"\n\s*\n")
+            .Select(x => x.TrimEnd())
+            .Where(x => !string.IsNullOrWhiteSpace(x))];
+    }
+
+    /// <remarks>Opened through the service, so reading a file is checked and recorded exactly as opening the mail is.</remarks>
+    private async Task OpenAttachmentAsync(SupportAttachment attachment)
+    {
+        if (!_opening.Add(attachment.Id)) return;
+
+        try
+        {
+            await using var content = await Postmaster.OpenAttachmentAsync(Summary.Id, attachment.Id);
+
+            if (content?.Content == null)
+            {
+                _unavailable.Add(attachment.Id);
+                return;
+            }
+
+            _unavailable.Remove(attachment.Id);
+            _browser ??= new SupportAttachmentFiles(JsRuntime);
+            await _browser.OpenOrSaveAsync(content);
+        }
+        finally
+        {
+            _opening.Remove(attachment.Id);
+        }
+    }
+
+    private async Task RouteAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_routeTo)) return;
+
+        var teamKey = _routeTo.Trim();
+        await ActAsync(() => Postmaster.RouteAsync(Summary.Id, teamKey), PostmasterViewText.Routed);
+    }
+
+    /// <remarks>Asked first: archiving moves the mail out of the list everyone works from, and nothing tells the sender.</remarks>
+    private async Task ArchiveAsync()
+    {
+        var confirmed = await DialogService.Confirm(
+            _text[PostmasterViewText.ConfirmArchiveBody],
+            _text[PostmasterViewText.ConfirmArchiveTitle],
+            new ConfirmOptions
+            {
+                OkButtonText = _text[PostmasterViewText.ConfirmArchiveAccept],
+                CancelButtonText = _text[PostmasterViewText.ConfirmArchiveCancel]
+            });
+
+        if (confirmed != true) return;
+
+        await ActAsync(() => Postmaster.ArchiveAsync(Summary.Id), PostmasterViewText.Archived);
+    }
+
+    private Task RestoreAsync() => ActAsync(() => Postmaster.RestoreAsync(Summary.Id), PostmasterViewText.Restored);
+
+    /// <remarks>
+    /// Reading and deciding are separate grants, so a reader who may only read is told so rather than having the
+    /// circuit taken down, as is one who typed a key no team has. A null answer means somebody else acted first, or
+    /// the mail went with its retention.
+    /// </remarks>
+    private async Task ActAsync(Func<Task<InboundMailItem>> act, TextKey done)
+    {
+        _busy = true;
+        try
+        {
+            var result = await act();
+            NotificationService.Notify(result == null ? NotificationSeverity.Warning : NotificationSeverity.Success, result == null ? _text[PostmasterViewText.AlreadyGone] : _text[done]);
+            _routeTo = null;
+            await Changed.InvokeAsync(Summary.Id);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[PostmasterViewText.ManageNotPermitted]);
+        }
+        catch (ArgumentException)
+        {
+            NotificationService.Notify(NotificationSeverity.Warning, _text[PostmasterViewText.NoSuchTeam]);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_browser != null) await _browser.DisposeAsync();
+    }
+
+    private static string FromOf(MailEnvelope envelope) => string.IsNullOrWhiteSpace(envelope.FromName) ? envelope.From : $"{envelope.FromName} <{envelope.From}>";
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
+}

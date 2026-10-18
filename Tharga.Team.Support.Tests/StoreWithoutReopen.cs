@@ -53,8 +53,8 @@ internal sealed class StoreWithoutReopen(InMemorySupportCaseStore inner) : ISupp
     public Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
         => inner.AddBindingAsync(teamKey, caseId, binding, cancellationToken);
 
-    public Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, CancellationToken cancellationToken = default)
-        => inner.SetMessageDeliveryAsync(teamKey, caseId, sequence, delivery, cancellationToken);
+    public Task SetMessageDeliveryAsync(string teamKey, string caseId, int sequence, SupportMessageDelivery delivery, string error = null, CancellationToken cancellationToken = default)
+        => inner.SetMessageDeliveryAsync(teamKey, caseId, sequence, delivery, error, cancellationToken);
 
     public Task<int> DeleteCasesForTeamAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.DeleteCasesForTeamAsync(teamKey, cancellationToken);

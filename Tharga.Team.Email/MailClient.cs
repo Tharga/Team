@@ -14,7 +14,8 @@ namespace Tharga.Team.Email;
 /// </summary>
 /// <remarks>
 /// <b>Never throws</b>, matching <c>SlackClient</c>. A failed send comes back as a failed
-/// <see cref="MailSendResult"/> and a failed read as an empty fetch at the unchanged position, so a mail
+/// <see cref="MailSendResult"/> and a failed read as an empty fetch at the unchanged position carrying
+/// <see cref="MailFetchResult.Error"/>, so a mail
 /// server being down delays a conversation instead of breaking the application that hosts it.
 /// <para>
 /// <b>A connection per operation.</b> Both clients are opened, used and disposed rather than pooled. A
@@ -22,8 +23,12 @@ namespace Tharga.Team.Email;
 /// process-local state that has to be revived after every network blip, and it buys nothing at a poll
 /// interval measured in minutes.
 /// </para>
+/// <para>
+/// <b>Every mail read has its sender checked</b> by <see cref="DkimSenderVerifier"/>, the process-wide one over
+/// DNS unless another is given, so <see cref="InboundMail.SenderVerified"/> means the same on every read path.
+/// </para>
 /// </remarks>
-internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClient> logger = null) : IMailClient
+internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClient> logger = null, DkimSenderVerifier senderVerifier = null) : IMailClient
 {
     /// <summary>How many messages one poll will take, so a large backlog cannot stall a deployment.</summary>
     private const int MaxMessagesPerFetch = 100;
@@ -83,7 +88,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
             var rescanned = position.IsInvalidatedBy(folder.UidValidity);
             var from = rescanned ? 0 : position.LastUid;
 
-            var uids = await folder.SearchAsync(SearchQuery.Uids(new UniqueIdRange(new UniqueId(from + 1), UniqueId.MaxValue)), cancellationToken);
+            var uids = Newer(await folder.SearchAsync(SearchFor(from, _options.FirstReadSince), cancellationToken), from);
 
             var mails = new List<InboundMail>();
             var highest = from;
@@ -92,7 +97,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
             {
                 var message = await folder.GetMessageAsync(uid, cancellationToken);
 
-                mails.Add(InboundMailReader.Read(message, uid.Id, includeRaw ? await RawAsync(message, cancellationToken) : null));
+                mails.Add(await InboundMailReader.ReadAsync(message, senderVerifier ?? DkimSenderVerifier.Shared, uid.Id, includeRaw ? await RawAsync(message, cancellationToken) : null, cancellationToken));
                 highest = uid.Id;
             }
 
@@ -104,7 +109,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         {
             logger?.LogError(e, "The mailbox could not be read.");
 
-            return MailFetchResult.Empty(position);
+            return MailFetchResult.Failed(position, e.Message);
         }
     }
 
@@ -123,6 +128,20 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
     }
 
     /// <summary>Connects to the IMAP server and opens the folder read-only; null when that worked, otherwise why not.</summary>
+    /// <summary>
+    /// The UIDs above the read position. IMAP reads <c>n:*</c> as "n up to the highest UID", so when nothing
+    /// newer exists the server still answers with the highest one, which would be read again on every poll.
+    /// </summary>
+    // IMAP's SINCE compares the date alone, so the time of day is dropped rather than half-honoured.
+    internal static SearchQuery SearchFor(uint from, DateTime? firstReadSince)
+    {
+        var newer = SearchQuery.Uids(new UniqueIdRange(new UniqueId(from + 1), UniqueId.MaxValue));
+
+        return from == 0 && firstReadSince.HasValue ? newer.And(SearchQuery.DeliveredAfter(firstReadSince.Value.Date)) : newer;
+    }
+
+    internal static IReadOnlyList<UniqueId> Newer(IEnumerable<UniqueId> uids, uint lastUid) => [.. uids.Where(x => x.Id > lastUid).OrderBy(x => x.Id)];
+
     internal async Task<string> CheckReadAsync(CancellationToken cancellationToken)
     {
         if (!CanRead) return "No IMAP server is configured.";

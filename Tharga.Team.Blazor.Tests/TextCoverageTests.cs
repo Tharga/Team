@@ -78,8 +78,26 @@ public class TextCoverageTests
         "Features/Support/SupportCaseCloseDialog.razor",
         "Features/Support/SupportCaseVisibilityPicker.razor",
         "Features/Support/SupportAcrossTeamsView.razor",
+        "Features/Support/SupportUnassignedView.razor",
+        "Features/Support/SupportUnassignedConversation.razor",
+        "Features/Support/SupportAttachmentPicker.razor",
+        "Features/Support/SupportMailboxAddress.razor",
+        "Features/Support/SupportAnswerRouteLine.razor",
+        "Framework/MailPreviewDialog.razor",
+        "Framework/RichTextEditor.razor",
+        "Framework/RichTextView.razor",
         "Features/Mailbox/PostmasterView.razor",
+        "Features/Mailbox/PostmasterMail.razor",
         "Features/Mailbox/TeamMailAddressView.razor",
+        "Features/User/UserMailPreferencesView.razor",
+        "Features/Messages/UserMessageComposeView.razor",
+        "Features/Messages/UserMessageLogView.razor",
+        "Features/Messages/UserMessageDetails.razor",
+        "Features/Messages/ContactMessageComposeView.razor",
+        "Features/Messages/ContactMessageLogView.razor",
+        "Features/Messages/ContactMessageDetails.razor",
+        "Features/User/UserNoticePreferencesView.razor",
+        "Features/Team/UserNoticeTeamDefaultsView.razor",
     ];
 
     /// <summary>
@@ -247,6 +265,23 @@ public class TextCoverageTests
         // consumer generates their translation table from, so a key reflection misses is invisible to them
         // in exactly the way a literal string is.
         Assert.All(AuditLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportUnassignedViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportCaseFilterText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportAttachmentText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(RichTextEditorText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportMailboxText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserMailPreferencesViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserMessageComposeViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserMessageLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(ContactMessageComposeViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(ContactMessageLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(ContactMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserNoticePreferencesViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserNoticeTeamDefaultsViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(UserNoticeText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(PostmasterViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
     }
 
     public static TheoryData<string> MigratedComponents()

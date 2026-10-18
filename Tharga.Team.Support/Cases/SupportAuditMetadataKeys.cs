@@ -17,4 +17,10 @@ public static class SupportAuditMetadataKeys
     public const string CaseSubject = "support.case.subject";
 
     public const string CaseVisibility = "support.case.visibility";
+
+    /// <summary>Where an entry sent again stands afterwards — Sent, Failed or Pending.</summary>
+    public const string Delivery = "support.message.delivery";
+
+    /// <summary>How many files a reply or answer carried; their names are kept out, as bodies are.</summary>
+    public const string AttachmentCount = "support.message.attachments";
 }

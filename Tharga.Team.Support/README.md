@@ -155,10 +155,36 @@ invitations, configured once under `Email:Override` (see *Mail outside productio
 guide). A reply that is withheld is recorded as not delivered. Upgrading changes what a test environment sends:
 set `Email:Override` first if it should keep receiving mail.
 
-**Email arrives without a team**, because a `From:` header does not say which tenant a problem concerns and
-every way of guessing puts one customer's problem in another customer's list. Such a case is created
-unassigned, and an operator assigns a team when they know which it is — or leaves it unassigned, which is a
-supported state rather than a backlog.
+**Email arrives in a team only when the sender provably belongs to it**, because a `From:` header does not say
+which tenant a problem concerns and every guess puts one customer's problem in another customer's list. A mail
+whose DKIM-verified sender is the one account holding the address, active in exactly one team, opens in that
+team; anything less opens unassigned with the teams the address matched as suggestions and why, and an operator
+assigns one in a click — or leaves it unassigned, which is a supported state rather than a backlog. Who a sender
+is comes from `ISupportSenderDirectory`, which `Tharga.Team.MongoDB` registers.
+
+**Support mail is complete both ways:**
+
+- **Several mailboxes** — `o.AddMailbox("billing", m => …)` beside `o.Email`, each read on its own; a case is
+  answered from the mailbox it came in through, and staff see which address that was.
+- **Files** — a mail's attachments, inline images and forwarded mail are kept through `ISupportAttachmentStore`
+  (GridFS by default), answers and replies carry files, and a file opens under the case's own read rules.
+- **Formatting** — answers are written in a small rich-text editor, a mail's HTML is kept, and everything goes
+  through one sanitizer on the way in and at every render; a formatted answer is mailed as HTML beside the text.
+- **The thread** — an answer carries the whole conversation and every message id is recorded, so a reply to any
+  of them finds its case.
+- **Speaking for support** — an answer names no staff member: no author heading, the host's signature after it,
+  earlier support entries attributed to support's name in the host's time zone (`o.Answers`), and the host's
+  support frame (`MailTemplateOptions.SupportHtml`) around it.
+- **Delivery** — every answer says whether it reached the customer, a bounce marks it not delivered with the
+  reason, and `ResendAsync` sends it again.
+
+A bounce that names no support answer is handed to every registered `IMailBounceHandler` — which is how
+[mail to users](https://team.tharga.net/articles/user-mail.html) sent from a support address learns it bounced.
+
+**Moving to 4.2:** `ISupportCaseService` gained seven members and `ISupportCaseStore.SetMessageDeliveryAsync` an
+`error` parameter, so implementers and decorators update; mail from a known sender may now open in their team;
+mail attachments are now stored in your database; and an answer mail no longer names who wrote it, its quotes
+read "On {date}, {name} wrote:" with support's name for support's entries. The full list is in the article.
 
 **Your own support staff answer across every team.** They belong to none of the customers' teams, so the
 team scopes cannot reach those cases. Two system scopes do — `support:all:read` and `support:all:manage` —

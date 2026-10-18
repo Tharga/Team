@@ -25,7 +25,19 @@ env:
   #
   # 3.29: invitation email moved to Tharga.Team.Email; a host that sends invitations must call
   # AddThargaEmailInvitations, since setting the Email options alone no longer registers a sender.
-  MAJOR_MINOR: '4.1'
+  #
+  # 4.0: an unset access level grants nothing (ITeamMember.AccessLevel is AccessLevel?); an invitation must
+  # name a level; ITeamEmailSender lost its four-string SendInviteAsync; the Developer role no longer
+  # oversees private API keys; the Tharga.Platform aliases are gone.
+  #
+  # 4.1: personal API keys for team and system keys (ApiKeyOptions.TeamKeys/SystemKeys, the key views show
+  # a Personal checkbox by default); scopes hidden per team through ITeamScopeVisibilityProvider.
+  #
+  # 4.2: ISupportCaseService gained members and ISupportCaseStore.SetMessageDeliveryAsync a parameter (an
+  # implementer must add them); OutboundMail, InboundMail and MailFetchResult gained positional parameters
+  # (recompile); support mail from a verified sender in one team now opens in that team, and its files are
+  # stored; with AddThargaUserMail, invitations are sent as mail to users from its address.
+  MAJOR_MINOR: '4.2'
 
 permissions:
   contents: write

@@ -90,10 +90,10 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         var view = RenderView(out var cases);
 
         Open(view, "Export is empty");
-        view.Find("textarea").Input("We are looking at it.");
+        view.TypeRichText("<p>We are looking at it.</p>");
         view.FindAll("button").First(b => b.TextContent.Contains("Answer")).Click();
 
-        cases.Verify(x => x.AnswerCaseAsync("acme", "case-acme", "We are looking at it.", default), Times.Once);
+        cases.Verify(x => x.AnswerCaseAsync("acme", "case-acme", string.Empty, "<p>We are looking at it.</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), default), Times.Once);
     }
 
     /// <summary>A change made on another instance reaches no in-process notifier, so the host asks for the re-read.</summary>
@@ -155,11 +155,23 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         Assert.Contains("https://icons/acme.png", view.Find("[data-case='case-acme'] img").GetAttribute("src"));
     }
 
-    private IRenderedComponent<SupportAcrossTeamsView> RenderView(out Mock<ISupportCaseService> cases)
+    /// <summary>A team's case that came in by mail names the support address staff answer it from.</summary>
+    [Fact]
+    public void AMailedCase_NamesTheSupportAddressItCameInTo()
+    {
+        var mailed = FromAcme with { Bindings = [new SupportChannelBinding { ChannelType = SupportChannelType.Email, ExternalId = "<m1@example.org>", Address = "alice@example.org", Mailbox = "hosted", MailboxAddress = "help@example.net" }] };
+
+        var view = RenderView(out _, mailed);
+
+        Assert.Equal("to help@example.net", view.Find("[data-case='case-acme'] [data-mailbox='case-acme']").TextContent);
+        Assert.Empty(view.FindAll("[data-case='case-globex'] [data-mailbox]"));
+    }
+
+    private IRenderedComponent<SupportAcrossTeamsView> RenderView(out Mock<ISupportCaseService> cases, SupportCase acme = null)
     {
         cases = new Mock<ISupportCaseService>();
         cases.Setup(x => x.GetCasesAcrossTeamsAsync(null, 100, default))
-            .ReturnsAsync(new SupportCasePage { Items = [FromAcme, FromGlobex] });
+            .ReturnsAsync(new SupportCasePage { Items = [acme ?? FromAcme, FromGlobex] });
         cases.Setup(x => x.GetAwaitingSupportCountAcrossTeamsAsync(default)).ReturnsAsync(2);
         cases.Setup(x => x.GetCaseAsync("acme", FromAcme.Id, default)).ReturnsAsync(FromAcme);
         cases.Setup(x => x.GetMessagesAsync("acme", FromAcme.Id, null, SupportCaseLimits.MaxMessagesPerCase, default))
