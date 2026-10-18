@@ -42,6 +42,25 @@ public interface IPostmasterService
     [RequireScope(SystemMailboxScopes.PostmasterRead, Audit = AuditMode.Access)]
     Task<MailContent> GetContentAsync(string mailId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// An unrouted mail made readable — its text, its formatting sanitized, the images it shows in place and the files
+    /// it carries — or null when the postmaster holds none by this id or its content is no longer kept.
+    /// </summary>
+    /// <remarks>Read from the content <see cref="GetContentAsync"/> returns, for a reader that cannot parse a mail itself.</remarks>
+    [RequireScope(SystemMailboxScopes.PostmasterRead, Audit = AuditMode.Access)]
+    Task<ReceivedMailBody> GetBodyAsync(string mailId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// One file of an unrouted mail, by its id in <see cref="ReceivedMailBody.Attachments"/>, for the caller to
+    /// dispose; null when the postmaster holds no such mail or the mail carries no such file.
+    /// </summary>
+    /// <remarks>
+    /// Opening a file is opening the mail, so it is recorded the same way. Serve it as
+    /// <see cref="SupportAttachmentContentTypes.ServedAs"/> says, never as the type its sender declared.
+    /// </remarks>
+    [RequireScope(SystemMailboxScopes.PostmasterRead, Audit = AuditMode.Access)]
+    Task<SupportAttachmentContent> OpenAttachmentAsync(string mailId, string attachmentId, CancellationToken cancellationToken = default);
+
     /// <summary>Delivers an unrouted mail to a team, marked as rerouted.</summary>
     /// <remarks>
     /// The team is where the mail goes, not who is asking: routing is authorized by the system scope alone, and

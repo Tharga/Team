@@ -10,7 +10,7 @@ namespace Tharga.Team;
 /// </remarks>
 public static class SystemMailboxScopes
 {
-    /// <summary>List unrouted mail and open it; every open is audited.</summary>
+    /// <summary>List unrouted mail and open it and its files; every open is audited.</summary>
     public const string PostmasterRead = "mailbox:postmaster:read";
 
     /// <summary>Route an unrouted mail to a team, or archive it without routing and restore it.</summary>

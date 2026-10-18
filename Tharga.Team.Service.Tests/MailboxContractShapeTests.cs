@@ -18,7 +18,7 @@ public class MailboxContractShapeTests
     [
         typeof(TeamMailKey), typeof(TeamMailAddresses), typeof(MailEnvelope), typeof(MailThreadOwner),
         typeof(InboundMailItem), typeof(InboundMailPage), typeof(PostmasterMailSummary), typeof(PostmasterPage),
-        typeof(MailContent)
+        typeof(MailContent), typeof(ReceivedMailBody), typeof(ReceivedMailImage)
     ];
 
     private static readonly Type[] Services = [typeof(ITeamMailboxService), typeof(IPostmasterService)];
@@ -81,9 +81,12 @@ public class MailboxContractShapeTests
     [Theory]
     [InlineData(nameof(IPostmasterService.OpenAsync))]
     [InlineData(nameof(IPostmasterService.GetContentAsync))]
+    [InlineData(nameof(IPostmasterService.GetBodyAsync))]
+    [InlineData(nameof(IPostmasterService.OpenAttachmentAsync))]
     public void OpeningUnroutedMail_IsAlwaysRecorded(string method)
     {
         Assert.Equal(AuditMode.Access, ScopeOf(typeof(IPostmasterService).GetMethod(method)!).Audit);
+        Assert.Equal(SystemMailboxScopes.PostmasterRead, ScopeOf(typeof(IPostmasterService).GetMethod(method)!).Scope);
     }
 
     [Theory]

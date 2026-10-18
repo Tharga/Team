@@ -50,6 +50,20 @@ internal sealed class PostmasterService : IPostmasterService
         return await TeamMailboxService.ContentOfAsync(_content, mailId, cancellationToken);
     }
 
+    public async Task<ReceivedMailBody> GetBodyAsync(string mailId, CancellationToken cancellationToken = default)
+    {
+        var content = await GetContentAsync(mailId, cancellationToken);
+
+        return content == null ? null : ReceivedMailReader.Body(mailId, content.Raw);
+    }
+
+    public async Task<SupportAttachmentContent> OpenAttachmentAsync(string mailId, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        var content = await GetContentAsync(mailId, cancellationToken);
+
+        return content == null ? null : ReceivedMailReader.Open(content.Raw, attachmentId);
+    }
+
     /// <remarks>
     /// The team is checked to exist when the host has a team service: routing a mail that may hold one
     /// organisation's material to a key that names nobody would put it where no one can ever read it.
