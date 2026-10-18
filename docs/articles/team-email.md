@@ -142,10 +142,11 @@ raw content, and records what became of it with `SetOutcomeAsync(teamKey, mailId
 an owner in the host's own terms (`"registered"`, a case id). Recording `null` returns the mail to the unhandled
 list. Who handled it and when is kept.
 
-`ITeamMailNotifier` raises `MailUpdated` for every mail received, handled or routed. It is a singleton raised in
-this process only, outside any circuit: a component marshals with `InvokeAsync`, and a host with several instances
-relays it over its own backplane. It carries no content — a handler reads the mail back through the service, where
-access is checked.
+`ITeamMailNotifier` raises `MailUpdated` for every mail received, handled, routed, archived or restored
+(`TeamMailChange` `Received`, `Handled`, `Rerouted`, `Archived`, `Restored`; the postmaster's own changes carry no
+team). It is a singleton raised in this process only, outside any circuit: a component marshals with `InvokeAsync`,
+and a host with several instances relays it over its own backplane. It carries no content — a handler reads the mail
+back through the service, where access is checked.
 
 ### Content
 
@@ -161,8 +162,8 @@ under the same id.
 | `mailbox:read` | Team | List and open the team's mail, see its addresses |
 | `mailbox:handle` | Team | Record what became of a mail |
 | `mailbox:manage` | Team | Issue and rotate the team's address |
-| `mailbox:postmaster:read` | System | List and open mail no team owns |
-| `mailbox:postmaster:manage` | System | Route such a mail to a team |
+| `mailbox:postmaster:read` | System | List and open mail no team owns, and its files |
+| `mailbox:postmaster:manage` | System | Route such a mail to a team, or archive and restore it |
 
 Three team scopes, because three different people use a mailbox: someone handling mail every day should not
 rotate the address every sender knows. Their access levels are the host's — `ReadAccessLevel` and
@@ -174,22 +175,72 @@ held only through a role.
 Mail no team owns. `IPostmasterService` is a system service: no team scope reaches it, because unrouted mail may
 hold any team's material.
 
-- **The listing is deliberately thin** — sender, subject, time and reason — enough to decide what to open.
-- **Opening is the audited act.** `OpenAsync` and `GetContentAsync` are recorded every time.
+- **The listing is deliberately thin** — sender, subject, time and reason, and for an archived mail when and by
+  whom — enough to decide what to open.
+- **Opening is the audited act.** `OpenAsync`, `GetContentAsync`, `GetBodyAsync` and `OpenAttachmentAsync` are
+  recorded every time, under `mailbox:postmaster:read`.
 - **`RouteAsync(mailId, toTeamKey)` delivers a mail to a team**, marked `Rerouted`. It refuses a team that does not
   exist, and a mail someone else already routed returns `null`. The parameter is not `teamKey` because the team is
   where the mail goes, not who is asking: routing is authorized by the system scope alone.
 - **Retention:** mail the postmaster holds longer than `PostmasterRetention` (default 90 days) is deleted with its
-  content, and every deletion is recorded.
+  content, archived or not, and every deletion is recorded.
 
 When a team is removed, its mailbox goes with it: its mail, the content kept for it, and its keys.
+
+### Held and archived
+
+A mail the postmaster holds waits for someone to route it — or to put it away without routing it: spam, a mail sent
+by mistake, one already dealt with elsewhere.
+
+- **`ArchiveAsync(mailId)`** records the outcome `PostmasterMailOutcome.Archived` (`"archived"`) on the mail, with
+  `HandledAt` and `HandledBy` — the archiver's name as it was then — and announces `TeamMailChange.Archived`. The mail
+  leaves `ListAsync()` and `GetCountAsync()`, and stays the postmaster's: it can still be opened, read, restored and
+  routed, and it goes with the same retention as the rest.
+- **`RestoreAsync(mailId)`** clears the outcome, who and when, puts the mail back among the held mail and announces
+  `TeamMailChange.Restored`.
+- **Both are idempotent and take `mailbox:postmaster:manage`**, recorded as changes. Archiving an archived mail, or
+  restoring a held one, returns it unchanged and announces nothing; a mail routed to a team, or one the postmaster no
+  longer holds, returns `null` — neither works on a team's mail.
+- **Routing an archived mail** delivers it as any other: the outcome is cleared on the way, so the team receives it
+  unhandled.
+- **`ListAsync(PostmasterMailState state, cursor, pageSize)`** lists `Held` or `Archived` mail. Both are ordered by
+  when the mail was received, newest first, with the same cursor — archived mail is not ordered by when it was
+  archived; each summary says when (`PostmasterMailSummary.ArchivedAt`) and by whom (`ArchivedBy`). `ListAsync()`
+  without a state is the held mail, as before.
+
+### Reading a mail
+
+A view cannot parse a mail itself, so the postmaster reads it for one:
+
+- **`GetBodyAsync(mailId)`** returns a `ReceivedMailBody`: `Text` (the text part, or the formatting rendered as
+  text), `Html` (the formatting through `SafeHtml` — formatting, web and mail links, remote images replaced by their
+  alt text, `cid:` references kept; null when there is none), `Attachments` (every file as a `SupportAttachment`:
+  attachments, inline images and forwarded mail as `.eml`, signatures left out, each `Id` its position counted
+  from 1) and `Images` (the inline images the formatting names, of a type a browser shows without running anything,
+  up to `ReceivedMailBody.MaxInlineImageBytes`, 2 MB, to show in place). Nothing is cut: quoted history stays,
+  since the point is to find out whose the mail is. Null when the postmaster holds no such mail or its content is
+  no longer kept.
+- **`OpenAttachmentAsync(mailId, attachmentId)`** returns one file as a `SupportAttachmentContent` for the caller to
+  dispose, or null. Serve it as `SupportAttachmentContentTypes.ServedAs` says, never as the declared type.
+
+A host with its own REST surface adds endpoints for listing by state, archiving, restoring, the body and a file,
+each calling `IPostmasterService` so the scope and the record apply.
 
 ## Views
 
 Both are in `Tharga.Team.Blazor` and take a `TimeTemplate` to render moments the host's way.
 
-- **`PostmasterView`** — the postmaster's list with a count, the envelope of an opened mail, and routing to a team
-  chosen from a list (when the reader may list teams) or typed.
+- **`PostmasterView`** — reads like the support mailbox. A switch shows the **Held** or the **Archived** mail; each
+  mail is an expandable card whose header shows the subject (or "(no subject)"), the sender, when it arrived, why it
+  reached the postmaster and, once archived, when and by whom. **Opening a card is the audited open**, once per mail
+  however often the list is read again: it shows who the mail went to (From, To, Cc, Delivered to, Received) and the
+  message as a conversation bubble — the sender, when it was written, the formatting sanitized with its own images in
+  place, or the text as paragraphs — with its files to open or save through `OpenAttachmentAsync`. Inside a held mail
+  it is routed to a team chosen from a list (when the reader may list teams) or typed, or **archived** after a
+  confirmation; an archived mail is **restored**. A reader who may read but not decide is told so.
+  `ShowTitle` (default `true`) shows the title and the count of held mail; set it to `false` when the view sits in a
+  tab whose header shows the count from `GetCountAsync()`. `RefreshAsync()` reads the list again for a host that
+  hears of a change on another instance; the in-process notifier is listened to as before.
 - **`TeamMailAddressView`** — the selected team's address with a copy button, a retiring address as a warning with
   its date, and changing the address only after a confirmation that says senders must be told. `AllowChange`
   hides creating and changing for a reader without `mailbox:manage`.
@@ -235,6 +286,38 @@ Coming from 3.x, follow *Migrating to 4.0* in the [implementation guide](impleme
   privately (Data Protection and the unsubscribe route of mail to users), and no longer lists
   `Microsoft.Extensions.Logging.Abstractions` and `Microsoft.Extensions.Options`, which the framework provides.
 - **With `AddThargaUserMail`, invitations go through mail to users** — see above.
+
+### The postmaster
+
+- **`IPostmasterService` gained five members**: `ListAsync(PostmasterMailState, cursor, pageSize)` (an overload, so
+  code compiled against `ListAsync(cursor, pageSize)` keeps running), `ArchiveAsync`, `RestoreAsync`, `GetBodyAsync`
+  and `OpenAttachmentAsync`. A host implementing or decorating it adds them; one with its own REST surface adds the
+  endpoints.
+- **`GetCountAsync()` and `ListAsync()` leave archived mail out.** Nothing is archived until someone archives it, so
+  existing data counts as before.
+- **`ITeamMailStore` gained three default members** — `ListUnroutedAsync(PostmasterMailState, …)`,
+  `ArchiveUnroutedAsync` and `RestoreUnroutedAsync`. A host's own store keeps compiling, lists held mail through its
+  old method, and refuses archiving with `NotSupportedException` until it implements them. It should also leave
+  archived mail (outcome `"archived"`) out of `ListUnroutedAsync(cursor, pageSize)` and `CountUnroutedAsync`, and
+  clear the outcome, `HandledAt` and `HandledBy` in `RouteAsync`. The built-in store does all of it.
+- **`TeamMailChange` gained `Archived` and `Restored`**, after the existing values; a `switch` over it handles them.
+- **`PostmasterMailSummary` gained `ArchivedAt` and `ArchivedBy`; `ReceivedMailBody` and `ReceivedMailImage` are new.**
+  `InboundMailItem.HandledBy` on an archived mail is the archiver's name, where on a team's mail it is the subject of
+  whoever recorded the outcome.
+- **MongoDB:** the `InboundMail` collection gains the index `TeamKey_Outcome_ReceivedAt` (team, outcome, received time
+  descending, mail id), created at start-up like the others.
+- **`PostmasterView`** lists cards rather than buttons, opens a mail when its card opens, and calls `ListAsync(state, …)`
+  and `GetBodyAsync`; a host whose tests click a subject button to open a mail clicks the card instead. It takes
+  `ShowTitle` and offers `RefreshAsync()`. The texts are in `PostmasterViewText`; translate the new keys —
+  `team.mailbox.postmaster.state.label` ("Which mail"), `.state.held` ("Held"), `.state.archived` ("Archived"),
+  `.noneArchived` ("No mail has been archived."), `.archived.by` ("Archived by {0}"), `.archived.when` ("Archived"),
+  `.archive` ("Archive"), `.confirmArchive.title` ("Archive this mail?"), `.confirmArchive.body` ("The mail goes to
+  no team. It moves to the archived mail, where it can be restored until it is deleted with the rest."),
+  `.confirmArchive.accept` ("Archive"), `.confirmArchive.cancel` ("Cancel"), `.archived` ("The mail was archived."),
+  `.restore` ("Restore"), `.restored` ("The mail is back among the held mail."), `.noText` ("The mail has no
+  text."), `.contentUnavailable` ("What the mail said is no longer kept."), `.manageNotPermitted` ("You may read this
+  mail, but not route, archive or restore it.") and `.noSuchTeam` ("No team has that key."). The files reuse the
+  `team.support.attachments.*` keys. No existing key was reworded.
 
 ## Moving to 3.29
 

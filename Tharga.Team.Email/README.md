@@ -37,7 +37,7 @@ builder.Services.AddScoped<IInboundMailContentStore, MyBlobContentStore>();
 ```
 
 - **An opaque, rotatable key per team** — a primary, and a secondary still accepted until it retires.
-- **One catch-all mailbox**, each mail routed by the address it was delivered to; what no team owns goes to the **postmaster** (`IPostmasterService`, system scopes), never dropped.
+- **One catch-all mailbox**, each mail routed by the address it was delivered to; what no team owns goes to the **postmaster** (`IPostmasterService`, system scopes), never dropped — routed to a team, or archived without routing and restored, and read with its files through `GetBodyAsync` and `OpenAttachmentAsync`.
 - **Each delivery kept once**, durably, however many instances read; a mail that cannot be kept is read again rather than skipped.
 - **The raw message goes to the host's `IInboundMailContentStore`**; the toolkit keeps the envelope. Storage for keys and mail comes from `Tharga.Team.MongoDB`.
 

@@ -64,6 +64,18 @@ they choose from, through a persisted queue, with staff messages and automatic n
   and the opt-out is kept for the address, for good, checked again when each mail is sent.
 - **`/login` honours a local `returnUrl`**, so the unsubscribe page's sign-in leads back to the mail settings.
 
+## The postmaster (`Tharga.Team.Email`, `Tharga.Team.Blazor`)
+
+- **Archive and restore.** Staff put a mail that reached no team away without routing it — spam, sent by mistake,
+  dealt with elsewhere — and bring it back (`ArchiveAsync`, `RestoreAsync`, under `mailbox:postmaster:manage`). An
+  archived mail leaves the held list and the count, is listed on its own with when and by whom, and can still be
+  opened and routed.
+- **Read it in the page.** `GetBodyAsync` returns the mail's text, its formatting through the one sanitizer with its
+  own images in place, and its files, which `OpenAttachmentAsync` opens — both recorded as opening the mail.
+- **`PostmasterView` reads like the support mailbox**: a Held/Archived switch, each mail an expandable card, the
+  message in the conversation bubble with its files, routing and archiving inside the card, `ShowTitle` for a host
+  that shows the count in its own tab, and `RefreshAsync()`.
+
 ## One mail template
 
 **`AddThargaMailTemplate(o => o.Html = …)`** frames every HTML mail the toolkit sends — support answers, messages,
@@ -86,6 +98,8 @@ own.
 - With `AddThargaUserMail`, invitations are sent from `UserMailOptions.Mail`, not `EmailOptions`.
 - A host with its own `IUserMailOutbox` stores `UserMailBatch.RecipientAddresses` and leaves contact mail out of a
   user's history; `UserMailKind` gained `Contact`.
+- `IPostmasterService` gained five members (implementers and decorators add them) and `ITeamMailStore` three default
+  members; the postmaster's count and list leave archived mail out; `TeamMailChange` gained `Archived` and `Restored`.
 - New dependencies: `HtmlSanitizer` (Service), `DnsClient` and `AngleSharp` (Email).
 
 Every change and the new text keys are listed in the *Moving to 4.2* sections of
