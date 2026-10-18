@@ -39,4 +39,9 @@ internal sealed class UserMailText(ITextResolver resolver = null)
 
     public async Task<string> DescriptionAsync(UserMailCategory category)
         => string.IsNullOrWhiteSpace(category.Description) ? null : await GetAsync(category.DescriptionKey, category.Description);
+
+    public Task<string> NameAsync(ContactMailCategory category) => GetAsync(category.NameKey, category.Name);
+
+    public async Task<string> DescriptionAsync(ContactMailCategory category)
+        => string.IsNullOrWhiteSpace(category.Description) ? null : await GetAsync(category.DescriptionKey, category.Description);
 }

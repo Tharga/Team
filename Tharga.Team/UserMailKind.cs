@@ -13,5 +13,8 @@ public enum UserMailKind
     Notice,
 
     /// <summary>An invitation to join a team.</summary>
-    Invitation
+    Invitation,
+
+    /// <summary>A message staff wrote to contacts, people who are not users; never part of a user's history.</summary>
+    Contact
 }

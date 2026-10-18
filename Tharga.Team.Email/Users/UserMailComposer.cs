@@ -10,9 +10,11 @@ internal sealed class UserMailComposer(UserMailFooter footer, MailTemplate templ
 
     /// <summary>The text with the footer under a signature line, the HTML in the template with the footer, and the unsubscribe address; with no user key, as a preview shows it.</summary>
     public async Task<UserMailComposed> ComposeAsync(string subject, string body, string bodyHtml, string userKey, UserMailCategory category)
-    {
-        var parts = await footer.ForAsync(userKey, category);
+        => Compose(subject, body, bodyHtml, await footer.ForAsync(userKey, category));
 
+    /// <summary>The text with <paramref name="parts"/> under a signature line, the HTML in the template with them, and their unsubscribe address; with no footer, the bodies alone.</summary>
+    public UserMailComposed Compose(string subject, string body, string bodyHtml, UserMailFooterContent parts)
+    {
         var text = parts == null ? body : $"{body?.TrimEnd()}\n\n-- \n{parts.Text}";
         var html = _template.Render(subject, body, bodyHtml, parts?.Html);
 

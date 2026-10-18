@@ -15,7 +15,8 @@ namespace Tharga.Team.Email.Users;
 /// nor indexed, nor does it pass its address on as a referrer.
 /// <para>
 /// <b>The token reveals its own category and nothing else.</b> Every category and its state is listed only for a
-/// request signed in as the very user the link is for; anyone else is offered a link to sign in.
+/// request signed in as the very user the link is for; anyone else is offered a link to sign in. A contact's link, which
+/// names an address rather than a user, gets a page of its own with neither.
 /// </para>
 /// </remarks>
 internal static class UserMailUnsubscribeEndpoint
@@ -28,11 +29,13 @@ internal static class UserMailUnsubscribeEndpoint
         var services = context.RequestServices;
         var text = new UserMailText(services.GetService<ITextResolver>());
         var options = OptionsOf(services);
-        var link = services.GetRequiredService<UserMailUnsubscribe>().Read(Token(context));
+        var token = Token(context);
+        var link = services.GetRequiredService<UserMailUnsubscribe>().Read(token);
 
         if (link == null)
         {
-            await InvalidAsync(context, text, options);
+            if (services.GetService<ContactMailUnsubscribe>()?.Read(token) is { } contact) await ContactMailUnsubscribeEndpoint.GetAsync(context, contact, text, options);
+            else await InvalidAsync(context, text, options);
             return;
         }
 
@@ -59,11 +62,13 @@ internal static class UserMailUnsubscribeEndpoint
         var services = context.RequestServices;
         var text = new UserMailText(services.GetService<ITextResolver>());
         var options = OptionsOf(services);
-        var link = await services.GetRequiredService<UserMailUnsubscribe>().UnsubscribeAsync(Token(context), context.RequestAborted);
+        var token = Token(context);
+        var link = await services.GetRequiredService<UserMailUnsubscribe>().UnsubscribeAsync(token, context.RequestAborted);
 
         if (link == null)
         {
-            await InvalidAsync(context, text, options);
+            if (services.GetService<ContactMailUnsubscribe>()?.Read(token) != null) await ContactMailUnsubscribeEndpoint.PostAsync(context, token, text, options);
+            else await InvalidAsync(context, text, options);
             return;
         }
 
@@ -85,7 +90,7 @@ internal static class UserMailUnsubscribeEndpoint
     private static string ProductOf(UserMailOptions options)
         => new[] { options.ProductName, options.Mail?.FromName, options.Mail?.FromAddress }.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x))?.Trim() ?? string.Empty;
 
-    private static async Task InvalidAsync(HttpContext context, UserMailText text, UserMailOptions options)
+    internal static async Task InvalidAsync(HttpContext context, UserMailText text, UserMailOptions options)
         => await WriteAsync(context, StatusCodes.Status400BadRequest, new UserMailUnsubscribePage
         {
             Title = await text.GetAsync(UserMailTexts.PageTitleKey, UserMailTexts.PageTitle),
@@ -174,14 +179,14 @@ internal static class UserMailUnsubscribeEndpoint
         }
     }
 
-    private static async Task<string> FrequencyAsync(UserMailText text, IReadOnlyList<UserMailCategoryFrequency> frequencies, string categoryKey)
+    internal static async Task<string> FrequencyAsync(UserMailText text, IReadOnlyList<UserMailCategoryFrequency> frequencies, string categoryKey)
     {
         var phrase = frequencies.FirstOrDefault(x => x.Category == categoryKey)?.Phrase;
 
         return phrase == null ? null : phrase.Format(await text.GetAsync(phrase.Key, phrase.English));
     }
 
-    private static async Task WriteAsync(HttpContext context, int statusCode, UserMailUnsubscribePage page)
+    internal static async Task WriteAsync(HttpContext context, int statusCode, UserMailUnsubscribePage page)
     {
         var response = context.Response;
         response.StatusCode = statusCode;
@@ -213,7 +218,14 @@ internal static class UserMailUnsubscribeEndpoint
         foreach (var line in page.Lines.Where(x => !string.IsNullOrWhiteSpace(x.Text)))
             html.Append("<p class=\"").Append(Encode(line.Class)).Append("\">").Append(Encode(line.Text)).Append("</p>");
 
-        if (!string.IsNullOrWhiteSpace(page.Button)) html.Append("<form method=\"post\"><button type=\"submit\">").Append(Encode(page.Button)).Append("</button></form>");
+        if (page.Buttons.Count > 0)
+        {
+            html.Append("<form method=\"post\">");
+            foreach (var button in page.Buttons)
+                html.Append("<button type=\"submit\" name=\"").Append(Encode(button.Name)).Append("\" value=\"").Append(Encode(button.Value)).Append("\">").Append(Encode(button.Text)).Append("</button>");
+            html.Append("</form>");
+        }
+        else if (!string.IsNullOrWhiteSpace(page.Button)) html.Append("<form method=\"post\"><button type=\"submit\">").Append(Encode(page.Button)).Append("</button></form>");
 
         if (page.Overview is { } overview)
         {
@@ -251,6 +263,7 @@ internal sealed record UserMailUnsubscribePage
     public string Heading { get; init; }
     public IReadOnlyList<UserMailUnsubscribeLine> Lines { get; init; } = [];
     public string Button { get; init; }
+    public IReadOnlyList<UserMailUnsubscribeButton> Buttons { get; init; } = [];
     public UserMailUnsubscribeOverview Overview { get; init; }
     public UserMailUnsubscribeAnchor SignIn { get; init; }
     public string Css { get; init; }
@@ -267,3 +280,6 @@ internal sealed record UserMailUnsubscribeItem(string Key, string Name, string S
 
 /// <summary>A link on the page.</summary>
 internal sealed record UserMailUnsubscribeAnchor(string Text, string Href);
+
+/// <summary>One of several buttons posting the page's form, each sending its own name and value.</summary>
+internal sealed record UserMailUnsubscribeButton(string Name, string Value, string Text);

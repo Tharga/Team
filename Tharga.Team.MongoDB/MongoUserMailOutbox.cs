@@ -119,7 +119,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         var batchId = entity.Id.ToString();
 
         await batches.AddAsync(entity);
-        await collection.AddManyAsync([.. batch.RecipientUserKeys.Select(x => ToBatchItem(batchId, x, batch, queuedAt))]);
+        await collection.AddManyAsync([.. ToBatchItems(batchId, batch, queuedAt)]);
 
         return batchId;
     }
@@ -183,6 +183,10 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
     public async Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
         => await collection.CountSentByCategoryAsync(since, cancellationToken) ?? [];
 
+    /// <remarks>One aggregation answered from the collection's contact statistics index, so no mail is read.</remarks>
+    public async Task<IReadOnlyList<UserMailCategorySent>> CountSentToContactsByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => await collection.CountSentToContactsByCategoryAsync(since, cancellationToken) ?? [];
+
     public TimeSpan? Retention => collection.Retention;
 
     /// <summary>The sent mail with one of these <c>Message-ID</c> forms.</summary>
@@ -234,12 +238,12 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         return await PageAsync(filter, Builders<UserMailEntity>.Sort.Descending(x => x.Id), pageSize, cancellationToken);
     }
 
-    /// <summary>The mails queued for this user's key, and those queued to this address with no user key; nothing when both are missing.</summary>
+    /// <summary>The mails queued for this user's key, and those queued to this address with no user key other than contact mail; nothing when both are missing.</summary>
     internal static FilterDefinition<UserMailEntity> ForRecipient(string userKey, string address)
     {
         var parts = new List<FilterDefinition<UserMailEntity>>();
         if (!string.IsNullOrEmpty(userKey)) parts.Add(Filter.Eq(x => x.RecipientUserKey, userKey));
-        if (!string.IsNullOrEmpty(address)) parts.Add(Filter.Eq(x => x.RecipientUserKey, null) & Filter.Eq(x => x.RecipientAddress, address));
+        if (!string.IsNullOrEmpty(address)) parts.Add(Filter.Eq(x => x.RecipientUserKey, null) & Filter.Eq(x => x.RecipientAddress, address) & Filter.Ne(x => x.Kind, UserMailKind.Contact));
 
         return parts.Count == 0 ? Filter.Eq(x => x.Id, ObjectId.Empty) : Filter.Or(parts);
     }
@@ -395,9 +399,14 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         BodyHtml = batch.BodyHtml,
         Body = batch.Body,
         Attachments = [.. (batch.Attachments ?? []).Select(ToAttachmentEntity)],
-        RecipientCount = batch.RecipientUserKeys.Length,
+        RecipientCount = (batch.RecipientUserKeys ?? []).Length + (batch.RecipientAddresses ?? []).Length,
         QueuedAt = queuedAt
     };
+
+    /// <summary>One mail per user key the batch names, then one per address it names alone, in that order.</summary>
+    internal static IEnumerable<UserMailEntity> ToBatchItems(string batchId, UserMailBatch batch, DateTime queuedAt)
+        => (batch.RecipientUserKeys ?? []).Select(x => ToBatchItem(batchId, x, batch, queuedAt))
+            .Concat((batch.RecipientAddresses ?? []).Where(x => x?.Address != null).Select(x => ToBatchItem(batchId, null, batch, queuedAt) with { RecipientAddress = x.Address, RecipientName = x.Name }));
 
     internal static UserMailEntity ToBatchItem(string batchId, string recipientUserKey, UserMailBatch batch, DateTime queuedAt) => new()
     {

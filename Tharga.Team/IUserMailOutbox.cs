@@ -33,7 +33,7 @@ public interface IUserMailOutbox
     /// <summary>The stored mail with this id, or null.</summary>
     Task<UserMailItem> GetAsync(string id, CancellationToken cancellationToken = default);
 
-    /// <summary>Stores the batch's content once and one queued mail, due at once, per recipient it names, and returns the batch's id.</summary>
+    /// <summary>Stores the batch's content once and one queued mail, due at once, per recipient it names — each user key, then each address alone — and returns the batch's id.</summary>
     Task<string> AddBatchAsync(UserMailBatch batch, DateTime queuedAt, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddBatchAsync)}. Implement it to queue one mail to many users.");
 
@@ -51,7 +51,7 @@ public interface IUserMailOutbox
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListBatchAsync)}. Implement it to list the recipients of one mail to many users.");
 
     /// <summary>One page, newest first, of the mails queued for this user's key or to this address with no user key, after the cursor a previous page returned; without their files' bytes.</summary>
-    /// <remarks>The address is compared as given, which the queue stores trimmed and in lower case; a null address matches nothing.</remarks>
+    /// <remarks>The address is compared as given, which the queue stores trimmed and in lower case; a null address matches nothing. Contact mail is left out: it went to the address before, or beside, it was a user's.</remarks>
     /// <exception cref="ArgumentException">The cursor was not issued by this outbox.</exception>
     Task<UserMailItemPage> ListForRecipientAsync(string userKey, string address, string cursor, int pageSize, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListForRecipientAsync)}. Implement it to show a user the mail sent to them.");
@@ -70,6 +70,11 @@ public interface IUserMailOutbox
     /// <remarks>A category nothing was sent in is left out. Mail to an address alone is not counted.</remarks>
     Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(CountSentByCategoryAsync)}. Implement it to tell users how often each category is sent.");
+
+    /// <summary>For each contact category, the contact mails sent — sent or bounced — completed at or after <paramref name="since"/>, and how many distinct addresses received at least one, counted in one query on the server.</summary>
+    /// <remarks>A category nothing was sent in is left out.</remarks>
+    Task<IReadOnlyList<UserMailCategorySent>> CountSentToContactsByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(CountSentToContactsByCategoryAsync)}. Implement it to tell contacts how often each category is sent.");
 
     /// <summary>How long a mail is kept once it is done, which bounds how far back <see cref="CountSentByCategoryAsync"/> can count; null when it is kept for good.</summary>
     TimeSpan? Retention => null;

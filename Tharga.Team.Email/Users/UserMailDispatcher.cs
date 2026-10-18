@@ -11,6 +11,11 @@ namespace Tharga.Team.Email.Users;
 /// address on their user record. A mail they opted out of after it was queued is skipped, not failed. A mail queued to
 /// an address alone, which only a required category takes, goes to that address.
 /// <para>
+/// <b>Contact mail goes its own way through the same queue</b>: to the address it was queued with, unless that address has
+/// opted out of its category or of all contact mail by the time it is sent, from the contact sender and with the contact
+/// footer. Without contact mail registered it fails with the reason rather than going out as mail to users.
+/// </para>
+/// <para>
 /// <b>Only a failure that may pass is retried</b> — the server refusing or being unreachable, a store that could not
 /// be read. A user with no address, a category no longer registered or a mail the non-production policy withholds
 /// would fail the same way every time, so they fail at once with the reason. The recipient's address is never logged.
@@ -27,12 +32,16 @@ internal sealed class UserMailDispatcher(
     IOptions<UserMailOptions> options,
     TimeProvider timeProvider,
     ILogger<UserMailDispatcher> logger = null,
-    MailTemplate template = null)
+    MailTemplate template = null,
+    ContactMailSending contacts = null)
 {
     internal const string OptedOutReason = "The recipient does not receive this category.";
     internal const string WithheldReason = "Withheld by the non-production mail policy: set Email:Override to receive it.";
     internal const string BatchGoneReason = "The content this mail shares with others is no longer stored.";
     internal const string AddressAloneReason = "A mail to an address alone is sent only in a required category.";
+    internal const string ContactsNotRegisteredReason = "Contact mail is not registered here, so it is not sent: register it with AddThargaContactMessages.";
+    internal const string ContactOptedOutReason = "The address opted out of this kind of mail.";
+    internal const string ContactOptedOutOfAllReason = "The address opted out of all mail from the product.";
 
     private readonly Dictionary<string, UserMailBatch> _batches = new(StringComparer.Ordinal);
     private readonly UserMailComposer _composer = new(footer, template);
@@ -89,6 +98,7 @@ internal sealed class UserMailDispatcher(
     {
         var mail = await ContentOfAsync(item, cancellationToken);
         if (mail == null) return await FailAsync(item, claimant, BatchGoneReason, cancellationToken);
+        if (mail.Kind == UserMailKind.Contact) return await SendToContactAsync(item, mail, claimant, retry, cancellationToken);
 
         var category = categories.Find(mail.Category);
         if (category == null) return await FailAsync(item, claimant, $"The mail category '{mail.Category}' is no longer registered.", cancellationToken);
@@ -116,22 +126,62 @@ internal sealed class UserMailDispatcher(
             if (string.IsNullOrWhiteSpace(recipient.EMail)) return await FailAsync(item, claimant, "The user record holds no address.", cancellationToken);
         }
 
-        var decision = policy.Decide(recipient.EMail.Trim(), mail.Subject);
-        if (!decision.ShouldSend)
-        {
-            logger?.LogWarning("User mail {Id} was not sent. {Reason}", item.Id, WithheldReason);
-            return await FailAsync(item, claimant, WithheldReason, cancellationToken);
-        }
-
-        if (decision.Action == OutboundMailAction.Redirect)
-            logger?.LogInformation("Redirecting user mail {Id} to {Recipient} instead of the user it was addressed to, because the environment is not production.", item.Id, decision.Recipient);
+        var decision = Decide(item, recipient.EMail.Trim(), mail.Subject);
+        if (!decision.ShouldSend) return await FailAsync(item, claimant, WithheldReason, cancellationToken);
 
         var composed = await _composer.ComposeAsync(mail.Subject, mail.Body, mail.BodyHtml, mail.RecipientUserKey, category);
-        var result = await mailClient.SendAsync(Outbound(mail, composed, recipient, decision), cancellationToken);
 
+        return await DeliverAsync(item, claimant, mailClient, Outbound(mail, composed, recipient, decision, mail.ReplyTo ?? options.Value.ReplyTo), recipient.EMail, retry, cancellationToken);
+    }
+
+    /// <summary>A contact mail: to its address unless that has opted out by now, from the contact sender with the contact footer.</summary>
+    private async Task<UserMailStatus> SendToContactAsync(UserMailItem item, UserMail mail, string claimant, bool retry, CancellationToken cancellationToken)
+    {
+        if (contacts == null) return await FailAsync(item, claimant, ContactsNotRegisteredReason, cancellationToken);
+
+        var category = contacts.Categories.Find(mail.Category);
+        if (category == null) return await FailAsync(item, claimant, $"The contact mail category '{mail.Category}' is no longer registered.", cancellationToken);
+
+        if (item.Attempts > options.Value.MaxAttempts) return await FailAsync(item, claimant, GaveUp(item.Attempts - 1, item.Reason), cancellationToken);
+
+        var address = UserMailAddresses.Normalize(mail.RecipientAddress);
+        if (address == null) return await FailAsync(item, claimant, "The mail names no address.", cancellationToken);
+
+        var suppression = await contacts.SuppressionOfAsync(address, category.Key, cancellationToken);
+        if (suppression != null)
+        {
+            await RecordAsync(outbox.MarkSkippedAsync(item.Id, claimant, suppression.Category == null ? ContactOptedOutOfAllReason : ContactOptedOutReason, Now(), cancellationToken), item);
+            return UserMailStatus.Skipped;
+        }
+
+        var decision = Decide(item, address, mail.Subject);
+        if (!decision.ShouldSend) return await FailAsync(item, claimant, WithheldReason, cancellationToken);
+
+        var composed = _composer.Compose(mail.Subject, mail.Body, mail.BodyHtml, await contacts.Footer.ForAsync(address, category));
+        var recipient = new UserMailRecipient { Key = null, EMail = address, Name = mail.RecipientName };
+
+        return await DeliverAsync(item, claimant, contacts.Mail, Outbound(mail, composed, recipient, decision, contacts.ReplyTo), address, retry, cancellationToken);
+    }
+
+    /// <summary>What the outbound mail policy does with this mail, logged when it is withheld or redirected.</summary>
+    private OutboundMailDecision Decide(UserMailItem item, string address, string subject)
+    {
+        var decision = policy.Decide(address, subject);
+
+        if (!decision.ShouldSend) logger?.LogWarning("User mail {Id} was not sent. {Reason}", item.Id, WithheldReason);
+        else if (decision.Action == OutboundMailAction.Redirect)
+            logger?.LogInformation("Redirecting user mail {Id} to {Recipient} instead of the address it was for, because the environment is not production.", item.Id, decision.Recipient);
+
+        return decision;
+    }
+
+    /// <summary>Sends the mail and records it sent with the address it was addressed to, or leaves it to be tried again.</summary>
+    private async Task<UserMailStatus> DeliverAsync(UserMailItem item, string claimant, IMailClient client, OutboundMail outbound, string address, bool retry, CancellationToken cancellationToken)
+    {
+        var result = await client.SendAsync(outbound, cancellationToken);
         if (!result.Success) return await RetryAsync(item, claimant, result.Error, retry, cancellationToken);
 
-        await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, UserMailAddresses.Normalize(recipient.EMail), Now(), cancellationToken), item);
+        await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, UserMailAddresses.Normalize(address), Now(), cancellationToken), item);
         return UserMailStatus.Sent;
     }
 
@@ -155,7 +205,7 @@ internal sealed class UserMailDispatcher(
         };
     }
 
-    private OutboundMail Outbound(UserMail mail, UserMailComposed composed, UserMailRecipient recipient, OutboundMailDecision decision)
+    private static OutboundMail Outbound(UserMail mail, UserMailComposed composed, UserMailRecipient recipient, OutboundMailDecision decision, string replyTo)
     {
         var to = decision.Action == OutboundMailAction.Deliver && !string.IsNullOrWhiteSpace(recipient.Name)
             ? new MailboxAddress(recipient.Name, decision.Recipient).ToString()
@@ -165,7 +215,7 @@ internal sealed class UserMailDispatcher(
             to,
             decision.Subject,
             composed.Body,
-            ReplyTo: mail.ReplyTo ?? options.Value.ReplyTo,
+            ReplyTo: replyTo,
             Attachments: [.. (mail.Attachments ?? []).Where(x => x.Content != null).Select(x => new MailAttachment(x.FileName, x.ContentType, x.Content, x.ContentId))],
             BodyHtml: composed.BodyHtml,
             UnsubscribeUrl: composed.UnsubscribeUrl);

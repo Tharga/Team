@@ -121,6 +121,10 @@ public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
     Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(CountSentByCategoryAsync)}.");
 
+    /// <summary>For each contact category, the contact mails sent or bounced since <paramref name="since"/>, and to how many distinct addresses, in one aggregation on the server.</summary>
+    Task<IReadOnlyList<UserMailCategorySent>> CountSentToContactsByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(CountSentToContactsByCategoryAsync)}.");
+
     /// <summary>How long a mail is kept once it is done.</summary>
     TimeSpan Retention => ThargaTeamOptions.DefaultUserMailRetention;
 }
@@ -130,7 +134,8 @@ public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
 /// Due mail is found by status and due time; a deduplication key is unique where one was given; a batch's mail by its
 /// batch and status; a user's history by their key or address, newest first; a sent mail by the <c>Message-ID</c> a bounce
 /// report names; how often each category was sent by status, completion, category and recipient, read from the index
-/// alone; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never
+/// alone, and how often each contact category was by kind, status, completion, category and address, read from an index
+/// of its own; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never
 /// does.
 /// </remarks>
 public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, IUserMailCollection
@@ -169,7 +174,9 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.MessageId),
             new CreateIndexOptions { Sparse = true, Name = "MessageId" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.CompletedAt).Ascending(x => x.Category).Ascending(x => x.RecipientUserKey),
-            new CreateIndexOptions { Name = "Status_CompletedAt_Category_RecipientUserKey" })
+            new CreateIndexOptions { Name = "Status_CompletedAt_Category_RecipientUserKey" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.Kind).Ascending(x => x.Status).Ascending(x => x.CompletedAt).Ascending(x => x.Category).Ascending(x => x.RecipientAddress),
+            new CreateIndexOptions { Name = "Kind_Status_CompletedAt_Category_RecipientAddress" })
     ];
 
     /// <inheritdoc />
@@ -184,6 +191,24 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
             return (counted, counted.Count);
         }, Operation.Read, cancellationToken, SentSince(since));
 
+    /// <inheritdoc />
+    public Task<IReadOnlyList<UserMailCategorySent>> CountSentToContactsByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+        => ExecuteAsync(nameof(CountSentToContactsByCategoryAsync), async (collection, _, ct) =>
+        {
+            var rows = await collection.Aggregate(SentToContactsByCategory(since), cancellationToken: ct).ToListAsync(ct);
+            IReadOnlyList<UserMailCategorySent> counted = [.. rows.Select(ToCategorySent)];
+            return (counted, counted.Count);
+        }, Operation.Read, cancellationToken, SentToContactsSince(since));
+
+    /// <summary>Contact mail sent or bounced, completed at or after <paramref name="since"/>; the fields the contact statistics index leads with.</summary>
+    internal static FilterDefinition<UserMailEntity> SentToContactsSince(DateTime since)
+        => Filter.Eq(x => x.Kind, UserMailKind.Contact) & SentSince(since);
+
+    /// <summary>The contact mails sent since a time grouped by category and address, then by category: how many mails and how many distinct addresses.</summary>
+    /// <remarks>Every field it reads is in <c>Kind_Status_CompletedAt_Category_RecipientAddress</c>, so the server answers from the index without reading a mail.</remarks>
+    internal static PipelineDefinition<UserMailEntity, BsonDocument> SentToContactsByCategory(DateTime since)
+        => Grouped(SentToContactsSince(since), nameof(UserMailEntity.RecipientAddress));
+
     /// <summary>Mail sent or bounced, completed at or after <paramref name="since"/>; the fields the statistics index leads with, so nothing else is read.</summary>
     internal static FilterDefinition<UserMailEntity> SentSince(DateTime since)
         => Filter.In(x => x.Status, [UserMailStatus.Sent, UserMailStatus.Bounced]) & Filter.Gte(x => x.CompletedAt, since);
@@ -194,13 +219,17 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
     /// </summary>
     /// <remarks>Every field it reads is in <c>Status_CompletedAt_Category_RecipientUserKey</c>, so the server answers from the index without reading a mail.</remarks>
     internal static PipelineDefinition<UserMailEntity, BsonDocument> SentByCategory(DateTime since)
+        => Grouped(SentSince(since), nameof(UserMailEntity.RecipientUserKey));
+
+    /// <summary>The mails a filter matches grouped by category and the recipient field, those with none left out, then by category.</summary>
+    private static PipelineDefinition<UserMailEntity, BsonDocument> Grouped(FilterDefinition<UserMailEntity> match, string recipientField)
     {
         IPipelineStageDefinition[] stages =
         [
-            PipelineStageDefinitionBuilder.Match(SentSince(since)),
+            PipelineStageDefinitionBuilder.Match(match),
             new BsonDocumentPipelineStageDefinition<UserMailEntity, BsonDocument>(new BsonDocument("$group", new BsonDocument
             {
-                { "_id", new BsonDocument { { "c", "$" + nameof(UserMailEntity.Category) }, { "u", "$" + nameof(UserMailEntity.RecipientUserKey) } } },
+                { "_id", new BsonDocument { { "c", "$" + nameof(UserMailEntity.Category) }, { "u", "$" + recipientField } } },
                 { "n", new BsonDocument("$sum", 1) }
             })),
             new BsonDocumentPipelineStageDefinition<BsonDocument, BsonDocument>(new BsonDocument("$match", new BsonDocument("_id.u", new BsonDocument("$ne", BsonNull.Value)))),

@@ -6,6 +6,9 @@ public sealed record UserMailBatch
     /// <summary>The keys of the users the mail is for; each is queued once, however often it is named.</summary>
     public required string[] RecipientUserKeys { get; init; }
 
+    /// <summary>Addresses the mail goes to alone, with no user key, each queued once; for contact mail, which the contact message service queues and <see cref="IUserMailQueue"/> refuses.</summary>
+    public UserMailBatchAddress[] RecipientAddresses { get; init; } = [];
+
     /// <summary>The key of a registered category; an unknown key is refused when the batch is queued.</summary>
     public required string Category { get; init; }
 
@@ -24,6 +27,11 @@ public sealed record UserMailBatch
     /// <summary>Which kind of mail every mail of the batch is, shown in each recipient's history; default <see cref="UserMailKind.Message"/>.</summary>
     public UserMailKind Kind { get; init; } = UserMailKind.Message;
 }
+
+/// <summary>An address one mail of a batch goes to alone, and the name it is addressed to.</summary>
+/// <param name="Address">The address, trimmed and in lower case.</param>
+/// <param name="Name">The name the mail is addressed to, or null.</param>
+public sealed record UserMailBatchAddress(string Address, string Name = null);
 
 /// <summary>The outcome of <see cref="IUserMailQueue.QueueBatchAsync"/>.</summary>
 /// <param name="Id">The id of the batch, which <see cref="IUserMailQueue.GetBatchAsync"/> reads its outcomes by.</param>

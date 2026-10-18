@@ -31,9 +31,11 @@ internal sealed class UserMailFooter(UserMailUnsubscribeToken tokens, IOptions<U
             url);
     }
 
-    private string Url(string token)
+    private string Url(string token) => Link(options.Value, token);
+
+    /// <summary>The unsubscribe address carrying this token, on the site's address and the unsubscribe path.</summary>
+    internal static string Link(UserMailOptions o, string token)
     {
-        var o = options.Value;
         var path = string.IsNullOrWhiteSpace(o.UnsubscribePath) ? UserMailOptions.DefaultUnsubscribePath : o.UnsubscribePath;
 
         return $"{o.BaseUrl.TrimEnd('/')}/{path.TrimStart('/')}?{TokenParameter}={Uri.EscapeDataString(token)}";

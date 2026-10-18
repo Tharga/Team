@@ -20,6 +20,8 @@ internal sealed class UserMailQueue(
     private const int MaxDeduplicationKeyLength = 200;
     private const int MaxPageSize = 100;
 
+    internal const string ContactRefusal = "Contact mail is queued by the contact message service, which checks the sender's scope and the addresses' opt-outs; this queue sends to users.";
+
     public async Task<UserMailQueued> QueueAsync(UserMail mail, CancellationToken cancellationToken = default)
     {
         var accepted = Accept(mail);
@@ -109,6 +111,7 @@ internal sealed class UserMailQueue(
     internal UserMail Accept(UserMail mail)
     {
         ArgumentNullException.ThrowIfNull(mail);
+        if (mail.Kind == UserMailKind.Contact) throw new ArgumentException(ContactRefusal, nameof(mail));
 
         var userKey = string.IsNullOrWhiteSpace(mail.RecipientUserKey) ? null : mail.RecipientUserKey.Trim();
         var address = userKey == null ? RecipientAddress(mail.RecipientAddress) : null;
@@ -144,6 +147,7 @@ internal sealed class UserMailQueue(
     internal UserMailBatch Accept(UserMailBatch batch)
     {
         ArgumentNullException.ThrowIfNull(batch);
+        if (batch.Kind == UserMailKind.Contact || (batch.RecipientAddresses ?? []).Length > 0) throw new ArgumentException(ContactRefusal, nameof(batch));
 
         string[] recipients = [.. (batch.RecipientUserKeys ?? []).Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x.Trim()).Distinct(StringComparer.Ordinal)];
         if (recipients.Length == 0) throw new ArgumentException("A mail to many users names at least one user's key.", nameof(batch));
@@ -154,20 +158,22 @@ internal sealed class UserMailQueue(
     }
 
     private UserMailBatch AcceptContent(string categoryKey, string subjectLine, string bodyHtml, string bodyText, UserMailAttachment[] attachments, string parameterName)
+        => Content(options.Value, categories.Get(categoryKey, parameterName).Key, subjectLine, bodyHtml, bodyText, attachments, parameterName);
+
+    /// <summary>The content as it is stored, in a category the caller already accepted: the subject on one line, the HTML sanitized, the text derived when missing, and the files within the limits.</summary>
+    /// <exception cref="ArgumentException">There is no subject or body, or the body or files exceed the limits.</exception>
+    internal static UserMailBatch Content(UserMailOptions o, string categoryKey, string subjectLine, string bodyHtml, string bodyText, UserMailAttachment[] attachments, string parameterName)
     {
-        var o = options.Value;
-        var category = categories.Get(categoryKey, parameterName);
-
         var (subject, body, html) = UserMailComposer.Draft(subjectLine, bodyText, bodyHtml);
-        if (subject.Length == 0) throw new ArgumentException("A mail to a user has a subject.", parameterName);
+        if (subject.Length == 0) throw new ArgumentException("A mail has a subject.", parameterName);
 
-        if (string.IsNullOrWhiteSpace(body)) throw new ArgumentException("A mail to a user has a body, as text or as HTML with something readable in it.", parameterName);
+        if (string.IsNullOrWhiteSpace(body)) throw new ArgumentException("A mail has a body, as text or as HTML with something readable in it.", parameterName);
         if (body.Length + (html?.Length ?? 0) > o.MaxBodyLength) throw new ArgumentException($"The mail's body is longer than the {o.MaxBodyLength} characters allowed.", parameterName);
 
         return new UserMailBatch
         {
             RecipientUserKeys = [],
-            Category = category.Key,
+            Category = categoryKey,
             Subject = subject,
             BodyHtml = html,
             Body = body,
@@ -179,7 +185,7 @@ internal sealed class UserMailQueue(
     {
         var files = (attachments ?? []).Where(x => x != null).ToArray();
 
-        if (files.Length > o.MaxAttachmentCount) throw new ArgumentException($"A mail to a user carries at most {o.MaxAttachmentCount} files.", nameof(attachments));
+        if (files.Length > o.MaxAttachmentCount) throw new ArgumentException($"A mail carries at most {o.MaxAttachmentCount} files.", nameof(attachments));
         if (files.Any(x => x.Content == null || string.IsNullOrWhiteSpace(x.FileName))) throw new ArgumentException("Every file sent with a mail has a name and content.", nameof(attachments));
         if (files.Sum(x => (long)x.Content.Length) > o.MaxAttachmentBytes) throw new ArgumentException($"The files sent with one mail add up to at most {o.MaxAttachmentBytes} bytes.", nameof(attachments));
 

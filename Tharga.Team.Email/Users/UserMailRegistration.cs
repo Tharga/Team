@@ -91,7 +91,8 @@ public static class UserMailRegistration
             sp.GetRequiredService<IOptions<UserMailOptions>>(),
             sp.GetRequiredService<TimeProvider>(),
             sp.GetService<ILogger<UserMailDispatcher>>(),
-            sp.GetService<MailTemplate>()));
+            sp.GetService<MailTemplate>(),
+            sp.GetService<ContactMailSending>()));
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, UserMailSender>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailBounceHandler, UserMailBounceHandler>());

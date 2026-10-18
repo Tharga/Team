@@ -41,7 +41,7 @@ internal sealed partial class UserMailCategoryRegistry
         {
             if (category == null) continue;
 
-            if (string.IsNullOrWhiteSpace(category.Key) || !KeyPattern().IsMatch(category.Key))
+            if (!IsKey(category.Key))
                 throw new InvalidOperationException($"The mail category key '{category.Key}' is not valid: use 1 to 64 lowercase letters, digits, dots, dashes or underscores, starting with a letter or digit.");
 
             if (UserMailCategories.BuiltIn.Any(x => x.Key == category.Key))
@@ -58,6 +58,9 @@ internal sealed partial class UserMailCategoryRegistry
 
         return new UserMailCategoryRegistry(all);
     }
+
+    /// <summary>Whether a category key has the shape every stored key has: 1 to 64 lowercase letters, digits, dots, dashes or underscores, starting with a letter or digit.</summary>
+    internal static bool IsKey(string key) => !string.IsNullOrWhiteSpace(key) && KeyPattern().IsMatch(key);
 
     [GeneratedRegex("^[a-z0-9][a-z0-9._-]{0,63}$")]
     private static partial Regex KeyPattern();

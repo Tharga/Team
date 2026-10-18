@@ -110,7 +110,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         lock (_gate)
         {
             var id = Guid.NewGuid().ToString("N");
-            _batches[id] = batch with { RecipientUserKeys = [] };
+            _batches[id] = batch with { RecipientUserKeys = [], RecipientAddresses = [] };
 
             foreach (var recipient in batch.RecipientUserKeys)
             {
@@ -119,6 +119,20 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                     Id = Guid.NewGuid().ToString("N"),
                     Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind },
                     BatchId = id,
+                    Status = UserMailStatus.Queued,
+                    QueuedAt = queuedAt,
+                    NextAttemptAt = queuedAt
+                });
+            }
+
+            foreach (var recipient in batch.RecipientAddresses ?? [])
+            {
+                _items.Add(new UserMailItem
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Mail = new UserMail { RecipientAddress = recipient.Address, RecipientName = recipient.Name, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind },
+                    BatchId = id,
+                    RecipientAddress = recipient.Address,
                     Status = UserMailStatus.Queued,
                     QueuedAt = queuedAt,
                     NextAttemptAt = queuedAt
@@ -210,6 +224,23 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         }
     }
 
+    public Task<IReadOnlyList<UserMailCategorySent>> CountSentToContactsByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            Counts++;
+            IReadOnlyList<UserMailCategorySent> counted =
+            [
+                .. _items
+                    .Where(x => x.Status is UserMailStatus.Sent or UserMailStatus.Bounced && x.CompletedAt >= since && x.Mail.Kind == UserMailKind.Contact)
+                    .GroupBy(x => x.Mail.Category)
+                    .Select(x => new UserMailCategorySent(x.Key, x.Count(), x.Select(m => m.RecipientAddress).Distinct().Count()))
+            ];
+
+            return Task.FromResult(counted);
+        }
+    }
+
     public Task<UserMailQueued> AddAsync(UserMail mail, DateTime queuedAt, CancellationToken cancellationToken = default)
     {
         lock (_gate)
@@ -264,7 +295,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         lock (_gate)
         {
             var mine = _items
-                .Where(x => (userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address))
+                .Where(x => (userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address && x.Mail.Kind != UserMailKind.Contact))
                 .Reverse()
                 .ToList();
 

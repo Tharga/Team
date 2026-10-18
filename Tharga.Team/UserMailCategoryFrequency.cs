@@ -16,7 +16,7 @@ public sealed record UserMailCategoryFrequency
     /// <summary>How many mails in the category were sent to users in the period.</summary>
     public int Sent { get; init; }
 
-    /// <summary>How many users received at least one of them.</summary>
+    /// <summary>How many users received at least one of them; for a contact category, how many distinct addresses.</summary>
     public int Recipients { get; init; }
 
     /// <summary>When the period counted starts, in UTC: a year back, or less when the outbox keeps done mail for less long.</summary>
