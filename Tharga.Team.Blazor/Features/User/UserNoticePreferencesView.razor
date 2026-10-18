@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Rendering
 @using Tharga.Team.Blazor.Framework
 @inject IUserNoticePreferenceService Notices
 @inject IUserService UserService
@@ -6,79 +7,97 @@
 @* Which automatic notices a user receives and how. Only the notices the user may receive in one of their teams are
    listed; a switch and, where a notice allows both, the delivery save at once. The service checks the reader. *@
 
-<RadzenCard>
-    @if (!_ready)
-    {
-        <Loading />
-    }
-    else if (_userKey == null)
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
-            @_text[UserNoticePreferencesViewText.NoUser]
-        </RadzenAlert>
-    }
-    else if (!_permitted)
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
-            @_text[UserNoticePreferencesViewText.NotPermitted]
-        </RadzenAlert>
-    }
-    else
-    {
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
-            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserNoticePreferencesViewText.Title]</RadzenText>
-            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserNoticePreferencesViewText.Explanation]</RadzenText>
-
-            @if (_choices.Length == 0)
-            {
-                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-empty>@_text[UserNoticePreferencesViewText.Empty]</RadzenText>
-            }
-
-            @foreach (var choice in _choices)
-            {
-                var notice = choice.Notice;
-                var description = Description(notice);
-
-                <RadzenStack @key="@($"{notice.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-notice="@notice.Key">
-                    <RadzenSwitch Value="@choice.Enabled" Disabled="@_busy" Change="@(value => SetAsync(choice, value, choice.Delivery))" aria-label="@Name(notice)" />
-                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
-                        <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(notice)</strong></RadzenText>
-                        @if (description != null)
-                        {
-                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@description</RadzenText>
-                        }
-                        @if (notice.Deliveries.Length > 1)
-                        {
-                            <RadzenSelectBar TValue="UserNoticeDelivery" Value="@choice.Delivery" Disabled="@(_busy || !choice.Enabled)" Size="ButtonSize.ExtraSmall"
-                                             Change="@(value => SetAsync(choice, choice.Enabled, value))" aria-label="@_text[UserNoticeText.Delivery]" data-delivery="@notice.Key">
-                                <Items>
-                                    @foreach (var delivery in notice.Deliveries)
-                                    {
-                                        <RadzenSelectBarItem Text="@_text[UserNoticeText.For(delivery)]" Value="@delivery" />
-                                    }
-                                </Items>
-                            </RadzenSelectBar>
-                        }
-                        @if (choice.VariesByTeam)
-                        {
-                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-varies="@notice.Key">@_text[UserNoticePreferencesViewText.VariesByTeam]</RadzenText>
-                        }
-                        @if (!choice.CategoryReceives)
-                        {
-                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-category-off="@notice.Key">@_text.Format(UserNoticePreferencesViewText.CategoryOff, CategoryName(choice.Category))</RadzenText>
-                        }
-                    </RadzenStack>
-                </RadzenStack>
-            }
-        </RadzenStack>
-    }
-</RadzenCard>
+@if (Framed)
+{
+    <RadzenCard>
+        @((RenderFragment)RenderContent)
+    </RadzenCard>
+}
+else
+{
+    @((RenderFragment)RenderContent)
+}
 
 @code {
+    private void RenderContent(RenderTreeBuilder __builder)
+    {
+        if (!_ready)
+        {
+            <Loading />
+        }
+        else if (_userKey == null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @_text[UserNoticePreferencesViewText.NoUser]
+            </RadzenAlert>
+        }
+        else if (!_permitted)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @_text[UserNoticePreferencesViewText.NotPermitted]
+            </RadzenAlert>
+        }
+        else
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+                @if (Framed)
+                {
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserNoticePreferencesViewText.Title]</RadzenText>
+                }
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserNoticePreferencesViewText.Explanation]</RadzenText>
+
+                @if (_choices.Length == 0)
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-empty>@_text[UserNoticePreferencesViewText.Empty]</RadzenText>
+                }
+
+                @foreach (var choice in _choices)
+                {
+                    var notice = choice.Notice;
+                    var description = Description(notice);
+
+                    <RadzenStack @key="@($"{notice.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-notice="@notice.Key">
+                        <RadzenSwitch Value="@choice.Enabled" Disabled="@_busy" Change="@(value => SetAsync(choice, value, choice.Delivery))" aria-label="@Name(notice)" />
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+                            <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(notice)</strong></RadzenText>
+                            @if (description != null)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@description</RadzenText>
+                            }
+                            @if (notice.Deliveries.Length > 1)
+                            {
+                                <RadzenSelectBar TValue="UserNoticeDelivery" Value="@choice.Delivery" Disabled="@(_busy || !choice.Enabled)" Size="ButtonSize.ExtraSmall"
+                                                 Change="@(value => SetAsync(choice, choice.Enabled, value))" aria-label="@_text[UserNoticeText.Delivery]" data-delivery="@notice.Key">
+                                    <Items>
+                                        @foreach (var delivery in notice.Deliveries)
+                                        {
+                                            <RadzenSelectBarItem Text="@_text[UserNoticeText.For(delivery)]" Value="@delivery" />
+                                        }
+                                    </Items>
+                                </RadzenSelectBar>
+                            }
+                            @if (choice.VariesByTeam)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-varies="@notice.Key">@_text[UserNoticePreferencesViewText.VariesByTeam]</RadzenText>
+                            }
+                            @if (!choice.CategoryReceives)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-category-off="@notice.Key">@_text.Format(UserNoticePreferencesViewText.CategoryOff, CategoryName(choice.Category))</RadzenText>
+                            }
+                        </RadzenStack>
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        }
+    }
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     /// <summary>Whose choices are shown and changed; the signed-in user's when not set, and another user's only with <c>users:manage</c>.</summary>
     [Parameter] public string UserKey { get; set; }
+
+    /// <summary>Whether the view draws its own card and title; false leaves both to the host, such as a tab named for it, and shows the rest as it is.</summary>
+    [Parameter] public bool Framed { get; set; } = true;
 
     private TextSet _text = TextSet.Empty;
     private UserNoticeChoice[] _choices = [];

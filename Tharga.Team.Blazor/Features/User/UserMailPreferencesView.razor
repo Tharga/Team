@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Components.Rendering
 @using Tharga.Team.Blazor.Framework
 @inject IUserMailPreferenceService Preferences
 @inject IUserService UserService
@@ -7,73 +8,91 @@
    why; an optional one is a switch that saves at once. The service checks that the reader is this user or holds
    users:manage. *@
 
-<RadzenCard>
-    @if (!_ready)
-    {
-        <Loading />
-    }
-    else if (_userKey == null)
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
-            @_text[UserMailPreferencesViewText.NoUser]
-        </RadzenAlert>
-    }
-    else if (!_permitted)
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
-            @_text[UserMailPreferencesViewText.NotPermitted]
-        </RadzenAlert>
-    }
-    else
-    {
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
-            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserMailPreferencesViewText.Title]</RadzenText>
-            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMailPreferencesViewText.Explanation]</RadzenText>
-
-            @foreach (var choice in _choices)
-            {
-                var category = choice.Category;
-                var description = Description(category);
-                var frequency = Frequency(category);
-
-                <RadzenStack @key="@($"{category.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-category="@category.Key">
-                    <RadzenSwitch Value="@choice.Receives" Disabled="@(category.Required || _busy)" Change="@(value => SetAsync(category, value))"
-                                  aria-label="@Name(category)" />
-                    <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                        <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(category)</strong></RadzenText>
-                        @if (description != null)
-                        {
-                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@description</RadzenText>
-                        }
-                        @if (frequency != null)
-                        {
-                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-frequency="@category.Key">@frequency</RadzenText>
-                        }
-                        @if (category.Required)
-                        {
-                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-required="@category.Key">
-                                @if (_termsUrl != null)
-                                {
-                                    <a href="@_termsUrl">@_text[UserMailText.AlwaysSent]</a>
-                                }
-                                else
-                                {
-                                    @_text[UserMailText.AlwaysSent]
-                                }
-                            </RadzenText>
-                        }
-                    </RadzenStack>
-                </RadzenStack>
-            }
-        </RadzenStack>
-    }
-</RadzenCard>
+@if (Framed)
+{
+    <RadzenCard>
+        @((RenderFragment)RenderContent)
+    </RadzenCard>
+}
+else
+{
+    @((RenderFragment)RenderContent)
+}
 
 @code {
+    private void RenderContent(RenderTreeBuilder __builder)
+    {
+        if (!_ready)
+        {
+            <Loading />
+        }
+        else if (_userKey == null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @_text[UserMailPreferencesViewText.NoUser]
+            </RadzenAlert>
+        }
+        else if (!_permitted)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @_text[UserMailPreferencesViewText.NotPermitted]
+            </RadzenAlert>
+        }
+        else
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+                @if (Framed)
+                {
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserMailPreferencesViewText.Title]</RadzenText>
+                }
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMailPreferencesViewText.Explanation]</RadzenText>
+
+                @foreach (var choice in _choices)
+                {
+                    var category = choice.Category;
+                    var description = Description(category);
+                    var frequency = Frequency(category);
+
+                    <RadzenStack @key="@($"{category.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-category="@category.Key">
+                        <RadzenSwitch Value="@choice.Receives" Disabled="@(category.Required || _busy)" Change="@(value => SetAsync(category, value))"
+                                      aria-label="@Name(category)" />
+                        <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                            <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(category)</strong></RadzenText>
+                            @if (description != null)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@description</RadzenText>
+                            }
+                            @if (frequency != null)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-frequency="@category.Key">@frequency</RadzenText>
+                            }
+                            @if (category.Required)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-required="@category.Key">
+                                    @if (_termsUrl != null)
+                                    {
+                                        <a href="@_termsUrl">@_text[UserMailText.AlwaysSent]</a>
+                                    }
+                                    else
+                                    {
+                                        @_text[UserMailText.AlwaysSent]
+                                    }
+                                </RadzenText>
+                            }
+                        </RadzenStack>
+                    </RadzenStack>
+                }
+            </RadzenStack>
+        }
+    }
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     /// <summary>Whose choices are shown and changed; the signed-in user's when not set, and another user's only with <c>users:manage</c>.</summary>
     [Parameter] public string UserKey { get; set; }
+
+    /// <summary>Whether the view draws its own card and title; false leaves both to the host, such as a tab named for it, and shows the rest as it is.</summary>
+    [Parameter] public bool Framed { get; set; } = true;
 
     private TextSet _text = TextSet.Empty;
     private IReadOnlyList<UserMailChoice> _choices = [];
