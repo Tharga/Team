@@ -7,6 +7,9 @@ public interface IScopeRegistry
 {
     IReadOnlyList<ScopeDefinition> All { get; }
 
+    /// <summary>The groups scopes are shown under, in the order the host defined them. Empty when the host defined none.</summary>
+    IReadOnlyList<ScopeGroup> Groups => Array.Empty<ScopeGroup>();
+
     /// <summary>The scopes <paramref name="accessLevel"/> grants on its own. Empty for null: an unset level grants nothing.</summary>
     IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel? accessLevel);
 

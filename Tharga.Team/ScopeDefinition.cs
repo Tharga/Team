@@ -11,6 +11,10 @@ namespace Tharga.Team;
 /// <paramref name="GrantOnly"/> is true, since no access level grants such a scope.
 /// </param>
 /// <param name="Description">Human-readable description, shown in the scope catalogue and pickers.</param>
+/// <param name="Group">
+/// The key of the <see cref="ScopeGroup"/> the scope is shown under, or null for an ungrouped scope. Display
+/// only: it has no bearing on who holds the scope or how it is checked.
+/// </param>
 /// <param name="GrantOnly">
 /// When true the scope is registered for documentation and validation only: no access level grants it,
 /// a tenant-defined custom role may not reference it, and the scope-override pickers do not offer it.
@@ -46,4 +50,10 @@ namespace Tharga.Team;
 /// exists to catch.
 /// </para>
 /// </remarks>
-public record ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description = null, bool GrantOnly = false);
+public record ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description = null, bool GrantOnly = false, string Group = null)
+{
+    public ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description, bool GrantOnly)
+        : this(Name, DefaultMinimumLevel, Description, GrantOnly, null)
+    {
+    }
+}

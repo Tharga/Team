@@ -2435,6 +2435,32 @@ A hidden scope is not offered, and is left out of the inherited and held scopes 
 
 *Added in 4.1 (Tharga/Team#318, #331, #334): before, `<TenantRoleManager>` offered and `<ScopeView>` listed every registered scope.*
 
+### Grouping scopes by area
+
+A host with several product areas can show its scopes by area instead of as one alphabetical list. Define the groups once, in the order they should appear, and name a group when registering a scope:
+
+```csharp
+o.ConfigureScopes = scopes =>
+{
+    scopes.DefineGroup("platform", "Platform");
+    scopes.DefineGroup("diary", "Diary");
+
+    scopes.Register("team:read", AccessLevel.Viewer, "Read the team.", group: "platform");
+    scopes.Register("case:read", AccessLevel.Viewer, "Read cases.", group: "diary");
+    scopes.Register("record:write", AccessLevel.User, "Write records.", group: "diary");
+    scopes.RegisterGrantOnly("record:erase", "Erase records.", group: "diary");
+};
+```
+
+`<ScopeView>` shows one table per group under its heading, in the order you defined them, with scopes that name no group last under an "Other" heading. `<TenantRoleManager>` and the scope-override picker (member editor and `<ApiKeyView>`) list scopes in the same order and tag each with its group, since a dropdown has no group headings. A group whose scopes are all hidden for the team (see above) shows no heading.
+
+- **Display only.** A group has no bearing on who holds a scope or how it is checked.
+- **Localised headings.** The display name passed to `DefineGroup` is the English default; override it through your `IThargaTextProvider` under the key `team.scopeGroup.<key>` (for `diary`: `team.scopeGroup.diary`). The "Other" heading is `team.scopeView.ungrouped`.
+- **An undefined group.** A scope naming a group that was never defined is still shown, under its key and after the defined groups, so a typo is visible instead of lost.
+- **Not configured.** With no groups and no `group:` arguments nothing changes: one list, no headings.
+
+*Added after 4.2 (Tharga/Team#347).*
+
 ### Dynamic (runtime-defined) tenant roles
 
 The roles registered above via `AddThargaTenantRoles` are **code roles** — global and fixed at deploy time. To let a team administrator define their **own** roles per team at runtime (e.g. org-specific Registrar / Case officer / Reader / Archivist), enable dynamic tenant roles and add the management component:

@@ -15,12 +15,14 @@ namespace Tharga.Team.Blazor.Features.Scopes;
 /// it is granted by no access level, so without the flag it would read as an ordinary scope that simply
 /// nobody happens to have.
 /// </param>
+/// <param name="Group">The key of the <see cref="ScopeGroup"/> the scope is shown under, or null when ungrouped.</param>
 public sealed record ScopeRow(
     string Name,
     string Description,
     IReadOnlyList<AccessLevel> AccessLevels,
     IReadOnlyList<string> Roles,
-    bool GrantOnly = false);
+    bool GrantOnly = false,
+    string Group = null);
 
 /// <summary>
 /// How a single scope is granted under the current selection: by the selected access level, by one or
@@ -83,7 +85,8 @@ public static class ScopeReference
                 s.Description,
                 Levels.Where(l => byLevel[l].Contains(s.Name)).ToList(),
                 roleList.Where(r => r.Scopes != null && r.Scopes.Contains(s.Name)).Select(r => r.Name).ToList(),
-                s.GrantOnly))
+                s.GrantOnly,
+                s.Group))
             .ToList();
     }
 

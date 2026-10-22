@@ -14,6 +14,7 @@ namespace Tharga.Team;
 public class ScopeRegistry : IScopeRegistry
 {
     private readonly List<ScopeDefinition> _scopes = new();
+    private readonly List<ScopeGroup> _groups = new();
     private ITenantRoleRegistry _roleRegistry;
 
     public void SetRoleRegistry(ITenantRoleRegistry roleRegistry)
@@ -23,9 +24,37 @@ public class ScopeRegistry : IScopeRegistry
 
     public IReadOnlyList<ScopeDefinition> All => _scopes;
 
+    public IReadOnlyList<ScopeGroup> Groups => _groups;
+
+    /// <summary>
+    /// Defines a group scopes can be shown under. Groups are shown in the order they are defined.
+    /// </summary>
+    /// <remarks>
+    /// Display only. A scope naming a group that was never defined is still shown, under its key and after the
+    /// defined groups, so a typo is visible rather than lost.
+    /// </remarks>
+    /// <param name="key">The key scopes name when registered with a group.</param>
+    /// <param name="displayName">The heading, in English. Localised through the text provider under <see cref="ScopeGroup.TextKeyFor"/>.</param>
+    public void DefineGroup(string key, string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(key))
+            throw new ArgumentException("A scope group needs a key.", nameof(key));
+
+        if (_groups.Any(g => g.Key == key))
+            throw new InvalidOperationException($"Scope group '{key}' is already defined.");
+
+        _groups.Add(new ScopeGroup(key, string.IsNullOrWhiteSpace(displayName) ? key : displayName));
+    }
+
     public void Register(string scopeName, AccessLevel defaultMinimumLevel, string description = null)
     {
         Add(new ScopeDefinition(scopeName, defaultMinimumLevel, description));
+    }
+
+    /// <summary>Registers a scope shown under <paramref name="group"/>. See <see cref="DefineGroup"/>.</summary>
+    public void Register(string scopeName, AccessLevel defaultMinimumLevel, string description, string group)
+    {
+        Add(new ScopeDefinition(scopeName, defaultMinimumLevel, description, false, group));
     }
 
     /// <summary>
@@ -51,7 +80,13 @@ public class ScopeRegistry : IScopeRegistry
     /// <param name="description">Human-readable description, shown in the scope catalogue.</param>
     public void RegisterGrantOnly(string scopeName, string description = null)
     {
-        Add(new ScopeDefinition(scopeName, AccessLevel.Custom, description, GrantOnly: true));
+        Add(new ScopeDefinition(scopeName, AccessLevel.Custom, description, true));
+    }
+
+    /// <summary>Registers a grant-only scope shown under <paramref name="group"/>. See <see cref="RegisterGrantOnly(string,string)"/>.</summary>
+    public void RegisterGrantOnly(string scopeName, string description, string group)
+    {
+        Add(new ScopeDefinition(scopeName, AccessLevel.Custom, description, true, group));
     }
 
     private void Add(ScopeDefinition definition)

@@ -1,10 +1,12 @@
 @namespace Tharga.Team.Blazor.Features.Roles
 @using System.Security.Claims
 @using Microsoft.Extensions.DependencyInjection
+@using Tharga.Team.Blazor.Features.Scopes
 @using Tharga.Team.Blazor.Features.Team
 @inject IServiceProvider ServiceProvider
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NotificationService NotificationService
+@inject IThargaTextProvider TextProvider
 
 @*
     Runtime role administration for the selected team: a team admin (team:manage) creates / edits / deletes
@@ -60,7 +62,15 @@ else
                                     Value="@context.Scopes"
                                     ValueChanged="@(v => context.Scopes = (v ?? Enumerable.Empty<string>()).ToList())"
                                     Placeholder="Select scopes..."
-                                    Style="width: 100%;" />
+                                    Style="width: 100%;">
+                        <Template Context="scope">
+                            <span>@scope</span>
+                            @if (_scopeGroupHeadings.TryGetValue((string)scope, out var heading))
+                            {
+                                <small class="rz-color-secondary"> · @heading</small>
+                            }
+                        </Template>
+                    </RadzenDropDown>
                 </Template>
             </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="" Width="60px" Sortable="false" Filterable="false">
@@ -109,6 +119,7 @@ else
     private string _manageScope = TeamScopes.Manage;
     private bool _canManage;
     private string[] _allScopeNames = [];
+    private IReadOnlyDictionary<string, string> _scopeGroupHeadings = new Dictionary<string, string>();
     // Scopes the team's ITeamScopeVisibilityProvider hides: left out of the picker, kept on a role that holds them.
     private IReadOnlySet<string> _hiddenScopes = new HashSet<string>();
     private IReadOnlyList<string> _codeRoleNames = [];
@@ -145,6 +156,14 @@ else
             _allScopeNames = _scopeRegistry.All
                 .Where(s => !s.GrantOnly && !_hiddenScopes.Contains(s.Name))
                 .Select(s => s.Name).OrderBy(s => s, StringComparer.Ordinal).ToArray();
+
+        if (_scopeRegistry != null)
+        {
+            var headingOf = await ScopeGroupHeadings.ResolveAsync(TextProvider, _scopeRegistry.Groups);
+            var groupOf = _scopeRegistry.All.ToDictionary(s => s.Name, s => s.Group);
+            _scopeGroupHeadings = groupOf.Where(x => !string.IsNullOrEmpty(x.Value)).ToDictionary(x => x.Key, x => headingOf(x.Value));
+            _allScopeNames = [.. ScopeGrouping.OrderByGroup(_allScopeNames, name => groupOf[name], _scopeRegistry.Groups)];
+        }
 
         await ReloadAsync();
     }
