@@ -46,6 +46,25 @@ public static class AccessLevelVisibility
         [AccessLevel.Viewer, AccessLevel.User, AccessLevel.Administrator];
 
     /// <summary>
+    /// Levels <c>ScopeView</c> lets a reader pick to see what they grant. Administrator stands for Owner too,
+    /// because the two grant identical scopes.
+    /// </summary>
+    public static readonly AccessLevel[] ScopeExplorer =
+        [AccessLevel.Viewer, AccessLevel.User, AccessLevel.Administrator];
+
+    /// <summary>
+    /// The levels <paramref name="offered"/> minus anything the host hid, except <paramref name="held"/>,
+    /// which always stays. Order is preserved.
+    /// </summary>
+    /// <remarks>
+    /// For a page that explains the signed-in member's own access: it must never hide the level that grants it.
+    /// </remarks>
+    public static AccessLevel[] Apply(IReadOnlyList<AccessLevel> offered, IEnumerable<AccessLevel> hidden, AccessLevel? held)
+    {
+        return [.. Apply(offered, hidden is null ? null : hidden.Where(level => level != held))];
+    }
+
+    /// <summary>
     /// The levels <paramref name="offered"/> minus anything the host hid. Order is preserved.
     /// </summary>
     public static AccessLevel[] Apply(IReadOnlyList<AccessLevel> offered, IEnumerable<AccessLevel> hidden)

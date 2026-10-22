@@ -8,6 +8,7 @@
 @inject IServiceProvider ServiceProvider
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IThargaTextProvider TextProvider
+@inject Microsoft.Extensions.Options.IOptions<ThargaBlazorOptions> BlazorOptions
 
 @*
     Interactive scope explorer: pick an access level and roles to see which scopes a member would have.
@@ -38,9 +39,10 @@
                 <RadzenLabel Text="Access level" />
                 <RadzenSelectBar @bind-Value="_selectedLevel" TValue="AccessLevel?" Change="@(_ => RecomputeGrants())" Size="ButtonSize.Small">
                     <Items>
-                        <RadzenSelectBarItem Text="Viewer" Value="AccessLevel.Viewer" />
-                        <RadzenSelectBarItem Text="User" Value="AccessLevel.User" />
-                        <RadzenSelectBarItem Text="Owner / Administrator" Value="AccessLevel.Administrator" />
+                        @foreach (var level in _offeredLevels)
+                        {
+                            <RadzenSelectBarItem Text="@SelectorLabel(level)" Value="@((AccessLevel?)level)" />
+                        }
                     </Items>
                 </RadzenSelectBar>
             </RadzenStack>
@@ -193,6 +195,7 @@
     private bool ShowSystemSection => ShowSystemScopes && _systemScopes.Count > 0;
 
     private AccessLevel? _selectedLevel;
+    private AccessLevel[] _offeredLevels = AccessLevelVisibility.ScopeExplorer;
     private IEnumerable<string> _selectedRolesValue = Array.Empty<string>();
     private HashSet<string> _overrides = new();
     private bool _loadedFromMember;
@@ -237,8 +240,11 @@
         if (_rows.Count > 0 && principal != null)
             await ApplyCurrentUserDefaultsAsync(principal);
 
+        _offeredLevels = AccessLevelVisibility.Apply(AccessLevelVisibility.ScopeExplorer, BlazorOptions.Value.HiddenAccessLevels, _selectedLevel);
         RecomputeGrants(); // refine with the loaded defaults
     }
+
+    private static string SelectorLabel(AccessLevel level) => level == AccessLevel.Administrator ? "Owner / Administrator" : level.ToString();
 
     /// <summary>
     /// Rebuilds the rows and the role bar from <paramref name="roles"/>, or from <see cref="Roles"/> when a
