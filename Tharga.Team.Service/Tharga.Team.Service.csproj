@@ -42,7 +42,7 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.13" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <PackageReference Include="Tharga.MongoDB" Version="2.18.2" />
     <!--
       The one HTML sanitizer: formatted text is kept and shown only as its allow-listed output, on every way in

@@ -61,6 +61,34 @@ public class AccessLevelVisibilityTests
     }
 
     [Fact]
+    public void ScopeExplorer_HidingViewer_OffersUserAndAdministrator()
+    {
+        Assert.Equal([AccessLevel.User, AccessLevel.Administrator],
+            AccessLevelVisibility.Apply(AccessLevelVisibility.ScopeExplorer, [AccessLevel.Viewer], null));
+    }
+
+    [Fact]
+    public void ScopeExplorer_KeepsALevelTheMemberHolds_EvenWhenHidden()
+    {
+        Assert.Equal(AccessLevelVisibility.ScopeExplorer,
+            AccessLevelVisibility.Apply(AccessLevelVisibility.ScopeExplorer, [AccessLevel.Viewer], AccessLevel.Viewer));
+    }
+
+    [Fact]
+    public void ScopeExplorer_HeldLevelOnlyRescuesItself()
+    {
+        Assert.Equal([AccessLevel.User, AccessLevel.Administrator],
+            AccessLevelVisibility.Apply(AccessLevelVisibility.ScopeExplorer, [AccessLevel.Viewer], AccessLevel.User));
+    }
+
+    [Fact]
+    public void ScopeExplorer_NothingHidden_IsTheBuiltInSet()
+    {
+        Assert.Equal(AccessLevelVisibility.ScopeExplorer,
+            AccessLevelVisibility.Apply(AccessLevelVisibility.ScopeExplorer, null, AccessLevel.User));
+    }
+
+    [Fact]
     public void HidingALevelASelectorNeverOffered_ChangesNothing()
     {
         Assert.Equal(AccessLevelVisibility.Member,

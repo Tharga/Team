@@ -111,7 +111,7 @@ public class TextCoverageTests
     private static readonly Dictionary<string, int> Pending = new()
     {
         ["Features/Roles/TenantRoleManager.razor"] = 11,
-        ["Features/Scopes/ScopeView.razor"] = 14,
+        ["Features/Scopes/ScopeView.razor"] = 12,
         ["Features/User/UserProfileView.razor"] = 13,
     };
 
