@@ -95,13 +95,17 @@ builder.AddThargaTeam(o =>
         // A spread across access levels so option-(b) pickers show a mix of inherited (disabled) and addable
         // scopes. Remember: Owner/Administrator inherit ALL scopes — to see addable ones, test against a
         // lower-level member or an AccessLevel.Custom key.
-        scopes.Register("orders:read", AccessLevel.Viewer, "View orders and order details.");
-        scopes.Register("orders:write", AccessLevel.User, "Create and edit orders.");
-        scopes.Register("orders:refund", AccessLevel.Administrator, "Issue refunds on orders.");
+        // Groups show scopes by product area in /scopes and the scope pickers; scopes with no group come last.
+        scopes.DefineGroup("sales", "Sales");
+        scopes.DefineGroup("content", "Content");
+
+        scopes.Register("orders:read", AccessLevel.Viewer, "View orders and order details.", group: "sales");
+        scopes.Register("orders:write", AccessLevel.User, "Create and edit orders.", group: "sales");
+        scopes.Register("orders:refund", AccessLevel.Administrator, "Issue refunds on orders.", group: "sales");
         scopes.Register("valuegroup:read", AccessLevel.Viewer, "Read value groups.");
-        scopes.Register("content:load", AccessLevel.Viewer, "Load published content.");
-        scopes.Register("content:publish", AccessLevel.User, "Publish content to live.");
-        scopes.Register("pim:manage", AccessLevel.Administrator, "Manage the product information catalog.");
+        scopes.Register("content:load", AccessLevel.Viewer, "Load published content.", group: "content");
+        scopes.Register("content:publish", AccessLevel.User, "Publish content to live.", group: "content");
+        scopes.Register("pim:manage", AccessLevel.Administrator, "Manage the product information catalog.", group: "content");
         scopes.Register("firewall:open", AccessLevel.Administrator); // no description — shows no tooltip
         scopes.Register("reports:export", AccessLevel.User, "Export reports to file.");
         scopes.Register("billing:manage", AccessLevel.Administrator, "Manage billing and invoices.");

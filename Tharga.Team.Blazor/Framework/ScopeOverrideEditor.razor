@@ -1,5 +1,9 @@
 @namespace Tharga.Team.Blazor.Framework
+@using Microsoft.Extensions.DependencyInjection
+@using Tharga.Team
+@using Tharga.Team.Blazor.Features.Scopes
 @inject IThargaTextProvider TextProvider
+@inject IServiceProvider ServiceProvider
 
 @*
     Scope-override picker (option b): shows the grantable scopes; the ones inherited from the principal's
@@ -26,6 +30,10 @@
                 Style="@Style">
     <Template>
         <span title="@(((ScopeOption)context).Description)">@(((ScopeOption)context).Name)</span>
+        @if (((ScopeOption)context).Group is { } group)
+        {
+            <small class="rz-color-secondary"> · @group</small>
+        }
     </Template>
 </RadzenDropDown>
 
@@ -61,18 +69,25 @@
     private TextSet _text = TextSet.Empty;
     private List<ScopeOption> _options = new();
     private IEnumerable<string> _value = Array.Empty<string>();
+    private IReadOnlyList<ScopeGroup> _groups = [];
+    private IReadOnlyDictionary<string, string> _groupKeyOf = new Dictionary<string, string>();
+    private Func<string, string> _groupHeading = key => key;
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(ScopeOverrideEditorText.All);
+        var registry = ServiceProvider.GetService<IScopeRegistry>();
+        _groups = registry?.Groups ?? [];
+        _groupKeyOf = registry?.All.ToDictionary(s => s.Name, s => s.Group) ?? new Dictionary<string, string>();
+        _groupHeading = await ScopeGroupHeadings.ResolveAsync(TextProvider, _groups);
         await base.OnInitializedAsync();
     }
 
     protected override void OnParametersSet()
     {
         var inherited = new HashSet<string>(InheritedScopes ?? Array.Empty<string>());
-        _options = ScopeVisibility.Options(AllScopes, inherited, Overrides, HiddenScopes)
-            .Select(s => new ScopeOption(s, inherited.Contains(s), GetDescription(s)))
+        _options = ScopeGrouping.OrderByGroup(ScopeVisibility.Options(AllScopes, inherited, Overrides, HiddenScopes), GroupKey, _groups)
+            .Select(s => new ScopeOption(s, inherited.Contains(s), GetDescription(s), GroupKey(s) is { Length: > 0 } key ? _groupHeading(key) : null))
             .ToList();
         // Inherited scopes appear checked (and disabled); current overrides are also checked.
         _value = ScopeVisibility.Checked(inherited, Overrides, HiddenScopes);
@@ -86,8 +101,10 @@
         await OverridesChanged.InvokeAsync(overrides);
     }
 
+    private string GroupKey(string scope) => _groupKeyOf.TryGetValue(scope, out var key) ? key : null;
+
     private string GetDescription(string scope)
         => Descriptions != null && Descriptions.TryGetValue(scope, out var d) ? d : null;
 
-    public sealed record ScopeOption(string Name, bool Inherited, string Description);
+    public sealed record ScopeOption(string Name, bool Inherited, string Description, string Group = null);
 }

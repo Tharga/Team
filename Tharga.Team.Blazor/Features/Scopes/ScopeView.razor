@@ -75,55 +75,62 @@
         }
     </RadzenText>
 
-    <RadzenDataGrid Data="@_rows" TItem="ScopeRow"
-                    AllowSorting="@AllowGridSorting"
-                    AllowFiltering="@AllowGridFiltering"
-                    FilterMode="FilterMode.Simple"
-                    FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                    RowRender="@OnRowRender">
-        <Columns>
-            <RadzenDataGridColumn Title="Scope" Property="@nameof(ScopeRow.Name)" Width="260px" SortOrder="SortOrder.Ascending">
-                <Template>
-                    <code>@context.Name</code>
-                    @if (Grant(context.Name).ByOverride)
-                    {
-                        <RadzenIcon Icon="star" Style="color: var(--rz-warning); margin-left: .35rem; font-size: 1rem; cursor: help;"
-                                    title="You have a personal scope override for this scope." />
-                    }
-                    @if (context.GrantOnly)
-                    {
-                        <RadzenIcon Icon="lock" Style="color: var(--rz-danger); margin-left: .35rem; font-size: 1rem; cursor: help;"
-                                    title="@_text[ScopeViewText.GrantOnlyTooltip]" />
-                    }
-                </Template>
-            </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Description" Property="@nameof(ScopeRow.Description)" Visible="@ShowDescription" Filterable="false" />
-            <RadzenDataGridColumn Title="Granted by" Sortable="false" Filterable="false">
-                <Template>
-                    @{ var grant = Grant(context.Name); }
-                    @if (!grant.Granted)
-                    {
-                        <RadzenText TextStyle="TextStyle.Body2">—</RadzenText>
-                    }
-                    else
-                    {
-                        @if (grant.ByLevel)
+    @foreach (var section in _sections)
+    {
+        @if (section.Heading != null)
+        {
+            <RadzenText TextStyle="TextStyle.H6" class="rz-mt-3 rz-mb-1">@section.Heading</RadzenText>
+        }
+        <RadzenDataGrid Data="@section.Items" TItem="ScopeRow"
+                        AllowSorting="@AllowGridSorting"
+                        AllowFiltering="@AllowGridFiltering"
+                        FilterMode="FilterMode.Simple"
+                        FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                        RowRender="@OnRowRender">
+            <Columns>
+                <RadzenDataGridColumn Title="Scope" Property="@nameof(ScopeRow.Name)" Width="260px" SortOrder="SortOrder.Ascending">
+                    <Template>
+                        <code>@context.Name</code>
+                        @if (Grant(context.Name).ByOverride)
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Info" Variant="Variant.Flat" Text="@LevelLabel(_selectedLevel)" class="rz-mr-1 rz-mb-1" />
+                            <RadzenIcon Icon="star" Style="color: var(--rz-warning); margin-left: .35rem; font-size: 1rem; cursor: help;"
+                                        title="You have a personal scope override for this scope." />
                         }
-                        @foreach (var role in grant.ByRoles)
+                        @if (context.GrantOnly)
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Variant="Variant.Flat" Text="@role" class="rz-mr-1 rz-mb-1" />
+                            <RadzenIcon Icon="lock" Style="color: var(--rz-danger); margin-left: .35rem; font-size: 1rem; cursor: help;"
+                                        title="@_text[ScopeViewText.GrantOnlyTooltip]" />
                         }
-                        @if (grant.ByOverride)
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn Title="Description" Property="@nameof(ScopeRow.Description)" Visible="@ShowDescription" Filterable="false" />
+                <RadzenDataGridColumn Title="Granted by" Sortable="false" Filterable="false">
+                    <Template>
+                        @{ var grant = Grant(context.Name); }
+                        @if (!grant.Granted)
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Override" class="rz-mr-1 rz-mb-1" />
+                            <RadzenText TextStyle="TextStyle.Body2">—</RadzenText>
                         }
-                    }
-                </Template>
-            </RadzenDataGridColumn>
-        </Columns>
-    </RadzenDataGrid>
+                        else
+                        {
+                            @if (grant.ByLevel)
+                            {
+                                <RadzenBadge BadgeStyle="BadgeStyle.Info" Variant="Variant.Flat" Text="@LevelLabel(_selectedLevel)" class="rz-mr-1 rz-mb-1" />
+                            }
+                            @foreach (var role in grant.ByRoles)
+                            {
+                                <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Variant="Variant.Flat" Text="@role" class="rz-mr-1 rz-mb-1" />
+                            }
+                            @if (grant.ByOverride)
+                            {
+                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Override" class="rz-mr-1 rz-mb-1" />
+                            }
+                        }
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
 }
 
 @if (ShowSystemSection)
@@ -183,6 +190,9 @@
     private static readonly ScopeGrant NotGranted = new(false, false, Array.Empty<string>(), false);
 
     private IReadOnlyList<ScopeRow> _rows = Array.Empty<ScopeRow>();
+    private IReadOnlyList<ScopeSection<ScopeRow>> _sections = [];
+    private IReadOnlyList<ScopeGroup> _groups = [];
+    private Func<string, string> _groupHeading = key => key;
     private IReadOnlyList<string> _allRoleNames = Array.Empty<string>();
     private IReadOnlyList<TenantRoleDefinition> _resolvedRoles = Array.Empty<TenantRoleDefinition>();
     private Dictionary<string, ScopeGrant> _grants = new();
@@ -210,6 +220,8 @@
         var systemRegistry = ServiceProvider.GetService<ISystemScopeRegistry>();
         var visibility = ServiceProvider.GetService<ITeamScopeVisibilityProvider>();
         _noScopesConfigured = scopeRegistry?.All.Any() != true;
+        _groups = scopeRegistry?.Groups ?? [];
+        _groupHeading = await ScopeGroupHeadings.ResolveAsync(TextProvider, _groups);
 
         // Code-registered roles only, so the grid is not empty on the first synchronous render. The team's
         // own roles need an async per-team read and arrive below, before the member's defaults are applied.
@@ -258,6 +270,7 @@
 
         _rows = ScopeReference.WithoutHidden(ScopeReference.BuildForRoles(scopeRegistry, _resolvedRoles), _hiddenScopes);
         _allRoleNames = _resolvedRoles.Select(r => r.Name).ToList();
+        _sections = ScopeGrouping.Sections(_rows, r => r.Group, _groups, _groupHeading, _text[ScopeViewText.Ungrouped]);
     }
 
     /// <summary>

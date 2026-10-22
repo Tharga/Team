@@ -99,7 +99,7 @@ public class SupportCaseOptions
     /// their descriptions and are still enforced; they are simply granted by no access level, rejected in
     /// tenant-defined custom roles, and left out of the scope-override pickers. Holding one then requires a
     /// code-registered tenant role or an explicit override — a recorded decision rather than a consequence
-    /// of being an Owner. See <see cref="ScopeRegistry.RegisterGrantOnly"/>.
+    /// of being an Owner. See <see cref="ScopeRegistry.RegisterGrantOnly(string,string)"/>.
     /// </para>
     /// <para>
     /// <b>Only some values differ from each other.</b> Owner and Administrator are granted every registered
@@ -107,7 +107,7 @@ public class SupportCaseOptions
     /// default does. The choices that actually differ are <see cref="AccessLevel.Administrator"/>,
     /// <see cref="AccessLevel.User"/>, <see cref="AccessLevel.Viewer"/> and <c>null</c>. Do not use
     /// <see cref="AccessLevel.Custom"/> to mean "nobody": it grants the scope to <i>every</i> level, which
-    /// is the trap <see cref="ScopeRegistry.RegisterGrantOnly"/> exists to avoid.
+    /// is the trap <see cref="ScopeRegistry.RegisterGrantOnly(string,string)"/> exists to avoid.
     /// </para>
     /// <para>
     /// <b>Changing this does not change enforcement</b>, only who is granted. Every check still runs

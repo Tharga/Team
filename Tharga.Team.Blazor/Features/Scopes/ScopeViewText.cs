@@ -20,6 +20,9 @@ public static class ScopeViewText
         "team.scopeView.grantOnlyLegend",
         "A lock marks a grant-only scope: no access level grants it, so it stays greyed here unless a role you hold names it.");
 
+    /// <summary>Heading over the scopes that belong to no group, shown only when the host defined groups.</summary>
+    public static readonly TextKey Ungrouped = new("team.scopeView.ungrouped", "Other");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [GrantOnlyTooltip, GrantOnlyLegend];
+    public static readonly TextKey[] All = [GrantOnlyTooltip, GrantOnlyLegend, Ungrouped];
 }
