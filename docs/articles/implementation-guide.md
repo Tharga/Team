@@ -1997,8 +1997,10 @@ behind it that every team administrator has to reason about.
 o.Blazor.HiddenAccessLevels = [AccessLevel.Viewer];
 ```
 
-That level stops being offered by the invite dialog, the member editor, the API-key level picker, and the
-consent picker. Default is empty — unset behaves exactly as before.
+That level stops being offered by the invite dialog, the member editor, the API-key level picker, the
+consent picker, and the access-level selector in `ScopeView`. The one exception is `ScopeView`: a level the
+signed-in member holds stays offered there, so a page explaining their own access never hides the level that
+grants it. Default is empty — unset behaves exactly as before.
 
 **Hidden is not invalid.** This governs what a person can *choose*, and nothing else. Members already on the
 level keep working, keep their scopes, and keep rendering their badge; if you sync members from another
