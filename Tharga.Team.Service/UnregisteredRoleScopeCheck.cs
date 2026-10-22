@@ -16,7 +16,7 @@ namespace Tharga.Team.Service;
 /// <para>
 /// <b>This warns rather than throws, deliberately.</b> Naming an unregistered scope on a code role is the
 /// documented way to obtain grant-only behaviour on 3.13 and earlier, so throwing would break every host
-/// that followed the guide as written. <see cref="ScopeRegistry.RegisterGrantOnly"/> is the replacement:
+/// that followed the guide as written. <see cref="ScopeRegistry.RegisterGrantOnly(string,string)"/> is the replacement:
 /// it keeps the registry entry, so a typo becomes visible while the scope is still granted by no access
 /// level. A host that has moved every such scope across can treat any remaining warning as a defect.
 /// </para>

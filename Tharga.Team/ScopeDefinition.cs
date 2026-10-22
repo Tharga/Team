@@ -20,7 +20,7 @@ namespace Tharga.Team;
 /// a tenant-defined custom role may not reference it, and the scope-override pickers do not offer it.
 /// It is held solely through a code-registered tenant role or an explicit scope override, so holding it
 /// is a recorded decision rather than a consequence of being a team Owner or Administrator.
-/// Register one with <see cref="ScopeRegistry.RegisterGrantOnly"/>.
+/// Register one with <see cref="ScopeRegistry.RegisterGrantOnly(string,string)"/>.
 /// </param>
 /// <remarks>
 /// <b>A scope name follows a grammar, and it is load-bearing rather than cosmetic.</b>

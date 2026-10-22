@@ -7,7 +7,7 @@ namespace Tharga.Team;
 /// Viewer gets only scopes registered at Viewer level.
 /// Custom gets no base scopes at all (exempt from the Owner/Administrator all-scopes rule);
 /// its effective scopes come solely from roles and scope overrides.
-/// Grant-only scopes (<see cref="RegisterGrantOnly"/>) are granted by no access level, Owner and
+/// Grant-only scopes (<see cref="RegisterGrantOnly(string,string)"/>) are granted by no access level, Owner and
 /// Administrator included; they too are held solely through roles and scope overrides.
 /// Role scopes are unioned with access level scopes.
 /// </summary>
