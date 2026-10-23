@@ -43,6 +43,20 @@ public class UserManagementWiringTests
     }
 
     [Fact]
+    public async Task UserByKey_WithoutScope_IsDenied_ThroughTheGatedService_ButReadable_ThroughTheUndecoratedOne()
+    {
+        var (sp, _) = BuildProvider(withScope: false);
+        using var scope = sp.CreateScope();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => scope.ServiceProvider.GetRequiredService<IUserService>().GetUserByKeyAsync("user-1"));
+
+        var inner = scope.ServiceProvider.GetRequiredKeyedService<IUserService>(UserServiceKeys.Inner);
+        Assert.IsNotType<AuthorizationUserServiceDecorator>(inner);
+        Assert.Equal("user-1", (await inner.GetUserByKeyAsync("user-1")).Key);
+    }
+
+    [Fact]
     public async Task UserEnumeration_WithoutScope_IsDenied()
     {
         var (sp, _) = BuildProvider(withScope: false);

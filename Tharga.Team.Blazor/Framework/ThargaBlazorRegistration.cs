@@ -542,7 +542,7 @@ public static class ThargaBlazorRegistration
 
         services.Remove(existing);
 
-        services.AddScoped<IUserService>(sp =>
+        services.AddKeyedScoped<IUserService>(UserServiceKeys.Inner, (sp, _) =>
         {
             IUserService inner;
             if (existing.ImplementationFactory != null)
@@ -554,10 +554,11 @@ public static class ThargaBlazorRegistration
 
             // Cache invalidation sits closest to the store, so it runs on the write that actually
             // happened — after authorization has already decided the call may proceed.
-            var cacheInvalidating = new CacheInvalidatingUserServiceDecorator(inner);
-
-            return new AuthorizationUserServiceDecorator(cacheInvalidating, sp.GetRequiredService<TeamAuthorizer>(), sp.GetRequiredService<ITeamService>);
+            return new CacheInvalidatingUserServiceDecorator(inner);
         });
+
+        services.AddScoped<IUserService>(sp =>
+            new AuthorizationUserServiceDecorator(sp.GetRequiredKeyedService<IUserService>(UserServiceKeys.Inner), sp.GetRequiredService<TeamAuthorizer>(), sp.GetRequiredService<ITeamService>));
     }
 
     private static void DecorateUserManagementWithAuthorization(IServiceCollection services)

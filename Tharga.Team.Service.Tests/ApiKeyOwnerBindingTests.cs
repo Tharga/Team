@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -78,7 +79,7 @@ public class ApiKeyOwnerBindingTests
         _userService.GetUserByKeyAsync(OwnerKey).Returns(user ?? new User());
     }
 
-    private async Task<AuthenticateResult> Authenticate(bool withUserService = true)
+    private async Task<AuthenticateResult> Authenticate(bool withUserService = true, IServiceProvider serviceProvider = null)
     {
         var context = new DefaultHttpContext();
         context.Request.Headers[ApiKeyConstants.HeaderName] = Secret;
@@ -89,7 +90,7 @@ public class ApiKeyOwnerBindingTests
         loggerFactory.CreateLogger(Arg.Any<string>()).Returns(Substitute.For<ILogger>());
 
         var handler = new ApiKeyAuthenticationHandler(optionsMonitor, loggerFactory, UrlEncoder.Default, _apiKeyService,
-            _scopes, teamService: _teamService, userService: withUserService ? _userService : null);
+            _scopes, teamService: _teamService, userService: withUserService ? _userService : null, serviceProvider: serviceProvider);
         await handler.InitializeAsync(new AuthenticationScheme(ApiKeyConstants.SchemeName, "API Key", typeof(ApiKeyAuthenticationHandler)), context);
         return await handler.AuthenticateAsync();
     }
@@ -111,6 +112,49 @@ public class ApiKeyOwnerBindingTests
         Assert.Equal(OwnerKey, result.Principal.FindFirst(TeamClaimTypes.ApiKeyOwner)?.Value);
         Assert.Null(result.Principal.FindFirst(TeamClaimTypes.MemberKey));
         Assert.Equal([Read, Write], Scopes(result));
+    }
+
+    // ---- The gated user service has no caller during authentication (Tharga/Team#351) ----
+
+    [Fact]
+    public async Task OwnerIsRead_PastTheGatedUserService_WhenTheUndecoratedOneIsRegistered()
+    {
+        GivenKey();
+        _teamService.GetTeamMemberAsync(TeamKey, OwnerKey).Returns(new Member());
+        _userService.GetUserByKeyAsync(OwnerKey).Returns<Task<IUser>>(_ => throw new UnauthorizedAccessException("GetUserByKeyAsync requires the 'users:manage' system scope."));
+        var inner = Substitute.For<IUserService>();
+        inner.GetUserByKeyAsync(OwnerKey).Returns(new User());
+        var services = new ServiceCollection().AddKeyedSingleton(UserServiceKeys.Inner, inner).BuildServiceProvider();
+
+        var result = await Authenticate(serviceProvider: services);
+
+        Assert.True(result.Succeeded);
+        await _userService.DidNotReceive().GetUserByKeyAsync(Arg.Any<string>());
+    }
+
+    [Fact]
+    public async Task ADisabledOwner_IsStillRefused_WhenReadThroughTheUndecoratedService()
+    {
+        GivenKey();
+        _teamService.GetTeamMemberAsync(TeamKey, OwnerKey).Returns(new Member());
+        var inner = Substitute.For<IUserService>();
+        inner.GetUserByKeyAsync(OwnerKey).Returns(new User { DisabledAt = DateTime.UtcNow });
+        var services = new ServiceCollection().AddKeyedSingleton(UserServiceKeys.Inner, inner).BuildServiceProvider();
+
+        var result = await Authenticate(serviceProvider: services);
+
+        Assert.False(result.Succeeded);
+    }
+
+    [Fact]
+    public async Task WithoutTheUndecoratedService_TheRegisteredUserServiceIsUsed()
+    {
+        GivenKey();
+        GivenOwner();
+
+        var result = await Authenticate(serviceProvider: new ServiceCollection().BuildServiceProvider());
+
+        Assert.True(result.Succeeded);
     }
 
     // ---- The owner can no longer act: the key is refused ----
