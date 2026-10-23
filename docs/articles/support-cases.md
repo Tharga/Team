@@ -895,6 +895,41 @@ builder.Services.AddThargaSupportCases(o =>
 
 Cases from before 4.2 show no support address and are answered from the primary.
 
+### Health
+
+The poller logs a failed read and tries again, and an answer that cannot go out is recorded on its case. Neither
+tells anyone watching the service, so a changed password or a locked account shows as mail to support that simply
+stops arriving. `ISupportMailboxHealth.CheckAsync` checks every mailbox that has an IMAP or SMTP server set, the
+primary first, and returns one `SupportMailboxHealth` for each:
+
+- `Name` — `primary`, or the name the mailbox was added under.
+- `Reading` — a `MailboxHealth` (`IsConfigured`, `IsReachable`, `Error`) for the IMAP account: it connects, signs in
+  and opens the folder read-only. Not configured for a mailbox that only sends.
+- `Sending` — the same for the SMTP server: it connects and signs in, and sends nothing. Not configured for a mailbox
+  that only reads.
+- `IsHealthy` — everything that is configured works.
+
+It never throws, checks the mailboxes at the same time, and returns an empty list when no mailbox is configured. It
+is registered with `AddThargaSupportCases` whatever is configured.
+
+```csharp
+builder.Services.AddHealthChecks().AddCheck<SupportMailboxesCheck>("support-mail");
+
+public class SupportMailboxesCheck(ISupportMailboxHealth mailboxes) : IHealthCheck
+{
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    {
+        var failing = (await mailboxes.CheckAsync(cancellationToken)).Where(x => !x.IsHealthy).Select(x => x.Name).ToArray();
+
+        return failing.Length == 0 ? HealthCheckResult.Healthy() : HealthCheckResult.Degraded($"Support mailboxes failing: {string.Join(", ", failing)}");
+    }
+}
+```
+
+Each check opens a connection to every server, so let the health endpoint cache its result rather than call this on
+every probe. `Error` carries the server's own message, which can name hosts and accounts: keep it off an endpoint
+anonymous callers can read.
+
 ### Bounces
 
 A mail that cannot be delivered comes back to the address it was sent from as a delivery status notification.
