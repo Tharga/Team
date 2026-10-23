@@ -329,6 +329,24 @@ first. `SupportCaseFilter` also takes `ShowSearch` — a search over the subject
 and suggested teams, the address a case corresponds with and the support address it came in to, which is not
 remembered — and `ShowKinds`, to leave the kind out where no assistant answers.
 
+Where help is asked for, **`Offered`** says who may be talked to: `SupportAssistance.Assistant`, `SupportAssistance.None`
+(a person), or both, which is what null offers. With both on offer the customer chooses on a select bar — *Assistant*
+or *Support*, with support chosen until they choose — and the case is raised the way they chose. With one there is
+nothing to choose: the bar gives way to its name and the case is raised that way. **The assistant is never offered
+without an `ISupportResponder`**, whatever is passed, so a responder that is registered but switched off for one
+organisation is a matter of what the host passes for that organisation:
+
+```razor
+@* Human support only for this organisation, although the assistant is registered *@
+<SupportCasesView Offered="_humanSupportOnly" />
+
+@code {
+    private readonly SupportAssistance[] _humanSupportOnly = [SupportAssistance.None];
+}
+```
+
+The two options are named by `team.support.cases.answeredBy.assistant` and `team.support.cases.answeredBy.human`.
+
 **`SupportUnassignedView`** reads like the cases view: each case an expandable card with the sender, status,
 *Needs an answer* and last activity in its header, whose conversation is read only while it is open; waiting
 cases first, then the newest activity, with the count awaiting an answer beside the filter (with search, and
