@@ -31,7 +31,8 @@ internal sealed class UserMailInvitationSender(
             Category = UserMailCategories.AccountKey,
             Subject = await text.FormatAsync(UserMailTexts.InvitationSubjectKey, UserMailTexts.InvitationSubject, invite.TeamName),
             Body = await text.FormatAsync(UserMailTexts.InvitationBodyKey, UserMailTexts.InvitationBody, name, invite.TeamName, invite.InviteLink),
-            Kind = UserMailKind.Invitation
+            Kind = UserMailKind.Invitation,
+            TeamKey = invite.TeamKey
         });
 
         if (sent.Status == UserMailStatus.Sent) return;

@@ -41,6 +41,11 @@ public interface IUserMailQueue
     /// <summary>One page of the mail sent to one user, newest first: every mail queued for their key, and every mail queued to <paramref name="address"/> alone.</summary>
     /// <exception cref="ArgumentException">The cursor was not issued for this list.</exception>
     Task<UserMailDeliveryPage> ListForRecipientAsync(string userKey, string address, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
+
+    /// <summary>One page of all mail to users and contacts, newest first, narrowed by <paramref name="filter"/>; without bodies and files.</summary>
+    /// <exception cref="ArgumentException">The cursor was not issued for this list.</exception>
+    Task<UserMailDeliveryPage> ListAsync(UserMailFilter filter, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListAsync)}.");
 }
 
 /// <summary>One page of queued mail and what became of each.</summary>
@@ -90,6 +95,9 @@ public sealed record UserMailDelivery
     /// <summary>The address the mail was addressed to: the one it was queued with, or for a mail to a user the one on their record when it was sent; null until then.</summary>
     public string RecipientAddress { get; init; }
 
+    /// <summary>The name a mail queued to an address alone is addressed to, or null.</summary>
+    public string RecipientName { get; init; }
+
     /// <summary>The category's key.</summary>
     public required string Category { get; init; }
 
@@ -101,6 +109,9 @@ public sealed record UserMailDelivery
 
     /// <summary>The deduplication key it was queued with, if any.</summary>
     public string DeduplicationKey { get; init; }
+
+    /// <summary>The key of the team it is about, or null when it belongs to none or to several.</summary>
+    public string TeamKey { get; init; }
 
     /// <summary>The batch whose content it carries, or null for a mail queued on its own.</summary>
     public string BatchId { get; init; }

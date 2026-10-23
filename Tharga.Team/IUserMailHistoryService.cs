@@ -21,6 +21,20 @@ public interface IUserMailHistoryService
     /// <exception cref="ArgumentException">The user key is empty, or the cursor was not issued for this list.</exception>
     /// <exception cref="UnauthorizedAccessException">The caller is not this user and does not hold <c>users:manage</c>.</exception>
     Task<UserMailHistoryPage> GetForUserAsync(string userKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// One page of all mail the application sent or tried to send — to users and, for staff messages to contacts, to addresses
+    /// alone — newest first and narrowed by <paramref name="filter"/>, for staff holding <see cref="SystemUserScopes.Manage"/>.
+    /// </summary>
+    /// <remarks>
+    /// Read by staff only, never by the user the mail is for: it is audited with how many mails were read and never an
+    /// address, and a refusal is audited too. Bodies and files are not returned. Each item names the user it is for when it
+    /// is for one, and the team when the mail records one.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The cursor was not issued for this list.</exception>
+    /// <exception cref="UnauthorizedAccessException">The caller does not hold <c>users:manage</c>.</exception>
+    Task<UserMailHistoryPage> ListAllAsync(UserMailFilter filter = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListAllAsync)}.");
 }
 
 /// <summary>One mail in a user's history.</summary>
@@ -52,6 +66,15 @@ public sealed record UserMailHistoryItem
 
     /// <summary>When it last changed, in UTC.</summary>
     public required DateTime ChangedAt { get; init; }
+
+    /// <summary>The key of the user it is for; null for a mail to an address alone. Set in the global log only.</summary>
+    public string RecipientUserKey { get; init; }
+
+    /// <summary>The name of the user it is for, or of the contact or invited person it is addressed to when it has one. Set in the global log only.</summary>
+    public string RecipientName { get; init; }
+
+    /// <summary>The key of the team it is about; null when it records none. Set in the global log only.</summary>
+    public string TeamKey { get; init; }
 }
 
 /// <summary>One page of a user's mail history, newest first.</summary>

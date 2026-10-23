@@ -36,6 +36,9 @@ public static class UserMailHistoryViewText
     /// <summary>An invitation to a team.</summary>
     public static readonly TextKey KindInvitation = new("team.userMail.history.kind.invitation", "Invitation");
 
+    /// <summary>A message staff wrote to contacts. Seen in the mail log only, never in a user's history.</summary>
+    public static readonly TextKey KindContact = new("team.userMail.history.kind.contact", "Contact");
+
     /// <summary>A mail waiting to be sent, or to be tried again.</summary>
     public static readonly TextKey StatusQueued = new("team.userMail.history.status.queued", "Waiting");
 
@@ -57,6 +60,7 @@ public static class UserMailHistoryViewText
         UserMailKind.Message => KindMessage,
         UserMailKind.Notice => KindNotice,
         UserMailKind.Invitation => KindInvitation,
+        UserMailKind.Contact => KindContact,
         _ => KindMail
     };
 
@@ -73,7 +77,7 @@ public static class UserMailHistoryViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, Explanation, Empty, ShowMore, NotPermitted, NoUser, To, KindMail, KindMessage, KindNotice, KindInvitation,
+        Title, Explanation, Empty, ShowMore, NotPermitted, NoUser, To, KindMail, KindMessage, KindNotice, KindInvitation, KindContact,
         StatusQueued, StatusSent, StatusSkipped, StatusFailed, StatusBounced
     ];
 }

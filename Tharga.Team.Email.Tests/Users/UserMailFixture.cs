@@ -117,7 +117,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                 _items.Add(new UserMailItem
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind },
+                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey },
                     BatchId = id,
                     Status = UserMailStatus.Queued,
                     QueuedAt = queuedAt,
@@ -130,7 +130,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                 _items.Add(new UserMailItem
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    Mail = new UserMail { RecipientAddress = recipient.Address, RecipientName = recipient.Name, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind },
+                    Mail = new UserMail { RecipientAddress = recipient.Address, RecipientName = recipient.Name, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey },
                     BatchId = id,
                     RecipientAddress = recipient.Address,
                     Status = UserMailStatus.Queued,
@@ -302,6 +302,28 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
             return Task.FromResult(Page(mine, cursor, pageSize));
         }
     }
+
+    public Task<UserMailItemPage> ListAsync(UserMailFilter filter, string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        filter ??= new UserMailFilter();
+
+        lock (_gate)
+        {
+            var found = _items.Where(x => Matches(x, filter)).Reverse().ToList();
+
+            return Task.FromResult(Page(found, cursor, pageSize));
+        }
+    }
+
+    private static bool Matches(UserMailItem x, UserMailFilter f)
+        => (f.Kind == null || x.Mail.Kind == f.Kind)
+           && (f.Category == null || x.Mail.Category == f.Category)
+           && (f.Status == null || x.Status == f.Status)
+           && (f.From == null || x.QueuedAt >= f.From)
+           && (f.To == null || x.QueuedAt < f.To)
+           && (f.RecipientUserKey == null || x.Mail.RecipientUserKey == f.RecipientUserKey)
+           && (f.RecipientAddress == null || x.RecipientAddress == f.RecipientAddress)
+           && (f.TeamKey == null || x.Mail.TeamKey == f.TeamKey);
 
     private static UserMailItemPage Page(List<UserMailItem> ordered, string cursor, int pageSize)
     {

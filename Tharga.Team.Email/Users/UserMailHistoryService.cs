@@ -52,6 +52,51 @@ internal sealed class UserMailHistoryService(
         return page;
     }
 
+    /// <remarks>
+    /// Read by staff and nobody else, whatever the filter names: a user reads their own mail through
+    /// <see cref="GetMineAsync"/>. The names of the users it is for are read for the page alone, in one lookup.
+    /// </remarks>
+    public async Task<UserMailHistoryPage> ListAllAsync(UserMailFilter filter = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+
+        if (!await authorizer.HasSystemScopeAsync(SystemUserScopes.Manage))
+        {
+            var refusal = $"{nameof(ListAllAsync)} requires the '{SystemUserScopes.Manage}' system scope.";
+            AuditLog(0, sw.ElapsedMilliseconds, false, refusal);
+            throw new UnauthorizedAccessException(refusal);
+        }
+
+        var page = await queue.ListAsync(filter, cursor, Math.Clamp(pageSize, 1, MaxPageSize), cancellationToken) ?? new UserMailDeliveryPage();
+        var names = await NamesAsync([.. page.Items.Select(x => x.RecipientUserKey).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)], cancellationToken);
+
+        var result = new UserMailHistoryPage
+        {
+            Items = [.. page.Items.Select(x => ToItem(x) with
+            {
+                RecipientUserKey = x.RecipientUserKey,
+                RecipientName = x.RecipientUserKey != null ? names.GetValueOrDefault(x.RecipientUserKey) : x.RecipientName,
+                TeamKey = x.TeamKey
+            })],
+            NextCursor = page.NextCursor
+        };
+
+        AuditLog(result.Items.Length, sw.ElapsedMilliseconds, true, null);
+
+        return result;
+    }
+
+    private async Task<Dictionary<string, string>> NamesAsync(string[] userKeys, CancellationToken cancellationToken)
+    {
+        if (userKeys.Length == 0) return new Dictionary<string, string>(StringComparer.Ordinal);
+
+        var found = await recipients.FindManyAsync(userKeys, cancellationToken) ?? [];
+
+        return found.Where(x => x != null && !string.IsNullOrWhiteSpace(x.Name))
+            .GroupBy(x => x.Key, StringComparer.Ordinal)
+            .ToDictionary(x => x.Key, x => x.First().Name, StringComparer.Ordinal);
+    }
+
     private async Task<UserMailHistoryPage> ReadAsync(string userKey, string cursor, int pageSize, CancellationToken cancellationToken)
     {
         var address = (await recipients.FindAsync(userKey, cancellationToken))?.EMail;
@@ -59,20 +104,30 @@ internal sealed class UserMailHistoryService(
 
         return new UserMailHistoryPage
         {
-            Items = [.. page.Items.Select(x => new UserMailHistoryItem
-            {
-                Id = x.Id,
-                Kind = x.Kind,
-                Category = x.Category,
-                Subject = x.Subject,
-                Status = x.Status,
-                Reason = x.Reason,
-                Address = x.RecipientAddress,
-                QueuedAt = x.QueuedAt,
-                ChangedAt = x.ChangedAt
-            })],
+            Items = [.. page.Items.Select(ToItem)],
             NextCursor = page.NextCursor
         };
+    }
+
+    private static UserMailHistoryItem ToItem(UserMailDelivery x) => new()
+    {
+        Id = x.Id,
+        Kind = x.Kind,
+        Category = x.Category,
+        Subject = x.Subject,
+        Status = x.Status,
+        Reason = x.Reason,
+        Address = x.RecipientAddress,
+        QueuedAt = x.QueuedAt,
+        ChangedAt = x.ChangedAt
+    };
+
+    private void AuditLog(int count, long durationMs, bool success, string error)
+    {
+        if (auditLogger == null || auditEntryFactory == null) return;
+
+        auditLogger.Log(auditEntryFactory.Create(AuditEventType.ServiceCall, UserMailAudit.Feature, UserMailAudit.LogAction, nameof(IUserMailHistoryService.ListAllAsync), durationMs, success, error,
+            metadata: new Dictionary<string, string> { [UserMailAudit.Count] = count.ToString(CultureInfo.InvariantCulture) }));
     }
 
     private void Audit(string userKey, int count, long durationMs, bool success, string error)

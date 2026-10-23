@@ -56,6 +56,12 @@ public interface IUserMailOutbox
     Task<UserMailItemPage> ListForRecipientAsync(string userKey, string address, string cursor, int pageSize, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListForRecipientAsync)}. Implement it to show a user the mail sent to them.");
 
+    /// <summary>One page, newest first, of all mail — to users and to addresses alone, contact mail included — narrowed by <paramref name="filter"/>, after the cursor a previous page returned; without bodies and files.</summary>
+    /// <remarks>A mail's subject, category, recipient, kind, status and times are returned; its body and its files are not, since a log describes mail and does not reproduce it.</remarks>
+    /// <exception cref="ArgumentException">The cursor was not issued by this outbox.</exception>
+    Task<UserMailItemPage> ListAsync(UserMailFilter filter, string cursor, int pageSize, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListAsync)}. Implement it to list all mail sent to users.");
+
     /// <summary>Stores a mail already claimed by <paramref name="claimant"/> for <paramref name="lease"/>, its first attempt counted, so it is sent at once by the caller and by nobody else unless the lease runs out.</summary>
     /// <exception cref="ArgumentException">The mail carries a deduplication key, which a mail sent at once does not take.</exception>
     Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)

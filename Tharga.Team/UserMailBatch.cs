@@ -26,6 +26,9 @@ public sealed record UserMailBatch
 
     /// <summary>Which kind of mail every mail of the batch is, shown in each recipient's history; default <see cref="UserMailKind.Message"/>.</summary>
     public UserMailKind Kind { get; init; } = UserMailKind.Message;
+
+    /// <summary>The key of the team every mail of the batch is about, so the mail log can be filtered by organisation; null when it belongs to none or to several.</summary>
+    public string TeamKey { get; init; }
 }
 
 /// <summary>An address one mail of a batch goes to alone, and the name it is addressed to.</summary>

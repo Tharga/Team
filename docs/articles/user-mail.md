@@ -381,6 +381,59 @@ public class MailHistoryController(IUserMailHistoryService history) : Controller
 
 The service refuses with `UnauthorizedAccessException`; answer it with 403 the way your API does.
 
+## The mail log
+
+A user's history shows what was sent to them. **The mail log is the same list across everyone**: every mail the
+application sent or tried to send, to users and to contacts, for staff holding `users:manage`.
+
+```razor
+@* On a staff page; the service refuses anyone without users:manage, and the view says so *@
+<UserMailLogView PageSize="50" />
+```
+
+It lists newest first, with when it was queued, who it was for (the user's name, or the invited person's or
+contact's name, and the address it went to), its kind, category, subject, **result** with the reason, and the team
+it is about. **The mail itself is never shown or returned**: no body and no files. A row for a user has a button
+that opens that user's own history. `UserMailLogView` takes `PageSize` (50), `TimeTemplate` and `Framed`, as the
+history view does, and filters on kind, result, category, a day or a range of days (each day is the reader's own),
+a user key or an address, and a team key.
+
+Behind it is `IUserMailHistoryService.ListAllAsync(filter, cursor, pageSize)`, which takes a `UserMailFilter`; every
+part given narrows the list and none lists everything:
+
+| `UserMailFilter` | |
+|---|---|
+| `Kind`, `Status`, `Category` | Only mail of that kind, standing there, in that category |
+| `From`, `To` | Queued at or after `From` and before `To`, in UTC |
+| `RecipientUserKey`, `RecipientAddress` | Only mail for that user, or addressed to that address (compared trimmed and in lower case; a mail to a user is addressed to the address on their record when it is sent) |
+| `TeamKey` | Only mail about that team, where the mail records one |
+
+- **Only staff read it, whoever they ask about.** A caller without `users:manage` gets `UnauthorizedAccessException`,
+  and a user who is in the log still cannot read it.
+- **Audited** under `usermail`, action `log`, with `usermail.count` — how many mails were read, never an address or
+  the filter. A refusal is audited too.
+- **Contact mail is in the log**, unlike a user's history, as its own kind (*Contact*).
+- **The team** is on a mail when it is about one team: an invitation is about the team it invites to, a staff message
+  about the one team its recipients were chosen within, and a notice, or a summary of notices, about the team it
+  names. A message chosen within several teams or all of them, and a summary of notices from several teams, belong
+  to none. Set `UserMail.TeamKey` or `UserMailBatch.TeamKey` on mail you queue yourself. Mail queued before this
+  version records no team.
+
+A host exposing it over REST calls the service and nothing else:
+
+```csharp
+[HttpGet("log")]
+public Task<UserMailHistoryPage> LogAsync([FromQuery] UserMailFilter filter, string cursor = null, int pageSize = 50)
+    => history.ListAllAsync(filter, cursor, pageSize, HttpContext.RequestAborted);
+```
+
+**Not in the log yet:** a send refused before it is stored (an unknown category, no subject) is an exception to the
+caller and leaves no record, and a support answer is recorded on its case only.
+
+A host with its own `IUserMailOutbox` implements `ListAsync(filter, cursor, pageSize)` to support it; until it does,
+`ListAllAsync` throws `NotSupportedException`. The built-in MongoDB outbox adds the index `TeamKey_Id`, created at
+start-up like the others.
+
 ## Bounces
 
 **A bounce returns to the address the mail was sent from**, so the toolkit only sees one when that address is a

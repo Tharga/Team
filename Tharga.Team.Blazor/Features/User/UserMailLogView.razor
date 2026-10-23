@@ -1,0 +1,264 @@
+@using Microsoft.AspNetCore.Components.Rendering
+@using Tharga.Team.Blazor.Framework
+@inject IUserMailHistoryService History
+@inject IUserMailPreferenceService Preferences
+@inject DialogService DialogService
+
+@* Every mail the application sent or tried to send, to users and contacts, newest first: who it was for, what kind and
+   category it was, its subject, what became of it and the team it was about, never its body. For staff holding
+   users:manage; the service refuses anyone else. Narrowed by the filters above the list, a page at a time. *@
+
+@if (Framed)
+{
+    <RadzenCard>
+        @((RenderFragment)RenderContent)
+    </RadzenCard>
+}
+else
+{
+    @((RenderFragment)RenderContent)
+}
+
+@code {
+    private void RenderContent(RenderTreeBuilder __builder)
+    {
+        if (!_ready)
+        {
+            <Loading />
+        }
+        else if (!_permitted)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+                @_text[UserMailLogViewText.NotPermitted]
+            </RadzenAlert>
+        }
+        else
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-mail-log>
+                @if (Framed)
+                {
+                    <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[UserMailLogViewText.Title]</RadzenText>
+                }
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[UserMailLogViewText.Explanation]</RadzenText>
+
+                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap" data-filters>
+                    <RadzenDropDown TValue="UserMailKind?" @bind-Value="_kind" Data="@_kindChoices" TextProperty="@nameof(Choice<UserMailKind>.Text)" ValueProperty="@nameof(Choice<UserMailKind>.Value)"
+                                    AllowClear="true" Placeholder="@_text[UserMailLogViewText.FilterKind]" aria-label="@_text[UserMailLogViewText.FilterKind]" data-filter="kind" />
+                    <RadzenDropDown TValue="UserMailStatus?" @bind-Value="_status" Data="@_statusChoices" TextProperty="@nameof(Choice<UserMailStatus>.Text)" ValueProperty="@nameof(Choice<UserMailStatus>.Value)"
+                                    AllowClear="true" Placeholder="@_text[UserMailLogViewText.FilterStatus]" aria-label="@_text[UserMailLogViewText.FilterStatus]" data-filter="status" />
+                    <RadzenDropDown TValue="string" @bind-Value="_category" Data="@_categoryChoices" TextProperty="@nameof(Choice<string>.Text)" ValueProperty="@nameof(Choice<string>.Value)"
+                                    AllowClear="true" Placeholder="@_text[UserMailLogViewText.FilterCategory]" aria-label="@_text[UserMailLogViewText.FilterCategory]" data-filter="category" />
+                    <RadzenDatePicker TValue="DateTime?" @bind-Value="_from" DateFormat="d" AllowClear="true" Placeholder="@_text[UserMailLogViewText.FilterFrom]"
+                                      aria-label="@_text[UserMailLogViewText.FilterFrom]" data-filter="from" />
+                    <RadzenDatePicker TValue="DateTime?" @bind-Value="_to" DateFormat="d" AllowClear="true" Placeholder="@_text[UserMailLogViewText.FilterTo]"
+                                      aria-label="@_text[UserMailLogViewText.FilterTo]" data-filter="to" />
+                    <RadzenTextBox @bind-Value="_recipient" Placeholder="@_text[UserMailLogViewText.FilterRecipient]" aria-label="@_text[UserMailLogViewText.FilterRecipient]" data-filter="recipient" />
+                    <RadzenTextBox @bind-Value="_team" Placeholder="@_text[UserMailLogViewText.FilterTeam]" aria-label="@_text[UserMailLogViewText.FilterTeam]" data-filter="team" />
+                    <RadzenButton Text="@_text[UserMailLogViewText.Search]" Icon="search" Click="SearchAsync" Disabled="@_busy" data-search />
+                    <RadzenButton Text="@_text[UserMailLogViewText.Clear]" ButtonStyle="ButtonStyle.Light" Click="ClearAsync" Disabled="@_busy" data-clear />
+                </RadzenStack>
+
+                @if (_items.Count == 0)
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-empty>@_text[UserMailLogViewText.Empty]</RadzenText>
+                }
+                else
+                {
+                    <RadzenDataGrid Data="@_items" TItem="UserMailHistoryItem" AllowSorting="false" AllowPaging="false">
+                        <Columns>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnWhen]" Width="10rem">
+                                <Template Context="item"><span data-time>@Time(item.QueuedAt)</span></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnRecipient]">
+                                <Template Context="item">
+                                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" data-recipient="@item.Id">
+                                        @if (!string.IsNullOrWhiteSpace(item.RecipientName))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-name><strong>@item.RecipientName</strong></RadzenText>
+                                        }
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-who>@Who(item)</RadzenText>
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnKind]">
+                                <Template Context="item"><RadzenBadge Text="@_text[UserMailHistoryViewText.For(item.Kind)]" BadgeStyle="BadgeStyle.Light" data-kind="@item.Kind" /></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnCategory]">
+                                <Template Context="item"><span data-category="@item.Category">@CategoryName(item.Category)</span></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnSubject]">
+                                <Template Context="item"><span data-subject>@item.Subject</span></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnResult]">
+                                <Template Context="item">
+                                    <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                                        <div><RadzenBadge Text="@_text[UserMailHistoryViewText.For(item.Status)]" BadgeStyle="@StatusStyle(item.Status)" data-status="@item.Status" /></div>
+                                        @if (!string.IsNullOrWhiteSpace(item.Reason))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-reason>@item.Reason</RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnTeam]">
+                                <Template Context="item"><span data-team>@item.TeamKey</span></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="" Width="3.5rem">
+                                <Template Context="item">
+                                    @if (!string.IsNullOrWhiteSpace(item.RecipientUserKey))
+                                    {
+                                        <RadzenButton Icon="history" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
+                                                      title="@_text.Format(UserMailLogViewText.UserMail, Who(item))" aria-label="@_text.Format(UserMailLogViewText.UserMail, Who(item))"
+                                                      Click="@(() => OpenUserMailAsync(item))" data-user-mail="@item.Id" />
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                }
+
+                @if (_nextCursor != null)
+                {
+                    <RadzenButton Text="@_text[UserMailLogViewText.ShowMore]" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Disabled="@_busy" Click="MoreAsync" data-show-more />
+                }
+            </RadzenStack>
+        }
+    }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    /// <summary>Whether the view draws its own card and title; false leaves both to the host, such as a tab named for it, and shows the rest as it is.</summary>
+    [Parameter] public bool Framed { get; set; } = true;
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>How many mails one page reads.</summary>
+    [Parameter] public int PageSize { get; set; } = 50;
+
+    private sealed record Choice<T>(T Value, string Text);
+
+    private TextSet _text = TextSet.Empty;
+    private IReadOnlyList<UserMailCategory> _categories = [];
+    private Choice<UserMailKind>[] _kindChoices = [];
+    private Choice<UserMailStatus>[] _statusChoices = [];
+    private Choice<string>[] _categoryChoices = [];
+    private List<UserMailHistoryItem> _items = [];
+    private UserMailFilter _filter = new();
+    private string _nextCursor;
+    private UserMailKind? _kind;
+    private UserMailStatus? _status;
+    private string _category;
+    private DateTime? _from;
+    private DateTime? _to;
+    private string _recipient;
+    private string _team;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = Preferences.GetCategories() ?? [];
+        _text = await TextProvider.ResolveAsync([.. UserMailLogViewText.All, .. UserMailHistoryViewText.All, .. _categories.Select(x => new TextKey(x.NameKey, x.Name))]);
+
+        UserMailKind[] kinds = [UserMailKind.Mail, UserMailKind.Message, UserMailKind.Notice, UserMailKind.Invitation, UserMailKind.Contact];
+        UserMailStatus[] statuses = [UserMailStatus.Queued, UserMailStatus.Sent, UserMailStatus.Skipped, UserMailStatus.Failed, UserMailStatus.Bounced];
+        _kindChoices = [.. kinds.Select(x => new Choice<UserMailKind>(x, _text[UserMailHistoryViewText.For(x)]))];
+        _statusChoices = [.. statuses.Select(x => new Choice<UserMailStatus>(x, _text[UserMailHistoryViewText.For(x)]))];
+        _categoryChoices = [.. _categories.Select(x => new Choice<string>(x.Key, CategoryName(x.Key)))];
+
+        await ReadAsync(null);
+        _ready = true;
+    }
+
+    private async Task SearchAsync()
+    {
+        _filter = UserMailLogQuery.Build(_kind, _status, _category, _from, _to, _recipient, _team);
+
+        await RestartAsync();
+    }
+
+    private async Task ClearAsync()
+    {
+        _kind = null;
+        _status = null;
+        _category = null;
+        _from = null;
+        _to = null;
+        _recipient = null;
+        _team = null;
+        _filter = new UserMailFilter();
+
+        await RestartAsync();
+    }
+
+    private async Task RestartAsync()
+    {
+        _busy = true;
+        try
+        {
+            _items = [];
+            _nextCursor = null;
+            await ReadAsync(null);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task MoreAsync()
+    {
+        _busy = true;
+        try
+        {
+            await ReadAsync(_nextCursor);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ReadAsync(string cursor)
+    {
+        try
+        {
+            var page = await History.ListAllAsync(_filter, cursor, PageSize);
+
+            // A new list rather than an addition to the old, which a grid bound to it would not notice.
+            _items = [.. _items, .. page.Items.Where(x => _items.All(y => y.Id != x.Id))];
+            _nextCursor = page.NextCursor;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+            _nextCursor = null;
+        }
+    }
+
+    /// <summary>The user's mail, as the user's own history shows it, over the log.</summary>
+    private Task OpenUserMailAsync(UserMailHistoryItem item)
+        => DialogService.OpenAsync(_text.Format(UserMailLogViewText.UserMailTitle, Who(item)),
+            _ => @<UserMailHistoryView UserKey="@item.RecipientUserKey" Framed="false" TimeTemplate="@TimeTemplate" />,
+            new DialogOptions { Width = "640px", Resizable = true });
+
+    /// <summary>The address a mail went to; before it is sent, the user's key.</summary>
+    private static string Who(UserMailHistoryItem item)
+        => !string.IsNullOrWhiteSpace(item.Address) ? item.Address : item.RecipientUserKey;
+
+    private string CategoryName(string key)
+        => _categories.FirstOrDefault(x => x.Key == key) is { } category ? _text[new TextKey(category.NameKey, category.Name)] : key;
+
+    private static BadgeStyle StatusStyle(UserMailStatus status) => status switch
+    {
+        UserMailStatus.Sent => BadgeStyle.Success,
+        UserMailStatus.Failed or UserMailStatus.Bounced => BadgeStyle.Danger,
+        UserMailStatus.Skipped => BadgeStyle.Light,
+        _ => BadgeStyle.Info
+    };
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
+}
