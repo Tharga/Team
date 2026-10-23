@@ -106,8 +106,7 @@ public class SetOwnerAuthorizationTests
 
     /// <summary>
     /// The retired name authorizes nothing. A host that upgraded without remapping is refused rather than
-    /// quietly still working — and <c>RetiredScopeCheck</c> is what turns that refusal into a startup error
-    /// they can act on.
+    /// quietly still working.
     /// </summary>
     [Fact]
     public async Task WithTheRetiredAssignOwnerScope_Throws()

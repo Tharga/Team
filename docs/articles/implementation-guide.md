@@ -1532,8 +1532,7 @@ longer matches a `support:*` notification route.
 > **Two built-in scopes express reach differently.** `teams:read` pluralises the feature to mean "every
 > team", against `team:read`'s one, and `apikey:system-manage` qualifies the action instead. Both predate
 > the grammar and are staying as they are — a renamed scope is invisible to the compiler and silently
-> authorizes nothing, which is what the startup `RetiredScopeCheck` exists to catch. Follow the grammar
-> above for new scopes rather than either of those.
+> authorizes nothing. Follow the grammar above for new scopes rather than either of those.
 
 ### Which team service to inject
 
@@ -2674,8 +2673,8 @@ owner, which `SetMemberRoleAsync` exists to refuse. See
 > **Renamed in 3.14.** This scope was `teams:assign-owner` in 3.9.0–3.13.0, where it authorized only the
 > ownerless-repair case. The name changed with the capability rather than being widened in place, so a host
 > that granted the old string does not silently acquire the ability to depose owners. **Remap it** — the old
-> name now authorizes nothing, and a startup check fails loudly if it is still registered rather than letting
-> holders be refused at the point of use with nothing explaining why.
+> name now authorizes nothing, so anyone who still holds it is refused at the point of use, with nothing to say
+> why.
 
 ### System scopes & privileged users
 

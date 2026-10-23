@@ -46,8 +46,7 @@ namespace Tharga.Team;
 /// <b>Two scopes express reach differently and are not the shape to copy.</b> <c>teams:read</c>
 /// pluralises the feature to mean "every team", against <c>team:read</c>'s one; <c>apikey:system-manage</c>
 /// qualifies the action instead. Both predate the grammar, and neither is worth renaming: a renamed scope
-/// is invisible to the compiler and silently authorizes nothing, which is what <c>RetiredScopeCheck</c>
-/// exists to catch.
+/// is invisible to the compiler and silently authorizes nothing.
 /// </para>
 /// </remarks>
 public record ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description = null, bool GrantOnly = false, string Group = null)

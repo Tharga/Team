@@ -31,7 +31,7 @@ Domain models, service abstractions, and authorization primitives for multi-tena
 - `ITeamScopeVisibilityProvider` - The scope counterpart: decides per team whether a scope is offered and shown in the scope pickers (member scope overrides, team API keys, custom roles) and on the access page (`ScopeView`). Default (`AllScopesVisibleTeamScopeVisibilityProvider`, registered by `AddThargaScopes`) shows every scope. Hiding a scope never removes it from a member or key that holds it.
 - `RequireAccessLevelAttribute` / `RequireScopeAttribute` - Declarative authorization on service methods.
 - `TeamScopes` / `ApiKeyScopes` / `AuditScopes` - Built-in scope constants (`audit:read` gates the audit log).
-- `SystemTeamScopes` - Cross-team system scopes: `teams:read` (enumerate any team), `teams:delete` (delete any team), `teams:assign-owner` (give an **ownerless** team an owner, chosen from its existing members; refused when the team already has one).
+- `SystemTeamScopes` - Cross-team system scopes: `teams:read` (enumerate any team), `teams:delete` (delete any team), `teams:set-owner` (make an existing member the sole owner of any team, whether it has no owner, one or several).
 - `ISystemScopeRegistry` / `ISystemRoleRegistry` - Global (system) scopes for system API keys, and a mapping of app/global roles (e.g. `Developer`) to those scopes for privileged users. Configured via `o.ConfigureSystemScopes` / `o.ConfigureSystemRoles`.
 
 ### Mail to users, messages and notices

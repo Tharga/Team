@@ -242,10 +242,6 @@ public static class ThargaBlazorRegistration
                 });
             }
 
-            // Fails startup if a host still registers a scope name we retired, naming the replacement.
-            // A renamed scope is invisible to the compiler and silently authorizes nothing.
-            services.AddSingleton<IHostedService>(sp => new RetiredScopeCheck(sp.GetRequiredService<ISystemScopeRegistry>()));
-
             // Warns when a code-registered role names a scope no one registered -- the shape a typo takes,
             // since role scopes are unvalidated strings. Warn rather than throw: naming an unregistered
             // scope on a role is the documented pre-3.14 way to get grant-only behaviour.
