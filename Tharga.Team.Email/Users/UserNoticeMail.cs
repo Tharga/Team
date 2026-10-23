@@ -24,8 +24,19 @@ internal sealed class UserNoticeMail(UserNoticeRegistry notices, UserMailText te
     private const string AtOncePrefix = "notice:";
     private const string DigestPrefix = "digest:";
 
-    /// <summary>The mail to <paramref name="userKey"/> for <paramref name="items"/>, every one of a notice in the catalogue and of one stream.</summary>
+    /// <summary>The mail to <paramref name="userKey"/> for <paramref name="items"/>, every one of a notice in the catalogue and of one stream; about a team when all its notices are.</summary>
     public async Task<UserMail> ComposeAsync(string userKey, string stream, UserNoticeItem[] items)
+        => (await ComposeContentAsync(userKey, stream, items)) with { TeamKey = TeamOf(items) };
+
+    /// <remarks>A summary can hold notices of several teams, and then belongs to none of them.</remarks>
+    private static string TeamOf(UserNoticeItem[] items)
+    {
+        string[] teams = [.. items.Select(x => x.TeamKey).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).Take(2)];
+
+        return teams.Length == 1 ? teams[0] : null;
+    }
+
+    private async Task<UserMail> ComposeContentAsync(string userKey, string stream, UserNoticeItem[] items)
     {
         var category = items[0].Category;
 

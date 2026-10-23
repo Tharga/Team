@@ -66,15 +66,34 @@ internal sealed class UserMailQueue(
         return ToPage(await outbox.ListForRecipientAsync(key, normalized, Cursor(cursor), Math.Clamp(pageSize, 1, MaxPageSize), cancellationToken));
     }
 
+    public async Task<UserMailDeliveryPage> ListAsync(UserMailFilter filter, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
+        => ToPage(await outbox.ListAsync(Normalized(filter), Cursor(cursor), Math.Clamp(pageSize, 1, MaxPageSize), cancellationToken));
+
+    /// <summary>The filter with its words trimmed and an address in the lower case the queue stores it in, so a filter typed by a person finds what was stored.</summary>
+    internal static UserMailFilter Normalized(UserMailFilter filter)
+    {
+        filter ??= new UserMailFilter();
+
+        return filter with
+        {
+            Category = string.IsNullOrWhiteSpace(filter.Category) ? null : filter.Category.Trim(),
+            RecipientUserKey = string.IsNullOrWhiteSpace(filter.RecipientUserKey) ? null : filter.RecipientUserKey.Trim(),
+            RecipientAddress = UserMailAddresses.Normalize(filter.RecipientAddress),
+            TeamKey = Team(filter.TeamKey)
+        };
+    }
+
     internal static UserMailDelivery ToDelivery(UserMailItem item) => new()
     {
         Id = item.Id,
         RecipientUserKey = item.Mail.RecipientUserKey,
         RecipientAddress = item.RecipientAddress,
+        RecipientName = item.Mail.RecipientName,
         Category = item.Mail.Category,
         Subject = item.Mail.Subject,
         Kind = item.Mail.Kind,
         DeduplicationKey = item.Mail.DeduplicationKey,
+        TeamKey = item.Mail.TeamKey,
         BatchId = item.BatchId,
         Status = item.Status,
         Attempts = item.Attempts,
@@ -139,9 +158,12 @@ internal sealed class UserMailQueue(
             Attachments = content.Attachments,
             ReplyTo = replyTo,
             DeduplicationKey = deduplicationKey,
-            Kind = mail.Kind
+            Kind = mail.Kind,
+            TeamKey = Team(mail.TeamKey)
         };
     }
+
+    private static string Team(string teamKey) => string.IsNullOrWhiteSpace(teamKey) ? null : teamKey.Trim();
 
     /// <summary>The batch as it is stored: each recipient once, and its content checked exactly as a single mail's is.</summary>
     internal UserMailBatch Accept(UserMailBatch batch)
@@ -154,7 +176,7 @@ internal sealed class UserMailQueue(
 
         var content = AcceptContent(batch.Category, batch.Subject, batch.BodyHtml, batch.Body, batch.Attachments, nameof(batch));
 
-        return content with { RecipientUserKeys = recipients, Kind = batch.Kind };
+        return content with { RecipientUserKeys = recipients, Kind = batch.Kind, TeamKey = Team(batch.TeamKey) };
     }
 
     private UserMailBatch AcceptContent(string categoryKey, string subjectLine, string bodyHtml, string bodyText, UserMailAttachment[] attachments, string parameterName)

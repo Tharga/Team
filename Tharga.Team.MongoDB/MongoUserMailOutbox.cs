@@ -238,6 +238,45 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         return await PageAsync(filter, Builders<UserMailEntity>.Sort.Descending(x => x.Id), pageSize, cancellationToken);
     }
 
+    public async Task<UserMailItemPage> ListAsync(UserMailFilter filter, string cursor, int pageSize, CancellationToken cancellationToken = default)
+    {
+        var query = ForLog(filter);
+        if (cursor != null) query &= Filter.Lt(x => x.Id, CursorId(cursor));
+
+        return await PageAsync(query, Builders<UserMailEntity>.Sort.Descending(x => x.Id), pageSize, cancellationToken, withoutBodies: true);
+    }
+
+    /// <summary>The mails the global log's filter selects: every part given narrows it, and none given selects all.</summary>
+    internal static FilterDefinition<UserMailEntity> ForLog(UserMailFilter filter)
+    {
+        filter ??= new UserMailFilter();
+        var parts = new List<FilterDefinition<UserMailEntity>>();
+
+        if (filter.Kind is { } kind) parts.Add(OfKind(kind));
+        if (!string.IsNullOrEmpty(filter.Category)) parts.Add(Filter.Eq(x => x.Category, filter.Category));
+        if (filter.Status is { } status) parts.Add(Filter.Eq(x => x.Status, status));
+        if (filter.From is { } from) parts.Add(Filter.Gte(x => x.QueuedAt, from));
+        if (filter.To is { } to) parts.Add(Filter.Lt(x => x.QueuedAt, to));
+        if (!string.IsNullOrEmpty(filter.RecipientUserKey)) parts.Add(Filter.Eq(x => x.RecipientUserKey, filter.RecipientUserKey));
+        if (!string.IsNullOrEmpty(filter.RecipientAddress)) parts.Add(Filter.Eq(x => x.RecipientAddress, filter.RecipientAddress));
+        if (!string.IsNullOrEmpty(filter.TeamKey)) parts.Add(Filter.Eq(x => x.TeamKey, filter.TeamKey));
+
+        return parts.Count == 0 ? Filter.Empty : Filter.And(parts);
+    }
+
+    /// <summary>The mails of a kind, a mail stored before kinds were counting as the kind it is read as: a message when it names a batch and a mail otherwise.</summary>
+    private static FilterDefinition<UserMailEntity> OfKind(UserMailKind kind)
+    {
+        var named = Filter.Eq(x => x.Kind, kind);
+
+        return kind switch
+        {
+            UserMailKind.Message => named | (Filter.Eq(x => x.Kind, null) & Filter.Ne(x => x.BatchId, null)),
+            UserMailKind.Mail => named | (Filter.Eq(x => x.Kind, null) & Filter.Eq(x => x.BatchId, null)),
+            _ => named
+        };
+    }
+
     /// <summary>The mails queued for this user's key, and those queued to this address with no user key other than contact mail; nothing when both are missing.</summary>
     internal static FilterDefinition<UserMailEntity> ForRecipient(string userKey, string address)
     {
@@ -252,15 +291,18 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
     internal static ObjectId CursorId(string cursor)
         => ObjectId.TryParse(cursor, out var id) ? id : throw new ArgumentException($"'{cursor}' is not a cursor this outbox issued.", nameof(cursor));
 
-    /// <remarks>The files' bytes are left on the server: a page describes mail, it does not resend it.</remarks>
-    private async Task<UserMailItemPage> PageAsync(FilterDefinition<UserMailEntity> filter, SortDefinition<UserMailEntity> sort, int pageSize, CancellationToken cancellationToken)
+    /// <remarks>The files' bytes are left on the server: a page describes mail, it does not resend it. A log leaves the bodies too, which it never shows.</remarks>
+    private async Task<UserMailItemPage> PageAsync(FilterDefinition<UserMailEntity> filter, SortDefinition<UserMailEntity> sort, int pageSize, CancellationToken cancellationToken, bool withoutBodies = false)
     {
         var size = Math.Clamp(pageSize, 1, 500);
+        var projection = Builders<UserMailEntity>.Projection.Exclude(AttachmentContentField);
+        if (withoutBodies) projection = projection.Exclude(nameof(UserMailEntity.Body)).Exclude(nameof(UserMailEntity.BodyHtml));
+
         var found = await collection.GetManyAsync(filter, new Options<UserMailEntity>
         {
             Sort = sort,
             Limit = size + 1,
-            Projection = Builders<UserMailEntity>.Projection.Exclude(AttachmentContentField)
+            Projection = projection
         }, cancellationToken);
 
         var items = (found?.Items ?? []).ToArray();
@@ -415,6 +457,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         Category = batch.Category,
         Subject = batch.Subject,
         Kind = batch.Kind,
+        TeamKey = batch.TeamKey,
         BatchId = batchId,
         Status = UserMailStatus.Queued,
         QueuedAt = queuedAt,
@@ -445,6 +488,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         Attachments = [.. (mail.Attachments ?? []).Select(ToAttachmentEntity)],
         ReplyTo = mail.ReplyTo,
         DeduplicationKey = mail.DeduplicationKey,
+        TeamKey = mail.TeamKey,
         Status = UserMailStatus.Queued,
         QueuedAt = queuedAt,
         NextAttemptAt = queuedAt
@@ -465,7 +509,8 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
             Attachments = [.. (entity.Attachments ?? []).Select(ToAttachment)],
             ReplyTo = entity.ReplyTo,
             DeduplicationKey = entity.DeduplicationKey,
-            Kind = entity.Kind ?? (entity.BatchId != null ? UserMailKind.Message : UserMailKind.Mail)
+            Kind = entity.Kind ?? (entity.BatchId != null ? UserMailKind.Message : UserMailKind.Mail),
+            TeamKey = entity.TeamKey
         },
         BatchId = entity.BatchId,
         RecipientAddress = entity.RecipientAddress,

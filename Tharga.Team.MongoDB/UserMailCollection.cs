@@ -51,6 +51,10 @@ public record UserMailEntity : EntityBase
     [BsonIgnoreIfNull]
     public string DeduplicationKey { get; init; }
 
+    /// <summary>The key of the team the mail is about, or null when it belongs to none or to several.</summary>
+    [BsonIgnoreIfNull]
+    public string TeamKey { get; init; }
+
     /// <summary>The batch whose content the mail carries, or null for a mail queued on its own.</summary>
     [BsonIgnoreIfNull]
     public string BatchId { get; init; }
@@ -132,7 +136,8 @@ public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
 /// <summary>Queued mail to users, default collection name <c>UserMail</c>.</summary>
 /// <remarks>
 /// Due mail is found by status and due time; a deduplication key is unique where one was given; a batch's mail by its
-/// batch and status; a user's history by their key or address, newest first; a sent mail by the <c>Message-ID</c> a bounce
+/// batch and status; a user's history by their key or address, newest first; the mail about a team by the team, newest first,
+/// the rest of the global log being read newest first by id; a sent mail by the <c>Message-ID</c> a bounce
 /// report names; how often each category was sent by status, completion, category and recipient, read from the index
 /// alone, and how often each contact category was by kind, status, completion, category and address, read from an index
 /// of its own; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never
@@ -173,6 +178,8 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
             new CreateIndexOptions { Name = "RecipientAddress_Id" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.MessageId),
             new CreateIndexOptions { Sparse = true, Name = "MessageId" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.TeamKey).Descending(x => x.Id),
+            new CreateIndexOptions { Sparse = true, Name = "TeamKey_Id" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.CompletedAt).Ascending(x => x.Category).Ascending(x => x.RecipientUserKey),
             new CreateIndexOptions { Name = "Status_CompletedAt_Category_RecipientUserKey" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.Kind).Ascending(x => x.Status).Ascending(x => x.CompletedAt).Ascending(x => x.Category).Ascending(x => x.RecipientAddress),

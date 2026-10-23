@@ -41,6 +41,9 @@ public sealed record UserMail
 
     /// <summary>Which kind of mail it is, shown in the recipient's history; default <see cref="UserMailKind.Mail"/>.</summary>
     public UserMailKind Kind { get; init; } = UserMailKind.Mail;
+
+    /// <summary>The key of the team the mail is about, such as the one an invitation is to, so the mail log can be filtered by organisation; null when it belongs to none or to several.</summary>
+    public string TeamKey { get; init; }
 }
 
 /// <summary>A file sent with a <see cref="UserMail"/>.</summary>

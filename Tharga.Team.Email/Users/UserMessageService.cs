@@ -261,6 +261,14 @@ internal sealed class UserMessageService(
             .ToDictionary(x => x.Key, x => x.First().Name, StringComparer.Ordinal);
     }
 
+    /// <summary>The team a message is about: the one its recipients are chosen within, or none when they are chosen within several teams or all of them.</summary>
+    private static string TeamOf(UserMessageRecipients recipients)
+    {
+        var audience = UserMessageAudience.Normalize(recipients);
+
+        return audience is { AllTeams: false, TeamKeys.Length: 1 } ? audience.TeamKeys[0] : null;
+    }
+
     /// <remarks>Queued before it is recorded, so a message that cannot be queued leaves no record; one that cannot then be recorded is still sent, and that is logged with its id.</remarks>
     private async Task<SentUserMessage> QueueAndRecordAsync(UserMessage message, CancellationToken cancellationToken)
     {
@@ -277,7 +285,8 @@ internal sealed class UserMessageService(
             Subject = message.Subject,
             BodyHtml = message.BodyHtml,
             Body = message.Body,
-            Attachments = message.Attachments ?? []
+            Attachments = message.Attachments ?? [],
+            TeamKey = TeamOf(message.Recipients)
         }, cancellationToken);
 
         var sender = await SenderAsync();
