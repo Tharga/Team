@@ -83,6 +83,17 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
         InvalidateUserCache(user.Identity);
     }
 
+    public override async Task SetUserEmailAsync(string userKey, string email)
+    {
+        if (string.IsNullOrEmpty(userKey)) return;
+
+        var user = await _userRepository.GetByKeyAsync(userKey);
+        if (user == null) return;
+
+        await _userRepository.SetEMailAsync(userKey, email);
+        InvalidateUserCache(user.Identity);
+    }
+
     /// <inheritdoc />
     protected override async Task SetUserProfileAsync(string userKey, string name, string email)
     {

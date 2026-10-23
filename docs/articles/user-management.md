@@ -426,6 +426,34 @@ override, so the row keeps tracking that user's later renames rather than pinnin
 Accepting an invitation clears the per-team override and promotes the admin-entered name to `IUser.Name`,
 so an accepted member's name and email come from the user record — see the co-member note above.
 
+## Setting a user's email address
+
+A user's address is written when the record is created, from the sign-in claims, and a user whose identity
+provider sent none holds the placeholder `unknown`. The address is not only for display: it is where the user's
+mail goes, what an invitation to them matches, and what their avatar and fallback name come from. A holder of
+`users:manage` sets it with **Change email** in the users grid's row menu, beside Rename, or in code:
+
+```csharp
+var result = await userManagementService.SetUserEmailAsync(userKey, "anna.svensson@example.com");
+// result.Previous — the address it replaced, or null
+```
+
+| | |
+|---|---|
+| Who | `users:manage` only, **the user's own record included**: an address is where their mail goes and what invitations match, so it is not self-service |
+| The address | Trimmed, and one plain address. Empty, a list, `Name <a@b.c>` and `a@b.c (work)` are refused with `ArgumentException`, and nothing is stored |
+| The directory | **Never written**, whatever `WriteNameToDirectory` says: the directory's address is usually the organisation's. The dialog says so for a user who is linked |
+| Other users | **Not compared.** More than one user may hold the same address, as one person can sign in with more than one identity |
+| Mail | **Nothing is sent** to the old or the new address |
+| Audit | Feature `user`, action `set-user-email`, with `user.email.old` and `user.email.new` as well as the user key. A refusal is audited as a failure, without the address it was given |
+
+A host that refreshes the profile from trusted sign-ins (below) will have the address set back to the one the
+identity provider sends the next time that user signs in. For a host that does not, an address set here stays.
+
+A host with its **own** `IUserService` implements `SetUserEmailAsync(userKey, email)` to opt in. Until it does, the
+call throws `NotSupportedException` naming the missing member, rather than reporting an address that was never
+set. A service built on `UserServiceRepositoryBase` has it already.
+
 ## Keeping name and email current from trusted sign-ins
 
 A user's `Name` and `EMail` are written once, when the record is created on the first sign-in, and never read from

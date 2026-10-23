@@ -51,6 +51,7 @@ public class TextCoverageTests
         "Features/Team/TeamDialog.razor",
         "Features/User/DirectoryOnlyUsersView.razor",
         "Features/User/UserIconDialog.razor",
+        "Features/User/UserEmailDialog.razor",
         "Features/Team/TeamIconDialog.razor",
         "Features/Simulation/AccessSimulationCard.razor",
         "Features/Simulation/AccessSimulationBar.razor",

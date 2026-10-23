@@ -71,6 +71,12 @@ public sealed class CacheInvalidatingUserServiceDecorator : IUserService
         await InvalidateAsync(userKey);
     }
 
+    public async Task SetUserEmailAsync(string userKey, string email)
+    {
+        await _inner.SetUserEmailAsync(userKey, email);
+        await InvalidateAsync(userKey);
+    }
+
     public async Task SetUserDirectoryIdAsync(string userKey, string directoryId)
     {
         await _inner.SetUserDirectoryIdAsync(userKey, directoryId);

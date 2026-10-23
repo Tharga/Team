@@ -152,6 +152,33 @@ public class AuditingUserManagementServiceDecorator : IUserManagementService
         }
     }
 
+    /// <remarks>
+    /// Both the address replaced and the new one are recorded: it is where the user's mail goes and what an
+    /// invitation to them matches, so "what was it changed from" is what someone investigating asks. A refusal
+    /// is audited as a failure too, without the address it was given.
+    /// </remarks>
+    public async Task<UserEmailChangeResult> SetUserEmailAsync(string userKey, string email, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var result = await _inner.SetUserEmailAsync(userKey, email, cancellationToken);
+            sw.Stop();
+            Log("set-user-email", nameof(SetUserEmailAsync), sw.ElapsedMilliseconds, true, metadata: Meta(
+                (AuditMetadataKeys.UserKey, userKey),
+                (AuditMetadataKeys.UserEmailOld, result?.Previous),
+                (AuditMetadataKeys.UserEmailNew, email?.Trim())));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("set-user-email", nameof(SetUserEmailAsync), sw.ElapsedMilliseconds, false, ex.Message,
+                metadata: Meta((AuditMetadataKeys.UserKey, userKey)));
+            throw;
+        }
+    }
+
     public IAsyncEnumerable<DirectoryUser> GetDirectoryOnlyUsersAsync(CancellationToken cancellationToken = default)
         => _inner.GetDirectoryOnlyUsersAsync(cancellationToken);
 

@@ -84,6 +84,28 @@ public class AuthorizationUserServiceDecoratorTests
         await inner.Received(1).SetUserNameAsync("u-other", "X");
     }
 
+    // ---- SetUserEmailAsync: users:manage only, the caller's own record included ----
+
+    [Fact]
+    public async Task SetUserEmail_WithScope_Delegates()
+    {
+        var (sut, inner) = Build(WithScopes(SystemUserScopes.Manage));
+
+        await sut.SetUserEmailAsync("u-other", "new@example.com");
+
+        await inner.Received(1).SetUserEmailAsync("u-other", "new@example.com");
+    }
+
+    [Fact]
+    public async Task SetUserEmail_OwnRecord_WithoutScope_Throws()
+    {
+        var (sut, inner) = Build(Anonymous());
+        inner.GetCurrentUserAsync().Returns(new TestUser { Key = "u-me" });
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.SetUserEmailAsync("u-me", "new@example.com"));
+        await inner.DidNotReceiveWithAnyArgs().SetUserEmailAsync(default, default);
+    }
+
     // ---- Administration requires users:manage ----
 
     [Fact]

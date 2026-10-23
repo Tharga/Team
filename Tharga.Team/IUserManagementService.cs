@@ -71,6 +71,27 @@ public interface IUserManagementService
     Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Set a user's email address. It stays local: a directory-backed user's address is usually owned by the
+    /// organisation, so it is never written back to the directory.
+    /// </summary>
+    /// <remarks>
+    /// The address is trimmed and must be a single, plain address. <b>Nothing is sent to it</b>, and it is not
+    /// checked against other users: more than one user may hold the same address. It is what the user is
+    /// mailed at, what an invitation to them matches, and what their avatar and fallback name come from,
+    /// so the change records the address it replaced.
+    /// <para>
+    /// A host that refreshes the profile from trusted sign-ins (<c>UserServiceBase.ShouldRefreshProfile</c>)
+    /// will have the address set back to the one the identity provider sends the next time they sign in.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The address is empty or not a single plain address.</exception>
+    /// <exception cref="InvalidOperationException">The user was not found.</exception>
+    /// <exception cref="NotSupportedException">The host's user service does not implement it.</exception>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task<UserEmailChangeResult> SetUserEmailAsync(string userKey, string email, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SetUserEmailAsync)}.");
+
+    /// <summary>
     /// The teams this user owns — the teams that deleting them would leave with no owner.
     /// </summary>
     /// <remarks>

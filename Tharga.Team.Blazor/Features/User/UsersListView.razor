@@ -138,6 +138,7 @@ else if (_loaded)
                                     <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionVerify]" Value="@VerifyAction" Icon="person_search" />
                                 }
                                 <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionRename]" Value="@RenameAction" Icon="edit" />
+                                <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionChangeEmail]" Value="@ChangeEmailAction" Icon="alternate_email" />
                                 @if (_showAdminUpload)
                                 {
                                     <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionSetIcon]" Value="@SetIconAction" Icon="image" />
@@ -277,6 +278,7 @@ else
     private const string DeleteAction = "delete";
     private const string SetIconAction = "set-icon";
     private const string RenameAction = "rename";
+    private const string ChangeEmailAction = "change-email";
     private const string AuditAction = "audit";
     private const string DisableAction = "disable";
     private const string EnableAction = "enable";
@@ -480,6 +482,9 @@ else
             case RenameAction:
                 await RenameUserAsync(user);
                 break;
+            case ChangeEmailAction:
+                await ChangeEmailAsync(user);
+                break;
             case AuditAction:
                 await OpenAuditLogAsync(user);
                 break;
@@ -547,6 +552,21 @@ else
         {
             NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.RenameFailed], ex.Message);
         }
+    }
+
+    /// <summary>Administrative edit of a user's <see cref="IUser.EMail"/>, which stays local to this application.</summary>
+    private async Task ChangeEmailAsync(UserViewModel user)
+    {
+        var saved = await DialogService.OpenAsync<UserEmailDialog>(_text.Format(UsersListViewText.ChangeEmailTitle, user.EMail ?? user.Name),
+            new Dictionary<string, object>
+            {
+                { nameof(UserEmailDialog.UserKey), user.Key },
+                { nameof(UserEmailDialog.CurrentEmail), user.EMail },
+                { nameof(UserEmailDialog.DirectoryLinked), !string.IsNullOrEmpty(user.DirectoryId) }
+            },
+            new DialogOptions { Width = "480px" });
+
+        if (saved is true) await LoadDataAsync();
     }
 
     private void ToggleDetails(UserViewModel user)
