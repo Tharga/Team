@@ -32,7 +32,14 @@ public class SampleBackgroundJob(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
 
         // One scope per unit of work. The correlation id groups every entry this run writes; without it
         // each entry gets its own and the grouping cannot be reconstructed afterwards.
