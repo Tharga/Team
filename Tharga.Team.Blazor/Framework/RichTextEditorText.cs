@@ -45,6 +45,18 @@ public static class RichTextEditorText
     /// <summary>The toolbar button that redoes what was undone.</summary>
     public static readonly TextKey Redo = new("team.richText.redo", "Redo");
 
+    /// <summary>The toolbar's text style picker, as its tooltip and as its label while the selection is in a style it does not offer.</summary>
+    public static readonly TextKey TextStyle = new("team.richText.textStyle", "Text style");
+
+    /// <summary>The text style picker's choice for ordinary body text.</summary>
+    public static readonly TextKey Paragraph = new("team.richText.paragraph", "Paragraph");
+
+    /// <summary>The text style picker's choice for a heading.</summary>
+    public static readonly TextKey Heading = new("team.richText.heading", "Heading");
+
+    /// <summary>The text style picker's choice for a heading under a heading.</summary>
+    public static readonly TextKey Subheading = new("team.richText.subheading", "Subheading");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Bold, Italic, Underline, BulletedList, NumberedList, Link, LinkAddress, LinkText, LinkNewWindow, LinkOk, LinkCancel, RemoveFormatting, Undo, Redo];
+    public static readonly TextKey[] All = [Bold, Italic, Underline, BulletedList, NumberedList, Link, LinkAddress, LinkText, LinkNewWindow, LinkOk, LinkCancel, RemoveFormatting, Undo, Redo, TextStyle, Paragraph, Heading, Subheading];
 }

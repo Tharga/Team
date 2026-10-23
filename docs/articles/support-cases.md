@@ -983,11 +983,18 @@ await cases.AnswerCaseAsync(teamKey, caseId, body: null, bodyHtml: "<p>Fixed in 
 The HTML overloads of `ReplyToCaseAsync` and `AnswerCaseAsync` sanitize on the server, turn images into their alt
 text, and derive the text from the HTML; `body` is used only when the HTML holds nothing readable.
 
-For your own pages: **`RichTextEditor`** (`Value`/`ValueChanged`, `Disabled`, `Label`, `Height`) writes HTML and
-sanitizes what is pasted into it, and **`RichTextView`** (`Html`, `Images`, `Class`) is the only way the toolkit
+For your own pages: **`RichTextEditor`** (`Value`/`ValueChanged`, `Disabled`, `Label`, `Height`, `ShowHeadings`) writes
+HTML and sanitizes what is pasted into it, and **`RichTextView`** (`Html`, `Images`, `Class`) is the only way the toolkit
 renders markup — it sanitizes whatever it is given, so a stored value is never shown as stored. `SafeHtml` and
 `HtmlImage` are public for server code, and `HtmlText` in `Tharga.Team.Email` renders HTML as the plain text
 the toolkit uses.
+
+`ShowHeadings="true"` adds a text style picker to the editor's toolbar with **Paragraph**, **Heading** (`h2`) and
+**Subheading** (`h3`), for text that is a structured document rather than a short reply. It is off by default, so
+the answer boxes above keep their small toolbar. The picker offers only styles `SafeHtml` keeps as they are, and
+its labels go through `IThargaTextProvider` under `team.richText.textStyle`, `team.richText.paragraph`,
+`team.richText.heading` and `team.richText.subheading`. Text that already holds headings shows them whether or not
+the picker is on.
 
 ## An assistant answering first
 

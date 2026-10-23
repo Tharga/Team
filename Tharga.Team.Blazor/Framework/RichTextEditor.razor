@@ -9,6 +9,21 @@
         <RadzenHtmlEditorUndo Title="@_text[RichTextEditorText.Undo]" />
         <RadzenHtmlEditorRedo Title="@_text[RichTextEditorText.Redo]" />
         <RadzenHtmlEditorSeparator />
+        @if (ShowHeadings)
+        {
+            <RadzenHtmlEditorCustomTool Title="@_text[RichTextEditorText.TextStyle]">
+                <Template Context="editor">
+                    @* The mouse must not take the selection from the text: without this the style lands on the first line, not the caret's. *@
+                    <div @onmousedown:preventDefault @onfocusin="@(() => editor.SaveSelectionAsync())">
+                        <RadzenDropDown TValue="string" Data="@_blocks" TextProperty="Text" ValueProperty="Block" AllowClear="false"
+                                        Value="@RichTextBlocks.Selected(editor.State?.FormatBlock)" ValueChanged="@(block => ApplyBlockAsync(editor, block))"
+                                        Placeholder="@_text[RichTextEditorText.TextStyle]" Disabled="@Disabled"
+                                        title="@_text[RichTextEditorText.TextStyle]" aria-label="@_text[RichTextEditorText.TextStyle]" Style="width: 9rem;" />
+                    </div>
+                </Template>
+            </RadzenHtmlEditorCustomTool>
+            <RadzenHtmlEditorSeparator />
+        }
         <RadzenHtmlEditorBold Title="@_text[RichTextEditorText.Bold]" />
         <RadzenHtmlEditorItalic Title="@_text[RichTextEditorText.Italic]" />
         <RadzenHtmlEditorUnderline Title="@_text[RichTextEditorText.Underline]" />
@@ -39,16 +54,40 @@
     /// <summary>The editor's height as a CSS length.</summary>
     [Parameter] public string Height { get; set; } = "10rem";
 
+    /// <summary>
+    /// Whether the toolbar offers a text style picker with paragraph, heading and subheading. Off by default, so the short
+    /// replies and messages the toolkit itself writes keep their small toolbar; turn it on where the text is a structured
+    /// document.
+    /// </summary>
+    [Parameter] public bool ShowHeadings { get; set; }
+
     /// <summary>Whether HTML from this editor holds nothing readable, as when only empty paragraphs remain.</summary>
     public static bool IsEmpty(string html) => SafeHtml.IsEmpty(html);
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
+    private IReadOnlyList<BlockChoice> _blocks = [];
+
+    private sealed record BlockChoice(string Block, string Text);
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(RichTextEditorText.All);
+        _blocks =
+        [
+            new BlockChoice(RichTextBlocks.Paragraph, _text[RichTextEditorText.Paragraph]),
+            new BlockChoice(RichTextBlocks.Heading, _text[RichTextEditorText.Heading]),
+            new BlockChoice(RichTextBlocks.Subheading, _text[RichTextEditorText.Subheading]),
+        ];
+    }
+
+    private static async Task ApplyBlockAsync(RadzenHtmlEditor editor, string block)
+    {
+        if (string.IsNullOrEmpty(block)) return;
+
+        await editor.RestoreSelectionAsync();
+        await editor.ExecuteCommandAsync(HtmlEditorCommands.FormatBlock, RichTextBlocks.Command(block));
     }
 
     private async Task ChangedAsync(string html)
