@@ -142,6 +142,7 @@ public static class SupportRegistration
         foreach (var mailbox in additionalMailboxes) RequireSendingAddressIsAccepted(mailbox.Options, mailbox.Name);
 
         services.TryAddSingleton(sp => new SupportMailboxes(sp.GetRequiredService<IOptions<MailOptions>>().Value, additionalMailboxes));
+        services.TryAddSingleton<ISupportMailboxHealth, SupportMailboxHealthCheck>();
 
         _ = SupportAnswerFrame.Zone(caseOptions.Answers.TimeZoneId);
         services.TryAddSingleton(caseOptions.Answers);

@@ -53,6 +53,35 @@ public class MailClientLoggingTests
     }
 
     [Fact]
+    public async Task AnSmtpServerThatCannotBeReached_IsReportedByTheCheck_WithoutNamingThePassword()
+    {
+        const string password = "app-password-123";
+        var options = new MailOptions { Timeout = TimeSpan.FromMilliseconds(500) };
+        options.Smtp.Host = "127.0.0.1";
+        options.Smtp.Port = 1;
+        options.Smtp.UseSsl = false;
+        options.Smtp.UserName = "support@example.com";
+        options.Smtp.Password = password;
+        var logger = new CapturingLogger();
+
+        var error = await new MailClient(Options.Create(options), logger).CheckSendAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(string.IsNullOrWhiteSpace(error));
+        Assert.DoesNotContain(password, error);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.DoesNotContain(password, entry.Message);
+    }
+
+    [Fact]
+    public async Task WithoutAnSmtpServer_TheSendCheckSaysSo_WithoutConnecting()
+    {
+        var error = await new MailClient(Options.Create(new MailOptions())).CheckSendAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("No SMTP server is configured.", error);
+    }
+
+    [Fact]
     public void AnEmptyFetch_CarriesNoError()
     {
         Assert.Null(MailFetchResult.Empty(MailFetchPosition.Start).Error);

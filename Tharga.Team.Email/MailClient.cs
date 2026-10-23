@@ -127,7 +127,6 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         }
     }
 
-    /// <summary>Connects to the IMAP server and opens the folder read-only; null when that worked, otherwise why not.</summary>
     /// <summary>
     /// The UIDs above the read position. IMAP reads <c>n:*</c> as "n up to the highest UID", so when nothing
     /// newer exists the server still answers with the highest one, which would be read again on every poll.
@@ -142,6 +141,7 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
 
     internal static IReadOnlyList<UniqueId> Newer(IEnumerable<UniqueId> uids, uint lastUid) => [.. uids.Where(x => x.Id > lastUid).OrderBy(x => x.Id)];
 
+    /// <summary>Connects to the IMAP server and opens the folder read-only; null when that worked, otherwise why not.</summary>
     internal async Task<string> CheckReadAsync(CancellationToken cancellationToken)
     {
         if (!CanRead) return "No IMAP server is configured.";
@@ -158,6 +158,25 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
         catch (Exception e)
         {
             logger?.LogWarning(e, "The mailbox could not be opened.");
+            return e.Message;
+        }
+    }
+
+    /// <summary>Connects to the SMTP server and signs in without sending anything; null when that worked, otherwise why not.</summary>
+    internal async Task<string> CheckSendAsync(CancellationToken cancellationToken)
+    {
+        if (!_options.Smtp.IsConfigured) return "No SMTP server is configured.";
+
+        try
+        {
+            using var client = new SmtpClient { Timeout = (int)_options.Timeout.TotalMilliseconds };
+            await ConnectAsync(client, _options.Smtp, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
+            return null;
+        }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "The SMTP server could not be reached.");
             return e.Message;
         }
     }
