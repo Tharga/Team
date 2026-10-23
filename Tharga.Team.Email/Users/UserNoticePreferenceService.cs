@@ -44,7 +44,7 @@ internal sealed class UserNoticePreferenceService(
     public async Task<UserNoticeChoice> SetChoiceAsync(string userKey, string noticeKey, bool enabled, UserNoticeDelivery delivery, CancellationToken cancellationToken = default)
     {
         var notice = notices.Get(noticeKey, nameof(noticeKey));
-        if (!notice.Allows(delivery)) throw new ArgumentException($"The notice '{notice.Key}' cannot be delivered {delivery}.", nameof(delivery));
+        UserNoticeSettings.RequireAllowed(notice, enabled, delivery);
 
         try
         {

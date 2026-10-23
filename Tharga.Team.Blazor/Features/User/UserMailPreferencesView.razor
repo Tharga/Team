@@ -68,16 +68,7 @@ else
                             }
                             @if (category.Required)
                             {
-                                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-required="@category.Key">
-                                    @if (_termsUrl != null)
-                                    {
-                                        <a href="@_termsUrl">@_text[UserMailText.AlwaysSent]</a>
-                                    }
-                                    else
-                                    {
-                                        @_text[UserMailText.AlwaysSent]
-                                    }
-                                </RadzenText>
+                                <AlwaysSentNote Key="@category.Key" Text="@_text[UserMailText.AlwaysSent]" TermsUrl="@_termsUrl" />
                             }
                         </RadzenStack>
                     </RadzenStack>

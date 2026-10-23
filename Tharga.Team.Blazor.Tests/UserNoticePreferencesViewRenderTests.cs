@@ -36,6 +36,17 @@ public class UserNoticePreferencesViewRenderTests : BunitContext
         Subject = "{subject} joined"
     };
 
+    private static readonly UserNoticeType Terms = new()
+    {
+        Key = "terms.changed",
+        Name = "The terms of use change",
+        Category = UserMailCategories.AccountKey,
+        Audience = UserNoticeAudience.EveryMember,
+        Required = true,
+        Deliveries = [UserNoticeDelivery.AtOnce, UserNoticeDelivery.Digest],
+        Subject = "{subject}: the terms of use change"
+    };
+
     private readonly Mock<IUserNoticePreferenceService> _notices = new();
     private readonly Mock<IUserService> _users = new();
 
@@ -54,7 +65,7 @@ public class UserNoticePreferencesViewRenderTests : BunitContext
         _notices.Setup(x => x.SetChoiceAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<UserNoticeDelivery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string _, string key, bool enabled, UserNoticeDelivery delivery, CancellationToken _) => new UserNoticeChoice
             {
-                Notice = key == Assigned.Key ? Assigned : Joined,
+                Notice = new[] { Assigned, Terms }.FirstOrDefault(x => x.Key == key) ?? Joined,
                 Category = Work,
                 Enabled = enabled,
                 Delivery = delivery,
@@ -97,6 +108,69 @@ public class UserNoticePreferencesViewRenderTests : BunitContext
         Assert.Contains("At once", bar.Markup);
         Assert.Contains("Daily summary", bar.Markup);
         Assert.Empty(view.FindAll("[data-delivery=\"member.joined\"]"));
+    }
+
+    private static UserNoticeChoice[] WithRequired() =>
+    [
+        .. Choices(),
+        new() { Notice = Terms, Category = UserMailCategories.Account, Enabled = true, Delivery = UserNoticeDelivery.AtOnce }
+    ];
+
+    [Fact]
+    public void ARequiredNotice_IsShownAlwaysOn_WithADisabledSwitchAndWhy()
+    {
+        var view = Render(WithRequired());
+
+        var required = Switch(view, "terms.changed");
+        Assert.Contains("rz-switch-checked", required.ClassName);
+        Assert.Contains("rz-state-disabled", required.ClassName);
+        Assert.Contains("Always sent: part of the terms of use", view.Find("[data-required=\"terms.changed\"]").TextContent);
+
+        Assert.DoesNotContain("rz-state-disabled", Switch(view, "case.assigned").ClassName);
+        Assert.Single(view.FindAll("[data-required]"));
+    }
+
+    [Fact]
+    public async Task TheDeliveryOfARequiredNotice_CanStillBeChosen()
+    {
+        var view = Render([WithRequired().Last()]);
+
+        var bar = view.FindComponent<RadzenSelectBar<UserNoticeDelivery>>();
+        Assert.False(bar.Instance.Disabled);
+
+        await view.InvokeAsync(() => bar.Instance.Change.InvokeAsync(UserNoticeDelivery.Digest));
+
+        _notices.Verify(x => x.SetChoiceAsync(Me, "terms.changed", true, UserNoticeDelivery.Digest, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void WithTermsOfUse_TheAlwaysSentLine_LinksToThem()
+    {
+        var preferences = new Mock<IUserMailPreferenceService>();
+        preferences.Setup(x => x.GetTermsUrl()).Returns("/terms");
+        Services.AddSingleton(preferences.Object);
+
+        var view = Render(WithRequired());
+
+        var link = view.Find("[data-required=\"terms.changed\"] a");
+        Assert.Equal("/terms", link.GetAttribute("href"));
+        Assert.Equal("Always sent: part of the terms of use", link.TextContent);
+    }
+
+    [Fact]
+    public void WithoutTermsOfUse_TheAlwaysSentLine_IsNoLink()
+    {
+        var view = Render(WithRequired());
+
+        Assert.Empty(view.FindAll("[data-required=\"terms.changed\"] a"));
+    }
+
+    [Fact]
+    public void TheAlwaysSentLine_IsTranslatedThroughTheTextProvider()
+    {
+        var view = Render(WithRequired(), texts: new Translating(new Dictionary<string, string> { [UserMailText.AlwaysSent.Key] = "Skickas alltid: en del av användarvillkoren" }));
+
+        Assert.Contains("Skickas alltid: en del av användarvillkoren", view.Find("[data-required=\"terms.changed\"]").TextContent);
     }
 
     [Fact]

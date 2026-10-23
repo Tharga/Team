@@ -1,0 +1,25 @@
+@namespace Tharga.Team.Blazor.Framework
+
+@* The line under a switch that cannot be turned off, linking to the terms of use where the host has set them. *@
+
+<RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-required="@Key">
+    @if (TermsUrl != null)
+    {
+        <a href="@TermsUrl">@Text</a>
+    }
+    else
+    {
+        @Text
+    }
+</RadzenText>
+
+@code {
+    /// <summary>The key of the mail category or notice that is always sent, so the line can be found by it.</summary>
+    [Parameter] public string Key { get; set; }
+
+    /// <summary>The line's text.</summary>
+    [Parameter] public string Text { get; set; }
+
+    /// <summary>The host's terms of use, or null for no link.</summary>
+    [Parameter] public string TermsUrl { get; set; }
+}

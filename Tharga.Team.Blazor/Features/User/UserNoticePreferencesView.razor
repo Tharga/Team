@@ -1,4 +1,5 @@
 @using Microsoft.AspNetCore.Components.Rendering
+@using Microsoft.Extensions.DependencyInjection
 @using Tharga.Team.Blazor.Framework
 @inject IUserNoticePreferenceService Notices
 @inject IUserService UserService
@@ -57,7 +58,7 @@ else
                     var description = Description(notice);
 
                     <RadzenStack @key="@($"{notice.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-notice="@notice.Key">
-                        <RadzenSwitch Value="@choice.Enabled" Disabled="@_busy" Change="@(value => SetAsync(choice, value, choice.Delivery))" aria-label="@Name(notice)" />
+                        <RadzenSwitch Value="@choice.Enabled" Disabled="@(notice.Required || _busy)" Change="@(value => SetAsync(choice, value, choice.Delivery))" aria-label="@Name(notice)" />
                         <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
                             <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(notice)</strong></RadzenText>
                             @if (description != null)
@@ -76,6 +77,10 @@ else
                                     </Items>
                                 </RadzenSelectBar>
                             }
+                            @if (notice.Required)
+                            {
+                                <AlwaysSentNote Key="@notice.Key" Text="@_text[UserMailText.AlwaysSent]" TermsUrl="@_termsUrl" />
+                            }
                             @if (choice.VariesByTeam)
                             {
                                 <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-varies="@notice.Key">@_text[UserNoticePreferencesViewText.VariesByTeam]</RadzenText>
@@ -93,6 +98,8 @@ else
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
+    [Inject] private IServiceProvider Services { get; set; }
+
     /// <summary>Whose choices are shown and changed; the signed-in user's when not set, and another user's only with <c>users:manage</c>.</summary>
     [Parameter] public string UserKey { get; set; }
 
@@ -103,6 +110,7 @@ else
     private UserNoticeChoice[] _choices = [];
     private string _loadedFor;
     private string _userKey;
+    private string _termsUrl;
     private bool _ready;
     private bool _permitted = true;
     private bool _busy;
@@ -131,7 +139,8 @@ else
             }
         }
 
-        _text = await TextProvider.ResolveAsync([.. UserNoticePreferencesViewText.All, .. _choices.SelectMany(Keys)]);
+        _termsUrl = Services.GetService<IUserMailPreferenceService>()?.GetTermsUrl();
+        _text = await TextProvider.ResolveAsync([.. UserNoticePreferencesViewText.All, UserMailText.AlwaysSent, .. _choices.SelectMany(Keys)]);
         _ready = true;
     }
 
