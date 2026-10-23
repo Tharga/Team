@@ -46,14 +46,33 @@ internal sealed class IconSettingsRefresher(
 
     private bool _hasStore;
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    protected override Task ExecuteAsync(CancellationToken stoppingToken) => RunAsync(stoppingToken);
+
+    /// <remarks>
+    /// <b>Being stopped ends the loop; it is not a failure.</b> A host whose start fails is disposed without
+    /// <c>StopAsync</c>, and a <c>BackgroundService</c> whose task then ends in an <see cref="OperationCanceledException"/>
+    /// is logged as a fault at Error and Critical, which reads as a crash in this library. A provider already disposed
+    /// means the same thing. Internal so a test can end the loop itself rather than race the host's thread pool.
+    /// </remarks>
+    internal async Task RunAsync(CancellationToken stoppingToken)
     {
         var interval = options.Value.IconSettingsRefreshInterval;
         if (!_hasStore || interval <= TimeSpan.Zero) return;
 
-        using var timer = new PeriodicTimer(interval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
-            await ApplyStoredAsync(stoppingToken);
+        try
+        {
+            using var timer = new PeriodicTimer(interval);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+                await ApplyStoredAsync(stoppingToken);
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (ObjectDisposedException)
+        {
+            return;
+        }
     }
 
     /// <returns>Whether a store exists, and so whether there is any point running the timer.</returns>
@@ -68,7 +87,7 @@ internal sealed class IconSettingsRefresher(
             var stored = await store.LoadAsync(cancellationToken);
             stored?.ApplyTo(settings);
         }
-        catch (Exception e)
+        catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             // Fail open: a store blip leaves the settings as they are, which is the last known good value.
             // Refusing to render avatars, or resetting to defaults, would be a worse answer to a transient read.

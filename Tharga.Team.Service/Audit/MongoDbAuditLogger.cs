@@ -100,11 +100,23 @@ public class MongoDbAuditLogger : BackgroundService, IAuditLogger
                     batch.Clear();
                 }
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error writing audit batch to MongoDB");
                 batch.Clear();
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
             }
         }
     }
