@@ -154,6 +154,27 @@ Entra gives every user a `userPrincipalName` identity, which is why it is hidden
 nothing about how the user actually signs in. A mapping that throws is treated as not matching. Chips
 with the same label are shown once.
 
+### Filtering by how users sign in
+
+Above the grid, **Filter by sign-in method** finds the users who do, or do not, sign in with a method — everyone
+without e-ID, say — using the labels above, and the users with no directory link.
+
+- **Not linked** is available at once; it needs no directory call.
+- **Signs in with …** and **Does not sign in with …** need every user's methods, which the column deliberately does
+  not read. Until they are read, the filter offers only *Not linked* and a **Read how everyone signs in** button.
+  Pressing it asks the directory about every linked user, 50 at a time (Entra answers each batch with one Graph
+  request per 15 users), with progress and a **Cancel**. The cost is paid only when someone asks for it, and what
+  was read is kept while the page is open. It grows with the number of linked users, so a large directory takes a
+  while.
+- **A failure or a cancel stops the reading** and keeps the batches already read; pressing the button again
+  continues with the users still unread.
+- **Only users who were read are matched.** A user with no directory link, or whose read failed, is never said to
+  lack a method — nothing is known about how they sign in. Find the unlinked with *Not linked*; a failed read shows
+  on the row as *Unavailable*.
+
+The choices are the methods that exist among the users read, so they follow your mappings and fallbacks. The
+filter works with the grid's own column filters, and returns the grid to its first page when changed.
+
 A host with its own `IUserManagementService` implementation shows no sign-in methods until it implements
 `GetSignInIdentitiesAsync`. The interface's default returns nothing, so existing implementations still compile.
 

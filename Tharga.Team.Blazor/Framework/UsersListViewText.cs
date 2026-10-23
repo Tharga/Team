@@ -141,6 +141,20 @@ public static class UsersListViewText
     public static readonly TextKey SignInFailed = new("team.usersList.signInFailed", "Unavailable");
     public static readonly TextKey SignInFailedHint = new("team.usersList.signInFailedHint", "The directory could not be read: {0}");
 
+    /// <summary>Filtering the list by how users sign in. <c>{0}</c> is a sign-in method as the Sign-in column names it.</summary>
+    public static readonly TextKey SignInFilterPlaceholder = new("team.usersList.signInFilter", "Filter by sign-in method");
+    public static readonly TextKey SignInFilterHas = new("team.usersList.signInFilterHas", "Signs in with {0}");
+    public static readonly TextKey SignInFilterLacks = new("team.usersList.signInFilterLacks", "Does not sign in with {0}");
+    public static readonly TextKey SignInFilterNote = new("team.usersList.signInFilterNote",
+        "Only users linked to the directory, whose methods could be read, are matched. Choose Not linked to find the others.");
+
+    /// <summary>Reading how every user signs in, which the filter needs before it can offer a method. <c>{0}</c> of <c>{1}</c> users are read.</summary>
+    public static readonly TextKey SignInReadAll = new("team.usersList.signInReadAll", "Read how everyone signs in");
+    public static readonly TextKey SignInReadAllHint = new("team.usersList.signInReadAllHint",
+        "Asks the directory about every user linked to it, a batch at a time, which can take a while with many users. It is done only when you ask, and what is read is kept while this page is open.");
+    public static readonly TextKey SignInReading = new("team.usersList.signInReading", "Reading sign-in methods: {0} of {1}");
+    public static readonly TextKey SignInReadFailed = new("team.usersList.signInReadFailed", "Could not read how everyone signs in");
+
     /// <summary>Labels for identities no host mapping names.</summary>
     public static readonly TextKey SignInEmail = new("team.usersList.signInEmail", "Email");
     public static readonly TextKey SignInUserName = new("team.usersList.signInUserName", "Username");
@@ -150,6 +164,8 @@ public static class UsersListViewText
     public static readonly TextKey[] All =
     [
         ColumnSignIn, SignInNotLinked, SignInNotLinkedHint, SignInNone, SignInFailed, SignInFailedHint,
+        SignInFilterPlaceholder, SignInFilterHas, SignInFilterLacks, SignInFilterNote, SignInReadAll, SignInReadAllHint,
+        SignInReading, SignInReadFailed,
         SignInEmail, SignInUserName, SignInPrincipalName,
         VerifyAll, ColumnName, ColumnEmail, ColumnTeams, ColumnLastSeen, BadgeDisabled, ActionView,
         ActionVerify, ActionRename, ActionChangeEmail, ActionSetIcon, ActionAuditLog, ActionEnable, ActionDisable, ActionDelete,
