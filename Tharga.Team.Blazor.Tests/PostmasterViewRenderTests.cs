@@ -472,6 +472,18 @@ public class PostmasterViewRenderTests : BunitContext
         view.WaitForAssertion(() => Assert.Empty(MailIds(view)));
     }
 
+    /// <summary>A routing names the team the mail went to, and is how a mail leaves the list: it must not be mistaken for a team's own change.</summary>
+    [Fact]
+    public void AMailRoutedToATeam_ReReadsTheList()
+    {
+        var view = RenderView();
+        _postmaster.Setup(x => x.ListAsync(PostmasterMailState.Held, null, 50, default)).ReturnsAsync(new PostmasterPage { Items = [] });
+
+        _notifier.Raise(x => x.MailUpdated += null, new TeamMailUpdatedEventArgs { TeamKey = "acme", MailId = "mail-1", Change = TeamMailChange.Rerouted });
+
+        view.WaitForAssertion(() => Assert.Empty(MailIds(view)));
+    }
+
     [Fact]
     public void ATeamsOwnMailBeingHandled_DoesNotReReadTheList()
     {

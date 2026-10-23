@@ -113,6 +113,7 @@ public class PostmasterArchiveTests
         var change = Assert.Single(_notified);
         Assert.Equal(TeamMailChange.Archived, change.Change);
         Assert.Null(change.TeamKey);
+        Assert.True(change.AffectsPostmaster);
         Assert.Equal("mail-1", change.MailId);
     }
 
@@ -150,6 +151,7 @@ public class PostmasterArchiveTests
         var change = Assert.Single(_notified);
         Assert.Equal(TeamMailChange.Restored, change.Change);
         Assert.Null(change.TeamKey);
+        Assert.True(change.AffectsPostmaster);
     }
 
     [Fact]

@@ -135,11 +135,11 @@ else
 
     /// <remarks>
     /// The postmaster's own changes are announced with no team; routing names the team the mail went to, and is
-    /// how a mail leaves this list.
+    /// how a mail leaves this list. See <see cref="TeamMailUpdatedEventArgs.AffectsPostmaster"/>.
     /// </remarks>
     private void OnMailUpdated(object sender, TeamMailUpdatedEventArgs e)
     {
-        if (e.TeamKey != null && e.Change != TeamMailChange.Rerouted) return;
+        if (!e.AffectsPostmaster) return;
 
         _ = RefreshAsync();
     }
