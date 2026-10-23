@@ -1583,6 +1583,12 @@ provider in the toolkit takes a dependency on a type marked `[EditorBrowsable(Ne
 constructor parameters and `[Inject]` properties. Internal services are discovered by the attribute rather
 than a list, so marking a new contract internal enrols it automatically.
 
+`InternalServiceHolderGuardTests` covers what that guard cannot read: classes that are not components or
+providers, and code that fetches an internal service from a service provider instead of injecting it. The few
+classes that hold `ITeamService` on purpose (the team selector's state, the simulation state and the code that builds
+claims) are listed there, with the members each may call, so a new call fails until someone writes down why it is
+safe.
+
 > **The guard cannot see your assembly.** It scans the toolkit's own components and providers. If you write
 > components against these services, add the equivalent test over your assembly — the rule is the same, and
 > a host component injecting `ITeamService` is exactly as unchecked as a toolkit one would be. Reflect over

@@ -27,8 +27,10 @@ namespace Tharga.Team.Blazor.Features.Simulation;
 /// <see cref="SimulationScopes.Simulate"/>, so the check happens above rather than being absent.
 /// </para>
 /// <para>
-/// Because it is not a component, the injection guards in the test projects do not cover it. <b>Do not follow
-/// this as a pattern</b> — a new surface reaching for <c>ITeamService</c> almost certainly wants a gated facet.
+/// Because it is not a component, the component guard does not cover it; <c>InternalServiceHolderGuardTests</c>
+/// does, and pins the <c>ITeamService</c> members it may call, so a new call fails until it is written down
+/// there. <b>Do not follow this as a pattern</b> — a new surface reaching for <c>ITeamService</c> almost
+/// certainly wants a gated facet.
 /// </para>
 /// </remarks>
 public sealed class AccessSimulationState
