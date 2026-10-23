@@ -55,6 +55,10 @@ public record UserMailEntity : EntityBase
     [BsonIgnoreIfNull]
     public string TeamKey { get; init; }
 
+    /// <summary>Whether this records a mail the queue refused, which the mail log shows and a user's own history does not.</summary>
+    [BsonIgnoreIfDefault]
+    public bool Refused { get; init; }
+
     /// <summary>The batch whose content the mail carries, or null for a mail queued on its own.</summary>
     [BsonIgnoreIfNull]
     public string BatchId { get; init; }

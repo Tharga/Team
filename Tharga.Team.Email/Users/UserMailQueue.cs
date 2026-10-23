@@ -1,3 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 
@@ -8,23 +12,30 @@ namespace Tharga.Team.Email.Users;
 /// <b>Everything that can be refused is refused here</b>, while the caller is still there to hear it: an unknown
 /// category, a mail with nothing to say, files over the limits. What can only be known later — whether the user
 /// still receives the category, what their address is — is decided when the mail is sent.
+/// <para>
+/// <b>A refusal is recorded as well as thrown</b>, so the mail log shows an attempt that would otherwise leave no trace.
+/// The caller hears the same exception, whether or not the record could be kept.
+/// </para>
 /// </remarks>
-internal sealed class UserMailQueue(
+internal sealed partial class UserMailQueue(
     UserMailCategoryRegistry categories,
     IUserMailOutbox outbox,
     IOptions<UserMailOptions> options,
     TimeProvider timeProvider,
-    UserMailDispatcher dispatcher = null) : IUserMailQueue
+    UserMailDispatcher dispatcher = null,
+    ILogger<UserMailQueue> logger = null) : IUserMailQueue
 {
     private const string OctetStream = "application/octet-stream";
     private const int MaxDeduplicationKeyLength = 200;
     private const int MaxPageSize = 100;
+    private const int MaxRecordedTextLength = 200;
+    private const int MaxRecordedReasonLength = 500;
 
     internal const string ContactRefusal = "Contact mail is queued by the contact message service, which checks the sender's scope and the addresses' opt-outs; this queue sends to users.";
 
     public async Task<UserMailQueued> QueueAsync(UserMail mail, CancellationToken cancellationToken = default)
     {
-        var accepted = Accept(mail);
+        var accepted = await AcceptRecordingAsync(mail, cancellationToken);
 
         return await outbox.AddAsync(accepted, Now(), cancellationToken);
     }
@@ -33,7 +44,7 @@ internal sealed class UserMailQueue(
     {
         if (dispatcher == null) throw new InvalidOperationException("Sending at once needs the user mail dispatcher, which this queue was built without.");
 
-        var accepted = Accept(mail);
+        var accepted = await AcceptRecordingAsync(mail, cancellationToken);
         var claimant = $"{Environment.MachineName}:{Environment.ProcessId}:now:{Guid.NewGuid():N}";
         var item = await outbox.AddClaimedAsync(accepted, Now(), claimant, options.Value.Lease, cancellationToken);
         await dispatcher.SendNowAsync(item, claimant, cancellationToken);
@@ -115,12 +126,89 @@ internal sealed class UserMailQueue(
 
     public async Task<UserMailBatchQueued> QueueBatchAsync(UserMailBatch batch, CancellationToken cancellationToken = default)
     {
-        var accepted = Accept(batch);
+        UserMailBatch accepted;
+        try
+        {
+            accepted = Accept(batch);
+        }
+        catch (ArgumentException e) when (batch != null && e is not ArgumentNullException)
+        {
+            await RecordRefusalAsync(new UserMail { Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey }, e, cancellationToken);
+            throw;
+        }
 
         var id = await outbox.AddBatchAsync(accepted, Now(), cancellationToken);
 
         return new UserMailBatchQueued(id, accepted.RecipientUserKeys.Length);
     }
+
+    private async Task<UserMail> AcceptRecordingAsync(UserMail mail, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return Accept(mail);
+        }
+        catch (ArgumentException e) when (mail != null && e is not ArgumentNullException)
+        {
+            await RecordRefusalAsync(mail, e, cancellationToken);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Records the refusal as a mail given up, what the caller named of it and the reason, never its body. A cause that repeats
+    /// is recorded once a day, so a host bug in a loop cannot fill the collection. Failing to record never changes what the
+    /// caller hears.
+    /// </summary>
+    private async Task RecordRefusalAsync(UserMail mail, ArgumentException refusal, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var refused = Refused(mail);
+            var reason = Truncated(ParameterSuffix().Replace(refusal.Message, string.Empty).Trim(), MaxRecordedReasonLength);
+
+            await outbox.AddRefusedAsync(refused, reason, RefusalKey(refused, reason), Now(), cancellationToken);
+        }
+        catch (NotSupportedException)
+        {
+            // An outbox that keeps no such record: the caller still hears the refusal.
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger?.LogWarning(e, "A refused mail could not be recorded in the mail log.");
+        }
+    }
+
+    /// <summary>What the caller named of a refused mail, trimmed and cut short; the body and files are left out.</summary>
+    private static UserMail Refused(UserMail mail)
+    {
+        var userKey = Truncated(mail.RecipientUserKey?.Trim(), MaxRecordedTextLength);
+
+        return new UserMail
+        {
+            RecipientUserKey = userKey,
+            RecipientAddress = userKey == null ? Truncated(UserMailAddresses.Normalize(mail.RecipientAddress), MaxRecordedTextLength) : null,
+            RecipientName = userKey == null ? Truncated(OneLine(mail.RecipientName), MaxRecordedTextLength) : null,
+            Category = Truncated(mail.Category?.Trim(), MaxRecordedTextLength) ?? string.Empty,
+            Subject = Truncated(OneLine(mail.Subject), MaxRecordedTextLength) ?? string.Empty,
+            Kind = mail.Kind,
+            TeamKey = Truncated(Team(mail.TeamKey), MaxRecordedTextLength)
+        };
+    }
+
+    /// <summary>The key that makes the same refusal of the same mail, on the same day, one record.</summary>
+    private string RefusalKey(UserMail refused, string reason)
+    {
+        var cause = string.Join('\n', refused.Kind, refused.Category, refused.RecipientUserKey, refused.RecipientAddress, refused.Subject, refused.TeamKey, reason);
+
+        return $"refused:{Now():yyyyMMdd}:{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(cause)))[..32]}";
+    }
+
+    private static string Truncated(string value, int length)
+        => string.IsNullOrEmpty(value) ? null : value.Length <= length ? value : value[..length];
+
+    [GeneratedRegex(@"\s*\(Parameter '[^']*'\)\s*$")]
+    private static partial Regex ParameterSuffix();
 
     public async Task<UserMailBatchDelivery> GetBatchAsync(string id, CancellationToken cancellationToken = default)
         => string.IsNullOrWhiteSpace(id) ? null : await outbox.GetBatchDeliveryAsync(id, cancellationToken);

@@ -70,7 +70,8 @@ public static class UserMailRegistration
             sp.GetRequiredService<IUserMailOutbox>(),
             sp.GetRequiredService<IOptions<UserMailOptions>>(),
             sp.GetRequiredService<TimeProvider>(),
-            sp.GetRequiredService<UserMailDispatcher>()));
+            sp.GetRequiredService<UserMailDispatcher>(),
+            sp.GetService<ILogger<UserMailQueue>>()));
 
         services.TryAddScoped<IUserMailHistoryService>(sp => new UserMailHistoryService(
             sp.GetRequiredService<IUserMailQueue>(),
@@ -116,7 +117,8 @@ public static class UserMailRegistration
                 sp.GetRequiredService<IUserMailOutbox>(),
                 sp.GetRequiredService<IOptions<UserMailOptions>>(),
                 sp.GetRequiredService<TimeProvider>(),
-                sp.GetRequiredService<UserMailDispatcher>()),
+                sp.GetRequiredService<UserMailDispatcher>(),
+                sp.GetService<ILogger<UserMailQueue>>()),
             sp.GetRequiredService<UserMailText>(),
             sp.GetRequiredService<IOptions<UserMailOptions>>()));
     }
