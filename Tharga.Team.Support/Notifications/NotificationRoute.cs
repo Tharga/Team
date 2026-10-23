@@ -40,7 +40,8 @@ public record NotificationRoute
     /// </summary>
     /// <remarks>
     /// Substitutions are <c>{event}</c>, <c>{feature}</c>, <c>{action}</c>, <c>{actor}</c>,
-    /// <c>{team}</c>, <c>{time}</c>, <c>{outcome}</c> and <c>{error}</c>. Any other name is looked up
+    /// <c>{team}</c> (the key), <c>{team.display}</c> (the name, or the key when there is none),
+    /// <c>{time}</c>, <c>{outcome}</c> and <c>{error}</c>. Any other name is looked up
     /// in the entry's metadata, so the audit vocabulary is usable directly: <c>{team.name}</c>,
     /// <c>{member.email}</c>. A name that resolves to nothing renders as empty rather than being left
     /// in the message as a literal brace.

@@ -101,7 +101,7 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
     private static string DefaultText(AuditEntry entry, string key)
     {
         var text = $"{SlackText.Escape(key ?? "event")} by {SlackText.Escape(Actor(entry))}";
-        if (!string.IsNullOrWhiteSpace(entry.TeamKey)) text += $" on team {SlackText.Escape(entry.TeamKey)}";
+        if (!string.IsNullOrWhiteSpace(entry.TeamKey)) text += $" on team {SlackText.Escape(TeamDisplay(entry))}";
         if (!entry.Success) text += $" — failed: {SlackText.Escape(entry.ErrorMessage ?? "no reason given")}";
         return text;
     }
@@ -120,11 +120,21 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
         "action" => entry.Action,
         "actor" => Actor(entry),
         "team" => entry.TeamKey,
+        "team.display" => TeamDisplay(entry),
         "time" => entry.Timestamp.ToString("u"),
         "outcome" => entry.Success ? "succeeded" : "failed",
         "error" => entry.ErrorMessage,
         _ => entry.Metadata != null && entry.Metadata.TryGetValue(name, out var value) ? value : null
     };
+
+    /// <summary>
+    /// The team as people know it: its name when the entry carries one, otherwise its key, so a message never
+    /// has a gap where the team should be.
+    /// </summary>
+    private static string TeamDisplay(AuditEntry entry)
+        => entry.Metadata != null && entry.Metadata.TryGetValue(AuditMetadataKeys.TeamName, out var name) && !string.IsNullOrWhiteSpace(name)
+            ? name
+            : entry.TeamKey;
 
     /// <summary>
     /// The configured link to the case this entry is about, or null when there is nothing to link to.

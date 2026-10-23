@@ -40,7 +40,7 @@ services.AddThargaSupport(o =>
     o.Notifications.Routes =
     [
         new() { Event = "team:create",  Template = "New team *{team.name}* created by {actor}." },
-        new() { Event = "team:invite",  Template = "{actor} invited *{member.email}* to team {team}." },
+        new() { Event = "team:invite",  Template = "{actor} invited *{member.email}* to *{team.display}*." },
         new() { Event = "team:set-consent", Channel = "#security" },
         new() { Event = "*", Channel = "#alerts", Success = false, Template = "{event} failed: {error}" }
     ];
@@ -93,7 +93,12 @@ Replace the list to take full control, or edit it to add and remove single event
 
 Placeholders are `{name}`:
 
-`{event}` · `{feature}` · `{action}` · `{actor}` · `{team}` · `{time}` · `{outcome}` · `{error}`
+`{event}` · `{feature}` · `{action}` · `{actor}` · `{team}` · `{team.display}` · `{time}` · `{outcome}` · `{error}`
+
+`{team}` is the team's key. `{team.display}` is its name, or the key when the entry carries none, so it is the one
+to use in a message people read. Team member changes (invite, remove, leave, suspend, restore, role, invitation
+extension, ownership transfer) and support cases record the name; the built-in routes for invite, remove-member and
+a raised support case use it.
 
 **Any other name is looked up in the entry's metadata**, so the audit vocabulary works directly with no
 mapping table to maintain beside it:

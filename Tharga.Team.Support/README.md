@@ -84,7 +84,9 @@ routing at all. `auth:user-created` is a data change and carries `{user.key}` an
 
 ### Template placeholders
 
-`{event}` · `{feature}` · `{action}` · `{actor}` · `{team}` · `{time}` · `{outcome}` · `{error}`
+`{event}` · `{feature}` · `{action}` · `{actor}` · `{team}` · `{team.display}` · `{time}` · `{outcome}` · `{error}`
+
+`{team}` is the team's key; `{team.display}` is its name, or the key when the entry carries none.
 
 Any other name is looked up in the entry's metadata, so the audit vocabulary works directly:
 `{team.name}`, `{member.email}`, `{member.accesslevel.new}`. A name that resolves to nothing renders as
