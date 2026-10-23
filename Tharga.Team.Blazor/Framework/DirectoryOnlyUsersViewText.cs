@@ -12,6 +12,9 @@ public static class DirectoryOnlyUsersViewText
     /// <summary>Placeholder: the number found.</summary>
     public static readonly TextKey FoundCount = new("team.directoryOnly.foundCount", "{0} user(s) found only in the directory");
 
+    /// <summary>Paging summary under the grid. Placeholders: {0} current page, {1} page count, {2} number of users.</summary>
+    public static readonly TextKey PagingSummary = new("team.directoryOnly.pagingSummary", "{2} users, page {0} of {1}");
+
     public static readonly TextKey ColumnName = new("team.directoryOnly.columnName", "Name");
     public static readonly TextKey ColumnEmail = new("team.directoryOnly.columnEmail", "Email");
     public static readonly TextKey ColumnStatus = new("team.directoryOnly.columnStatus", "Status");
@@ -27,6 +30,6 @@ public static class DirectoryOnlyUsersViewText
     public static readonly TextKey[] All =
     [
         Load, Refresh, FoundCount, ColumnName, ColumnEmail, ColumnStatus,
-        StatusDisabled, StatusEnabled, EmptyPrompt, NotifyFailed,
+        StatusDisabled, StatusEnabled, EmptyPrompt, NotifyFailed, PagingSummary,
     ];
 }

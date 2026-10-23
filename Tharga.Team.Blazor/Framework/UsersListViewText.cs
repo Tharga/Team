@@ -17,6 +17,9 @@ public static class UsersListViewText
 {
     public static readonly TextKey VerifyAll = new("team.usersList.verifyAll", "Verify all");
 
+    /// <summary>Paging summary under the grid. Placeholders: {0} current page, {1} page count, {2} number of users.</summary>
+    public static readonly TextKey PagingSummary = new("team.usersList.pagingSummary", "{2} users, page {0} of {1}");
+
     public static readonly TextKey ColumnName = new("team.usersList.columnName", "Name");
     public static readonly TextKey ColumnEmail = new("team.usersList.columnEmail", "Email");
     public static readonly TextKey ColumnTeams = new("team.usersList.columnTeams", "Teams");
@@ -156,6 +159,6 @@ public static class UsersListViewText
         UserEnabled, CouldNotDisable, CouldNotEnable, DisabledTooltip, DisabledByTooltip,
         CannotDeleteSelfTitle, CannotDeleteSelfDetail, DeleteUserTitle, DeletedLocallyTitle,
         DirectoryDeleteIncomplete, UserDeleted, DeleteFailed, RemovedFromOneTeam, RemovedFromManyTeams,
-        RemovedFromOneTeamAndDirectory, RemovedFromManyTeamsAndDirectory
+        RemovedFromOneTeamAndDirectory, RemovedFromManyTeamsAndDirectory, PagingSummary
     ];
 }

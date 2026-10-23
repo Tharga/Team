@@ -23,6 +23,7 @@
 else if (_loaded)
 {
     <RadzenDataGrid Data="@_teamViewModels" TItem="TeamViewModel" AllowSorting="true" AllowPaging="true" PageSize="10"
+                    ShowPagingSummary="true" PagingSummaryFormat="@_text[TeamsListViewText.PagingSummary]"
                     AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive">
         <Columns>
             <RadzenDataGridColumn Title="" Width="66px" Sortable="false" Filterable="false">

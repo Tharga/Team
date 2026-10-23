@@ -13,6 +13,9 @@ public static class TeamsListViewText
     public static readonly TextKey RequiresScope = new("team.teamsList.requiresScope",
         "Viewing teams and their members requires the {0} system scope.");
 
+    /// <summary>Paging summary under the grid. Placeholders: {0} current page, {1} page count, {2} number of teams.</summary>
+    public static readonly TextKey PagingSummary = new("team.teamsList.pagingSummary", "{2} teams, page {0} of {1}");
+
     public static readonly TextKey ColumnName = new("team.teamsList.columnName", "Name");
     public static readonly TextKey BadgeEmpty = new("team.teamsList.badgeEmpty", "Empty");
     public static readonly TextKey ColumnOwner = new("team.teamsList.columnOwner", "Owner");
@@ -104,6 +107,6 @@ public static class TeamsListViewText
         OwnerAssigned, OwnerAssignedDetail, CouldNotAssignOwner,
         ActionChangeOwner, ActionReduceOwners, ChangeOwnerTitle, ReduceOwnersTitle,
         OwnerSetDetail, OwnerUnchanged, OwnerUnchangedDetail, DeleteConfirmOne, DeleteConfirmMany,
-        DeleteTitle, DeleteOk, DeleteCancel, TeamDeleted, DeleteFailed
+        DeleteTitle, DeleteOk, DeleteCancel, TeamDeleted, DeleteFailed, PagingSummary
     ];
 }
