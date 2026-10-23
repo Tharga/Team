@@ -27,9 +27,10 @@ namespace Tharga.Team.Blazor.Features.Team;
 /// to a role they hold, and that is decided by <c>TeamGrantResolver</c> when claims are built, not here.
 /// </para>
 /// <para>
-/// Because it is not a component, the injection guards in <c>Tharga.Team.Blazor.Tests</c> and
-/// <c>Tharga.Team.Mcp.Tests</c> do not cover it. <b>Do not follow this as a pattern</b> — a new surface
-/// reaching for <see cref="ITeamService"/> almost certainly wants a gated facet instead.
+/// Because it is not a component, the component guard does not cover it; <c>InternalServiceHolderGuardTests</c>
+/// does, and pins the <see cref="ITeamService"/> members it may call, so a new call fails until it is written
+/// down there. <b>Do not follow this as a pattern</b> — a new surface reaching for <see cref="ITeamService"/>
+/// almost certainly wants a gated facet instead.
 /// </para>
 /// </remarks>
 internal class TeamStateService : ITeamStateService
