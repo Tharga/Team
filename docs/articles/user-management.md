@@ -42,6 +42,8 @@ the per-team-member `LastSeen`, which tracks when a member was last active in th
 made an authenticated request reads as **Never** rather than blank — "we have no value" and "this has
 never happened" are different answers on a list whose purpose is finding dormant accounts.
 
+The users, teams and directory-only grids show a paging summary under the table, such as "42 users, page 1 of 5". The wording comes from `IThargaTextProvider` and can be translated: `team.usersList.pagingSummary`, `team.teamsList.pagingSummary` and `team.directoryOnly.pagingSummary`. Each is a format with `{0}` for the current page, `{1}` for the page count and `{2}` for the number of rows, for example `{2} användare, sida {0} av {1}`.
+
 The same list shows a **Teams** count per user, with the memberships behind it. How much it counts depends
 on the caller's own visibility: without the `teams:read` system scope it counts only teams the caller
 belongs to, so a user whose teams the caller shares none of reads as **0**. Grant `teams:read` — see

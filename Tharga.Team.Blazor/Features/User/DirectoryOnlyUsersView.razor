@@ -22,7 +22,8 @@
 
 @if (_loadedOnce || _loading)
 {
-    <RadzenDataGrid Data="@_users" TItem="DirectoryUser" AllowSorting="true" AllowPaging="true" PageSize="10">
+    <RadzenDataGrid Data="@_users" TItem="DirectoryUser" AllowSorting="true" AllowPaging="true" PageSize="10"
+                    ShowPagingSummary="true" PagingSummaryFormat="@_text[DirectoryOnlyUsersViewText.PagingSummary]">
         <Columns>
             <RadzenDataGridColumn Title="" Width="66px" Sortable="false" Filterable="false">
                 <Template>

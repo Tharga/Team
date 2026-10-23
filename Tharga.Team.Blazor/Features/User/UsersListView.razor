@@ -41,6 +41,7 @@ else if (_loaded)
         </RadzenStack>
     }
     <RadzenDataGrid @ref="_grid" Data="@_allUsers" TItem="UserViewModel" AllowSorting="true" AllowPaging="true" PageSize="10"
+                    ShowPagingSummary="true" PagingSummaryFormat="@_text[UsersListViewText.PagingSummary]"
                     AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                     RowRender="@OnUserRowRender">
         <Columns>
