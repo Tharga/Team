@@ -48,11 +48,9 @@ public class NotificationOptions
     /// leaving it, and a user being deleted.
     /// </summary>
     /// <remarks>
-    /// <b>The issue also named "user logs on" and "user created". Neither is in this list, because
-    /// neither exists as an audited event today</b> — the toolkit audits API-key authentication
-    /// (<c>auth:*</c>) but not an interactive logon, and users are created as a side effect of first
-    /// sign-in rather than through an audited call. Routing them is a one-line addition here once those
-    /// events are raised; a default naming an event nothing emits would look configured and do nothing.
+    /// <b>"User logs on" and "user created" are audited (<c>auth:signin</c>, <c>auth:user-created</c>) and so
+    /// routable, but are not in this list.</b> A sign-in happens too often to post by default, and whether a
+    /// new user is news is the host's call; each is a one-line addition to <see cref="Routes"/>.
     /// </remarks>
     public static IList<NotificationRoute> DefaultRoutes() =>
     [

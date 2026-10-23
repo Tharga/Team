@@ -3,9 +3,8 @@
 A signed-in member can raise a support case for their team, reply to it, and read its history. Cases are
 persisted, authorized and audited.
 
-> **What this is not, yet.** There is **no Jira link and no AI responder**. Cases work on the site, over
-> Slack threads and by email, all in both directions; the rest is in
-> [issue #142](https://github.com/Tharga/Team/issues/142).
+> **What this is not, yet.** There is **no Jira link**. Cases work on the site, over Slack threads and by
+> email, all in both directions, and an [assistant](#an-assistant-answering-first) can answer first.
 
 ## Enabling it
 
