@@ -38,6 +38,55 @@ public class RichTextEditorRenderTests : BunitContext
     }
 
     [Fact]
+    public void TheToolbar_OffersParagraphHeadingAndSubheading_AndNothingTheReadingSideWouldDrop()
+    {
+        var view = RenderEditor(headings: true);
+
+        var picker = view.FindComponent<RadzenDropDown<string>>();
+
+        Assert.Equal(["Paragraph", "Heading", "Subheading"], picker.FindAll(".rz-dropdown-item").Select(x => x.TextContent.Trim()));
+        Assert.Equal([RichTextBlocks.Paragraph, RichTextBlocks.Heading, RichTextBlocks.Subheading], RichTextBlocks.Offered);
+    }
+
+    [Fact]
+    public void TheStylePickers_Labels_ComeFromTheTextCatalogue()
+    {
+        var provider = new Mock<IThargaTextProvider>();
+        provider.Setup(x => x.GetAsync(It.IsAny<TextKey>())).ReturnsAsync((TextKey key) => $"[{key.Key}]");
+
+        var view = RenderEditor(provider: provider.Object, headings: true);
+
+        var picker = view.FindComponent<RadzenDropDown<string>>();
+        Assert.Equal([$"[{RichTextEditorText.Paragraph.Key}]", $"[{RichTextEditorText.Heading.Key}]", $"[{RichTextEditorText.Subheading.Key}]"],
+            picker.FindAll(".rz-dropdown-item").Select(x => x.TextContent.Trim()));
+        Assert.Equal($"[{RichTextEditorText.TextStyle.Key}]", picker.Instance.Placeholder);
+    }
+
+    [Fact]
+    public void ByDefault_NoStylePickerIsOffered_SoTheSmallComposersKeepTheirToolbar()
+    {
+        var view = RenderEditor();
+
+        Assert.Empty(view.FindComponents<RadzenDropDown<string>>());
+    }
+
+    [Theory]
+    [InlineData(RichTextBlocks.Heading, "<h2>")]
+    [InlineData(RichTextBlocks.Subheading, "<h3>")]
+    [InlineData(RichTextBlocks.Paragraph, "<p>")]
+    public async Task ChoosingAStyle_FormatsTheBlockAtTheCaret(string block, string command)
+    {
+        var view = RenderEditor(headings: true);
+        JSInterop.Setup<RadzenHtmlEditorCommandState>("Radzen.execCommand", _ => true).SetResult(new RadzenHtmlEditorCommandState { Success = true, Html = $"<{block}>x</{block}>" });
+        var picker = view.FindComponent<RadzenDropDown<string>>();
+
+        await view.InvokeAsync(() => picker.Instance.ValueChanged.InvokeAsync(block));
+
+        var call = Assert.Single(JSInterop.Invocations, x => x.Identifier == "Radzen.execCommand");
+        Assert.Equal(["formatBlock", command], call.Arguments.Skip(1).Select(x => x?.ToString()));
+    }
+
+    [Fact]
     public void EveryToolsTitle_ComesFromTheTextCatalogue()
     {
         var provider = new Mock<IThargaTextProvider>();
@@ -134,11 +183,11 @@ public class RichTextEditorRenderTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
-    private IRenderedComponent<RichTextEditor> RenderEditor(Action<string> changed = null, IThargaTextProvider provider = null)
+    private IRenderedComponent<RichTextEditor> RenderEditor(Action<string> changed = null, IThargaTextProvider provider = null, bool headings = false)
     {
         Setup(provider);
 
-        return Render<RichTextEditor>(p => p.Add(x => x.ValueChanged, changed ?? (_ => { })));
+        return Render<RichTextEditor>(p => p.Add(x => x.ValueChanged, changed ?? (_ => { })).Add(x => x.ShowHeadings, headings));
     }
 
     private IRenderedComponent<SupportUnassignedConversation> RenderConversation()
