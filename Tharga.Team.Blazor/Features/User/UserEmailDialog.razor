@@ -1,0 +1,83 @@
+@using Tharga.Team
+@using Tharga.Team.Blazor.Framework
+@inject IUserManagementService UserManagementService
+@inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
+
+@*
+    An administrator sets a user's email address through IUserManagementService, which checks users:manage,
+    validates the address and audits the change. Closes with true once it is saved.
+*@
+<RadzenTemplateForm TItem="EmailModel" Data="@_model" Submit="@OnSubmit">
+    <RadzenStack Gap="1rem">
+        <RadzenText TextStyle="TextStyle.Body2">@_text[UserEmailDialogText.Help]</RadzenText>
+
+        @if (DirectoryLinked)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall" data-directory-note>
+                @_text[UserEmailDialogText.DirectoryNote]
+            </RadzenAlert>
+        }
+
+        <div>
+            <RadzenLabel Component="Email" Text="@_text[UserEmailDialogText.Email]" />
+            <RadzenTextBox Name="Email" @bind-Value="@_model.Email" Disabled="@_busy" Style="width: 100%;" />
+            <RadzenRequiredValidator Component="Email" Text="@_text[UserEmailDialogText.Required]" />
+            <RadzenEmailValidator Component="Email" Text="@_text[UserEmailDialogText.Invalid]" />
+        </div>
+
+        <span class="validation-message" data-error>@_error</span>
+
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" Gap="0.5rem">
+            <RadzenButton ButtonType="ButtonType.Submit" Text="@_text[UserEmailDialogText.Save]" ButtonStyle="ButtonStyle.Primary" Disabled="@_busy" />
+            <RadzenButton Text="@_text[UserEmailDialogText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="@(() => DialogService.Close(false))" />
+        </RadzenStack>
+    </RadzenStack>
+</RadzenTemplateForm>
+
+@code {
+    /// <summary>The user whose address is set.</summary>
+    [Parameter] public string UserKey { get; set; }
+
+    /// <summary>The address the user holds now, shown to be edited.</summary>
+    [Parameter] public string CurrentEmail { get; set; }
+
+    /// <summary>Whether the user is linked to a directory account, which this does not change.</summary>
+    [Parameter] public bool DirectoryLinked { get; set; }
+
+    private sealed class EmailModel
+    {
+        public string Email { get; set; }
+    }
+
+    private readonly EmailModel _model = new();
+    private TextSet _text = TextSet.Empty;
+    private string _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(UserEmailDialogText.All);
+        _model.Email = CurrentEmail?.Contains('@') == true ? CurrentEmail : null;
+    }
+
+    private async Task OnSubmit(EmailModel model)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            await UserManagementService.SetUserEmailAsync(UserKey, model.Email);
+            DialogService.Close(true);
+        }
+        catch (Exception e)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

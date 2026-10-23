@@ -41,6 +41,14 @@ public class CacheInvalidatingUserServiceDecoratorTests
         public Task SetOwnIconAsync(byte[] data, string contentType) => Task.CompletedTask;
         public Task ClearOwnIconAsync() => Task.CompletedTask;
 
+        public List<(string UserKey, string Email)> Emails { get; } = [];
+
+        public Task SetUserEmailAsync(string userKey, string email)
+        {
+            Emails.Add((userKey, email));
+            return Task.CompletedTask;
+        }
+
         public List<(string UserKey, DateTime? DisabledAt, string DisabledBy)> Disabled { get; } = [];
 
         public Task SetUserDisabledAsync(string userKey, DateTime? disabledAt, string disabledBy)
@@ -82,6 +90,23 @@ public class CacheInvalidatingUserServiceDecoratorTests
         await sut.SetUserDisabledAsync("u1", disabledAt, "admin");
 
         Assert.Equal(("u1", disabledAt, "admin"), Assert.Single(host.Disabled));
+        Assert.Contains("u1", host.Invalidated);
+    }
+
+    /// <summary>
+    /// A new address must reach the store and the cached user must be dropped behind it, or the old address is
+    /// served, and mailed to, until the cache ages out. Through the interface for the reason the disable test
+    /// gives: the member is a default one, and a decorator that omits the override lands in the throwing default.
+    /// </summary>
+    [Fact]
+    public async Task SetUserEmail_ReachesTheStoreAndInvalidates()
+    {
+        var host = new HostStore();
+        IUserService sut = new CacheInvalidatingUserServiceDecorator(host);
+
+        await sut.SetUserEmailAsync("u1", "new@example.com");
+
+        Assert.Equal(("u1", "new@example.com"), Assert.Single(host.Emails));
         Assert.Contains("u1", host.Invalidated);
     }
 

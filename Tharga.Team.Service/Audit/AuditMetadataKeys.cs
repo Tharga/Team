@@ -45,6 +45,12 @@ public static class AuditMetadataKeys
     /// <summary>The display name a user was renamed to, on an administrative rename.</summary>
     public const string UserNameNew = "user.name.new";
 
+    /// <summary>The email address a user held before an administrator set another; absent when they held none.</summary>
+    public const string UserEmailOld = "user.email.old";
+
+    /// <summary>The email address an administrator set on a user.</summary>
+    public const string UserEmailNew = "user.email.new";
+
     /// <summary>Tenant roles assigned to a member, comma-separated.</summary>
     public const string MemberTenantRoles = "member.tenantroles";
 

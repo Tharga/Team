@@ -29,6 +29,7 @@ public static class UsersListViewText
     public static readonly TextKey ActionView = new("team.usersList.actionView", "View");
     public static readonly TextKey ActionVerify = new("team.usersList.actionVerify", "Verify");
     public static readonly TextKey ActionRename = new("team.usersList.actionRename", "Rename");
+    public static readonly TextKey ActionChangeEmail = new("team.usersList.actionChangeEmail", "Change email");
     public static readonly TextKey ActionSetIcon = new("team.usersList.actionSetIcon", "Set icon");
     public static readonly TextKey ActionAuditLog = new("team.usersList.actionAuditLog", "Audit log");
     public static readonly TextKey ActionEnable = new("team.usersList.actionEnable", "Enable");
@@ -59,6 +60,7 @@ public static class UsersListViewText
     /// <summary>Dialog titles. <c>{0}</c> identifies the user.</summary>
     public static readonly TextKey IconTitle = new("team.usersList.iconTitle", "Icon — {0}");
     public static readonly TextKey RenameTitle = new("team.usersList.renameTitle", "Rename — {0}");
+    public static readonly TextKey ChangeEmailTitle = new("team.usersList.changeEmailTitle", "Change email — {0}");
     public static readonly TextKey AuditLogTitle = new("team.usersList.auditLogTitle", "Audit log — {0}");
 
     public static readonly TextKey RenameHelp = new("team.usersList.renameHelp",
@@ -150,10 +152,10 @@ public static class UsersListViewText
         ColumnSignIn, SignInNotLinked, SignInNotLinkedHint, SignInNone, SignInFailed, SignInFailedHint,
         SignInEmail, SignInUserName, SignInPrincipalName,
         VerifyAll, ColumnName, ColumnEmail, ColumnTeams, ColumnLastSeen, BadgeDisabled, ActionView,
-        ActionVerify, ActionRename, ActionSetIcon, ActionAuditLog, ActionEnable, ActionDisable, ActionDelete,
+        ActionVerify, ActionRename, ActionChangeEmail, ActionSetIcon, ActionAuditLog, ActionEnable, ActionDisable, ActionDelete,
         ActionDisableSelf, ActionDeleteSelf, UserKey, CopyUserKey, Identity, CopyIdentity, DirectoryId,
         CopyDirectoryId, TeamMemberships, ColumnTeam, ShowThisTeam, ColumnRole, ColumnState, IconTitle,
-        RenameTitle, AuditLogTitle, RenameHelp, NamePlaceholder, Save, Cancel, UserDisabledDetail,
+        RenameTitle, ChangeEmailTitle, AuditLogTitle, RenameHelp, NamePlaceholder, Save, Cancel, UserDisabledDetail,
         UserEnabledDetail, RenamedLocallyTitle, RenameFailed, VerificationFailed,
         CannotDisableSelfTitle, CannotDisableSelfDetail, ConfirmDisable, ConfirmDisableTitle, UserDisabled,
         UserEnabled, CouldNotDisable, CouldNotEnable, DisabledTooltip, DisabledByTooltip,

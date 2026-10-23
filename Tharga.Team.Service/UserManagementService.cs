@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Net.Mail;
+using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Tharga.Team;
 
@@ -91,6 +92,28 @@ public class UserManagementService : IUserManagementService
         {
             return new UserNameChangeResult(DirectoryError: ex.Message);
         }
+    }
+
+    public async Task<UserEmailChangeResult> SetUserEmailAsync(string userKey, string email, CancellationToken cancellationToken = default)
+    {
+        var address = PlainAddress(email);
+        var user = await RequireUserAsync(userKey);
+
+        await _userService.SetUserEmailAsync(user.Key, address);
+
+        return new UserEmailChangeResult(user.EMail);
+    }
+
+    /// <summary>The address trimmed, when it is one plain address: not empty, not a list, and without a display name or comment around it.</summary>
+    private static string PlainAddress(string email)
+    {
+        var trimmed = email?.Trim();
+        if (string.IsNullOrEmpty(trimmed)) throw new ArgumentException("An email address is required.", nameof(email));
+
+        if (!MailAddress.TryCreate(trimmed, out var parsed) || parsed.Address != trimmed)
+            throw new ArgumentException("The email address is not a single, plain address.", nameof(email));
+
+        return trimmed;
     }
 
     public async Task<DirectoryVerificationResult> VerifyUserAsync(string userKey, CancellationToken cancellationToken = default)

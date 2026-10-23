@@ -272,6 +272,15 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
         return null;
     }
 
+    /// <remarks>
+    /// Throws rather than no-opping when unimplemented, as <see cref="SetUserDisabledAsync"/> does: silently
+    /// accepting the change would report an address that was never set.
+    /// </remarks>
+    public virtual Task SetUserEmailAsync(string userKey, string email)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetUserEmailAsync)}. Implement it to let an " +
+            $"administrator set a user's email address (the '{SystemUserScopes.Manage}' system scope).");
+
     public virtual Task SetUserLastSeenAsync(string userKey, DateTime lastSeen) => Task.CompletedTask;
 
     public virtual Task SetUserDirectoryIdAsync(string userKey, string directoryId) => Task.CompletedTask;

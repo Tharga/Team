@@ -46,6 +46,21 @@ public interface IUserService
     Task SetUserNameAsync(string userKey, string name);
 
     /// <summary>
+    /// Sets the user's email address (administrative). Call through
+    /// <see cref="IUserManagementService.SetUserEmailAsync"/>, which validates the address and audits the change;
+    /// requires <see cref="SystemUserScopes.Manage"/>.
+    /// </summary>
+    /// <remarks>
+    /// Throws rather than no-opping when unimplemented, as <see cref="SetUserDisabledAsync"/> does: silently
+    /// skipping the change would report an address that was never set.
+    /// </remarks>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task SetUserEmailAsync(string userKey, string email)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetUserEmailAsync)}. Implement it to let an " +
+            $"administrator set a user's email address (the '{SystemUserScopes.Manage}' system scope).");
+
+    /// <summary>
     /// The user with the given key, or null. The default implementation scans <see cref="GetAsync"/>;
     /// storage-backed services override it with a direct read.
     /// </summary>

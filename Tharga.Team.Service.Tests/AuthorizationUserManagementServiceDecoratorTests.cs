@@ -78,6 +78,26 @@ public class AuthorizationUserManagementServiceDecoratorTests
     }
 
     [Fact]
+    public async Task SetUserEmail_WithScope_Delegates()
+    {
+        var (sut, inner) = Build(WithScopes(SystemUserScopes.Manage));
+        var expected = new UserEmailChangeResult("old@example.com");
+        inner.SetUserEmailAsync("u-1", "new@example.com", Arg.Any<CancellationToken>()).Returns(expected);
+
+        var result = await sut.SetUserEmailAsync("u-1", "new@example.com");
+
+        Assert.Same(expected, result);
+    }
+
+    [Fact]
+    public async Task SetUserEmail_WithoutScope_Throws()
+    {
+        var (sut, inner) = Build(WithScopes(TeamScopes.Manage));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.SetUserEmailAsync("u-1", "new@example.com"));
+        await inner.DidNotReceiveWithAnyArgs().SetUserEmailAsync(default, default, default);
+    }
+
+    [Fact]
     public async Task DirectoryOnly_WithScope_Streams()
     {
         var (sut, inner) = Build(WithScopes(SystemUserScopes.Manage));
