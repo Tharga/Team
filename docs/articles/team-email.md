@@ -148,6 +148,35 @@ team). It is a singleton raised in this process only, outside any circuit: a com
 and a host with several instances relays it over its own backplane. It carries no content — a handler reads the mail
 back through the service, where access is checked.
 
+**Several instances and the postmaster.** The mail the postmaster holds belongs to no team, so a change to it has no
+team group to be relayed to; send it to the staff who may read the postmaster (`mailbox:postmaster:read`) instead.
+Which changes those are is `TeamMailUpdatedEventArgs.AffectsPostmaster`: a change with no team (mail taken in,
+archived or restored) **and a routing**, which names the team the mail went to and takes it off the postmaster's list.
+Testing the team key for null alone leaves a routed mail on every other instance's page.
+
+```csharp
+// On every instance: send what changed here to the staff on the other instances.
+notifier.MailUpdated += (_, e) =>
+{
+    if (e.AffectsPostmaster) _ = backplane.SendToPostmasterReadersAsync();
+};
+```
+
+```razor
+@* On a page showing the postmaster; when the backplane delivers the message, ask the view to read again *@
+<PostmasterView @ref="_postmaster" />
+
+@code {
+    private PostmasterView _postmaster;
+
+    private Task OnPostmasterChangedAsync() => _postmaster.RefreshAsync();
+}
+```
+
+`RefreshAsync()` reads the list and the count again through `IPostmasterService`, so nothing in the message is trusted
+and a missed or repeated message does no harm. An open card keeps what it opened. Do not answer a relayed message with
+`ITeamMailNotifier.Notify` while also relaying from `MailUpdated`: the notification would be relayed again.
+
 ### Content
 
 The toolkit keeps the envelope — sender, recipients, subject, Message-Id, route — and hands the **raw message**

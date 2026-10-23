@@ -77,6 +77,7 @@ public class PostmasterTests
         Assert.Equal(0, await Postmaster().GetCountAsync());
         Assert.Equal(TeamMailChange.Rerouted, Assert.Single(notified).Change);
         Assert.Equal("team-a", notified[0].TeamKey);
+        Assert.True(notified[0].AffectsPostmaster);
     }
 
     [Fact]

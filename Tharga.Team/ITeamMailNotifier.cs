@@ -8,6 +8,12 @@ namespace Tharga.Team;
 /// request or circuit; a handler marshals before touching component state. It reaches subscribers in this
 /// process only — a host with several instances relays it over its own backplane.
 /// <para>
+/// <b>Relaying the postmaster's changes.</b> The mail the postmaster holds belongs to no team, so there is no team group to
+/// send a change to; relay the events whose <see cref="TeamMailUpdatedEventArgs.AffectsPostmaster"/> is true to the staff who
+/// may read the postmaster, and have each of their pages call <c>PostmasterView.RefreshAsync</c>. Do not answer a relayed
+/// event with <see cref="Notify"/> while also relaying from <see cref="MailUpdated"/>: it would be relayed again, and again.
+/// </para>
+/// <para>
 /// <b>It carries no authorization.</b> Every subscriber hears about every team's mail; a handler that wants the
 /// mail reads it back through <see cref="ITeamMailboxService"/>, where the checks are.
 /// </para>

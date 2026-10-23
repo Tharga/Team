@@ -71,6 +71,7 @@ public class TeamMailReceiverTests
         Assert.Single(_notified);
         Assert.Equal(TeamMailChange.Received, _notified[0].Change);
         Assert.Equal("team-a", _notified[0].TeamKey);
+        Assert.False(_notified[0].AffectsPostmaster);
     }
 
     [Fact]
@@ -103,6 +104,7 @@ public class TeamMailReceiverTests
         Assert.Null(item.TeamKey);
         Assert.Equal(MailRouteReason.UnknownAddress, item.Reason);
         Assert.Null(_notified.Single().TeamKey);
+        Assert.True(_notified.Single().AffectsPostmaster);
     }
 
     [Fact]
