@@ -21,7 +21,7 @@ internal sealed class UserNoticeTeamService(
     public async Task<UserNoticeTeamDefault> SetTeamDefaultAsync(string teamKey, string noticeKey, bool enabled, UserNoticeDelivery delivery, CancellationToken cancellationToken = default)
     {
         var notice = notices.Get(noticeKey, nameof(noticeKey));
-        if (!notice.Allows(delivery)) throw new ArgumentException($"The notice '{notice.Key}' cannot be delivered {delivery}.", nameof(delivery));
+        UserNoticeSettings.RequireAllowed(notice, enabled, delivery);
 
         var sw = Stopwatch.StartNew();
         var before = Default(notice, (await store.GetTeamDefaultsAsync(teamKey, cancellationToken))?.GetValueOrDefault(notice.Key));
@@ -39,7 +39,7 @@ internal sealed class UserNoticeTeamService(
     {
         var (enabled, delivery) = UserNoticeSettings.TeamDefault(notice, stored);
 
-        return new UserNoticeTeamDefault { Notice = notice, Enabled = enabled, Delivery = delivery, IsSet = enabled != notice.OnByDefault || delivery != notice.DefaultDelivery };
+        return new UserNoticeTeamDefault { Notice = notice, Enabled = enabled, Delivery = delivery, IsSet = (enabled, delivery) != UserNoticeSettings.TeamDefault(notice, null) };
     }
 
     private void Audit(string teamKey, UserNoticeTeamDefault value, long durationMs)

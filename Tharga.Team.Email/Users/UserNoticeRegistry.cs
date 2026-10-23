@@ -54,6 +54,9 @@ internal sealed partial class UserNoticeRegistry
         if (categories?.Find(notice.Category) == null)
             throw new InvalidOperationException($"The notice '{notice.Key}' is sent in '{notice.Category}', which is not a registered mail category. Register it with {nameof(UserMailOptions)}.{nameof(UserMailOptions.AddCategory)}.");
 
+        if (notice.Required && !categories.Find(notice.Category).Required)
+            throw new InvalidOperationException($"The notice '{notice.Key}' is required, but is sent in '{notice.Category}', which a user can turn off. Send it in a required category, such as '{UserMailCategories.AccountKey}'.");
+
         if (notice.Audience == null)
             throw new InvalidOperationException($"The notice '{notice.Key}' says nothing about who may receive it: set {nameof(UserNoticeType.Audience)}.");
 

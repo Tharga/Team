@@ -33,15 +33,27 @@ public class UserNoticeTeamDefaultsViewRenderTests : BunitContext
         Subject = "{subject} joined"
     };
 
+    private static readonly UserNoticeType Terms = new()
+    {
+        Key = "terms.changed",
+        Name = "The terms of use change",
+        Category = UserMailCategories.AccountKey,
+        Audience = UserNoticeAudience.EveryMember,
+        Required = true,
+        Deliveries = [UserNoticeDelivery.AtOnce, UserNoticeDelivery.Digest],
+        Subject = "{subject}: the terms of use change"
+    };
+
     private readonly Mock<IUserNoticeTeamService> _service = new();
 
-    private IRenderedComponent<UserNoticeTeamDefaultsView> Render(string selectedTeam = TeamKey, bool permitted = true, string teamKey = null)
+    private IRenderedComponent<UserNoticeTeamDefaultsView> Render(string selectedTeam = TeamKey, bool permitted = true, string teamKey = null, bool withRequired = false)
     {
         var defaults = new[]
         {
             new UserNoticeTeamDefault { Notice = Opened, Enabled = true, Delivery = UserNoticeDelivery.AtOnce, IsSet = true },
             new UserNoticeTeamDefault { Notice = Joined, Enabled = true, Delivery = UserNoticeDelivery.AtOnce }
         };
+        if (withRequired) defaults = [.. defaults, new UserNoticeTeamDefault { Notice = Terms, Enabled = true, Delivery = UserNoticeDelivery.AtOnce }];
 
         if (permitted) _service.Setup(x => x.GetTeamDefaultsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(defaults);
         else _service.Setup(x => x.GetTeamDefaultsAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ThrowsAsync(new UnauthorizedAccessException());
@@ -49,7 +61,7 @@ public class UserNoticeTeamDefaultsViewRenderTests : BunitContext
         _service.Setup(x => x.SetTeamDefaultAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<UserNoticeDelivery>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((string _, string key, bool enabled, UserNoticeDelivery delivery, CancellationToken _) => new UserNoticeTeamDefault
             {
-                Notice = key == Opened.Key ? Opened : Joined,
+                Notice = new[] { Opened, Terms }.FirstOrDefault(x => x.Key == key) ?? Joined,
                 Enabled = enabled,
                 Delivery = delivery,
                 IsSet = true
@@ -86,6 +98,47 @@ public class UserNoticeTeamDefaultsViewRenderTests : BunitContext
         Assert.NotNull(view.Find("[data-changed=\"case.opened\"]"));
         Assert.Empty(view.FindAll("[data-changed=\"member.joined\"]"));
         Assert.Single(view.FindComponents<RadzenSelectBar<UserNoticeDelivery>>());
+    }
+
+    [Fact]
+    public void ARequiredNotice_IsShownAlwaysOn_WithADisabledSwitchAndWhy()
+    {
+        var view = Render(withRequired: true);
+
+        var required = Switch(view, "terms.changed");
+        Assert.Contains("rz-switch-checked", required.ClassName);
+        Assert.Contains("rz-state-disabled", required.ClassName);
+        Assert.Contains("Always sent: part of the terms of use", view.Find("[data-required=\"terms.changed\"]").TextContent);
+
+        Assert.DoesNotContain("rz-state-disabled", Switch(view, "member.joined").ClassName);
+        Assert.Single(view.FindAll("[data-required]"));
+    }
+
+    [Fact]
+    public async Task TheDeliveryOfARequiredNotice_CanStillBeSetForTheTeam()
+    {
+        var view = Render(withRequired: true);
+
+        var bar = view.FindComponents<RadzenSelectBar<UserNoticeDelivery>>().Last();
+        Assert.False(bar.Instance.Disabled);
+
+        await view.InvokeAsync(() => bar.Instance.Change.InvokeAsync(UserNoticeDelivery.Digest));
+
+        _service.Verify(x => x.SetTeamDefaultAsync(TeamKey, "terms.changed", true, UserNoticeDelivery.Digest, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public void WithTermsOfUse_TheAlwaysSentLine_LinksToThem()
+    {
+        var preferences = new Mock<IUserMailPreferenceService>();
+        preferences.Setup(x => x.GetTermsUrl()).Returns("/terms");
+        Services.AddSingleton(preferences.Object);
+
+        var view = Render(withRequired: true);
+
+        var link = view.Find("[data-required=\"terms.changed\"] a");
+        Assert.Equal("/terms", link.GetAttribute("href"));
+        Assert.Equal("Always sent: part of the terms of use", link.TextContent);
     }
 
     [Fact]

@@ -45,7 +45,8 @@ team repository registered.
 
 The catalogue is checked when the call runs, and anything wrong throws: a bad or repeated key, a missing name or
 subject, a category that is not registered, no `Audience`, no delivery allowed, a `DefaultDelivery` it does not
-allow, a malformed template, or a template using a placeholder it does not declare.
+allow, a malformed template, a template using a placeholder it does not declare, or a [required
+notice](#a-notice-that-cannot-be-turned-off) sent in a category a user can turn off.
 
 ## The catalogue
 
@@ -55,7 +56,8 @@ allow, a malformed template, or a template using a placeholder it does not decla
 | `Name`, `Description` | — / null | Shown to users, in English |
 | `Category` | — (required) | A registered mail category; turning it off stops the notice too |
 | `Audience` | — (required) | Who may receive it, see below |
-| `OnByDefault` | `true` | Whether a user receives it when neither they nor their team chose |
+| `OnByDefault` | `true` | Whether a user receives it when neither they nor their team chose; ignored when `Required` |
+| `Required` | `false` | Everyone it admits receives it, whatever they or their team chose. Needs a required category, see below |
 | `Deliveries` | `[AtOnce]` | What a user may choose between |
 | `DefaultDelivery` | `AtOnce` | One of `Deliveries` |
 | `Subject` | — (required) | The subject line template |
@@ -66,6 +68,38 @@ allow, a malformed template, or a template using a placeholder it does not decla
 **Templates** use `{name}` for a declared placeholder and `{subject}` for the occurrence's subject text, which
 every notice has; `{{` and `}}` write a brace. Values are HTML-encoded in the body, which is HTML, and inserted
 as they are into the subject line.
+
+### A notice that cannot be turned off
+
+No user can turn off a required mail category, but a notice sent in one is still each user's choice, and the
+team's default. When the notice must always go out — an announcement that the
+customer agreement changes, which the agreement itself says is mailed to each organisation's owners — set
+`Required`:
+
+```csharp
+o.Add(new UserNoticeType
+{
+    Key = "terms.changed",
+    Name = "The terms of use change",
+    Category = UserMailCategories.AccountKey,
+    Audience = UserNoticeAudience.AtLeast(AccessLevel.Owner),
+    Required = true,
+    Deliveries = [UserNoticeDelivery.AtOnce, UserNoticeDelivery.Digest],
+    Subject = "{subject}: the terms of use change"
+});
+```
+
+- **Everyone it admits receives it**, whatever they or their team chose, and an occurrence is never `Skipped`
+  for having been turned off. A choice or a default stored before the notice became required is ignored.
+- **Only the delivery stays a choice**, where the notice allows more than one: a user can still prefer the daily
+  summary, and a team can still set its default.
+- **Turning it off is refused.** `SetChoiceAsync` and `SetTeamDefaultAsync` throw `ArgumentException` for
+  `enabled: false`, and nothing is stored or audited. `GetChoicesAsync` and `GetTeamDefaultsAsync` report it as
+  enabled, with `EnabledChosen` false.
+- **It must be sent in a required category**, such as `account`, so turning the category off cannot stop it
+  either. Registering it in an optional category throws.
+- The preferences and team default views show the switch on and disabled, with the same line a required mail
+  category shows, linking to `UserMailOptions.TermsUrl` when set.
 
 ### Who may receive it
 
@@ -134,8 +168,8 @@ the catalogue's**. Then:
 - **Daily summary** — listed in one mail per user and mail category at `DigestTime` (07:00) in `TimeZoneId`
   (UTC). A second summary the same day keeps what arrives for the next.
 - **At most `MaxItemsPerMail` (100)** notices in one mail; the rest wait for the next.
-- **A notice the user turns off while it waits is not sent.** Turning the notice's mail category off stops it at
-  send time, as for any user mail.
+- **A notice the user turns off while it waits is not sent**, unless it is required. Turning the notice's mail
+  category off stops it at send time, as for any user mail; a required category cannot be turned off.
 - **Every instance shares the work** under leases; the mail started for a stream is recorded on it, so an
   instance taking over queues the same mail once.
 
@@ -154,7 +188,7 @@ is stored.
 | Member | |
 |---|---|
 | `GetChoicesAsync(userKey)` | Every notice the user may receive in any of their teams, in catalogue order |
-| `SetChoiceAsync(userKey, noticeKey, enabled, delivery)` | Records a choice; a delivery the notice does not allow is refused |
+| `SetChoiceAsync(userKey, noticeKey, enabled, delivery)` | Records a choice; a delivery the notice does not allow is refused, and so is turning a required notice off |
 
 Each `UserNoticeChoice` says whether it is `Enabled` and how it is delivered, whether each is the user's own
 (`EnabledChosen`, `DeliveryChosen`), `VariesByTeam` when the user has not chosen and their teams' defaults
@@ -166,7 +200,7 @@ whatever is chosen here.
 | Member | |
 |---|---|
 | `GetTeamDefaultsAsync(teamKey)` | The team's default for every notice, saying which the team set |
-| `SetTeamDefaultAsync(teamKey, noticeKey, enabled, delivery)` | Sets what members who have not chosen receive, and how |
+| `SetTeamDefaultAsync(teamKey, noticeKey, enabled, delivery)` | Sets what members who have not chosen receive, and how; turning a required notice off is refused |
 
 `notices:manage` is granted to Administrator and above by default. Set `ManageAccessLevel` to change that, or to
 `null` to make it grant-only, held through a role or an override. Only deviations from the catalogue are stored,

@@ -50,8 +50,15 @@ public sealed record UserNoticeType
     [System.Text.Json.Serialization.JsonIgnore]
     public UserNoticeAudience Audience { get; init; }
 
-    /// <summary>Whether a user receives it when neither they nor their team chose, default true.</summary>
+    /// <summary>Whether a user receives it when neither they nor their team chose, default true; ignored for a <see cref="Required"/> notice.</summary>
     public bool OnByDefault { get; init; } = true;
+
+    /// <summary>
+    /// Whether every recipient receives it whatever they or their team chose, as a notice of a change to the terms must.
+    /// Only the delivery stays a choice, where the notice allows more than one. The notice must be sent in a required
+    /// mail category, so turning the category off cannot stop it either.
+    /// </summary>
+    public bool Required { get; init; }
 
     /// <summary>The deliveries a user may choose between, at least one, default at once only.</summary>
     public UserNoticeDelivery[] Deliveries { get; init; } = [UserNoticeDelivery.AtOnce];

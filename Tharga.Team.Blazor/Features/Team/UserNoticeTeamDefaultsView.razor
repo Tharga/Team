@@ -1,3 +1,4 @@
+@using Microsoft.Extensions.DependencyInjection
 @using Tharga.Team.Blazor.Framework
 @inject IUserNoticeTeamService TeamNotices
 @inject ITeamStateService TeamState
@@ -40,7 +41,7 @@
                 var description = Description(notice);
 
                 <RadzenStack @key="@($"{notice.Key}:{_revision}")" Orientation="Orientation.Horizontal" AlignItems="AlignItems.Start" Gap="0.75rem" data-notice="@notice.Key">
-                    <RadzenSwitch Value="@value.Enabled" Disabled="@_busy" Change="@(enabled => SetAsync(value, enabled, value.Delivery))" aria-label="@Name(notice)" />
+                    <RadzenSwitch Value="@value.Enabled" Disabled="@(notice.Required || _busy)" Change="@(enabled => SetAsync(value, enabled, value.Delivery))" aria-label="@Name(notice)" />
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
                         <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0"><strong>@Name(notice)</strong></RadzenText>
                         @if (description != null)
@@ -59,6 +60,10 @@
                                 </Items>
                             </RadzenSelectBar>
                         }
+                        @if (notice.Required)
+                        {
+                            <AlwaysSentNote Key="@notice.Key" Text="@_text[UserMailText.AlwaysSent]" TermsUrl="@_termsUrl" />
+                        }
                         @if (value.IsSet)
                         {
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-changed="@notice.Key">@_text[UserNoticeTeamDefaultsViewText.Changed]</RadzenText>
@@ -73,6 +78,8 @@
 @code {
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
+    [Inject] private IServiceProvider Services { get; set; }
+
     /// <summary>The team whose defaults are shown and changed; the selected team when not set.</summary>
     [Parameter] public string TeamKey { get; set; }
 
@@ -80,6 +87,7 @@
     private UserNoticeTeamDefault[] _defaults = [];
     private string _loadedFor;
     private string _teamKey;
+    private string _termsUrl;
     private bool _ready;
     private bool _permitted = true;
     private bool _busy;
@@ -108,7 +116,8 @@
             }
         }
 
-        _text = await TextProvider.ResolveAsync([.. UserNoticeTeamDefaultsViewText.All, .. _defaults.SelectMany(x => Keys(x.Notice))]);
+        _termsUrl = Services.GetService<IUserMailPreferenceService>()?.GetTermsUrl();
+        _text = await TextProvider.ResolveAsync([.. UserNoticeTeamDefaultsViewText.All, UserMailText.AlwaysSent, .. _defaults.SelectMany(x => Keys(x.Notice))]);
         _ready = true;
     }
 

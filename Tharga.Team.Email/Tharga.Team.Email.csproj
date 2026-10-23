@@ -39,7 +39,7 @@
       client, and taking MailKit for reading makes a second SMTP stack pointless. Support cases and an
       organisation's own mailbox both use it; a consumer who wants neither never takes it.
     -->
-    <PackageReference Include="MailKit" Version="4.18.1" />
+    <PackageReference Include="MailKit" Version="4.18.2" />
     <!--
       DNS TXT lookups for the DKIM keys that verify an inbound sender; the BCL resolves addresses only. Every
       host on MongoDB already carries it, because the driver takes it for SRV records.
