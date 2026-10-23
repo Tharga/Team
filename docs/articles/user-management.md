@@ -396,8 +396,8 @@ team to somebody who may never arrive.
 > **`teams:assign-owner`**, and it refused outright on a team that already had an owner — it repaired
 > ownerless teams and nothing else. `teams:set-owner` can depose a sitting owner, which is the point, so the
 > grant was renamed rather than widened in place: a host that granted the old string does not silently
-> acquire the larger capability. **The old name now authorizes nothing.** Remap it — a startup check fails
-> with both names rather than leaving holders refused at the point of use with nothing explaining why.
+> acquire the larger capability. **The old name now authorizes nothing.** Remap it — anyone who still holds
+> it is refused at the point of use, with nothing to say why.
 >
 > `AssignOwnerAsync` is removed. `SetOwnerAsync` covers everything it did.
 

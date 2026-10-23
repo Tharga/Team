@@ -82,9 +82,8 @@ public static class SystemTeamScopes
     /// <para>
     /// <b>Renamed from <c>teams:assign-owner</c> (3.9.0–3.13.0), which authorized only the ownerless-repair
     /// case.</b> The name changed with the capability rather than being widened in place, so a host that
-    /// granted the old string does not silently acquire the ability to depose owners. A startup check fails
-    /// loudly if the retired name is still registered — see <c>RetiredScopeCheck</c> — because the failure
-    /// would otherwise be a silent refusal at the point of use rather than an error at boot.
+    /// granted the old string does not silently acquire the ability to depose owners. The old name authorizes
+    /// nothing.
     /// </para>
     /// </remarks>
     public const string SetOwner = "teams:set-owner";
