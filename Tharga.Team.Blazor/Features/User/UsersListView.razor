@@ -2,6 +2,7 @@
 @using Microsoft.JSInterop
 @using Tharga.Team.Blazor.Features.Team
 @typeparam TMember where TMember : class, Tharga.Team.ITeamMember
+@implements IDisposable
 @inject ITeamDirectoryService TeamDirectoryService
 @inject ITeamOversightService TeamOversightService
 @inject IUserService UserService
@@ -36,11 +37,35 @@ else if (_loaded)
 {
     @if (_showDirectory)
     {
-        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" class="rz-mb-3 rz-mt-2">
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap" class="rz-mb-3 rz-mt-2">
             <RadzenButton Text="@_text[UsersListViewText.VerifyAll]" Icon="how_to_reg" ButtonStyle="ButtonStyle.Light" Click="@VerifyAllAsync" Disabled="@_verifying" />
+            @if (_showSignIn)
+            {
+                @* Has and lacks need every user's methods, which are read only when asked for: the Sign-in column reads
+                   the visible page alone so its cost does not grow with the number of users, and a filter has no such limit. *@
+                <RadzenDropDown TValue="SignInFilter" Value="@_signInFilter" ValueChanged="@ChooseSignInFilterAsync" Data="@_signInChoices"
+                                TextProperty="@nameof(SignInChoice.Text)" ValueProperty="@nameof(SignInChoice.Filter)" AllowClear="true"
+                                Placeholder="@_text[UsersListViewText.SignInFilterPlaceholder]" aria-label="@_text[UsersListViewText.SignInFilterPlaceholder]"
+                                Disabled="@_readingSignIn" Style="min-width: 16rem;" data-signin-filter="true" />
+                @if (_readingSignIn)
+                {
+                    <RadzenProgressBar Value="@_signInReadDone" Max="@_signInReadTotal" ShowValue="false" Style="width: 12rem;" data-signin-progress="true" />
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text.Format(UsersListViewText.SignInReading, _signInReadDone, _signInReadTotal)</RadzenText>
+                    <RadzenButton Text="@_text[UsersListViewText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="@CancelSignInRead" data-signin-cancel="true" />
+                }
+                else if (!_allSignInRead)
+                {
+                    <RadzenButton Text="@_text[UsersListViewText.SignInReadAll]" Icon="manage_search" ButtonStyle="ButtonStyle.Light" Click="@ReadAllSignInMethodsAsync"
+                                  Disabled="@_loadingSignIn" title="@_text[UsersListViewText.SignInReadAllHint]" data-signin-read-all="true" />
+                }
+                @if (_signInFilter is { Kind: not SignInFilterKind.NotLinked })
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-signin-note="true">@_text[UsersListViewText.SignInFilterNote]</RadzenText>
+                }
+            }
         </RadzenStack>
     }
-    <RadzenDataGrid @ref="_grid" Data="@_allUsers" TItem="UserViewModel" AllowSorting="true" AllowPaging="true" PageSize="10"
+    <RadzenDataGrid @ref="_grid" Data="@_rows" TItem="UserViewModel" AllowSorting="true" AllowPaging="true" PageSize="10"
                     ShowPagingSummary="true" PagingSummaryFormat="@_text[UsersListViewText.PagingSummary]"
                     AllowFiltering="true" FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                     RowRender="@OnUserRowRender">
@@ -296,12 +321,21 @@ else
     private SignInMethodOptions _signInMethodOptions;
     private SignInFallbackLabels _signInLabels;
     private readonly Dictionary<string, SignInMethod[]> _signInCache = new();
+    private SignInMethodReader _signInReader;
+    private SignInFilter _signInFilter;
+    private SignInChoice[] _signInChoices = [];
+    private bool _allSignInRead;
+    private bool _readingSignIn;
+    private int _signInReadDone;
+    private int _signInReadTotal;
+    private CancellationTokenSource _signInReadCancellation;
     private RadzenDataGrid<UserViewModel> _grid;
     private IUser[] _users;
     private ITeam<TMember>[] _teams;
     private bool _canSeeAllTeams;
 
     private List<UserViewModel> _allUsers = new();
+    private List<UserViewModel> _rows = new();
     private UserViewModel _selectedUser;
     private TextSet _text = TextSet.Empty;
 
@@ -331,6 +365,8 @@ else
         _signInMethodOptions = ServiceProvider.GetService<SignInMethodOptions>() ?? new SignInMethodOptions();
         _signInLabels = new SignInFallbackLabels(_text[UsersListViewText.SignInEmail], _text[UsersListViewText.SignInUserName],
             _text[UsersListViewText.SignInPrincipalName]);
+        _signInReader = new SignInMethodReader((keys, cancellationToken) => UserManagementService.GetSignInIdentitiesAsync(keys, cancellationToken),
+            _signInMethodOptions, _signInLabels);
 
         if (_canAdminister)
         {
@@ -376,17 +412,8 @@ else
         _loadingSignIn = true;
         try
         {
-            var result = await UserManagementService.GetSignInIdentitiesAsync(pending.Select(x => x.Key).ToArray());
-            var byUser = result.ToDictionary(x => x.UserKey, x => x.Identities);
-            foreach (var row in pending)
-            {
-                // Linked, but the directory no longer knows the account: nothing to show, which is "None".
-                var methods = byUser.TryGetValue(row.Key, out var identities)
-                    ? SignInMethodResolver.Resolve(identities, _signInMethodOptions, _signInLabels)
-                    : [];
-                row.SignInMethods = methods;
-                _signInCache[row.Key] = methods;
-            }
+            await _signInReader.ReadBatchAsync(pending);
+            foreach (var row in pending) _signInCache[row.Key] = row.SignInMethods;
         }
         catch (Exception ex)
         {
@@ -398,8 +425,96 @@ else
             _loadingSignIn = false;
         }
 
+        RefreshSignInFilter();
         StateHasChanged();
     }
+
+    /// <summary>
+    /// Reads how every user not yet read signs in, a batch at a time with progress, so the filter can offer the methods
+    /// that exist. Asked for rather than done on load: the cost grows with the number of users. A failure stops the
+    /// reading and leaves the unread users unread, so asking again continues where it stopped.
+    /// </summary>
+    private async Task ReadAllSignInMethodsAsync()
+    {
+        if (_loadingSignIn) return;
+
+        var pending = UserAdminGate.PendingSignInRows(_allUsers);
+        if (pending.Length == 0) return;
+
+        _loadingSignIn = true;
+        _readingSignIn = true;
+        _signInReadDone = 0;
+        _signInReadTotal = pending.Length;
+        _signInReadCancellation = new CancellationTokenSource();
+        try
+        {
+            await _signInReader.ReadAsync(pending, async batch =>
+            {
+                foreach (var row in batch) _signInCache[row.Key] = row.SignInMethods;
+                _signInReadDone += batch.Length;
+                await InvokeAsync(StateHasChanged);
+            }, _signInReadCancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.SignInReadFailed], ex.Message);
+        }
+        finally
+        {
+            _signInReadCancellation.Dispose();
+            _signInReadCancellation = null;
+            _readingSignIn = false;
+            _loadingSignIn = false;
+        }
+
+        RefreshSignInFilter();
+    }
+
+    private void CancelSignInRead() => _signInReadCancellation?.Cancel();
+
+    private async Task ChooseSignInFilterAsync(SignInFilter filter)
+    {
+        _signInFilter = filter;
+        ApplySignInFilter();
+
+        if (_grid != null) await _grid.GoToPage(0);
+    }
+
+    /// <summary>
+    /// Brings the filter in step with what has been read. A has or lacks filter is only true of users who were read,
+    /// so one left over after new unread users appear is dropped rather than showing a list that is quietly partial.
+    /// </summary>
+    private void RefreshSignInFilter()
+    {
+        _allSignInRead = UserAdminGate.PendingSignInRows(_allUsers).Length == 0;
+        if (!_allSignInRead && _signInFilter is { Kind: not SignInFilterKind.NotLinked }) _signInFilter = null;
+
+        _signInChoices = BuildSignInChoices();
+        ApplySignInFilter();
+    }
+
+    private void ApplySignInFilter() => _rows = _signInFilter == null ? _allUsers : [.. _allUsers.Where(_signInFilter.Matches)];
+
+    private SignInChoice[] BuildSignInChoices()
+    {
+        List<SignInChoice> choices = [new(SignInFilter.NotLinked, _text[UsersListViewText.SignInNotLinked])];
+        if (!_allSignInRead) return [.. choices];
+
+        foreach (var method in SignInFilter.MethodsOf(_allUsers))
+        {
+            choices.Add(new SignInChoice(SignInFilter.Has(method), _text.Format(UsersListViewText.SignInFilterHas, method)));
+            choices.Add(new SignInChoice(SignInFilter.Lacks(method), _text.Format(UsersListViewText.SignInFilterLacks, method)));
+        }
+
+        return [.. choices];
+    }
+
+    public void Dispose() => _signInReadCancellation?.Cancel();
+
+    private sealed record SignInChoice(SignInFilter Filter, string Text);
 
     private void OnUserRowRender(RowRenderEventArgs<UserViewModel> args)
     {
@@ -455,6 +570,8 @@ else
                 State = x.Member.State
             }).ToArray()
         }).OrderBy(u => u.Name).ToList();
+
+        RefreshSignInFilter();
     }
 
     private async Task OnUserActionAsync(RadzenSplitButtonItem item, UserViewModel user)
