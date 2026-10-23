@@ -1094,6 +1094,16 @@ public class MyTeamService : TeamServiceRepositoryBase<TeamEntity, TeamMember>
 > the team and writing its member list back loses one of two overlapping edits to the same team, and the lost
 > edit can be a removal or a suspension. This applies to a replacement `ITeamRepository` and to the member
 > methods a host overrides on `TeamServiceBase` (changed in 4.1, Tharga/Team#338).
+>
+> **The owner rules are part of the write.** Three member changes check a rule that two overlapping calls could
+> each pass on a stale read: demoting a member who has just become the owner, removing them, and two transfers or
+> two administrators leaving at once. Tharga.Team.MongoDB therefore puts the rule in the update's filter, and a
+> transfer is one update that promotes and demotes together. A store of your own gets the same protection by
+> overriding `SetTeamMemberRoleUnlessOwnerAsync`, `RemoveTeamMemberGuardedAsync` and `TransferTeamOwnershipAsync`
+> on `TeamServiceBase` (or `SetMemberRoleUnlessOwnerAsync`, `RemoveMemberGuardedAsync` and `TransferOwnershipAsync`
+> on a replacement `ITeamRepository`), returning false when the store refused. Left alone they do what the store
+> did before, so nothing breaks, but the overlap remains possible. A refused call fails with the same message as
+> the existing check (changed after 4.2, Tharga/Team#342).
 
 ### _Imports.razor
 

@@ -38,6 +38,40 @@ public interface ITeamRepository<TTeamEntity, TMember> : IRepository
     Task AddMemberAsync(string teamKey, TMember member);
     Task RemoveMemberAsync(string teamKey, string userKey);
     Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel);
+    /// <summary>
+    /// Sets the access level unless the member is the Owner, as one write that checks that itself. False when refused.
+    /// </summary>
+    /// <remarks>
+    /// A default interface method doing the unconditional write, so a host's own repository keeps compiling and behaving
+    /// as before. The built-in one puts the condition in the update's filter (Tharga/Team#342).
+    /// </remarks>
+    async Task<bool> SetMemberRoleUnlessOwnerAsync(string teamKey, string userKey, AccessLevel accessLevel)
+    {
+        await SetMemberRoleAsync(teamKey, userKey, accessLevel);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the member unless they are the Owner and, when <paramref name="requireOtherAdministrator"/>, unless no
+    /// other active administrator or owner would remain, as one write. False when refused. See <see cref="SetMemberRoleUnlessOwnerAsync"/>.
+    /// </summary>
+    async Task<bool> RemoveMemberGuardedAsync(string teamKey, string userKey, bool requireOtherAdministrator)
+    {
+        await RemoveMemberAsync(teamKey, userKey);
+        return true;
+    }
+
+    /// <summary>
+    /// Promotes the new owner and demotes the current one together, only while the current one is still the Owner.
+    /// False when refused. See <see cref="SetMemberRoleUnlessOwnerAsync"/>.
+    /// </summary>
+    async Task<bool> TransferOwnershipAsync(string teamKey, string currentOwnerKey, string newOwnerKey)
+    {
+        await SetMemberRoleAsync(teamKey, newOwnerKey, AccessLevel.Owner);
+        await SetMemberRoleAsync(teamKey, currentOwnerKey, AccessLevel.Administrator);
+        return true;
+    }
+
     Task SetMemberSuspendedAsync(string teamKey, string userKey, DateTime? suspendedAt, string suspendedBy);
     Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles);
     Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides);

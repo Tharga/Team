@@ -191,6 +191,21 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
         return _teamRepository.RemoveMemberAsync(teamKey, userKey);
     }
 
+    protected override Task<bool> SetTeamMemberRoleUnlessOwnerAsync(string teamKey, string userKey, AccessLevel accessLevel)
+    {
+        return _teamRepository.SetMemberRoleUnlessOwnerAsync(teamKey, userKey, accessLevel);
+    }
+
+    protected override Task<bool> RemoveTeamMemberGuardedAsync(string teamKey, string userKey, bool requireOtherAdministrator)
+    {
+        return _teamRepository.RemoveMemberGuardedAsync(teamKey, userKey, requireOtherAdministrator);
+    }
+
+    protected override Task<bool> TransferTeamOwnershipAsync(string teamKey, string currentOwnerKey, string newOwnerUserKey)
+    {
+        return _teamRepository.TransferOwnershipAsync(teamKey, currentOwnerKey, newOwnerUserKey);
+    }
+
     protected override Task<ITeam> SetTeamMemberInvitationResponseAsync(string teamKey, string userKey, string inviteKey, bool accept)
     {
         return _teamRepository.SetInvitationResponseAsync(teamKey, userKey, inviteKey, accept);

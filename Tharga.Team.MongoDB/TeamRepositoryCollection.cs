@@ -21,6 +21,47 @@ internal class TeamRepositoryCollection<TTeamEntity, TMember> : DiskRepositoryCo
 
     public override string CollectionName => _collectionName;
 
+    /// <inheritdoc />
+    public Task<bool> TransferOwnershipAsync(string teamKey, string currentOwnerKey, string newOwnerKey, CancellationToken cancellationToken = default)
+        => ExecuteAsync(nameof(TransferOwnershipAsync), async (collection, _, ct) =>
+        {
+            var result = await collection.UpdateOneAsync(
+                TransferFilter(teamKey, currentOwnerKey, newOwnerKey),
+                TransferUpdate(),
+                new UpdateOptions { ArrayFilters = TransferArrayFilters(currentOwnerKey, newOwnerKey) },
+                ct);
+
+            return (result.MatchedCount > 0, (int)result.MatchedCount);
+        }, Operation.Update, cancellationToken, TransferFilter(teamKey, currentOwnerKey, newOwnerKey));
+
+    private const string OwnerIdentifier = "outgoing";
+    private const string NewOwnerIdentifier = "incoming";
+
+    /// <summary>The team, with the current owner still the Owner and the new owner a member of it.</summary>
+    internal static FilterDefinition<TTeamEntity> TransferFilter(string teamKey, string currentOwnerKey, string newOwnerKey)
+    {
+        var builder = Builders<TTeamEntity>.Filter;
+        return builder.And(
+            builder.Eq(x => x.Key, teamKey),
+            builder.ElemMatch(x => x.Members, m => m.Key == currentOwnerKey && m.AccessLevel == AccessLevel.Owner),
+            builder.ElemMatch(x => x.Members, m => m.Key == newOwnerKey));
+    }
+
+    /// <summary>Both levels in one update, so the team is never seen with two owners or none.</summary>
+    internal static UpdateDefinition<TTeamEntity> TransferUpdate()
+        => new BsonDocumentUpdateDefinition<TTeamEntity>(new BsonDocument("$set", new BsonDocument
+        {
+            { $"Members.$[{OwnerIdentifier}].AccessLevel", nameof(AccessLevel.Administrator) },
+            { $"Members.$[{NewOwnerIdentifier}].AccessLevel", nameof(AccessLevel.Owner) },
+        }));
+
+    internal static IEnumerable<ArrayFilterDefinition> TransferArrayFilters(string currentOwnerKey, string newOwnerKey)
+        =>
+        [
+            new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument($"{OwnerIdentifier}.Key", currentOwnerKey)),
+            new BsonDocumentArrayFilterDefinition<BsonDocument>(new BsonDocument($"{NewOwnerIdentifier}.Key", newOwnerKey)),
+        ];
+
     public override IEnumerable<CreateIndexModel<TTeamEntity>> Indices =>
     [
         new(Builders<TTeamEntity>.IndexKeys.Ascending(x => x.Key), new CreateIndexOptions { Unique = true, Name = "Key" }),

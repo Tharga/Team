@@ -169,6 +169,49 @@ public abstract class TeamServiceBase : ITeamService
             $"'{GetType().Name}' does not implement {nameof(SetTeamMemberSuspendedAsync)}. Implement it, " +
             $"and declare {nameof(ITeamMember.SuspendedAt)}/{nameof(ITeamMember.SuspendedBy)} on your " +
             $"member entity, to support suspending members.");
+    /// <summary>
+    /// Sets a member's access level unless that member is the Owner, as one write that checks the rule itself.
+    /// False when the write was refused.
+    /// </summary>
+    /// <remarks>
+    /// The guard in <see cref="SetMemberRoleAsync"/> reads before it writes, so a transfer landing in between
+    /// lets the demotion through and leaves a team with no owner (Tharga/Team#342). A store that can make the
+    /// condition part of the write overrides this. Virtual, never abstract: the default is the unconditional
+    /// write, which is what a host store did before, so deriving classes keep compiling and behaving.
+    /// </remarks>
+    protected virtual async Task<bool> SetTeamMemberRoleUnlessOwnerAsync(string teamKey, string userKey, AccessLevel accessLevel)
+    {
+        await SetTeamMemberRoleAsync(teamKey, userKey, accessLevel);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a member unless that member is the Owner and, when <paramref name="requireOtherAdministrator"/>,
+    /// unless no other active administrator or owner would remain, as one write that checks the rules itself.
+    /// False when the write was refused.
+    /// </summary>
+    /// <remarks>See <see cref="SetTeamMemberRoleUnlessOwnerAsync"/> for why, and for the default.</remarks>
+    protected virtual async Task<bool> RemoveTeamMemberGuardedAsync(string teamKey, string userKey, bool requireOtherAdministrator)
+    {
+        await RemoveTeamMemberAsync(teamKey, userKey);
+        return true;
+    }
+
+    /// <summary>
+    /// Makes <paramref name="newOwnerUserKey"/> the owner and <paramref name="currentOwnerKey"/> an
+    /// administrator, only while the latter is still the owner, as one write. False when it was refused.
+    /// </summary>
+    /// <remarks>
+    /// The default is the two writes this class made before, promoting before demoting so a failure between them
+    /// never leaves the team without an owner. See <see cref="SetTeamMemberRoleUnlessOwnerAsync"/>.
+    /// </remarks>
+    protected virtual async Task<bool> TransferTeamOwnershipAsync(string teamKey, string currentOwnerKey, string newOwnerUserKey)
+    {
+        await SetTeamMemberRoleAsync(teamKey, newOwnerUserKey, AccessLevel.Owner);
+        await SetTeamMemberRoleAsync(teamKey, currentOwnerKey, AccessLevel.Administrator);
+        return true;
+    }
+
     protected abstract Task SetTeamConsentInternalAsync(string teamKey, string[] consentedRoles, AccessLevel? accessLevel);
 
     /// <summary>
@@ -513,9 +556,10 @@ public abstract class TeamServiceBase : ITeamService
             throw new InvalidOperationException(OwnerCannotLeaveMessage);
 
         var user = await RequireCurrentUserAsync();
-        if (member.Key == user.Key) RequireNotLastAdministrator(member, members);
+        var leaving = member.Key == user.Key;
+        if (leaving) RequireNotLastAdministrator(member, members);
 
-        await DetachMemberAsync(teamKey, userKey);
+        await DetachMemberAsync(teamKey, userKey, leaving && member.AccessLevel == AccessLevel.Administrator);
     }
 
     /// <inheritdoc />
@@ -537,7 +581,7 @@ public abstract class TeamServiceBase : ITeamService
 
         RequireNotLastAdministrator(member, members);
 
-        await DetachMemberAsync(teamKey, user.Key);
+        await DetachMemberAsync(teamKey, user.Key, member.AccessLevel == AccessLevel.Administrator);
     }
 
     /// <summary>
@@ -565,9 +609,15 @@ public abstract class TeamServiceBase : ITeamService
     /// The removal itself, shared by <see cref="RemoveMemberAsync"/> and <see cref="LeaveTeamAsync"/> so
     /// the two ways out of a team cannot drift into evicting different things.
     /// </summary>
-    private async Task DetachMemberAsync(string teamKey, string userKey)
+    private async Task DetachMemberAsync(string teamKey, string userKey, bool requireOtherAdministrator)
     {
-        await RemoveTeamMemberAsync(teamKey, userKey);
+        if (!await RemoveTeamMemberGuardedAsync(teamKey, userKey, requireOtherAdministrator))
+        {
+            var now = (await GetMembersAsync(teamKey).ToArrayAsync()).FirstOrDefault(x => x.Key == userKey);
+            if (now != null)
+                throw new InvalidOperationException(now.AccessLevel == AccessLevel.Owner ? OwnerCannotLeaveMessage : LastAdministratorCannotLeaveMessage);
+        }
+
         await _cache.RemoveMemberAsync(teamKey, userKey);
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
@@ -591,7 +641,13 @@ public abstract class TeamServiceBase : ITeamService
         if (current?.AccessLevel == AccessLevel.Owner)
             throw new InvalidOperationException("The owner's access level cannot be changed. Transfer ownership first.");
 
-        await SetTeamMemberRoleAsync(teamKey, userKey, accessLevel);
+        if (!await SetTeamMemberRoleUnlessOwnerAsync(teamKey, userKey, accessLevel))
+        {
+            await _cache.RemoveMemberAsync(teamKey, userKey);
+            if ((await GetTeamMemberAsync(teamKey, userKey))?.AccessLevel == AccessLevel.Owner)
+                throw new InvalidOperationException("The owner's access level cannot be changed. Transfer ownership first.");
+        }
+
         await _cache.RemoveMemberAsync(teamKey, userKey);
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
     }
@@ -913,6 +969,18 @@ public abstract class TeamServiceBase : ITeamService
         return count;
     }
 
+    /// <summary>Why the store refused a transfer, read back from the team as it stands now.</summary>
+    private async Task<InvalidOperationException> RefusedTransferAsync<TMember>(string teamKey, string currentOwnerKey, string newOwnerUserKey) where TMember : ITeamMember
+    {
+        var members = (await GetTeamAsync<TMember>(teamKey))?.Members;
+        if (members?.FirstOrDefault(x => x.Key == currentOwnerKey)?.AccessLevel != AccessLevel.Owner)
+            return new InvalidOperationException("Only the current owner can transfer ownership.");
+        if (members.All(x => x.Key != newOwnerUserKey))
+            return new InvalidOperationException($"User '{newOwnerUserKey}' is not a member of this team.");
+
+        return new InvalidOperationException("Ownership could not be transferred because the team changed meanwhile. Try again.");
+    }
+
     public async Task<SetOwnerResult> SetOwnerAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
     {
         var team = await GetTeamAsync<TMember>(teamKey)
@@ -963,8 +1031,9 @@ public abstract class TeamServiceBase : ITeamService
         if (newOwner.Key == user.Key)
             throw new InvalidOperationException("Cannot transfer ownership to yourself.");
 
-        await SetTeamMemberRoleAsync(teamKey, newOwnerUserKey, AccessLevel.Owner);
-        await SetTeamMemberRoleAsync(teamKey, user.Key, AccessLevel.Administrator);
+        if (!await TransferTeamOwnershipAsync(teamKey, user.Key, newOwnerUserKey))
+            throw await RefusedTransferAsync<TMember>(teamKey, user.Key, newOwnerUserKey);
+
         await _cache.RemoveMemberAsync(teamKey, newOwnerUserKey);
         await _cache.RemoveMemberAsync(teamKey, user.Key);
         TeamsListChangedEvent?.Invoke(this, new TeamsListChangedEventArgs());
