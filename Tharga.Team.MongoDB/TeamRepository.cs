@@ -118,6 +118,60 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
         return UpdateMemberAsync(TeamFilter(teamKey), PullMember(userKey));
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The Owner rule is in the filter, so a transfer landing after the caller read the roster still stops the
+    /// demotion (Tharga/Team#342). <see cref="EMode.FirstOrDefault"/> is what sends the filter with the update.
+    /// </remarks>
+    public async Task<bool> SetMemberRoleUnlessOwnerAsync(string teamKey, string userKey, AccessLevel accessLevel)
+    {
+        var update = Builders<TTeamEntity>.Update
+            .Set(x => x.Members.FirstMatchingElement().AccessLevel, accessLevel);
+
+        var result = await UpdateMemberAsync(NotOwnerFilter(teamKey, userKey), update);
+        return result?.Before != null;
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> RemoveMemberGuardedAsync(string teamKey, string userKey, bool requireOtherAdministrator)
+    {
+        var result = await UpdateMemberAsync(RemoveGuardFilter(teamKey, userKey, requireOtherAdministrator), PullMember(userKey));
+        return result?.Before != null;
+    }
+
+    /// <inheritdoc />
+    public Task<bool> TransferOwnershipAsync(string teamKey, string currentOwnerKey, string newOwnerKey)
+        => _collection.TransferOwnershipAsync(teamKey, currentOwnerKey, newOwnerKey);
+
+    /// <summary>The team with a member of that key who is not the Owner.</summary>
+    internal static FilterDefinition<TTeamEntity> NotOwnerFilter(string teamKey, string userKey)
+    {
+        var builder = Builders<TTeamEntity>.Filter;
+        return builder.And(
+            builder.Eq(x => x.Key, teamKey),
+            builder.ElemMatch(x => x.Members, m => m.Key == userKey && m.AccessLevel != AccessLevel.Owner));
+    }
+
+    /// <summary>
+    /// <see cref="NotOwnerFilter"/>, and when asked, another active administrator or owner as well, so the last one
+    /// cannot leave. Counts the same members <c>TeamServiceBase</c> does: accepted, not suspended, at Administrator or above.
+    /// </summary>
+    internal static FilterDefinition<TTeamEntity> RemoveGuardFilter(string teamKey, string userKey, bool requireOtherAdministrator)
+    {
+        var builder = Builders<TTeamEntity>.Filter;
+        var notOwner = NotOwnerFilter(teamKey, userKey);
+        if (!requireOtherAdministrator) return notOwner;
+
+        var member = Builders<TMember>.Filter;
+        return builder.And(
+            notOwner,
+            builder.ElemMatch(x => x.Members, member.And(
+                member.Ne(m => m.Key, userKey),
+                member.Eq(m => m.State, MembershipState.Member),
+                member.Eq(m => m.SuspendedAt, null),
+                member.In(m => m.AccessLevel, [AccessLevel.Owner, AccessLevel.Administrator]))));
+    }
+
     public Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
     {
         var update = Builders<TTeamEntity>.Update
