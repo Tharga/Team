@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Service.Audit;
@@ -19,6 +20,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     private readonly ITenantRoleService _tenantRoleService;
     private readonly ITeamService _teamService;
     private readonly IUserService _userService;
+    private readonly IServiceProvider _serviceProvider;
 
     /// <summary>
     /// Creates a new instance of the API key authentication handler.
@@ -32,7 +34,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         CompositeAuditLogger auditLogger = null,
         ITenantRoleService tenantRoleService = null,
         ITeamService teamService = null,
-        IUserService userService = null)
+        IUserService userService = null,
+        IServiceProvider serviceProvider = null)
         : base(options, logger, encoder)
     {
         _apiKeyAdministrationService = apiKeyAdministrationService;
@@ -41,7 +44,15 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         _tenantRoleService = tenantRoleService;
         _teamService = teamService;
         _userService = userService;
+        _serviceProvider = serviceProvider;
     }
+
+    /// <summary>
+    /// The user store to read an owner from. The undecorated one when the host registered it: authenticating a
+    /// key happens before any caller exists, so the gated <see cref="IUserService"/> would demand
+    /// <c>users:manage</c> of nobody and refuse every private key.
+    /// </summary>
+    private IUserService OwnerReader => _serviceProvider?.GetKeyedService<IUserService>(UserServiceKeys.Inner) ?? _userService;
 
     /// <summary>
     /// Why a personal system key must be refused, or null when its owner still stands behind it.
@@ -58,11 +69,11 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     /// </remarks>
     private async Task<string> ResolveSystemOwnerAsync(IApiKey key)
     {
-        if (_userService == null) return "The owner of this personal API key cannot be verified.";
+        if (OwnerReader == null) return "The owner of this personal API key cannot be verified.";
 
         try
         {
-            var user = await _userService.GetUserByKeyAsync(key.OwnerMemberKey);
+            var user = await OwnerReader.GetUserByKeyAsync(key.OwnerMemberKey);
             if (user == null) return "The owner of this personal API key no longer exists.";
             if (user.DisabledAt != null) return "The owner of this personal API key is disabled.";
             return null;
@@ -94,7 +105,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     /// </remarks>
     private async Task<(TeamGrant Grant, string Refusal)> ResolveOwnerAsync(IApiKey key)
     {
-        if (_teamService == null || _userService == null)
+        if (_teamService == null || OwnerReader == null)
             return (null, "The owner of this private API key cannot be verified.");
 
         try
@@ -106,7 +117,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
                 return (null, "The owner of this private API key is suspended from the team.");
 
             // The member key is the user key, so the user record is one read away.
-            var user = await _userService.GetUserByKeyAsync(key.OwnerMemberKey);
+            var user = await OwnerReader.GetUserByKeyAsync(key.OwnerMemberKey);
             if (user == null)
                 return (null, "The owner of this private API key no longer exists.");
             if (user.DisabledAt != null)
