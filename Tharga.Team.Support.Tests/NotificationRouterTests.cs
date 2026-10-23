@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Service.Audit;
 using Tharga.Team.Support.Notifications;
@@ -302,6 +303,41 @@ public class NotificationRouterTests
         var router = Router(new NotificationRoute { Event = "auth", Channel = "#auth" });
 
         Assert.Single(router.Route(Entry("auth", null)));
+    }
+
+    // --- sign-in and user creation ---
+
+    [Fact]
+    public void AUserCreatedByTheirFirstSignIn_CanBeRouted_WithTheirAddress()
+    {
+        var user = Substitute.For<IUser>();
+        user.Key.Returns("u-1");
+        user.Identity.Returns("anna");
+        user.EMail.Returns("anna@example.com");
+        var router = Router(new NotificationRoute { Event = "auth:user-created", Channel = "#signups", Template = "New user *{user.email}* signed in for the first time." });
+
+        var message = Assert.Single(router.Route(AuthAuditEntries.UserCreated(user, new ClaimsPrincipal(new ClaimsIdentity()))));
+
+        Assert.Equal("#signups", message.Channel);
+        Assert.Equal("New user *anna@example.com* signed in for the first time.", message.Text);
+    }
+
+    [Fact]
+    public void AnInteractiveSignIn_CanBeRouted_NamingWhoSignedIn()
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Email, "anna@example.com")], "test"));
+        var router = Router(new NotificationRoute { Event = "auth:signin", Channel = "#auth", Template = "{actor} signed in." });
+
+        var message = Assert.Single(router.Route(AuthAuditEntries.SignIn(principal)));
+
+        Assert.Equal("#auth", message.Channel);
+        Assert.Equal("anna@example.com signed in.", message.Text);
+    }
+
+    [Fact]
+    public void NeitherSignInNorUserCreation_IsARouteByDefault()
+    {
+        Assert.DoesNotContain(NotificationOptions.DefaultRoutes(), x => x.Event.StartsWith("auth", StringComparison.Ordinal));
     }
 
     // --- the built-in routes ---

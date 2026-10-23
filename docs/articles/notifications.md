@@ -158,10 +158,14 @@ Every mutation the toolkit audits: teams (`team:create`, `team:rename`, `team:de
 `user:delete`, `user:set-user-name`), API keys, and support cases (`support:raise`, `support:reply`,
 `support:close`, `support:reopen`).
 
-**Not yet: user sign-in and user creation.** Neither is an audited event today — the toolkit audits
-API-key authentication but not an interactive logon, and users are created as a side effect of first
-sign-in rather than through an audited call. When those events are raised they become routable with no
-change to the package.
+**Sign-in and user creation are routable too, but not by default.** `auth:signin` is audited when an
+interactive sign-in completes through `AddThargaAuth`, and `auth:user-created` when a first sign-in creates the
+user record, with `{user.email}` and `{user.key}` to use in a template. A sign-in happens too often to post by
+default, and whether a new user is news is the host's call, so add the one you want:
+
+```csharp
+new() { Event = "auth:user-created", Channel = "#signups", Template = "New user *{user.email}* signed in for the first time." }
+```
 
 ## Two things to know
 
@@ -187,6 +191,7 @@ background pump, so no HTTPS round trip ever runs on the thread of the operation
 
 ## What this package will grow into
 
-Slack notifications are capability one. Planned: support cases, Slack inbound, email in and out, an AI
-support bot, and Jira tickets with a customer-facing ticket view. Those bring real dependencies, which
-is why this is a separate package rather than part of `Tharga.Team.Service`.
+Slack notifications were capability one. Support cases, Slack inbound, email in and out, and an AI assistant
+have followed in the same package — see [Support cases](support-cases.md). Planned: Jira tickets with a
+customer-facing ticket view. Those bring real dependencies, which is why this is a separate package rather than
+part of `Tharga.Team.Service`.
