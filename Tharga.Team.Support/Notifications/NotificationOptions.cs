@@ -57,14 +57,14 @@ public class NotificationOptions
     public static IList<NotificationRoute> DefaultRoutes() =>
     [
         new() { Event = "team:create", Template = "New team *{team.name}* created by {actor}." },
-        new() { Event = "team:invite", Template = "{actor} invited *{member.email}* to team {team}." },
-        new() { Event = "team:remove-member", Template = "{actor} removed a member from team {team}." },
+        new() { Event = "team:invite", Template = "{actor} invited *{member.email}* to *{team.display}*." },
+        new() { Event = "team:remove-member", Template = "{actor} removed a member from *{team.display}*." },
         new() { Event = "user:delete", Template = "{actor} deleted user *{user.key}*." },
 
         // Somebody asking for help is the one built-in worth answering promptly, so it ships as a default
         // rather than as something a host has to know to add. {case.url} renders empty until a URL template
         // is configured, which leaves the message readable rather than broken.
-        new() { Event = "support:raise", Template = "New support case *{support.case.subject}* from {actor} on team {team}. {case.url}" },
+        new() { Event = "support:raise", Template = "New support case *{support.case.subject}* from {actor} on *{team.display}*. {case.url}" },
 
         // A reply matters as much as the first message: a case somebody has come back to is waiting on
         // support again. Worded to be readable in a channel that only ever sees these two events.

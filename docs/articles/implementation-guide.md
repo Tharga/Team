@@ -3267,6 +3267,8 @@ before/after pairs are captured where the previous value is needed to read the e
 | Set custom roles | `customroles.names` |
 | Transfer ownership | `team.newowner.key` |
 
+Every team member change (invite, remove, leave, suspend, restore, role, tenant roles, scope overrides, display name, invitation response, invitation extension, ownership transfer) also records `team.name`, read when the change is made, so a notification can name the team. If the team cannot be read the name is omitted and the entry still carries the key.
+
 Capturing a "before" value is best-effort: if the read fails it is omitted rather than recorded as a
 misleading blank, and it never fails the operation. Metadata shows as an expandable detail row in
 `<AuditLogView />`, in the CSV export (a JSON-encoded `Metadata` column) and JSON export, and — since the

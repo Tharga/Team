@@ -181,8 +181,8 @@ public class AuditingTeamServiceDecorator : ITeamService
 
     public async Task AddMemberAsync(string teamKey, InviteUserModel model)
     {
-        // No read: the invited identity is the whole story here.
-        var inviteMetadata = Meta((AuditMetadataKeys.MemberEmail, model?.Email));
+        // The invited identity is the story; the team name is read only so a route can name the team.
+        var inviteMetadata = await WithTeamNameAsync(teamKey, Meta((AuditMetadataKeys.MemberEmail, model?.Email)));
 
         var sw = Stopwatch.StartNew();
         try
@@ -201,7 +201,7 @@ public class AuditingTeamServiceDecorator : ITeamService
 
     public async Task RemoveMemberAsync(string teamKey, string userKey)
     {
-        var metadata = Meta((AuditMetadataKeys.MemberKey, userKey));
+        var metadata = await WithTeamNameAsync(teamKey, Meta((AuditMetadataKeys.MemberKey, userKey)));
 
         var sw = Stopwatch.StartNew();
         try
@@ -224,17 +224,19 @@ public class AuditingTeamServiceDecorator : ITeamService
     /// </summary>
     public async Task LeaveTeamAsync(string teamKey)
     {
+        var metadata = await WithTeamNameAsync(teamKey, Meta());
+
         var sw = Stopwatch.StartNew();
         try
         {
             await _inner.LeaveTeamAsync(teamKey);
             sw.Stop();
-            Log("leave-team", nameof(LeaveTeamAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("leave-team", nameof(LeaveTeamAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, metadata: metadata);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("leave-team", nameof(LeaveTeamAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log("leave-team", nameof(LeaveTeamAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, metadata);
             throw;
         }
     }
@@ -307,7 +309,7 @@ public class AuditingTeamServiceDecorator : ITeamService
     public async Task SetMemberSuspendedAsync(string teamKey, string userKey, bool suspended)
     {
         var action = suspended ? "suspend" : "restore";
-        var metadata = Meta((AuditMetadataKeys.MemberKey, userKey));
+        var metadata = await WithTeamNameAsync(teamKey, Meta((AuditMetadataKeys.MemberKey, userKey)));
 
         var sw = Stopwatch.StartNew();
         try
@@ -331,17 +333,19 @@ public class AuditingTeamServiceDecorator : ITeamService
     /// </remarks>
     public async Task ExtendInvitationAsync(string teamKey, string inviteKey)
     {
+        var metadata = await WithTeamNameAsync(teamKey, Meta());
+
         var sw = Stopwatch.StartNew();
         try
         {
             await _inner.ExtendInvitationAsync(teamKey, inviteKey);
             sw.Stop();
-            Log("extend-invitation", nameof(ExtendInvitationAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("extend-invitation", nameof(ExtendInvitationAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, metadata: metadata);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("extend-invitation", nameof(ExtendInvitationAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log("extend-invitation", nameof(ExtendInvitationAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, metadata);
             throw;
         }
     }
@@ -349,10 +353,10 @@ public class AuditingTeamServiceDecorator : ITeamService
     public async Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
     {
         var previous = await TryGetMemberAsync(teamKey, userKey);
-        var metadata = Meta(
+        var metadata = await WithTeamNameAsync(teamKey, Meta(
             (AuditMetadataKeys.MemberKey, userKey),
             (AuditMetadataKeys.MemberAccessLevelOld, previous?.AccessLevel.ToString()),
-            (AuditMetadataKeys.MemberAccessLevelNew, accessLevel.ToString()));
+            (AuditMetadataKeys.MemberAccessLevelNew, accessLevel.ToString())));
 
         var sw = Stopwatch.StartNew();
         try
@@ -371,9 +375,9 @@ public class AuditingTeamServiceDecorator : ITeamService
 
     public async Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles)
     {
-        var metadata = Meta(
+        var metadata = await WithTeamNameAsync(teamKey, Meta(
             (AuditMetadataKeys.MemberKey, userKey),
-            (AuditMetadataKeys.MemberTenantRoles, Join(tenantRoles)));
+            (AuditMetadataKeys.MemberTenantRoles, Join(tenantRoles))));
 
         var sw = Stopwatch.StartNew();
         try
@@ -392,9 +396,9 @@ public class AuditingTeamServiceDecorator : ITeamService
 
     public async Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides)
     {
-        var metadata = Meta(
+        var metadata = await WithTeamNameAsync(teamKey, Meta(
             (AuditMetadataKeys.MemberKey, userKey),
-            (AuditMetadataKeys.MemberScopeOverrides, Join(scopeOverrides)));
+            (AuditMetadataKeys.MemberScopeOverrides, Join(scopeOverrides))));
 
         var sw = Stopwatch.StartNew();
         try
@@ -416,10 +420,10 @@ public class AuditingTeamServiceDecorator : ITeamService
         // Empty string rather than null for a cleared override, so "was unset" and "was set to X" stay
         // distinguishable from a failed read (which omits the key entirely).
         var previous = await TryGetMemberAsync(teamKey, userKey);
-        var metadata = Meta(
+        var metadata = await WithTeamNameAsync(teamKey, Meta(
             (AuditMetadataKeys.MemberKey, userKey),
             (AuditMetadataKeys.MemberNameOld, previous == null ? null : previous.Name ?? string.Empty),
-            (AuditMetadataKeys.MemberNameNew, name ?? string.Empty));
+            (AuditMetadataKeys.MemberNameNew, name ?? string.Empty)));
 
         var sw = Stopwatch.StartNew();
         try
@@ -459,10 +463,10 @@ public class AuditingTeamServiceDecorator : ITeamService
         // "none" rather than an omitted key: consent being cleared is a fact worth recording, and is
         // distinct from a read that failed.
         var previous = await TryFindTeamAsync(teamKey);
-        var metadata = Meta(
+        var metadata = await WithTeamNameAsync(teamKey, Meta(
             (AuditMetadataKeys.ConsentAccessLevelOld, previous == null ? null : TeamConsent.Resolve(previous, DateTime.UtcNow).AccessLevel?.ToString() ?? ConsentNone),
             (AuditMetadataKeys.ConsentAccessLevelNew, accessLevel?.ToString() ?? ConsentNone),
-            (AuditMetadataKeys.ConsentRoles, Join(consentedRoles)));
+            (AuditMetadataKeys.ConsentRoles, Join(consentedRoles))));
 
         var sw = Stopwatch.StartNew();
         try
@@ -582,7 +586,7 @@ public class AuditingTeamServiceDecorator : ITeamService
 
     public async Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
     {
-        var metadata = Meta((AuditMetadataKeys.NewOwnerKey, newOwnerUserKey));
+        var metadata = await WithTeamNameAsync(teamKey, Meta((AuditMetadataKeys.NewOwnerKey, newOwnerUserKey)));
 
         var sw = Stopwatch.StartNew();
         try
@@ -663,6 +667,20 @@ public class AuditingTeamServiceDecorator : ITeamService
         {
             if (value != null) metadata[key] = value;
         }
+        return metadata;
+    }
+
+    /// <summary>
+    /// <paramref name="metadata"/> with the team's name added, so a route can name the team by what people call it
+    /// instead of by its key. Best-effort: audit detail must never fail the operation it describes, so a team that
+    /// cannot be read leaves the name out and the entry still carries the key.
+    /// </summary>
+    private async Task<Dictionary<string, string>> WithTeamNameAsync(string teamKey, Dictionary<string, string> metadata)
+    {
+        if (metadata.ContainsKey(AuditMetadataKeys.TeamName)) return metadata;
+
+        var name = (await TryFindTeamAsync(teamKey))?.Name;
+        if (!string.IsNullOrWhiteSpace(name)) metadata[AuditMetadataKeys.TeamName] = name;
         return metadata;
     }
 
