@@ -262,6 +262,29 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         }
     }
 
+    public Task<bool> AddRefusedAsync(UserMail mail, string reason, string deduplicationKey, DateTime at, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (deduplicationKey != null && _items.Any(x => x.Mail.DeduplicationKey == deduplicationKey)) return Task.FromResult(false);
+
+            _items.Add(new UserMailItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Mail = mail with { DeduplicationKey = deduplicationKey },
+                RecipientAddress = mail.RecipientUserKey == null ? mail.RecipientAddress : null,
+                Refused = true,
+                Status = UserMailStatus.Failed,
+                Reason = reason,
+                QueuedAt = at,
+                NextAttemptAt = at,
+                CompletedAt = at
+            });
+
+            return Task.FromResult(true);
+        }
+    }
+
     public Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
     {
         if (mail.DeduplicationKey != null) throw new ArgumentException("A mail sent at once takes no deduplication key.", nameof(mail));
@@ -295,7 +318,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         lock (_gate)
         {
             var mine = _items
-                .Where(x => (userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address && x.Mail.Kind != UserMailKind.Contact))
+                .Where(x => !x.Refused && ((userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address && x.Mail.Kind != UserMailKind.Contact)))
                 .Reverse()
                 .ToList();
 

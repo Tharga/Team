@@ -34,7 +34,7 @@ public class UserMailQueueTests
         var e = await Assert.ThrowsAsync<ArgumentException>(() => _fixture.Queue.QueueAsync(Mail("nope")));
 
         Assert.Contains("'nope'", e.Message);
-        Assert.Empty(_fixture.Outbox.Items);
+        Assert.True(Assert.Single(_fixture.Outbox.Items).Refused);
     }
 
     [Fact]
@@ -114,7 +114,8 @@ public class UserMailQueueTests
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.QueueAsync(attachments: [File(6), File(5)]));
         await fixture.QueueAsync(attachments: [File(6), File(4)]);
 
-        Assert.Equal([6L, 4L], fixture.Outbox.Single.Mail.Attachments.Select(x => x.Size));
+        Assert.Equal([6L, 4L], fixture.Outbox.Items.Single(x => !x.Refused).Mail.Attachments.Select(x => x.Size));
+        Assert.Equal(2, fixture.Outbox.Items.Count(x => x.Refused));
     }
 
     [Fact]

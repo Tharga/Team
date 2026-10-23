@@ -427,12 +427,24 @@ public Task<UserMailHistoryPage> LogAsync([FromQuery] UserMailFilter filter, str
     => history.ListAllAsync(filter, cursor, pageSize, HttpContext.RequestAborted);
 ```
 
-**Not in the log yet:** a send refused before it is stored (an unknown category, no subject) is an exception to the
-caller and leaves no record, and a support answer is recorded on its case only.
+**A send the queue refuses is in the log too**, as *Not sent* with the reason, although the caller still gets the
+exception: an unknown category, a mail with no subject or body, files over the limits, an optional category to an
+address alone, an address a mail cannot go to, or a mail of kind `Contact` queued here.
 
-A host with its own `IUserMailOutbox` implements `ListAsync(filter, cursor, pageSize)` to support it; until it does,
-`ListAllAsync` throws `NotSupportedException`. The built-in MongoDB outbox adds the index `TeamKey_Id`, created at
-start-up like the others.
+- It records what the caller named — the user or address, category, subject, kind and team — **never the body or
+  files**, each cut short.
+- **Once a day per cause.** The same refusal of the same mail on the same day is recorded once, so a host bug in a
+  loop cannot fill the collection; the next day it is recorded again.
+- **A refused batch is one record**, with its kind, category, subject and team and no recipient.
+- **It is not in the user's own history**, only in the log: the reason is for staff, not for the person it was meant for.
+- It expires like any mail that is done. **Failing to record it never changes what the caller hears.**
+
+**Not in the log yet:** a support answer is recorded on its case only.
+
+A host with its own `IUserMailOutbox` implements `ListAsync(filter, cursor, pageSize)` to support the log; until it
+does, `ListAllAsync` throws `NotSupportedException`. It implements `AddRefusedAsync(mail, reason, deduplicationKey, at)`
+to keep refusals, and without it they are simply not recorded. The built-in MongoDB outbox adds the index `TeamKey_Id`,
+created at start-up like the others.
 
 ## Bounces
 

@@ -121,11 +121,12 @@ public class UserMailInvitationTests
     }
 
     [Fact]
-    public async Task AnAddressThatCannotBeMailed_IsRefused_AndNothingIsRecorded()
+    public async Task AnAddressThatCannotBeMailed_IsRefused_AndNothingIsSent_OnlyTheRefusalIsRecorded()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => Sender().SendInviteAsync(Invite() with { RecipientEmail = "not an address" }));
 
-        Assert.Empty(_fixture.Outbox.Items);
+        Assert.True(Assert.Single(_fixture.Outbox.Items).Refused);
+        Assert.Empty(_fixture.Mail.Sent);
     }
 
     [Fact]
@@ -195,7 +196,7 @@ public class UserMailInvitationTests
         var refusal = await Assert.ThrowsAsync<ArgumentException>(() => _fixture.Queue.QueueAsync(new UserMail { RecipientAddress = "cia@example.org", Category = UserMailFixture.News, Subject = "Hello", Body = "Hello." }));
 
         Assert.Contains(UserMailFixture.News, refusal.Message);
-        Assert.Empty(_fixture.Outbox.Items);
+        Assert.True(Assert.Single(_fixture.Outbox.Items).Refused);
     }
 
     [Theory]

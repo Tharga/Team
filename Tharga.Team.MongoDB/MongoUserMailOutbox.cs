@@ -45,6 +45,30 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         }
     }
 
+    /// <remarks>Stored as given up, so it is never claimed, and with its completion time, so it expires like any mail that is done.</remarks>
+    public async Task<bool> AddRefusedAsync(UserMail mail, string reason, string deduplicationKey, DateTime at, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mail);
+
+        var entity = ToEntity(mail with { DeduplicationKey = deduplicationKey }, at) with
+        {
+            Status = UserMailStatus.Failed,
+            Reason = reason,
+            CompletedAt = at,
+            Refused = true
+        };
+
+        try
+        {
+            await collection.AddAsync(entity);
+            return true;
+        }
+        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey && deduplicationKey != null)
+        {
+            return false;
+        }
+    }
+
     /// <remarks>Inserted already held, so no sender on any instance can claim it between the insert and the caller's attempt.</remarks>
     public async Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
     {
@@ -284,7 +308,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         if (!string.IsNullOrEmpty(userKey)) parts.Add(Filter.Eq(x => x.RecipientUserKey, userKey));
         if (!string.IsNullOrEmpty(address)) parts.Add(Filter.Eq(x => x.RecipientUserKey, null) & Filter.Eq(x => x.RecipientAddress, address) & Filter.Ne(x => x.Kind, UserMailKind.Contact));
 
-        return parts.Count == 0 ? Filter.Eq(x => x.Id, ObjectId.Empty) : Filter.Or(parts);
+        return parts.Count == 0 ? Filter.Eq(x => x.Id, ObjectId.Empty) : Filter.Or(parts) & Filter.Ne(x => x.Refused, true);
     }
 
     /// <exception cref="ArgumentException">The cursor was not issued by this outbox.</exception>
@@ -513,6 +537,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
             TeamKey = entity.TeamKey
         },
         BatchId = entity.BatchId,
+        Refused = entity.Refused,
         RecipientAddress = entity.RecipientAddress,
         Status = entity.Status,
         Attempts = entity.Attempts,

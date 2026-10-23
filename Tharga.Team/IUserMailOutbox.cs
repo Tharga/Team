@@ -62,6 +62,14 @@ public interface IUserMailOutbox
     Task<UserMailItemPage> ListAsync(UserMailFilter filter, string cursor, int pageSize, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListAsync)}. Implement it to list all mail sent to users.");
 
+    /// <summary>Records a mail the queue refused, so the mail log can show an attempt that otherwise leaves no trace: stored as given up at <paramref name="at"/> for <paramref name="reason"/>, never attempted, and left out of the user's own history.</summary>
+    /// <remarks>
+    /// <paramref name="deduplicationKey"/> keeps a refusal that repeats from being recorded again; false is returned, and nothing
+    /// stored, when a mail is already recorded under it.
+    /// </remarks>
+    Task<bool> AddRefusedAsync(UserMail mail, string reason, string deduplicationKey, DateTime at, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddRefusedAsync)}. Implement it to record mail the queue refused.");
+
     /// <summary>Stores a mail already claimed by <paramref name="claimant"/> for <paramref name="lease"/>, its first attempt counted, so it is sent at once by the caller and by nobody else unless the lease runs out.</summary>
     /// <exception cref="ArgumentException">The mail carries a deduplication key, which a mail sent at once does not take.</exception>
     Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
@@ -125,6 +133,9 @@ public sealed record UserMailItem
 
     /// <summary>The batch whose content the mail carries, or null for a mail queued on its own.</summary>
     public string BatchId { get; init; }
+
+    /// <summary>Whether this records a mail the queue refused rather than one it accepted; such a record is in the mail log and not in the user's own history.</summary>
+    public bool Refused { get; init; }
 
     /// <summary>The address the mail was addressed to: the one it was queued with, or for a mail to a user the one on their record when it was sent; null until then.</summary>
     public string RecipientAddress { get; init; }
