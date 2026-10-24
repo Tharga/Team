@@ -34,15 +34,8 @@ public static class SupportTranscriptText
     /// <summary>Read out for the dots shown while somebody on the other side is writing; <c>{0}</c> is their name.</summary>
     public static readonly TextKey Typing = new("team.support.transcript.typing", "{0} is typing…");
 
-    /// <summary>Beside the assistant's dots while a service call runs: <c>{0}</c> is which one, as a word from <see cref="LookupOrdinals"/>.</summary>
-    public static readonly TextKey Lookup = new("team.support.transcript.lookup", "{0} lookup…");
-
-    /// <summary>The words <see cref="Lookup"/> counts with, comma-separated, from the first; past the last, <see cref="LookupNumbered"/> is used.</summary>
-    public static readonly TextKey LookupOrdinals = new("team.support.transcript.lookupOrdinals",
-        "First,Second,Third,Fourth,Fifth,Sixth,Seventh,Eighth,Ninth,Tenth");
-
-    /// <summary>Beside the dots for a lookup past the words in <see cref="LookupOrdinals"/>: <c>{0}</c> is its number.</summary>
-    public static readonly TextKey LookupNumbered = new("team.support.transcript.lookupNumbered", "Lookup {0}…");
+    /// <summary>Beside the assistant's dots once it has gone round the tool loop: <c>{0}</c> is how many times it has.</summary>
+    public static readonly TextKey WorkingLoop = new("team.support.transcript.workingLoop", "Working {0}…");
 
     /// <summary>Opens the list under an answer of the one service call the assistant made for it.</summary>
     public static readonly TextKey ServiceCall = new("team.support.transcript.serviceCall", "1 service call");
@@ -73,7 +66,7 @@ public static class SupportTranscriptText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, Lookup, LookupOrdinals, LookupNumbered, ServiceCall, ServiceCalls,
+        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, WorkingLoop, ServiceCall, ServiceCalls,
         Helpful, NotHelpful, RatedHelpful, RatedNotHelpful, NoAnswerYet, NoAnswerAway
     ];
 }

@@ -64,6 +64,9 @@ Asked for while testing, fourth round (2026-10-24): the round counter looked str
 - [x] 28. Configurable: `o.Blazor.Support` (`SupportDisplayOptions`): `RateAnswers` (default true) takes the thumbs and the marks away; `ServiceCallsShownTo` (`Everyone` default, `Support`, `Nobody`) decides who sees the calls. Display only; what is kept stays. Read through `SupportDisplay.Of`, defaults where the Blazor options are not registered.
   - Done: tests 6 + 1 Blazor, and the panel's label checks. `get_my_cases` takes no arguments by design (the team and the person are the caller's), so `get_my_cases()` is right. Build at 14 warnings; full suite green (Blazor 2223).
 
+- [x] 29. Text beside the dots, always (the user still saw dots alone: "First lookup…" showed only while a call ran, under a second in the sample, and never for a model that calls nothing): "Working…", then "Working n…" where n counts the tool loops, kept while the model reads what came back.
+  - Done: `SupportAssistantSteps.Describe` takes the idle text; `Running` for the line under text already written; `WorkingLoop` ("Working {0}…") replaces the lookup texts, which were not released. The support page's `AssistantThinking` (released) now defaults to "Working…" so both places read alike. Build at 14 warnings; full suite green (Blazor 2224).
+
 ## Decisions
 
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.

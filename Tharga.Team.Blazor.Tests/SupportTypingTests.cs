@@ -237,7 +237,7 @@ public class SupportTypingTests : BunitContext
     private static SupportAssistantCall Call(string name, string arguments = "") => new() { Name = name, Arguments = arguments };
 
     [Fact]
-    public void ATranscript_SaysWhichLookupTheAssistantIsOn_BesideItsDots()
+    public void ATranscript_SaysHowManyTimesTheAssistantHasLoopedForTools_BesideItsDots()
     {
         AddServices(new Mock<ISupportCaseService>());
 
@@ -249,31 +249,33 @@ public class SupportTypingTests : BunitContext
             .Add(x => x.AssistantProgress, new SupportAssistantProgress { Round = 2, Tools = ["get_case_messages"], Calls = [Call("get_my_cases"), Call("get_case_messages")] }));
 
         Assert.Equal("thinking", view.Find("[data-answer-so-far]").GetAttribute("data-answer-so-far"));
-        Assert.Equal("Second lookup…", view.Find("[data-answer-so-far] .support-typing__label").TextContent);
+        Assert.Equal("Working 2…", view.Find("[data-answer-so-far] .support-typing__label--shown").TextContent);
         Assert.Empty(view.FindAll("[data-step]"));
     }
 
+    /// <summary>Working until the model asks for tools, then the loop it is on, kept while it reads what came back.</summary>
     [Theory]
-    [InlineData(1, "First lookup…")]
-    [InlineData(3, "Third lookup…")]
-    [InlineData(10, "Tenth lookup…")]
-    [InlineData(11, "Lookup 11…")]
-    public async Task Lookups_AreCountedInWords_ThenInNumbers(int made, string expected)
+    [InlineData(1, false, "Working…")]
+    [InlineData(1, true, "Working 1…")]
+    [InlineData(2, false, "Working 1…")]
+    [InlineData(2, true, "Working 2…")]
+    [InlineData(4, false, "Working 3…")]
+    public async Task TheLoops_AreCounted(int round, bool toolsRunning, string expected)
     {
         var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
-        var progress = new SupportAssistantProgress { Tools = ["get_my_cases"], Calls = [.. Enumerable.Range(0, made).Select(_ => Call("get_my_cases"))] };
+        var progress = new SupportAssistantProgress { Round = round, Tools = toolsRunning ? ["get_my_cases"] : [] };
 
-        Assert.Equal(expected, SupportAssistantSteps.Describe(text, progress));
+        Assert.Equal(expected, SupportAssistantSteps.Describe(text, progress, "Working…"));
     }
 
-    /// <summary>While the model thinks or writes, the dots keep their own words.</summary>
     [Fact]
-    public async Task WithNoLookupRunning_NothingIsSaid()
+    public async Task BeforeAnythingIsReported_ItIsWorking()
     {
         var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
 
-        Assert.Null(SupportAssistantSteps.Describe(text, null));
-        Assert.Null(SupportAssistantSteps.Describe(text, new SupportAssistantProgress { Calls = [Call("get_my_cases")] }));
+        Assert.Equal("Working…", SupportAssistantSteps.Describe(text, null, "Working…"));
+        Assert.Null(SupportAssistantSteps.Running(text, null));
+        Assert.Null(SupportAssistantSteps.Running(text, new SupportAssistantProgress { Round = 2 }));
     }
 
     [Fact]

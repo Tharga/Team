@@ -1319,11 +1319,10 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<Suppo
 - **A round is one call to the model.** The model either writes or asks for tools; when their results go back, the next
   round starts. An answer that looks something up takes two rounds or more, which the tool loop of
   `UseFunctionInvocation` runs for you.
-- **Until the first words arrive**, the assistant's side shows the same flashing dots as a person writing, read out as
-  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page. While a
-  service call runs, the words shown beside the dots count it: "First lookup…", "Second lookup…", and from the eleventh
-  "Lookup 11…" (`team.support.transcript.lookup`, `.lookupOrdinals` and `.lookupNumbered`). A lookup part way through
-  the text is said under it.
+- **Until the first words arrive**, the assistant's side shows flashing dots with what it is doing beside them:
+  "Working…" (`team.support.panel.working` in the panel, `team.support.cases.assistant.thinking` on the support page),
+  then "Working 2…" once it has gone round the tool loop twice, counting each time it asks for service calls
+  (`team.support.transcript.workingLoop`). A service call part way through the text is said under it.
 - **Each report is the whole state**, the text so far included, not what changed, so a report that is missed costs
   nothing.
 - **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads

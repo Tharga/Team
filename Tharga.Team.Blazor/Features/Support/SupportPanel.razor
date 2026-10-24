@@ -158,9 +158,8 @@
                     }
                     else if (_busy)
                     {
-                        var lookup = SupportAssistantSteps.Describe(_text, _progress);
                         <div class="support-panel__msg support-panel__msg--them" data-working>
-                            <SupportTypingDots Label="@(lookup ?? _text[SupportPanelText.Working])" ShowLabel="@(lookup != null)" />
+                            <SupportTypingDots Label="@SupportAssistantSteps.Describe(_text, _progress, _text[SupportPanelText.Working])" ShowLabel="true" />
                         </div>
                     }
                 </div>
@@ -269,7 +268,7 @@
     </button>;
 
     // Under text already written, when the model looks something up part way through.
-    private RenderFragment Step => SupportAssistantSteps.Describe(_text, _progress) is not { } step
+    private RenderFragment Step => SupportAssistantSteps.Running(_text, _progress) is not { } step
         ? null
         : @<span class="support-panel__step" data-step>@step</span>;
 

@@ -5,17 +5,27 @@ namespace Tharga.Team.Blazor.Features.Support;
 /// <summary>What the assistant is doing, beside its dots, and the service calls it made, under its answer.</summary>
 internal static class SupportAssistantSteps
 {
-    /// <summary>"Second lookup…" while its second service call runs, or null while none runs. <paramref name="text"/> holds <see cref="SupportTranscriptText"/>'s lookup texts.</summary>
-    public static string Describe(TextSet text, SupportAssistantProgress progress)
+    /// <summary>
+    /// <paramref name="working"/> until the model has gone round the tool loop, then "Working 2…" with how many times it
+    /// has. <paramref name="text"/> holds <see cref="SupportTranscriptText"/>.
+    /// </summary>
+    public static string Describe(TextSet text, SupportAssistantProgress progress, string working)
     {
-        if (progress?.Tools is not { Length: > 0 } || progress.Calls is not { Length: > 0 }) return null;
+        var loops = LoopsOf(progress);
 
-        var number = progress.Calls.Length;
-        var ordinals = text[SupportTranscriptText.LookupOrdinals].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        return loops > 0 ? text.Format(SupportTranscriptText.WorkingLoop, loops) : working;
+    }
 
-        return number <= ordinals.Length
-            ? text.Format(SupportTranscriptText.Lookup, ordinals[number - 1])
-            : text.Format(SupportTranscriptText.LookupNumbered, number);
+    /// <summary>Under text already written: "Working 2…" while a service call runs, or null while none does.</summary>
+    public static string Running(TextSet text, SupportAssistantProgress progress)
+        => progress?.Tools is { Length: > 0 } ? text.Format(SupportTranscriptText.WorkingLoop, LoopsOf(progress)) : null;
+
+    /// <summary>How many times the model has asked for service calls: the round it is on while they run, the one before once they are back.</summary>
+    public static int LoopsOf(SupportAssistantProgress progress)
+    {
+        if (progress == null) return 0;
+
+        return progress.Tools is { Length: > 0 } ? progress.Round : progress.Round - 1;
     }
 
     /// <summary>"2 service calls", for the list under an answer.</summary>

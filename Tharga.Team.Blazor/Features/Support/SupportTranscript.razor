@@ -204,10 +204,10 @@
                 </span>
             </div>
             <div style="max-width: 75%; min-width: 0; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
-                @{ var step = SupportAssistantSteps.Describe(_text, AssistantProgress); }
+                @{ var step = SupportAssistantSteps.Running(_text, AssistantProgress); }
                 @if (string.IsNullOrEmpty(AssistantProgress?.AnswerSoFar))
                 {
-                    <SupportTypingDots Label="@(step ?? ThinkingText)" ShowLabel="@(step != null)" />
+                    <SupportTypingDots Label="@SupportAssistantSteps.Describe(_text, AssistantProgress, ThinkingText)" ShowLabel="true" />
                 }
                 else
                 {
