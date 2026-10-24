@@ -24,7 +24,8 @@ left and the cards on the home page list every page by area.
 - **Support → AI assistant** chooses what the assistant answers the selected team with. Until a team chooses, it
   is the sample's built-in responder, a short script rather than an AI model, which says so in its answers.
 - **System → Support desk** (Developer role) is the back office. Open it in a second window, write in the panel's
-  Support tab, and answer from the desk: each side reads as a chat.
+  Support tab, and answer from the desk: each side reads as a chat. It also lists what the assistant was asked and
+  could not do; with the built-in responder, that is every question off its script.
 
 ## Connect Slack
 

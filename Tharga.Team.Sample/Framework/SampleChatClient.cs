@@ -29,6 +29,10 @@ internal sealed class SampleChatClient : IChatClient
 
     private const string CasesTool = "get_my_cases";
 
+    private const string MissingSkillTool = "report_missing_skill";
+
+    private const int MaxReportedLength = 80;
+
     private static readonly TimeSpan LookupDelay = TimeSpan.FromMilliseconds(800);
 
     private static readonly (string Term, string Answer)[] Script =
@@ -63,6 +67,16 @@ internal sealed class SampleChatClient : IChatClient
         }
 
         var scripted = Array.Find(Script, x => question.Contains(x.Term, StringComparison.OrdinalIgnoreCase)).Answer;
+
+        // Off the script, it says so as a model should: report what was asked, then tell the member. The desk lists it.
+        if (scripted == null && options?.Tools?.Any(x => x.Name == MissingSkillTool) == true
+            && !history.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any())
+        {
+            var what = question.Length > MaxReportedLength ? question[..MaxReportedLength] : question;
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                [new FunctionCallContent(Guid.NewGuid().ToString("N"), MissingSkillTool, new Dictionary<string, object> { ["what"] = what })])));
+        }
+
         var answer = scripted == null ? Fallback : $"{scripted}\n\n{Signature}";
 
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer)));

@@ -307,14 +307,6 @@ public interface ISupportCaseStore
         => Task.FromResult<SupportCase>(null);
 
     /// <summary>
-    /// Moves a case to <paramref name="state"/>.
-    /// </summary>
-    /// <remarks>
-    /// <b>The default throws rather than no-opping.</b> A store that silently dropped the hand-off would
-    /// leave the assistant answering a customer who has just asked for a person — reporting success for
-    /// something that did not happen, which is worse than refusing.
-    /// </remarks>
-    /// <summary>
     /// Adds to what the assistant could not do in a case, keeping the newest <see cref="SupportCaseLimits.MaxAssistantGaps"/>.
     /// </summary>
     /// <remarks>
@@ -324,6 +316,14 @@ public interface ISupportCaseStore
     Task AddAssistantGapsAsync(string teamKey, string caseId, string[] gaps, CancellationToken cancellationToken = default)
         => Task.CompletedTask;
 
+    /// <summary>
+    /// Moves a case to <paramref name="state"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>The default throws rather than no-opping.</b> A store that silently dropped the hand-off would
+    /// leave the assistant answering a customer who has just asked for a person — reporting success for
+    /// something that did not happen, which is worse than refusing.
+    /// </remarks>
     Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
         => throw new NotSupportedException(
             $"This store does not implement {nameof(SetAssistantStateAsync)}, so a case cannot be handed from an assistant to a person. Implement it, or do not register an {nameof(ISupportResponder)}.");

@@ -1239,8 +1239,13 @@ start gets the channel at once.
 
 ### It answers; it does not act
 
-The built-in tools are reads: the caller's own cases, and one case's transcript. Closing, assigning and
+The built-in tools are reads: the caller's own cases (`get_my_cases`), a search through them by subject and by what
+was written in them (`search_my_cases`), and one case's transcript (`get_case_messages`). Closing, assigning and
 reopening stay with people — an assistant that can close its own cases can close the ones it answered badly.
+
+**It answers only the person who raised the case.** `RunAssistantAsync` does nothing for anybody else, even somebody
+who may write in the case. The tools read with the caller's rights, and the answer is kept where everybody who reads
+the case sees it, so run by a teammate or by support with wider rights it could quote what the author may not see.
 
 Every tool reads through the same scope-checked service any other caller uses, so the assistant sees exactly
 what the person it is answering would see. The responder is handed the case and its transcript rather than
@@ -1251,6 +1256,19 @@ product your customer is actually asking about. Implement `ISupportAssistantTool
 set, or resolve the built-in one and add to what it returns. Keep every tool reading through a scope-checked
 service — a tool that reaches the store directly is a second enforcement point, and the assistant would be
 the one caller able to use it.
+
+### What it could not do
+
+Whatever tools the host supplies, the assistant is also given `report_missing_skill`. When a member asks for
+something none of its tools can do, the model calls it with what was asked, in a few words, and then says it cannot
+help. What it reports comes back as `SupportAnswer.Gaps` and is kept on the case as `SupportCase.AssistantGaps`,
+whether it answered or declined: trimmed, at most 200 characters each, once each, the newest 20 per case.
+
+`SupportAssistantGapsView` lists them across every team for the people who build the assistant, the same thing asked
+in several cases as one entry, most asked first, and each case opens as on the desk. It reads through
+`GetCasesAcrossTeamsAsync`, so it needs `support:all:read`. `SupportAcrossTeamsView` marks such a case with
+**The assistant could not help**, and what it was shows on hover. A store of your own keeps them by implementing
+`ISupportCaseStore.AddAssistantGapsAsync`; the default keeps nothing.
 
 ### Running it
 

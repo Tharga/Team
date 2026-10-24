@@ -55,10 +55,13 @@ public static class SupportAcrossTeamsViewText
     public static readonly TextKey NotPermitted = new("team.support.acrossTeams.notPermitted",
         "You do not have access to support cases across every team.");
 
+    /// <summary>On a case where the assistant was asked for something it had no way to do; what it was shows on hover.</summary>
+    public static readonly TextKey AssistantCouldNot = new("team.support.acrossTeams.assistantCouldNot", "The assistant could not help");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         Awaiting, NoCases, NoneMatch, AnswerLabel, Close, CloseWarningTitle, CloseWarning, CloseAnyway, OnlyTheAuthor, Open, Closed, WithAssistant,
-        ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant
+        ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant, AssistantCouldNot
     ];
 }

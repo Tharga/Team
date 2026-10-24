@@ -23,8 +23,10 @@ Asked for while testing (2026-10-24):
   - Done: words of three letters or more, cut to a rough stem, matched in the subject and then in every message; the newest 100 of the caller's cases, at most 10 matches with the words and where they were found, through `GetMyCasesAsync` and `GetMessagesAsync`, so only cases the caller may read. `get_case_messages` now points at it. `SupportAssistantToolsTests`: 9 tests.
 - [x] 10. What the assistant could not do: a `report_missing_skill` tool the responder always adds, `SupportAnswer.Gaps`, `SupportCase.AssistantGaps` with a store method (MongoDB and in-memory), recorded by the service.
   - Done: `report_missing_skill(what)` is added by `ChatSupportResponder` beside the host's tools, whatever they are; what it is told comes back as `SupportAnswer.Gaps`. The service keeps them, trimmed to 200 characters, once each, whether the assistant answered or declined, through `ISupportCaseStore.AddAssistantGapsAsync` (a default that keeps nothing). MongoDB pushes them keeping the newest 20 (`SupportCaseLimits.MaxAssistantGaps`). The default instructions tell the model to call it. Tests: 6 in Support (one through the real tool loop), 2 in MongoDB.
-- [~] 11. `SupportAssistantGapsView`: staff list, across teams, of what the assistant could not do, opening the case; a badge on the desk's case. On the sample's support desk.
-- [ ] 12. Docs, full build (baseline 14) and the full suite; run the sample.
+- [x] 11. `SupportAssistantGapsView`: staff list, across teams, of what the assistant could not do, opening the case; a badge on the desk's case. On the sample's support desk.
+  - Done: `SupportAssistantGapsView` reads every page across teams, one entry per thing asked (case-insensitive), most asked first, each case opening as `SupportCaseConversation` for staff; a note without `support:all:read`. `SupportAcrossTeamsView` shows **The assistant could not help** with the gaps on hover. On the sample's desk. The sample's scripted client reports every question off its script. `SupportAssistantGapsViewTests`: 5 tests.
+- [x] 12. Docs, full build (baseline 14) and the full suite; run the sample.
+  - Docs: the support article (who the assistant answers, the built-in tools, what it could not do), the notifications article (`WithAssistant`, the built-in routes skip assistant conversations), the `Tharga.Team.Blazor` README and the sample README. Build at 14 warnings; full suite green: Email 985, MongoDB 460, Blazor 2160, Service 1470, Support 768, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
 
 ## Decisions
 
@@ -33,4 +35,4 @@ Asked for while testing (2026-10-24):
 
 ## Last session
 
-2026-10-24: steps 2 to 6 done and committed (the round counter). The user asked for steps 7 to 11 after trying it; step 7 in progress.
+2026-10-24: steps 2 to 12 done and committed. Next: the user tries the search, the gap list and Slack staying quiet in the sample; then the close-out and the PR, after #384 merges.
