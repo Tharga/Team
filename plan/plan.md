@@ -14,6 +14,7 @@
 - [x] 7. Docs: the assistant section of `docs/articles/support-cases.md`, the `Tharga.Team.Support` README, and XML docs on the new public members.
   - Done: a new "A model per team" section in the article, with the resolver, readiness and the not-configured behaviour. The places that said the assistant follows registration were corrected: what the customer sees, `RunAssistantAsync`, Settings, the decline notice, and `Offered`. Updated the `Tharga.Team.Support` README and the root README's support section too.
 - [~] 8. Full build (warning baseline 14) and the full test suite, then push the branch for the user to test.
+  - Build at 14 warnings, the baseline. Full suite green: Email 985, MongoDB 446, Blazor 2071, Service 1470, Support 676, Mcp 121, Entra 58, Images 11. Waiting for approval to push.
 
 ## Decisions
 
@@ -25,4 +26,4 @@
 
 ## Last session
 
-2026-10-24: plan confirmed. #381 filed for the configurable connection (platform model, Neurolito, Anthropic) and #377 commented. Step 2 done; step 3 (the resolver) next.
+2026-10-24: plan confirmed. #381 filed for the configurable connection (platform model, Neurolito, Anthropic) and #377 commented. Steps 2 to 7 are done and committed, and the build and full suite are green. Next: push the branch for the user to test (on approval), then the close-out (re-run `dotnet outdated`, drop `plan/`, open the PR).
