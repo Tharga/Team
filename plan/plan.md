@@ -19,8 +19,9 @@ Asked for while testing (2026-10-24):
   - Done in the authorization decorator, both overloads: after the write check, the case's author must be the caller; anybody else gets false and the responder is not asked. Test: support across teams cannot run it, the author still can.
 - [x] 8. No Slack while the assistant has the conversation: `support.case.withAssistant` on the raise and reply audit entries, a `WithAssistant` filter on `NotificationRoute`, and the default support routes set to false.
   - Done: the audit decorator writes `support.case.withAssistant` on raise (from the raised case) and on reply (the case read after the reply; left out when it cannot be read, which then posts). Case threads already skipped assistant conversations, so the posts came from the default routes alone.
-- [~] 9. `search_my_cases(text)`: the member's own cases by subject and by what was written in them, so the assistant can find a case and then read it with `get_case_messages`.
-- [ ] 10. What the assistant could not do: a `report_missing_skill` tool the responder always adds, `SupportAnswer.Gaps`, `SupportCase.AssistantGaps` with a store method (MongoDB and in-memory), recorded by the service.
+- [x] 9. `search_my_cases(text)`: the member's own cases by subject and by what was written in them, so the assistant can find a case and then read it with `get_case_messages`.
+  - Done: words of three letters or more, cut to a rough stem, matched in the subject and then in every message; the newest 100 of the caller's cases, at most 10 matches with the words and where they were found, through `GetMyCasesAsync` and `GetMessagesAsync`, so only cases the caller may read. `get_case_messages` now points at it. `SupportAssistantToolsTests`: 9 tests.
+- [~] 10. What the assistant could not do: a `report_missing_skill` tool the responder always adds, `SupportAnswer.Gaps`, `SupportCase.AssistantGaps` with a store method (MongoDB and in-memory), recorded by the service.
 - [ ] 11. `SupportAssistantGapsView`: staff list, across teams, of what the assistant could not do, opening the case; a badge on the desk's case. On the sample's support desk.
 - [ ] 12. Docs, full build (baseline 14) and the full suite; run the sample.
 
