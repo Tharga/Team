@@ -16,6 +16,8 @@
 - [~] 8. Full build (warning baseline 14) and the full test suite, then push the branch for the user to test.
   - Build at 14 warnings, the baseline. Full suite green: Email 985, MongoDB 446, Blazor 2071, Service 1470, Support 676, Mcp 121, Entra 58, Images 11. Waiting for approval to push.
 
+- [x] Aside, asked for while testing: the sample's menu is grouped into expandable sections, and the dashboard shows one card per area. `SampleNavigation` is the single list both read. Sample only, nothing shipped.
+
 ## Decisions
 
 - Readiness is a value with a reason rather than a yes or no, as FortDocs' `AssistantReadiness` is, so a component can say why the assistant is missing.
