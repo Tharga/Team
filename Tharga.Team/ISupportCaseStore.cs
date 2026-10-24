@@ -314,6 +314,16 @@ public interface ISupportCaseStore
     /// leave the assistant answering a customer who has just asked for a person — reporting success for
     /// something that did not happen, which is worse than refusing.
     /// </remarks>
+    /// <summary>
+    /// Adds to what the assistant could not do in a case, keeping the newest <see cref="SupportCaseLimits.MaxAssistantGaps"/>.
+    /// </summary>
+    /// <remarks>
+    /// The default keeps nothing, so a store written before this existed loses only that list: the answer, and
+    /// everything else about the case, is unaffected.
+    /// </remarks>
+    Task AddAssistantGapsAsync(string teamKey, string caseId, string[] gaps, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
     Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
         => throw new NotSupportedException(
             $"This store does not implement {nameof(SetAssistantStateAsync)}, so a case cannot be handed from an assistant to a person. Implement it, or do not register an {nameof(ISupportResponder)}.");

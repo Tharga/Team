@@ -118,6 +118,10 @@ public record SupportCaseEntity : EntityBase
     [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.String)]
     public SupportTeamSuggestionReason? SuggestionReason { get; init; }
+
+    /// <summary>What the assistant was asked and could not do. Absent until it first could not.</summary>
+    [BsonIgnoreIfNull]
+    public string[] AssistantGaps { get; init; }
 }
 
 /// <summary>How far one person has read a case's transcript.</summary>

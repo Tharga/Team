@@ -117,6 +117,15 @@ public record SupportCase
     public SupportAssistantState AssistantState { get; init; } = SupportAssistantState.None;
 
     /// <summary>
+    /// What the assistant was asked in this case and had no way to do, oldest first, in its own words.
+    /// </summary>
+    /// <remarks>
+    /// For the people who build the assistant, so they can see what to add. Empty on every case it could help with,
+    /// and on every case raised before this existed.
+    /// </remarks>
+    public string[] AssistantGaps { get; init; } = [];
+
+    /// <summary>
     /// Whether the team's support readers may read this case, when the host lets each case decide.
     /// </summary>
     /// <remarks>

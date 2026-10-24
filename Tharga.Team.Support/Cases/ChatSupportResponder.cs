@@ -27,6 +27,10 @@ internal sealed class ChatSupportResponder(
 {
     internal const string NotConfiguredReason = "The assistant is not set up for this team.";
 
+    internal const string MissingSkillTool = "report_missing_skill";
+
+    internal const string MissingSkillNoted = "Noted for the people who build this assistant. Now tell the person plainly that you cannot do this, and that a person can help.";
+
     public Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default)
         => AnswerAsync(supportCase, transcript, null, cancellationToken);
 
@@ -52,15 +56,18 @@ internal sealed class ChatSupportResponder(
                 return SupportAnswer.Declined(NotConfiguredReason);
             }
 
-            var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken)] };
+            var gaps = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken), MissingSkill(gaps)] };
 
             var body = progress == null
                 ? (await chat.GetResponseAsync(history, chatOptions, deadline.Token)).Text?.Trim()
                 : (await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token)).Trim();
 
-            return string.IsNullOrWhiteSpace(body)
+            var answer = string.IsNullOrWhiteSpace(body)
                 ? SupportAnswer.Declined("The assistant returned nothing.")
                 : SupportAnswer.FromBody(body);
+
+            return answer with { Gaps = [.. gaps] };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -77,6 +84,22 @@ internal sealed class ChatSupportResponder(
             return SupportAnswer.Declined("The assistant could not be reached.");
         }
     }
+
+    /// <remarks>
+    /// <b>Always given, whatever tools the host supplies</b>, because what the assistant could not do is what tells
+    /// the people building it what to add. It changes nothing but the list it is given.
+    /// </remarks>
+    private static AIFunction MissingSkill(System.Collections.Concurrent.ConcurrentQueue<string> gaps) =>
+        AIFunctionFactory.Create(
+            (string what) =>
+            {
+                if (!string.IsNullOrWhiteSpace(what)) gaps.Enqueue(what);
+                return MissingSkillNoted;
+            },
+            MissingSkillTool,
+            "Call this when the person asks for something none of your other tools can do, so the people who build this " +
+            "assistant can add it. Pass what they asked for in a few words, such as \"search cases by subject\". Then tell " +
+            "them plainly that you cannot do it.");
 
     /// <remarks>
     /// <b>Rounds are read from what the tool loop yields:</b> the model's call for a tool comes through as it is made,

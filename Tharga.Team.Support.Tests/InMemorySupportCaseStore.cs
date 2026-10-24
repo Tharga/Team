@@ -200,6 +200,14 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task AddAssistantGapsAsync(string teamKey, string caseId, string[] gaps, CancellationToken cancellationToken = default)
+    {
+        var index = _cases.FindIndex(x => x.Case.TeamKey == teamKey && x.Case.Id == caseId);
+        if (index >= 0) _cases[index] = (_cases[index].Case with { AssistantGaps = [.. (_cases[index].Case.AssistantGaps ?? []).Concat(gaps).TakeLast(SupportCaseLimits.MaxAssistantGaps)] }, _cases[index].Messages);
+
+        return Task.CompletedTask;
+    }
+
     public Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
     {
         var index = _cases.FindIndex(x => x.Case.TeamKey == teamKey && x.Case.Id == caseId);

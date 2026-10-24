@@ -335,6 +335,17 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return entity == null ? null : ToCase(entity);
     }
 
+    public async Task AddAssistantGapsAsync(string teamKey, string caseId, string[] gaps, CancellationToken cancellationToken = default)
+    {
+        if (gaps is not { Length: > 0 }) return;
+
+        await UpdateAsync(teamKey, caseId, AddGaps(gaps));
+    }
+
+    /// <summary>Appends, keeping the newest <see cref="SupportCaseLimits.MaxAssistantGaps"/>, in one update.</summary>
+    internal static UpdateDefinition<SupportCaseEntity> AddGaps(string[] gaps)
+        => Builders<SupportCaseEntity>.Update.PushEach(x => x.AssistantGaps, gaps, slice: -SupportCaseLimits.MaxAssistantGaps);
+
     public async Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
     {
         await RequireCaseAsync(teamKey, caseId);
@@ -632,7 +643,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         SuggestedTeams = entity.SuggestedTeams == null
             ? []
             : [.. entity.SuggestedTeams.Select(x => new SupportCaseTeam { Key = x.Key, Name = x.Name })],
-        SuggestionReason = entity.SuggestionReason
+        SuggestionReason = entity.SuggestionReason,
+        AssistantGaps = entity.AssistantGaps ?? []
     };
 
     private static SupportCaseTeamEntity ToEntity(SupportCaseTeam team) => new()

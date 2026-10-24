@@ -47,4 +47,15 @@ public static class SupportCaseLimits
     /// this.
     /// </remarks>
     public const int DerivedSubjectLength = 50;
+
+    /// <summary>
+    /// Most things the assistant could not do that one case keeps, the newest; and the longest each may be.
+    /// </summary>
+    /// <remarks>
+    /// The model writes these, so they are bounded like anything else it writes: a case is a conversation, not a log.
+    /// </remarks>
+    public const int MaxAssistantGaps = 20;
+
+    /// <summary>The longest one thing the assistant could not do may be, in characters.</summary>
+    public const int MaxAssistantGapLength = 200;
 }

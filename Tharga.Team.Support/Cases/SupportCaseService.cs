@@ -141,6 +141,10 @@ internal sealed class SupportCaseService(
         // A test double does not run the streaming default and answers nothing; it is then asked as it always was.
         var answer = progress == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, progress, cancellationToken);
         answer ??= await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
+        // Kept whether or not it answered: a decline because it could not do what was asked is the more telling one.
+        var gaps = Bounded(answer?.Gaps);
+        if (gaps.Length > 0) await store.AddAssistantGapsAsync(teamKey, caseId, gaps, cancellationToken);
+
         if (answer?.Answered != true) return false;
 
         var message = new SupportMessage
@@ -681,6 +685,14 @@ internal sealed class SupportCaseService(
 
     public Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => store.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
+
+    private static string[] Bounded(string[] gaps)
+        => [.. (gaps ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Select(x => x.Length > SupportCaseLimits.MaxAssistantGapLength ? x[..SupportCaseLimits.MaxAssistantGapLength] : x)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(SupportCaseLimits.MaxAssistantGaps)];
 
     public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
     {

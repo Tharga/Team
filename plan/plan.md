@@ -21,8 +21,9 @@ Asked for while testing (2026-10-24):
   - Done: the audit decorator writes `support.case.withAssistant` on raise (from the raised case) and on reply (the case read after the reply; left out when it cannot be read, which then posts). Case threads already skipped assistant conversations, so the posts came from the default routes alone.
 - [x] 9. `search_my_cases(text)`: the member's own cases by subject and by what was written in them, so the assistant can find a case and then read it with `get_case_messages`.
   - Done: words of three letters or more, cut to a rough stem, matched in the subject and then in every message; the newest 100 of the caller's cases, at most 10 matches with the words and where they were found, through `GetMyCasesAsync` and `GetMessagesAsync`, so only cases the caller may read. `get_case_messages` now points at it. `SupportAssistantToolsTests`: 9 tests.
-- [~] 10. What the assistant could not do: a `report_missing_skill` tool the responder always adds, `SupportAnswer.Gaps`, `SupportCase.AssistantGaps` with a store method (MongoDB and in-memory), recorded by the service.
-- [ ] 11. `SupportAssistantGapsView`: staff list, across teams, of what the assistant could not do, opening the case; a badge on the desk's case. On the sample's support desk.
+- [x] 10. What the assistant could not do: a `report_missing_skill` tool the responder always adds, `SupportAnswer.Gaps`, `SupportCase.AssistantGaps` with a store method (MongoDB and in-memory), recorded by the service.
+  - Done: `report_missing_skill(what)` is added by `ChatSupportResponder` beside the host's tools, whatever they are; what it is told comes back as `SupportAnswer.Gaps`. The service keeps them, trimmed to 200 characters, once each, whether the assistant answered or declined, through `ISupportCaseStore.AddAssistantGapsAsync` (a default that keeps nothing). MongoDB pushes them keeping the newest 20 (`SupportCaseLimits.MaxAssistantGaps`). The default instructions tell the model to call it. Tests: 6 in Support (one through the real tool loop), 2 in MongoDB.
+- [~] 11. `SupportAssistantGapsView`: staff list, across teams, of what the assistant could not do, opening the case; a badge on the desk's case. On the sample's support desk.
 - [ ] 12. Docs, full build (baseline 14) and the full suite; run the sample.
 
 ## Decisions

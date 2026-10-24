@@ -21,6 +21,7 @@ public class SupportAssistantOptions
         "You answer support questions for the signed-in user. " +
         "Use the supplied tools to look up their teams, membership and cases rather than assuming. " +
         "If you cannot answer from what the tools return, say so plainly and tell them a person will pick it up. " +
+        "When they ask for something none of your tools can do, call report_missing_skill with what they asked for, then tell them you cannot do it. " +
         "Never guess at account state, and never claim to have changed anything: you can read, not act.";
 
     /// <summary>
