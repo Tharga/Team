@@ -104,7 +104,7 @@
                 }
 
                 @* How the assistant came to the answer, folded: each service call with what it was asked for. *@
-                @if (message.AssistantCalls is { Length: > 0 } calls)
+                @if (message.AssistantCalls is { Length: > 0 } calls && ShowsCalls)
                 {
                     <details style="margin-top: 0.25rem; font-size: 0.75rem; color: var(--rz-text-secondary-color);" data-calls="@message.Sequence">
                         <summary style="cursor: pointer;">@SupportAssistantSteps.Counted(_text, calls)</summary>
@@ -116,7 +116,7 @@
                 }
 
                 @* Rated by the person it answered, where they may; shown as a mark wherever they may not, as for support. *@
-                @if (message.Kind == SupportMessageKind.Assistant)
+                @if (message.Kind == SupportMessageKind.Assistant && _display.RateAnswers)
                 {
                     if (Rate.HasDelegate)
                     {
@@ -207,7 +207,7 @@
                 @{ var step = SupportAssistantSteps.Describe(_text, AssistantProgress); }
                 @if (string.IsNullOrEmpty(AssistantProgress?.AnswerSoFar))
                 {
-                    <SupportTypingDots Label="@(step ?? ThinkingText)" />
+                    <SupportTypingDots Label="@(step ?? ThinkingText)" ShowLabel="@(step != null)" />
                 }
                 else
                 {
@@ -481,12 +481,19 @@
         => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
+    [Inject] private IServiceProvider Services { get; set; }
 
     private TextSet _text = TextSet.Empty;
     private TextSet _files = TextSet.Empty;
+    private SupportDisplayOptions _display = new();
+
+    // The support side is whoever does not read the case from the author's seat.
+    private bool ShowsCalls => _display.ServiceCallsShownTo == SupportServiceCallsAudience.Everyone
+                               || (_display.ServiceCallsShownTo == SupportServiceCallsAudience.Support && !AuthorOnRight);
 
     protected override async Task OnInitializedAsync()
     {
+        _display = SupportDisplay.Of(Services);
         _text = await TextProvider.ResolveAsync(SupportTranscriptText.All);
         _files = await TextProvider.ResolveAsync(SupportAttachmentText.All);
     }

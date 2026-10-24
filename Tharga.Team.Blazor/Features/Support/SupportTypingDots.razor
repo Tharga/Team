@@ -1,13 +1,16 @@
-@* Three flashing dots while somebody on the other side is writing, read out as Label. *@
+@* Three flashing dots while somebody on the other side is writing, read out as Label, and shown beside them with ShowLabel. *@
 
 <span class="support-typing" role="status" data-typing>
     <span class="support-typing__dot" aria-hidden="true"></span>
     <span class="support-typing__dot" aria-hidden="true"></span>
     <span class="support-typing__dot" aria-hidden="true"></span>
-    <span class="support-typing__label">@Label</span>
+    <span class="@(ShowLabel ? "support-typing__label support-typing__label--shown" : "support-typing__label")">@Label</span>
 </span>
 
 @code {
-    /// <summary>Who is writing, for a screen reader: the dots themselves say nothing.</summary>
+    /// <summary>What is happening, for a screen reader: the dots themselves say nothing.</summary>
     [Parameter] public string Label { get; set; }
+
+    /// <summary>Shows <see cref="Label"/> beside the dots too, as the assistant's lookups are; otherwise only a screen reader reads it.</summary>
+    [Parameter] public bool ShowLabel { get; set; }
 }

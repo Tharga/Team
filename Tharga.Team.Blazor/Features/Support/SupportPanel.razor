@@ -103,7 +103,7 @@
                             else
                             {
                                 <RadzenMarkdown Text="@SupportAnswerLinks.SiteOnly(message.Text)" AllowHtml="false" />
-                                @if (message.Calls is { Length: > 0 } calls)
+                                @if (message.Calls is { Length: > 0 } calls && _display.ServiceCallsShownTo == SupportServiceCallsAudience.Everyone)
                                 {
                                     <details class="support-panel__calls" data-calls="@message.Sequence">
                                         <summary>@SupportAssistantSteps.Counted(_text, calls)</summary>
@@ -113,7 +113,7 @@
                                         }
                                     </details>
                                 }
-                                @if (message.ByAssistant)
+                                @if (message.ByAssistant && _display.RateAnswers)
                                 {
                                     <div class="support-panel__rate" data-rate="@message.Sequence">
                                         @foreach (var choice in Ratings)
@@ -158,8 +158,9 @@
                     }
                     else if (_busy)
                     {
+                        var lookup = SupportAssistantSteps.Describe(_text, _progress);
                         <div class="support-panel__msg support-panel__msg--them" data-working>
-                            <SupportTypingDots Label="@(SupportAssistantSteps.Describe(_text, _progress) ?? _text[SupportPanelText.Working])" />
+                            <SupportTypingDots Label="@(lookup ?? _text[SupportPanelText.Working])" ShowLabel="@(lookup != null)" />
                         </div>
                     }
                 </div>
@@ -223,6 +224,7 @@
     private static readonly SupportAnswerRating[] Ratings = [SupportAnswerRating.Up, SupportAnswerRating.Down];
 
     private TextSet _text = TextSet.Empty;
+    private SupportDisplayOptions _display = new();
     private readonly List<PanelMessage> _messages = [];
     private List<SupportCase> _earlier = [];
     private ISupportPanelAvailability _availability;
@@ -285,8 +287,9 @@
     protected override async Task OnInitializedAsync()
     {
         _width = DefaultWidth;
+        _display = SupportDisplay.Of(Services);
         _text = await TextProvider.ResolveAsync(SupportPanelText.All);
-        _availability = Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
+        _availability =Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
 
         var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
         _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, OnWritingChanged);

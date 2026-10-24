@@ -60,6 +60,10 @@ Asked for while testing, fourth round (2026-10-24): the round counter looked str
 - [x] 26. The service calls behind an answer: `SupportAssistantCall` (name, what it was asked for written out as `text: "export"`) on `SupportAnswer.Calls`, `SupportAssistantProgress.Calls` and `SupportMessage.AssistantCalls`; kept bounded (`MaxAssistantCalls` 20, `MaxAssistantCallArgumentsLength` 200); MongoDB `SupportAssistantCallEntity`. Shown under the answer in the panel and the transcript, folded as "2 service calls", a row per call such as `search_my_cases(text: "export")`.
   - Done: read from the tool loop in one piece and streamed; `report_missing_skill` is not a service call. The sample's script also searches (`search_my_cases(text: …)`) for a question about cases that names something. Tests: 4 Support, 1 contract, 3 MongoDB, 6 + 2 Blazor. Build at 14 warnings; full suite green: Email 985, MongoDB 466, Blazor 2216, Service 1470, Support 809, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
 
+- [x] 27. The lookup words are shown beside the dots, not only read out: `SupportTypingDots.ShowLabel`, set while a lookup runs. "Working…" and somebody typing stay screen-reader text.
+- [x] 28. Configurable: `o.Blazor.Support` (`SupportDisplayOptions`): `RateAnswers` (default true) takes the thumbs and the marks away; `ServiceCallsShownTo` (`Everyone` default, `Support`, `Nobody`) decides who sees the calls. Display only; what is kept stays. Read through `SupportDisplay.Of`, defaults where the Blazor options are not registered.
+  - Done: tests 6 + 1 Blazor, and the panel's label checks. `get_my_cases` takes no arguments by design (the team and the person are the caller's), so `get_my_cases()` is right. Build at 14 warnings; full suite green (Blazor 2223).
+
 ## Decisions
 
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.

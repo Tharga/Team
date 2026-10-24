@@ -1279,7 +1279,8 @@ whether it answered or declined: trimmed, at most 200 characters each, once each
 again takes it back (`RateAnswerAsync`, with `SupportAnswerRating.None`). Only the person who raised the case may rate,
 because it is them the assistant answered, and only the assistant's answers can be rated. The rating is kept on the
 answer (`SupportMessage.Rating`), counted on the case (`AnswersRatedUp`, `AnswersRatedDown`), audited as
-`support:rate-answer`, and shown to support as a mark on the answer.
+`support:rate-answer`, and shown to support as a mark on the answer. `o.Blazor.Support.RateAnswers = false` takes the
+thumbs and the marks off the panel and the support page; ratings already given are kept.
 
 `SupportAssistantFeedbackView` lists all of it across every team for the people who build the assistant: what it could
 not do, the same thing asked in several cases as one entry, most asked first; and the cases with an answer rated not
@@ -1320,7 +1321,7 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<Suppo
   `UseFunctionInvocation` runs for you.
 - **Until the first words arrive**, the assistant's side shows the same flashing dots as a person writing, read out as
   `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page. While a
-  service call runs, the words beside the dots count it: "First lookup…", "Second lookup…", and from the eleventh
+  service call runs, the words shown beside the dots count it: "First lookup…", "Second lookup…", and from the eleventh
   "Lookup 11…" (`team.support.transcript.lookup`, `.lookupOrdinals` and `.lookupNumbered`). A lookup part way through
   the text is said under it.
 - **Each report is the whole state**, the text so far included, not what changed, so a report that is missed costs
@@ -1349,6 +1350,8 @@ answered and for support alike.
   answer, each written out to at most `MaxAssistantCallArgumentsLength` (200) characters.
 - **What a call was asked for can hold words from the conversation**, such as what the member searched for, so it is
   kept on the case and shown only where the case can be read. It is not audited.
+- **Who sees them** is the host's choice, `o.Blazor.Support.ServiceCallsShownTo`: `Everyone`, the default; `Support`,
+  only whoever reads the case from the support side; or `Nobody`. They are kept either way.
 - **A responder of your own** lists its calls by returning them on `SupportAnswer.Calls`.
 
 ### Settings
