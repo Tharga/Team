@@ -1,7 +1,7 @@
 namespace Tharga.Team.Support.Cases;
 
 /// <summary>
-/// Scope constants for support cases. Both are <b>team</b> scopes.
+/// Scope constants for support cases and the assistant. All are <b>team</b> scopes.
 /// </summary>
 /// <remarks>
 /// <b>There is no scope for raising a case or reading your own.</b> Those are what an ordinary member does,
@@ -22,4 +22,13 @@ public static class SupportScopes
 
     /// <summary>Reply to and close any case in the team.</summary>
     public const string Manage = "support:manage";
+
+    /// <summary>
+    /// Choose what the support assistant answers the team with, and store the team's key for a provider.
+    /// </summary>
+    /// <remarks>
+    /// Its own scope rather than <see cref="Manage"/>: answering cases and deciding where the team's conversations
+    /// are sent, on whose account, are different trusts.
+    /// </remarks>
+    public const string AssistantManage = "assistant:manage";
 }
