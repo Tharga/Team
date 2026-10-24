@@ -53,6 +53,13 @@ Asked for while testing, third round (2026-10-24): whether support is online, an
   - Done: `SupportDeskPresence` counts only Online and Away; the hint, the docs and the READMEs say so. Tests: 3 more in `SupportDeskPresenceTests`. Build at 14 warnings; full suite green (Support 804, Blazor 2209).
   - Docs: the support article's "Is anybody on support" (the desk and Slack, what members see), the `Tharga.Team.Blazor` README, the sample README. Build at 14 warnings; full suite green: Email 985, MongoDB 463, Blazor 2209, Service 1470, Support 802, Support.Anthropic 12, Mcp 121, Entra 58, Images 11. The sample runs.
 
+Asked for while testing, fourth round (2026-10-24): the round counter looked strange; show the service calls made.
+
+- [x] 25. Beside the dots, in words: "First lookup…", "Second lookup…", from the eleventh "Lookup 11…", counting the service calls while one runs; "Working…" otherwise. No round numbers on screen. A lookup part way through the text is said under it.
+  - Done: `SupportAssistantSteps.Describe` from `SupportAssistantProgress.Calls`; `Lookup`, `LookupOrdinals` (comma-separated words) and `LookupNumbered` replace `Round` and `RoundTools`, which were not released.
+- [x] 26. The service calls behind an answer: `SupportAssistantCall` (name, what it was asked for written out as `text: "export"`) on `SupportAnswer.Calls`, `SupportAssistantProgress.Calls` and `SupportMessage.AssistantCalls`; kept bounded (`MaxAssistantCalls` 20, `MaxAssistantCallArgumentsLength` 200); MongoDB `SupportAssistantCallEntity`. Shown under the answer in the panel and the transcript, folded as "2 service calls", a row per call such as `search_my_cases(text: "export")`.
+  - Done: read from the tool loop in one piece and streamed; `report_missing_skill` is not a service call. The sample's script also searches (`search_my_cases(text: …)`) for a question about cases that names something. Tests: 4 Support, 1 contract, 3 MongoDB, 6 + 2 Blazor. Build at 14 warnings; full suite green: Email 985, MongoDB 466, Blazor 2216, Service 1470, Support 809, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
+
 ## Decisions
 
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.

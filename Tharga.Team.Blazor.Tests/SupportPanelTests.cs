@@ -319,7 +319,7 @@ public class SupportPanelTests : BunitContext
     }
 
     [Fact]
-    public void WhileTheAssistantWorks_ThePanelShowsItsRound_AndTheToolItRuns()
+    public void WhileTheAssistantWorks_ThePanelSaysWhichLookupItIsOn()
     {
         var raised = Case("case-1");
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
@@ -329,20 +329,41 @@ public class SupportPanelTests : BunitContext
             .Returns((string _, string _, IProgress<SupportAssistantProgress> progress, CancellationToken _) =>
             {
                 report = progress;
-                progress.Report(new SupportAssistantProgress { Round = 1, Tools = ["get_my_cases"] });
+                progress.Report(new SupportAssistantProgress { Round = 1, Tools = ["get_my_cases"], Calls = [new SupportAssistantCall { Name = "get_my_cases" }] });
                 return kept.Task;
             });
         var view = Render(open: true);
 
         Send(view, Question);
 
-        view.WaitForAssertion(() => Assert.Equal("Round 1: get_my_cases", view.Find("[data-working] [data-step]").TextContent));
+        view.WaitForAssertion(() => Assert.Equal("First lookup…", view.Find("[data-working] .support-typing__label").TextContent));
 
-        view.InvokeAsync(() => report.Report(new SupportAssistantProgress { Round = 2, AnswerSoFar = "You have two" }));
+        SupportAssistantCall[] made = [new() { Name = "get_my_cases" }, new() { Name = "search_my_cases", Arguments = "text: \"export\"" }];
+        view.InvokeAsync(() => report.Report(new SupportAssistantProgress { Round = 2, AnswerSoFar = "You have two", Tools = ["search_my_cases"], Calls = made }));
 
-        view.WaitForAssertion(() => Assert.Equal("Round 2", view.Find("[data-answer-so-far] [data-step]").TextContent));
-        view.InvokeAsync(() => kept.SetResult(true));
+        view.WaitForAssertion(() => Assert.Equal("Second lookup…", view.Find("[data-answer-so-far] [data-step]").TextContent));
+
+        view.InvokeAsync(() => report.Report(new SupportAssistantProgress { Round = 3, AnswerSoFar = "You have two cases.", Calls = made }));
+
         view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-step]")));
+        view.InvokeAsync(() => kept.SetResult(true));
+    }
+
+    [Fact]
+    public void AnAnswer_ShowsTheServiceCallsItMade_Folded()
+    {
+        var raised = Case("case-1");
+        var answer = Message(2, "You have two cases.", SupportMessageKind.Assistant, author: null) with
+        {
+            AssistantCalls = [new() { Name = "get_my_cases" }, new() { Name = "search_my_cases", Arguments = "text: \"export\"" }]
+        };
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User), answer);
+        var view = Render(open: true);
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.Equal("2 service calls", view.Find("[data-calls='2'] summary").TextContent.Trim()));
+        Assert.Equal(["get_my_cases()", "search_my_cases(text: \"export\")"], view.FindAll("[data-calls='2'] [data-call]").Select(x => x.TextContent.Trim()));
     }
 
     [Fact]

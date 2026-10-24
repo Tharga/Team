@@ -188,6 +188,22 @@
     color: var(--rz-primary);
 }
 
+.support-panel__calls {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--rz-text-secondary-color);
+}
+
+.support-panel__calls > summary {
+    cursor: pointer;
+}
+
+.support-panel__call {
+    padding-left: 0.75rem;
+    font-family: var(--rz-font-family-monospace, monospace);
+    overflow-wrap: anywhere;
+}
+
 .support-panel__step {
     display: block;
     margin-top: 0.25rem;

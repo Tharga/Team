@@ -193,6 +193,10 @@ public record SupportMessageEntity
     [BsonIgnoreIfDefault]
     [BsonRepresentation(BsonType.String)]
     public SupportAnswerRating Rating { get; init; }
+
+    /// <summary>The service calls the assistant made for the entry; absent when it made none, as on every entry written before they were kept.</summary>
+    [BsonIgnoreIfNull]
+    public SupportAssistantCallEntity[] AssistantCalls { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system.</summary>

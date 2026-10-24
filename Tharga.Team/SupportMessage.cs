@@ -83,4 +83,7 @@ public record SupportMessage
 
     /// <summary>How the person the assistant answered rated this answer; only the assistant's answers are rated.</summary>
     public SupportAnswerRating Rating { get; init; }
+
+    /// <summary>The service calls the assistant made for this answer, in order; empty for any other entry, and for an answer that looked nothing up.</summary>
+    public SupportAssistantCall[] AssistantCalls { get; init; } = [];
 }

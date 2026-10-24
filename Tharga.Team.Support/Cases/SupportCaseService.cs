@@ -154,7 +154,8 @@ internal sealed class SupportCaseService(
             Kind = SupportMessageKind.Assistant,
             AuthorName = SupportCaseActors.AssistantName,
             Body = answer.Body,
-            SentAt = timeProvider.GetUtcNow().UtcDateTime
+            SentAt = timeProvider.GetUtcNow().UtcDateTime,
+            AssistantCalls = BoundedCalls(answer.Calls)
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
@@ -695,6 +696,18 @@ internal sealed class SupportCaseService(
             .Select(x => x.Length > SupportCaseLimits.MaxAssistantGapLength ? x[..SupportCaseLimits.MaxAssistantGapLength] : x)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(SupportCaseLimits.MaxAssistantGaps)];
+
+    /// <remarks>The model chose these, so they are bounded like anything else it writes.</remarks>
+    internal static SupportAssistantCall[] BoundedCalls(SupportAssistantCall[] calls)
+        => [.. (calls ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x?.Name))
+            .Take(SupportCaseLimits.MaxAssistantCalls)
+            .Select(x => x with
+            {
+                Arguments = x.Arguments is { Length: > SupportCaseLimits.MaxAssistantCallArgumentsLength } arguments
+                    ? $"{arguments[..(SupportCaseLimits.MaxAssistantCallArgumentsLength - 1)]}…"
+                    : x.Arguments ?? string.Empty
+            })];
 
     public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
     {

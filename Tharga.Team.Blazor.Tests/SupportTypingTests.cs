@@ -234,8 +234,10 @@ public class SupportTypingTests : BunitContext
         Assert.Contains("Check the date", row.TextContent);
     }
 
+    private static SupportAssistantCall Call(string name, string arguments = "") => new() { Name = name, Arguments = arguments };
+
     [Fact]
-    public void ATranscript_ShowsTheRound_AndTheToolTheAssistantRuns()
+    public void ATranscript_SaysWhichLookupTheAssistantIsOn_BesideItsDots()
     {
         AddServices(new Mock<ISupportCaseService>());
 
@@ -244,16 +246,67 @@ public class SupportTypingTests : BunitContext
             .Add(x => x.CaseAuthorIdentity, Author)
             .Add(x => x.AuthorOnRight, true)
             .Add(x => x.ThinkingText, "Looking into it")
-            .Add(x => x.AssistantProgress, new SupportAssistantProgress { Round = 2, Tools = ["get_my_cases", "get_case_messages"] }));
+            .Add(x => x.AssistantProgress, new SupportAssistantProgress { Round = 2, Tools = ["get_case_messages"], Calls = [Call("get_my_cases"), Call("get_case_messages")] }));
 
         Assert.Equal("thinking", view.Find("[data-answer-so-far]").GetAttribute("data-answer-so-far"));
-        Assert.Equal("Round 2: get_my_cases, get_case_messages", view.Find("[data-step]").TextContent.Trim());
+        Assert.Equal("Second lookup…", view.Find("[data-answer-so-far] .support-typing__label").TextContent);
+        Assert.Empty(view.FindAll("[data-step]"));
+    }
+
+    [Theory]
+    [InlineData(1, "First lookup…")]
+    [InlineData(3, "Third lookup…")]
+    [InlineData(10, "Tenth lookup…")]
+    [InlineData(11, "Lookup 11…")]
+    public async Task Lookups_AreCountedInWords_ThenInNumbers(int made, string expected)
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+        var progress = new SupportAssistantProgress { Tools = ["get_my_cases"], Calls = [.. Enumerable.Range(0, made).Select(_ => Call("get_my_cases"))] };
+
+        Assert.Equal(expected, SupportAssistantSteps.Describe(text, progress));
+    }
+
+    /// <summary>While the model thinks or writes, the dots keep their own words.</summary>
+    [Fact]
+    public async Task WithNoLookupRunning_NothingIsSaid()
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+
+        Assert.Null(SupportAssistantSteps.Describe(text, null));
+        Assert.Null(SupportAssistantSteps.Describe(text, new SupportAssistantProgress { Calls = [Call("get_my_cases")] }));
     }
 
     [Fact]
-    public void NothingReported_ShowsNoRound()
+    public void AnAnswer_ShowsItsServiceCalls_Folded_WithWhatEachWasAskedFor()
     {
-        Assert.Null(SupportAssistantSteps.Describe(TextSet.Empty, null));
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportTranscript>(p => p
+            .Add(x => x.Messages,
+            [
+                new SupportMessage { Sequence = 1, Kind = SupportMessageKind.User, AuthorIdentity = Author, AuthorName = "Alice", Body = "Where is my export case?", SentAt = DateTime.UtcNow },
+                new SupportMessage
+                {
+                    Sequence = 2, Kind = SupportMessageKind.Assistant, AuthorName = "Assistant", Body = "Here it is.", SentAt = DateTime.UtcNow,
+                    AssistantCalls = [Call("get_my_cases"), Call("search_my_cases", "text: \"export\"")]
+                }
+            ])
+            .Add(x => x.CaseAuthorIdentity, Author)
+            .Add(x => x.AuthorOnRight, true));
+
+        var calls = view.Find("[data-calls='2']");
+        Assert.False(calls.HasAttribute("open"));
+        Assert.Equal("2 service calls", calls.QuerySelector("summary")!.TextContent.Trim());
+        Assert.Equal(["get_my_cases()", "search_my_cases(text: \"export\")"], view.FindAll("[data-calls='2'] [data-call]").Select(x => x.TextContent.Trim()));
+        Assert.Single(view.FindAll("[data-calls]"));
+    }
+
+    [Fact]
+    public async Task OneServiceCall_IsCountedAsOne()
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+
+        Assert.Equal("1 service call", SupportAssistantSteps.Counted(text, [Call("get_my_cases")]));
     }
 
     [Fact]

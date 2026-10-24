@@ -29,6 +29,8 @@ internal sealed class SampleChatClient : IChatClient
 
     private const string CasesTool = "get_my_cases";
 
+    private const string SearchTool = "search_my_cases";
+
     private const string MissingSkillTool = "report_missing_skill";
 
     private const int MaxReportedLength = 80;
@@ -51,19 +53,22 @@ internal sealed class SampleChatClient : IChatClient
         var history = messages?.ToList() ?? [];
         var question = history.LastOrDefault(x => x.Role == ChatRole.User)?.Text ?? string.Empty;
 
-        // A question about cases takes two rounds, as a model's would: ask for the member's cases, then answer from them.
+        // A question about cases looks things up as a model would: the member's cases, then, when the question names
+        // something, the cases that mention it; then it answers from what it found.
         if (question.Contains("case", StringComparison.OrdinalIgnoreCase) && options?.Tools?.Any(x => x.Name == CasesTool) == true)
         {
-            // Tool calls are not kept in the case, so any result here is from this answer's own lookup.
-            var found = history.SelectMany(x => x.Contents).OfType<FunctionResultContent>().LastOrDefault();
-            if (found == null)
-            {
-                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), CasesTool)])));
-            }
+            // Tool calls are not kept in the case, so any result here is from this answer's own lookups.
+            var found = history.SelectMany(x => x.Contents).OfType<FunctionResultContent>().ToArray();
+            if (found.Length == 0) return Call(CasesTool);
 
-            var count = found.Result is JsonElement { ValueKind: JsonValueKind.Array } list ? list.GetArrayLength() : 0;
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
-                $"I looked up your support cases in this team: you have {count}. Ask about one of them, or ask for a person.\n\n{Signature}")));
+            var term = SearchTerm(question);
+            var searches = term != null && options.Tools.Any(x => x.Name == SearchTool);
+            if (searches && found.Length == 1) return Call(SearchTool, new Dictionary<string, object> { ["text"] = term });
+
+            var answer = $"I looked up your support cases in this team: you have {Count(found[0])}.";
+            if (searches) answer += $" {Count(found[1])} of them mention \"{term}\".";
+
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"{answer} Ask about one of them, or ask for a person.\n\n{Signature}")));
         }
 
         var scripted = Array.Find(Script, x => question.Contains(x.Term, StringComparison.OrdinalIgnoreCase)).Answer;
@@ -73,14 +78,31 @@ internal sealed class SampleChatClient : IChatClient
             && !history.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any())
         {
             var what = question.Length > MaxReportedLength ? question[..MaxReportedLength] : question;
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
-                [new FunctionCallContent(Guid.NewGuid().ToString("N"), MissingSkillTool, new Dictionary<string, object> { ["what"] = what })])));
+            return Call(MissingSkillTool, new Dictionary<string, object> { ["what"] = what });
         }
 
-        var answer = scripted == null ? Fallback : $"{scripted}\n\n{Signature}";
+        var reply = scripted == null ? Fallback : $"{scripted}\n\n{Signature}";
 
-        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer)));
+        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
     }
+
+    private static Task<ChatResponse> Call(string tool, IDictionary<string, object> arguments = null)
+        => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), tool, arguments)])));
+
+    private static int Count(FunctionResultContent result)
+        => result.Result is JsonElement { ValueKind: JsonValueKind.Array } list ? list.GetArrayLength() : 0;
+
+    /// <summary>The last word worth searching for, such as "export" in "show me my case about the export"; null when there is none.</summary>
+    private static string SearchTerm(string question)
+        => System.Text.RegularExpressions.Regex.Matches(question, @"\p{L}{4,}")
+            .Select(x => x.Value)
+            .LastOrDefault(x => !NotSearchedFor.Contains(x));
+
+    private static readonly HashSet<string> NotSearchedFor = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "case", "cases", "about", "have", "many", "show", "find", "what", "which", "where", "with", "from", "that", "this",
+        "there", "their", "your", "mine", "open", "does", "need", "help", "please", "could", "would", "list", "tell"
+    };
 
     // A word at a time, at about the pace of a small local model, so the panel shows an answer being written.
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(

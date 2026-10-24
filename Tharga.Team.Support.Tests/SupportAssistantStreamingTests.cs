@@ -53,6 +53,64 @@ public class SupportAssistantStreamingTests
         Assert.Equal(2, seen.Items[^1].Round);
         Assert.Equal("You have 2 cases.", seen.Items[^1].AnswerSoFar);
         Assert.Equal([1, 2], seen.Items.Select(x => x.Round).Distinct());
+        Assert.Equal(["get_my_cases"], seen.Items[^1].Calls.Select(x => x.Name));
+        Assert.Equal(["get_my_cases"], answer.Calls.Select(x => x.Name));
+    }
+
+    /// <summary>Asked in one piece through the real tool loop, the calls are read from the messages it returns.</summary>
+    [Fact]
+    public async Task InOnePiece_TheServiceCalls_AreKeptWithTheAnswer_WithWhatTheyWereAskedFor()
+    {
+        var answer = await Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "exportåäö", ["limit"] = 5 }).AnswerAsync(Case(), Transcript());
+
+        Assert.Equal("Found it.", answer.Body);
+        var call = Assert.Single(answer.Calls);
+        Assert.Equal("search_my_cases", call.Name);
+        Assert.Equal("text: \"exportåäö\", limit: 5", call.Arguments);
+    }
+
+    [Fact]
+    public async Task Streamed_TheServiceCalls_AreReported_AndKept()
+    {
+        var seen = new Reports();
+
+        var answer = await Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" }).AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Contains(seen.Items, x => x.Tools.SequenceEqual(["search_my_cases"]) && x.Calls.Length == 1);
+        Assert.Equal("text: \"export\"", Assert.Single(answer.Calls).Arguments);
+    }
+
+    /// <summary>Noting what it could not do is the assistant's own bookkeeping, not a call on the host's services.</summary>
+    [Fact]
+    public async Task NotingWhatItCouldNotDo_IsNotAServiceCall()
+    {
+        var seen = new Reports();
+
+        var answer = await Calling(ChatSupportResponder.MissingSkillTool, new Dictionary<string, object> { ["what"] = "close my case" }).AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Empty(answer.Calls);
+        Assert.All(seen.Items, x => Assert.Empty(x.Calls));
+        Assert.Equal(["close my case"], answer.Gaps);
+        Assert.Equal(2, seen.Items[^1].Round);
+    }
+
+    [Fact]
+    public async Task TheCalls_AreKeptOnTheAnswer_Bounded()
+    {
+        var calls = Enumerable.Range(0, 25).Select(i => new SupportAssistantCall { Name = $"tool_{i}", Arguments = new string('x', 300) }).ToArray();
+        var responder = Substitute.For<ISupportResponder>();
+        responder.AnswerAsync(Arg.Any<SupportCase>(), Arg.Any<IReadOnlyList<SupportMessage>>(), Arg.Any<CancellationToken>())
+            .Returns(SupportAnswer.FromBody("Done.") with { Calls = calls });
+        var world = new World(responder);
+        var raised = await world.As(Alice).RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+
+        Assert.True(await world.As(Alice).RunAssistantAsync(TeamA, raised.Id));
+
+        var kept = (await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items[^1].AssistantCalls;
+        Assert.Equal(SupportCaseLimits.MaxAssistantCalls, kept.Length);
+        Assert.Equal("tool_0", kept[0].Name);
+        Assert.Equal(SupportCaseLimits.MaxAssistantCallArgumentsLength, kept[0].Arguments.Length);
+        Assert.EndsWith("…", kept[0].Arguments);
     }
 
     [Fact]
@@ -181,6 +239,13 @@ public class SupportAssistantStreamingTests
         Assert.Equal(["raise", "assistant-answer"], world.Audit.Entries.Select(x => x.Action));
     }
 
+    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments)
+    {
+        var chat = new CallingChatClient(tool, arguments).AsBuilder().UseFunctionInvocation().Build();
+
+        return new ChatSupportResponder(new RegisteredChatClientResolver(chat), new SearchTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
+    }
+
     private static ChatSupportResponder Responder(IChatClient chat)
         => new(new RegisteredChatClientResolver(chat), new NoTools(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
 
@@ -300,6 +365,37 @@ public class SupportAssistantStreamingTests
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>Calls one tool with the arguments given until it has the result, then answers; in one piece or streamed.</summary>
+    private sealed class CallingChatClient(string tool, Dictionary<string, object> arguments) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ChatResponse(Next(messages)));
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            var next = Next(messages);
+            yield return new ChatResponseUpdate(next.Role, next.Contents);
+        }
+
+        private ChatMessage Next(IEnumerable<ChatMessage> messages)
+            => messages.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any()
+                ? new ChatMessage(ChatRole.Assistant, "Found it.")
+                : new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("call-1", tool, arguments)]);
+
+        public object GetService(Type serviceType, object serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class SearchTool : ISupportAssistantTools
+    {
+        public Task<IReadOnlyList<AITool>> ForCurrentCallerAsync(string teamKey, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AITool>>([AIFunctionFactory.Create((string text, int limit = 10) => new[] { "case-1" }, "search_my_cases")]);
     }
 
     private sealed class OneTool : ISupportAssistantTools

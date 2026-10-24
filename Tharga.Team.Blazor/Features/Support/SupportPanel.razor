@@ -103,6 +103,16 @@
                             else
                             {
                                 <RadzenMarkdown Text="@SupportAnswerLinks.SiteOnly(message.Text)" AllowHtml="false" />
+                                @if (message.Calls is { Length: > 0 } calls)
+                                {
+                                    <details class="support-panel__calls" data-calls="@message.Sequence">
+                                        <summary>@SupportAssistantSteps.Counted(_text, calls)</summary>
+                                        @foreach (var call in calls)
+                                        {
+                                            <div class="support-panel__call" data-call>@SupportAssistantSteps.Row(call)</div>
+                                        }
+                                    </details>
+                                }
                                 @if (message.ByAssistant)
                                 {
                                     <div class="support-panel__rate" data-rate="@message.Sequence">
@@ -149,8 +159,7 @@
                     else if (_busy)
                     {
                         <div class="support-panel__msg support-panel__msg--them" data-working>
-                            <SupportTypingDots Label="@_text[SupportPanelText.Working]" />
-                            @Step
+                            <SupportTypingDots Label="@(SupportAssistantSteps.Describe(_text, _progress) ?? _text[SupportPanelText.Working])" />
                         </div>
                     }
                 </div>
@@ -209,7 +218,7 @@
     /// <summary>How long a message to a person waits for an answer before the member is told we will get back to them. Defaults to 60 seconds; while support is away they are told at once.</summary>
     [Parameter] public TimeSpan NoAnswerAfter { get; set; } = SupportNoAnswerWatch.DefaultAfter;
 
-    private sealed record PanelMessage(bool FromMe, string Text, int Sequence = 0, bool ByAssistant = false, SupportAnswerRating Rating = SupportAnswerRating.None);
+    private sealed record PanelMessage(bool FromMe, string Text, int Sequence = 0, bool ByAssistant = false, SupportAnswerRating Rating = SupportAnswerRating.None, SupportAssistantCall[] Calls = null);
 
     private static readonly SupportAnswerRating[] Ratings = [SupportAnswerRating.Up, SupportAnswerRating.Down];
 
@@ -257,9 +266,10 @@
         }
     </button>;
 
-    private RenderFragment Step => _progress == null
+    // Under text already written, when the model looks something up part way through.
+    private RenderFragment Step => SupportAssistantSteps.Describe(_text, _progress) is not { } step
         ? null
-        : @<span class="support-panel__step" data-step>@SupportAssistantSteps.Describe(_text, _progress)</span>;
+        : @<span class="support-panel__step" data-step>@step</span>;
 
     private string WhoClass(bool support) => support == _support ? "support-panel__who-pick support-panel__who-pick--on" : "support-panel__who-pick";
 
@@ -480,7 +490,7 @@
         _messages.AddRange((page?.Items ?? [])
             .Where(x => x.Kind != SupportMessageKind.System)
             .Select(x => new PanelMessage(x.Kind == SupportMessageKind.User && !x.AsSupport && x.AuthorIdentity == supportCase.AuthorIdentity, x.Body,
-                x.Sequence, x.Kind == SupportMessageKind.Assistant, x.Rating)));
+                x.Sequence, x.Kind == SupportMessageKind.Assistant, x.Rating, x.AssistantCalls)));
 
         _withAssistant = supportCase.AssistantState == SupportAssistantState.Active;
         if (adoptWhoAnswers) _support = !_withAssistant;

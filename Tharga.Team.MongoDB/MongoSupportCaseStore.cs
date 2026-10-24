@@ -702,7 +702,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Source = entity.Source,
         AsSupport = entity.AsSupport,
         Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)],
-        Rating = entity.Rating
+        Rating = entity.Rating,
+        AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty })]
     };
 
     internal static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -719,7 +720,10 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Source = message.Source,
         AsSupport = message.AsSupport,
         Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null,
-        Rating = message.Rating
+        Rating = message.Rating,
+        AssistantCalls = message.AssistantCalls is { Length: > 0 } calls
+            ? [.. calls.Select(x => new SupportAssistantCallEntity { Name = x.Name, Arguments = string.IsNullOrEmpty(x.Arguments) ? null : x.Arguments })]
+            : null
     };
 
     private static SupportAttachment ToAttachment(SupportAttachmentEntity entity) => new()

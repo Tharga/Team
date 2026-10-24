@@ -1307,20 +1307,22 @@ call it, so a host using `<SupportCasesView />` needs none of this.
 ### Watching the answer being written
 
 Pass an `IProgress<SupportAssistantProgress>` and you are told how far the assistant has got while it works: the answer
-as written so far, which **round** it is on, and the **tools** it is running. `SupportPanel` and `SupportCasesView` do
-this, so the customer reads the answer as it is written instead of waiting for all of it:
+as written so far, which **round** it is on, the **tools** running now, and every **service call** it has made.
+`SupportPanel` and `SupportCasesView` do this, so the customer reads the answer as it is written instead of waiting for
+all of it:
 
 ```csharp
-var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<SupportAssistantProgress>(p => Show(p.AnswerSoFar, p.Round, p.Tools)));
+var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<SupportAssistantProgress>(p => Show(p.AnswerSoFar, p.Tools, p.Calls)));
 ```
 
 - **A round is one call to the model.** The model either writes or asks for tools; when their results go back, the next
   round starts. An answer that looks something up takes two rounds or more, which the tool loop of
   `UseFunctionInvocation` runs for you.
 - **Until the first words arrive**, the assistant's side shows the same flashing dots as a person writing, read out as
-  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page. Under the
-  dots, and under the text as it grows, a line says the round and the tool running: "Round 1: get_my_cases", then
-  "Round 2" (`team.support.transcript.round` and `team.support.transcript.roundTools`).
+  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page. While a
+  service call runs, the words beside the dots count it: "First lookup…", "Second lookup…", and from the eleventh
+  "Lookup 11…" (`team.support.transcript.lookup`, `.lookupOrdinals` and `.lookupNumbered`). A lookup part way through
+  the text is said under it.
 - **Each report is the whole state**, the text so far included, not what changed, so a report that is missed costs
   nothing.
 - **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
@@ -1332,6 +1334,22 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<Suppo
   as before. `ChatSupportResponder` streams through `IChatClient.GetStreamingResponseAsync`, tools included, and
   Neurolito and the Anthropic API both stream. A responder of your own answers in one piece and reports nothing,
   unless it implements the `ISupportResponder.AnswerAsync` overload that takes the progress.
+
+### The service calls behind an answer
+
+The calls the assistant made for an answer are kept with it, as `SupportMessage.AssistantCalls`: each tool's name and
+what it was asked for, written out short as `text: "export"`. The panel and the support page show them under the
+answer, folded as **2 service calls**, one row per call such as `search_my_cases(text: "export")`, for the person
+answered and for support alike.
+
+- **Asked in one piece or streamed**, they are read from what the tool loop yields, so a host's own tools are listed
+  as well as the built-in ones. `report_missing_skill` is not: it notes what the assistant could not do, which is
+  listed on its own.
+- **They are bounded** like anything else the model writes: the first `SupportCaseLimits.MaxAssistantCalls` (20) of an
+  answer, each written out to at most `MaxAssistantCallArgumentsLength` (200) characters.
+- **What a call was asked for can hold words from the conversation**, such as what the member searched for, so it is
+  kept on the case and shown only where the case can be read. It is not audited.
+- **A responder of your own** lists its calls by returning them on `SupportAnswer.Calls`.
 
 ### Settings
 

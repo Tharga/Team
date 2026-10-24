@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -59,15 +61,26 @@ internal sealed class ChatSupportResponder(
             var gaps = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken), MissingSkill(gaps)] };
 
-            var body = progress == null
-                ? (await chat.GetResponseAsync(history, chatOptions, deadline.Token)).Text?.Trim()
-                : (await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token)).Trim();
+            string body;
+            SupportAssistantCall[] calls;
+
+            if (progress == null)
+            {
+                var response = await chat.GetResponseAsync(history, chatOptions, deadline.Token);
+                body = response.Text?.Trim();
+                calls = [.. response.Messages.SelectMany(x => x.Contents).OfType<FunctionCallContent>().Where(IsServiceCall).Select(CallOf)];
+            }
+            else
+            {
+                (body, calls) = await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token);
+                body = body.Trim();
+            }
 
             var answer = string.IsNullOrWhiteSpace(body)
                 ? SupportAnswer.Declined("The assistant returned nothing.")
                 : SupportAnswer.FromBody(body);
 
-            return answer with { Gaps = [.. gaps] };
+            return answer with { Gaps = [.. gaps], Calls = calls };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -109,11 +122,13 @@ internal sealed class ChatSupportResponder(
     /// answer they preview is still kept.
     /// </para>
     /// </remarks>
-    private async Task<string> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, CancellationToken cancellationToken)
+    private async Task<(string Body, SupportAssistantCall[] Calls)> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, CancellationToken cancellationToken)
     {
         var text = new StringBuilder();
         var round = 1;
         List<string> running = [];
+        List<SupportAssistantCall> calls = [];
+        var waiting = false;
         var reporting = true;
 
         void Report()
@@ -122,7 +137,7 @@ internal sealed class ChatSupportResponder(
 
             try
             {
-                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running] });
+                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running], Calls = [.. calls] });
             }
             catch (Exception ex)
             {
@@ -135,15 +150,19 @@ internal sealed class ChatSupportResponder(
 
         await foreach (var update in chat.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
         {
-            var called = update.Contents.OfType<FunctionCallContent>().Select(x => x.Name).ToArray();
-            if (called.Length > 0)
+            var asked = update.Contents.OfType<FunctionCallContent>().ToArray();
+            if (asked.Length > 0)
             {
-                running.AddRange(called);
+                waiting = true;
+                var shown = asked.Where(IsServiceCall).ToArray();
+                running.AddRange(shown.Select(x => x.Name));
+                calls.AddRange(shown.Select(CallOf));
                 Report();
             }
 
-            if (running.Count > 0 && update.Contents.OfType<FunctionResultContent>().Any())
+            if (waiting && update.Contents.OfType<FunctionResultContent>().Any())
             {
+                waiting = false;
                 running.Clear();
                 round++;
                 Report();
@@ -155,8 +174,29 @@ internal sealed class ChatSupportResponder(
             Report();
         }
 
-        return text.ToString();
+        return (text.ToString(), [.. calls]);
     }
+
+    /// <remarks>Noting what the assistant could not do is not a call on the host's services, so it is neither shown nor kept as one.</remarks>
+    private static bool IsServiceCall(FunctionCallContent call) => call.Name != MissingSkillTool;
+
+    private static readonly JsonSerializerOptions Written = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    /// <summary>The call as a person reads it: <c>text: "export", pageSize: 10</c>, values as the model passed them.</summary>
+    internal static SupportAssistantCall CallOf(FunctionCallContent call) => new()
+    {
+        Name = call.Name,
+        Arguments = call.Arguments is { Count: > 0 } arguments
+            ? string.Join(", ", arguments.Select(x => $"{x.Key}: {ValueOf(x.Value)}"))
+            : string.Empty
+    };
+
+    private static string ValueOf(object value) => value switch
+    {
+        null => "null",
+        JsonElement element => element.GetRawText(),
+        _ => JsonSerializer.Serialize(value, Written)
+    };
 
     /// <remarks>
     /// <b>A failing lookup reads as not configured, never as an exception.</b> Readiness is asked while a case
