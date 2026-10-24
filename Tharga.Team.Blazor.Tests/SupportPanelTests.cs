@@ -388,6 +388,7 @@ public class SupportPanelTests : BunitContext
     [Fact]
     public void AnAnswerByTheAssistant_CanBeRated_AndTheSameAgainTakesItBack()
     {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.RateAnswers = true);
         var raised = Case("case-1");
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User), Message(2, "Check the date range.", SupportMessageKind.Assistant, author: null));
         var view = Render(open: true);

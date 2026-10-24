@@ -65,6 +65,7 @@ public class SupportAnswerRatingViewTests : BunitContext
 
     private IRenderedComponent<SupportTranscript> RenderTranscript(SupportMessage[] messages, Action<(SupportMessage Message, SupportAnswerRating Rating)> rate)
     {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.RateAnswers = true);
         Services.AddSingleton(Mock.Of<ISupportCaseService>());
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         Services.AddSingleton(Mock.Of<IIconResolver>());

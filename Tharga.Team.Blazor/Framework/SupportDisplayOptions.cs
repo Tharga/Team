@@ -11,9 +11,9 @@ public sealed class SupportDisplayOptions
 {
     /// <summary>
     /// Whether the person the assistant answered can rate its answers with thumbs up or down, and support sees how they
-    /// were rated. Default <c>true</c>.
+    /// were rated. Default <c>false</c>: a host turns it on.
     /// </summary>
-    public bool RateAnswers { get; set; } = true;
+    public bool RateAnswers { get; set; }
 
     /// <summary>
     /// Who sees what an answer took, folded under it: the service calls the assistant made and the tokens the model

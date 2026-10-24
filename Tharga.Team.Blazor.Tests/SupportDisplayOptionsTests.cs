@@ -27,13 +27,26 @@ public class SupportDisplayOptionsTests : BunitContext
         }
     ];
 
+    /// <summary>Rating is the host's to turn on; what an answer took is shown to everybody until the host says otherwise.</summary>
     [Fact]
-    public void ByDefault_AnswersAreRated_AndEverybodySeesTheCalls()
+    public void ByDefault_AnswersAreNotRated_AndEverybodySeesWhatTheyTook()
     {
         var member = RenderTranscript(asMember: true);
+        var staff = Render<SupportTranscript>(p => p.Add(x => x.Messages, Conversation()).Add(x => x.CaseAuthorIdentity, "alice").Add(x => x.AuthorOnRight, false));
+
+        Assert.Empty(member.FindAll("[data-rate]"));
+        Assert.Empty(staff.FindAll("[data-rated]"));
+        Assert.NotNull(member.Find("[data-calls='2']"));
+    }
+
+    [Fact]
+    public void WithRatingOn_TheMemberHasThumbs_AndSupportSeesTheMark()
+    {
+        var member = RenderTranscript(asMember: true, o => o.RateAnswers = true);
+        var staff = Render<SupportTranscript>(p => p.Add(x => x.Messages, Conversation()).Add(x => x.CaseAuthorIdentity, "alice").Add(x => x.AuthorOnRight, false));
 
         Assert.NotEmpty(member.FindAll("[data-rate-choice]"));
-        Assert.NotNull(member.Find("[data-calls='2']"));
+        Assert.NotNull(staff.Find("[data-rated='Up']"));
     }
 
     [Fact]
@@ -70,10 +83,10 @@ public class SupportDisplayOptionsTests : BunitContext
     public void TheSettings_AreReadFromTheBlazorOptions()
     {
         var options = new ThargaBlazorOptions();
-        options.Support.RateAnswers = false;
+        options.Support.RateAnswers = true;
         Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(options));
 
-        Assert.False(SupportDisplay.Of(Services).RateAnswers);
+        Assert.True(SupportDisplay.Of(Services).RateAnswers);
     }
 
     [Fact]
@@ -81,7 +94,7 @@ public class SupportDisplayOptionsTests : BunitContext
     {
         var display = SupportDisplay.Of(new ServiceCollection().BuildServiceProvider());
 
-        Assert.True(display.RateAnswers);
+        Assert.False(display.RateAnswers);
         Assert.Equal(SupportAnswerDetailsAudience.Everyone, display.AnswerDetailsShownTo);
     }
 

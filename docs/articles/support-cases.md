@@ -1279,8 +1279,9 @@ whether it answered or declined: trimmed, at most 200 characters each, once each
 again takes it back (`RateAnswerAsync`, with `SupportAnswerRating.None`). Only the person who raised the case may rate,
 because it is them the assistant answered, and only the assistant's answers can be rated. The rating is kept on the
 answer (`SupportMessage.Rating`), counted on the case (`AnswersRatedUp`, `AnswersRatedDown`), audited as
-`support:rate-answer`, and shown to support as a mark on the answer. `o.Blazor.Support.RateAnswers = false` takes the
-thumbs and the marks off the panel and the support page; ratings already given are kept.
+`support:rate-answer`, and shown to support as a mark on the answer. **Rating is off by default**:
+`o.Blazor.Support.RateAnswers = true` puts the thumbs and the marks on the panel and the support page. Turned off
+again, ratings already given are kept.
 
 `SupportAssistantFeedbackView` lists all of it across every team for the people who build the assistant: what it could
 not do, the same thing asked in several cases as one entry, most asked first; and the cases with an answer rated not

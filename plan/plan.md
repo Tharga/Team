@@ -72,6 +72,10 @@ Asked for while testing, fourth round (2026-10-24): the round counter looked str
   - Not yet: a usage row per answer for billing and per-team totals behind a system scope (#378, and the rest of #381 step 3).
   - Tests: 4 Support, 2 MongoDB, 3 Blazor. Build at 14 warnings; full suite green: Email 985, MongoDB 468, Blazor 2231, Service 1470, Support 814, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
 
+- [x] 32. A stored key shows as a mask in the key field, so it does not look empty: `StoredKeyMask` (U+2022, which no key holds) while the key would be kept; the mask is taken out of whatever is typed, and nothing left keeps the stored key. The hint says "A key is stored. Type a new one to replace it." (unreleased text).
+- [x] 33. Rating is off by default (`RateAnswers = false`); a host turns it on. The sample keeps the default.
+  - Tests: 4 connection view, 2 display, the rating tests now turn it on. Build at 14 warnings; full suite green (Blazor 2236).
+
 ## Decisions
 
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.
