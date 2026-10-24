@@ -1276,6 +1276,8 @@ Pass an `IProgress<string>` and the answer is reported while the model writes it
 var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<string>(soFar => Show(soFar)));
 ```
 
+- **Until the first words arrive**, the assistant's side shows the same flashing dots as a person writing, read out as
+  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page.
 - **Each report is the whole answer so far**, not the piece just added, so a report that is missed costs nothing.
 - **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
   it then. An answer that breaks off halfway is declined, and nothing that was shown on the way is kept.

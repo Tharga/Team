@@ -119,8 +119,8 @@
                     }
                     else if (_busy)
                     {
-                        <div class="support-panel__msg support-panel__msg--them support-panel__msg--busy" role="status" aria-live="polite" data-working>
-                            @_text[SupportPanelText.Working]
+                        <div class="support-panel__msg support-panel__msg--them" data-working>
+                            <SupportTypingDots Label="@_text[SupportPanelText.Working]" />
                         </div>
                     }
                 </div>

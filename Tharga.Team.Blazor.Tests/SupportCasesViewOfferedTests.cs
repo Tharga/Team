@@ -195,6 +195,29 @@ public class SupportCasesViewOfferedTests : BunitContext
     }
 
     [Fact]
+    public void BeforeTheFirstWord_TheConversationShowsTheAssistantsDots()
+    {
+        var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.Assistant]);
+        var withAssistant = Raised with { AssistantState = SupportAssistantState.Active };
+        var kept = new TaskCompletionSource<bool>();
+        _cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = [withAssistant] });
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
+        _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
+        _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default)).Returns(kept.Task);
+
+        Send(view);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find($"[data-conversation='{withAssistant.Id}'] [data-answer-so-far='thinking']")));
+        var thinking = view.Find("[data-answer-so-far='thinking']");
+        Assert.NotNull(thinking.QuerySelector("[data-sender='assistant']"));
+        Assert.Equal(SupportCasesViewText.AssistantThinking.Default, thinking.QuerySelector(".support-typing__label")!.TextContent);
+
+        view.InvokeAsync(() => kept.SetResult(true));
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-answer-so-far]")));
+    }
+
+    [Fact]
     public void TheAssistantsAnswer_ShowsInTheConversation_AsItIsWritten()
     {
         var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.Assistant]);

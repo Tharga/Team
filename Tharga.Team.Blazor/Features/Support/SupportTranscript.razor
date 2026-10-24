@@ -127,20 +127,27 @@
         </div>
     }
 
-    @* Not yet kept: shown as the assistant writes it, and replaced by the answer once it is. *@
-    @if (!string.IsNullOrEmpty(AnswerSoFar))
+    @* Not yet kept: dots while the assistant has written nothing, then the answer as it writes it, replaced by the answer once kept. *@
+    @if (!string.IsNullOrEmpty(AnswerSoFar) || !string.IsNullOrEmpty(ThinkingText))
     {
         var onRight = !AuthorOnRight;
 
         <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")"
-             aria-busy="true" data-answer-so-far>
+             aria-busy="true" data-answer-so-far="@(string.IsNullOrEmpty(AnswerSoFar) ? "thinking" : "writing")">
             <div style="flex: 0 0 auto;">
                 <span title="@_text[SupportTranscriptText.Assistant]" aria-label="@_text[SupportTranscriptText.Assistant]" data-sender="assistant" style="@IconCircle">
                     <RadzenIcon Icon="smart_toy" />
                 </span>
             </div>
             <div style="max-width: 75%; min-width: 0; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
-                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@AnswerSoFar</RadzenText>
+                @if (string.IsNullOrEmpty(AnswerSoFar))
+                {
+                    <SupportTypingDots Label="@ThinkingText" />
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@AnswerSoFar</RadzenText>
+                }
             </div>
         </div>
     }
@@ -219,6 +226,12 @@
 
     /// <summary>The assistant's answer as written so far, shown after the last entry until it is kept.</summary>
     [Parameter] public string AnswerSoFar { get; set; }
+
+    /// <summary>
+    /// While the assistant is working and has written nothing yet, flashing dots on its side, read out as this text;
+    /// null when it is not working.
+    /// </summary>
+    [Parameter] public string ThinkingText { get; set; }
 
     /// <summary>Who is writing an answer right now, shown as flashing dots after the last entry.</summary>
     [Parameter] public SupportCaseTypingEventArgs[] Writing { get; set; } = [];

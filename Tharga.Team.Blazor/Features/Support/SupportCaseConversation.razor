@@ -14,12 +14,12 @@
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="false" TimeTemplate="TimeTemplate"
                            ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" ThinkingText="@ThinkingText" />
     }
     else
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" ThinkingText="@ThinkingText" />
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
@@ -53,11 +53,7 @@
                           ButtonStyle="ButtonStyle.Light" Click="CloseAsync" Disabled="_busy" data-close="@Case.Id" />
         }
 
-        @if (Thinking && string.IsNullOrEmpty(AnswerSoFar))
-        {
-            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_member[SupportCasesViewText.AssistantThinking]</RadzenText>
-        }
-        else if (Declined && !AsStaff && WithAssistant)
+        @if (Declined && !Thinking && !AsStaff && WithAssistant)
         {
             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-declined="@Case.Id">@_member[SupportCasesViewText.AssistantDeclined]</RadzenText>
         }
@@ -135,6 +131,8 @@
     private bool NothingToSend => RichTextEditor.IsEmpty(_reply) && _files.Count == 0;
 
     private bool WithAssistant => Case.AssistantState == SupportAssistantState.Active;
+
+    private string ThinkingText => Thinking ? _member[SupportCasesViewText.AssistantThinking] : null;
 
     private string ReplyText => AsStaff ? _staff[SupportAcrossTeamsViewText.AnswerLabel] : _member[SupportCasesViewText.ReplyLabel];
 

@@ -318,6 +318,8 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
 
         view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-working]")));
+        Assert.Equal(3, view.FindAll("[data-working] .support-typing__dot").Count);
+        Assert.Equal("Working…", view.Find("[data-working] .support-typing__label").TextContent);
         Assert.Empty(view.FindAll("[data-answer-so-far]"));
         view.InvokeAsync(() => kept.SetResult(true));
     }
