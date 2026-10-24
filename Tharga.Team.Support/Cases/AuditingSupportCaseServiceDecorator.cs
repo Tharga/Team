@@ -47,7 +47,8 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             // derives one, so recording the argument records nothing -- and a notification worded around
             // {support.case.subject} then names the case with an empty string.
             Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject), (AuditMetadataKeys.TeamName, raised.TeamName)));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject), (AuditMetadataKeys.TeamName, raised.TeamName),
+                    (SupportAuditMetadataKeys.WithAssistant, Flag(raised.AssistantState == SupportAssistantState.Active))));
 
             return raised;
         }
@@ -121,7 +122,7 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             await inner.ReplyToCaseAsync(teamKey, caseId, body, cancellationToken);
 
             Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.WithAssistant, await WithAssistantAsync(teamKey, caseId))));
         }
         catch (Exception ex)
         {
@@ -140,7 +141,7 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             await inner.ReplyToCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
 
             Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.WithAssistant, await WithAssistantAsync(teamKey, caseId)), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
         }
         catch (Exception ex)
         {
@@ -178,7 +179,7 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
 
             Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.WithAssistant, await WithAssistantAsync(teamKey, caseId)), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
         }
         catch (Exception ex)
         {
@@ -408,6 +409,25 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         var entry = auditEntryFactory.Create(Feature, action, methodName, durationMs, success, errorMessage, teamKey, metadata);
 
         auditLogger.Log(entry);
+    }
+
+    private static string Flag(bool value) => value ? "true" : "false";
+
+    /// <remarks>
+    /// Read after the reply, which is what a notification is about. Not knowing leaves the key out, and a route then
+    /// treats the reply as support's: a missed post is worse than an extra one.
+    /// </remarks>
+    private async Task<string> WithAssistantAsync(string teamKey, string caseId)
+    {
+        try
+        {
+            var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+            return supportCase == null ? null : Flag(supportCase.AssistantState == SupportAssistantState.Active);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     private static string CountOf(IReadOnlyList<SupportAttachmentUpload> attachments)

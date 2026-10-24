@@ -150,6 +150,26 @@ public class SupportAssistantStreamingTests
         Assert.Empty(seen.Items);
     }
 
+    /// <summary>
+    /// The tools read with the caller's rights and the answer is kept where the author reads it, so somebody else who
+    /// may write in the case, here support across teams, does not get the assistant to answer it.
+    /// </summary>
+    [Fact]
+    public async Task SomebodyElseWhoMayWrite_DoesNotGetTheAssistantToAnswer()
+    {
+        var responder = new OnePieceResponder("Reindex the export.");
+        var world = new World(responder);
+        var raised = await world.As(Alice).RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+        var staff = world.As("staff-subject", team: null, systemScopes: [SystemSupportScopes.AllManage]);
+
+        Assert.False(await staff.RunAssistantAsync(TeamA, raised.Id));
+        Assert.False(await staff.RunAssistantAsync(TeamA, raised.Id, new Reports()));
+
+        Assert.Equal(0, responder.Calls);
+        Assert.Single((await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items);
+        Assert.True(await world.As(Alice).RunAssistantAsync(TeamA, raised.Id));
+    }
+
     [Fact]
     public async Task AWatchedAnswer_IsAuditedAsAnyAnswer()
     {
@@ -186,14 +206,12 @@ public class SupportAssistantStreamingTests
 
         public CollectingAuditLogger Audit { get; } = new();
 
-        public ISupportCaseService As(string subject)
+        public ISupportCaseService As(string subject, string team = TeamA, string[] systemScopes = null)
         {
-            var principal = new ClaimsPrincipal(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, subject),
-                new Claim(ClaimTypes.Name, subject),
-                new Claim(TeamClaimTypes.TeamKey, TeamA)
-            ], "test"));
+            List<Claim> claims = [new(ClaimTypes.NameIdentifier, subject), new(ClaimTypes.Name, subject)];
+            if (team != null) claims.Add(new Claim(TeamClaimTypes.TeamKey, team));
+            claims.AddRange((systemScopes ?? []).Select(x => new Claim(TeamClaimTypes.SystemScope, x)));
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
             var authorizer = new TeamAuthorizer(new FixedPrincipalAccessor(principal));
 
             return new AuditingSupportCaseServiceDecorator(
@@ -218,8 +236,13 @@ public class SupportAssistantStreamingTests
 
     private sealed class OnePieceResponder(string answer) : ISupportResponder
     {
+        public int Calls { get; private set; }
+
         public Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default)
-            => Task.FromResult(SupportAnswer.FromBody(answer));
+        {
+            Calls++;
+            return Task.FromResult(SupportAnswer.FromBody(answer));
+        }
     }
 
     private sealed class StreamingChatClient(params string[] pieces) : IChatClient

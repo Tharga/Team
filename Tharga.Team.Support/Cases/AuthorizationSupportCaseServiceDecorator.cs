@@ -45,10 +45,11 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.RaiseCaseAsync(teamKey, subject, body, assistance, cancellationToken);
     }
 
-    /// <remarks>Authorized as replying is — the answer lands in the transcript exactly as a reply does.</remarks>
+    /// <remarks>Authorized as replying is — the answer lands in the transcript exactly as a reply does — and run only for the person who raised the case.</remarks>
     public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "answer", CaseAccessKind.Write);
+        if (!await AsksForThemselvesAsync(teamKey, caseId)) return false;
 
         return await inner.RunAssistantAsync(teamKey, caseId, cancellationToken);
     }
@@ -57,8 +58,22 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "answer", CaseAccessKind.Write);
+        if (!await AsksForThemselvesAsync(teamKey, caseId)) return false;
 
         return await inner.RunAssistantAsync(teamKey, caseId, progress, cancellationToken);
+    }
+
+    /// <remarks>
+    /// <b>The assistant answers only the person who raised the case.</b> Its tools read with the caller's rights, and
+    /// its answer is kept where everybody who reads the case sees it. Run by a teammate or by support, with wider
+    /// rights than the author, it could quote what the author may not see. Nothing is done rather than refused, as
+    /// for every other case the assistant has no answer for.
+    /// </remarks>
+    private async Task<bool> AsksForThemselvesAsync(string teamKey, string caseId)
+    {
+        var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+
+        return supportCase != null && supportCase.AuthorIdentity == await authorizer.GetSubjectAsync();
     }
 
     /// <remarks>Authorized as replying is: whoever may answer a case may decide who answers it.</remarks>

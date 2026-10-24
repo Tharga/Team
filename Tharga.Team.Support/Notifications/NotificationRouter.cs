@@ -44,6 +44,7 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
         {
             if (route == null) continue;
             if (!Matches(route, key, entry.Success)) continue;
+            if (route.WithAssistant.HasValue && route.WithAssistant.Value != WithAssistant(entry)) continue;
 
             var channel = string.IsNullOrWhiteSpace(route.Channel) ? _options.DefaultChannel : route.Channel;
 
@@ -57,6 +58,11 @@ public sealed partial class NotificationRouter(IOptions<NotificationOptions> opt
 
         return messages ?? (IReadOnlyList<NotificationMessage>)[];
     }
+
+    private static bool WithAssistant(AuditEntry entry)
+        => entry.Metadata != null
+           && entry.Metadata.TryGetValue(SupportAuditMetadataKeys.WithAssistant, out var value)
+           && string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The routing key for an entry — <c>feature:action</c>, the same shape as a scope.</summary>
     public static string EventKey(AuditEntry entry)

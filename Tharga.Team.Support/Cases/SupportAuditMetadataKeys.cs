@@ -25,6 +25,15 @@ public static class SupportAuditMetadataKeys
     public const string AttachmentCount = "support.message.attachments";
 
     /// <summary>
+    /// On a raise or a reply: <c>true</c> while the assistant has the conversation, <c>false</c> once a person does.
+    /// </summary>
+    /// <remarks>
+    /// What keeps a member talking to the assistant out of support's channel: the default routes for
+    /// <c>support:raise</c> and <c>support:reply</c> match only <c>false</c> (<c>NotificationRoute.WithAssistant</c>).
+    /// </remarks>
+    public const string WithAssistant = "support.case.withAssistant";
+
+    /// <summary>
     /// What the assistant answers a team with after a change: Platform, Off, or a provider.
     /// </summary>
     /// <remarks>There is deliberately no key for the API key, for the reason there is none for a body.</remarks>

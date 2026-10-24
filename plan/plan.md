@@ -9,8 +9,20 @@
   - Done: `Round` and `RoundTools` in `SupportTranscriptText`, also in `SupportPanelText.All`. `SupportAssistantSteps.Describe` writes the line; `SupportAssistantRelay` replaces `SupportAnswerSoFar`. `SupportTranscript` and `SupportCaseConversation` take `AssistantProgress` in place of `AnswerSoFar`.
 - [x] 5. Sample: the scripted client calls `get_my_cases` for a question about cases.
   - Done: it asks for the tool when the question mentions a case and the tool is offered, then answers with the count; the lookup pauses 0.8 s each side so the round shows.
-- [~] 6. Docs, full build (baseline 14) and the full suite; run the sample.
+- [x] 6. Docs, full build (baseline 14) and the full suite; run the sample.
   - Docs: the streaming section of the support article describes rounds and tools; the `Tharga.Team.Blazor` README.
+  - Build at 14 warnings, full suite green; the sample shows Round 1 and Round 2 for a question about cases.
+
+Asked for while testing (2026-10-24):
+
+- [x] 7. Only the person who raised a case has the assistant answer it. Anybody else gets nothing done and false, so the tools always read with the rights of the person being answered.
+  - Done in the authorization decorator, both overloads: after the write check, the case's author must be the caller; anybody else gets false and the responder is not asked. Test: support across teams cannot run it, the author still can.
+- [x] 8. No Slack while the assistant has the conversation: `support.case.withAssistant` on the raise and reply audit entries, a `WithAssistant` filter on `NotificationRoute`, and the default support routes set to false.
+  - Done: the audit decorator writes `support.case.withAssistant` on raise (from the raised case) and on reply (the case read after the reply; left out when it cannot be read, which then posts). Case threads already skipped assistant conversations, so the posts came from the default routes alone.
+- [~] 9. `search_my_cases(text)`: the member's own cases by subject and by what was written in them, so the assistant can find a case and then read it with `get_case_messages`.
+- [ ] 10. What the assistant could not do: a `report_missing_skill` tool the responder always adds, `SupportAnswer.Gaps`, `SupportCase.AssistantGaps` with a store method (MongoDB and in-memory), recorded by the service.
+- [ ] 11. `SupportAssistantGapsView`: staff list, across teams, of what the assistant could not do, opening the case; a badge on the desk's case. On the sample's support desk.
+- [ ] 12. Docs, full build (baseline 14) and the full suite; run the sample.
 
 ## Decisions
 
@@ -19,4 +31,4 @@
 
 ## Last session
 
-2026-10-24: steps 2 to 5 done; step 6 (verification and the user trying it) in progress.
+2026-10-24: steps 2 to 6 done and committed (the round counter). The user asked for steps 7 to 11 after trying it; step 7 in progress.

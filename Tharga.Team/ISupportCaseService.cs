@@ -108,8 +108,9 @@ public interface ISupportCaseService
     /// assistant is thinking.
     /// <para>
     /// Does nothing and returns <c>false</c> when the case has no assistant, when the customer has already
-    /// asked for a person, or when the host registered no responder. Every one of those is an ordinary state
-    /// rather than an error, so a caller can call this unconditionally.
+    /// asked for a person, when the host registered no responder, or when the caller is not the person who
+    /// raised the case: the assistant's tools read with the caller's rights, so it answers only its author.
+    /// Every one of those is an ordinary state rather than an error, so a caller can call this unconditionally.
     /// </para>
     /// </remarks>
     /// <returns>True when an answer was appended.</returns>
