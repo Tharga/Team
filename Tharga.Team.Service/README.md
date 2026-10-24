@@ -146,7 +146,7 @@ A component, controller or MCP provider should inject one of these — **never `
 | Inject | For | Checked by |
 |---|---|---|
 | `ITeamManagementService` | One team: its details, roster, members, custom roles, and every mutation | `team:read` on reads, `team:manage` / `member:manage` on mutations |
-| `ITeamDirectoryService` | The caller's **own** teams, with or without rosters | Recomputed per team from that membership — teams not granting `team:read` are omitted |
+| `ITeamDirectoryService` | The caller's **own** teams, with or without rosters; whether they are suspended in one, their own access to it, and leaving it | The listing is recomputed per team from that membership — teams not granting `team:read` are omitted. The rest is ungated: it concerns only the caller's own membership |
 | `ITeamOversightService` | **Every** team, regardless of membership | `teams:read` system scope. Discovery only |
 | `ITeamInvitationService` | Resolving an invite code | **The code itself.** An invitee holds no scope for the team they are joining |
 | `ITeamLifecycleService` | Creating a team | Authenticated caller plus `AllowTeamCreation` |

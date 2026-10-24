@@ -1,14 +1,18 @@
 namespace Tharga.Team;
 
 /// <summary>
-/// The caller's own teams — <b>the interface a component, controller or MCP provider should inject</b> to
-/// list them. Scope-<i>filtered</i> rather than scope-gated: each team is included only if the caller's
-/// membership in that team grants <c>team:read</c>.
+/// The caller's own teams and their own standing in them — <b>the interface a component, controller or MCP
+/// provider should inject</b> to list those teams, ask whether their membership in one is suspended, read
+/// their own access to it, or leave it. The listing is scope-<i>filtered</i> rather than scope-gated: each
+/// team is included only if the caller's membership in that team grants <c>team:read</c>. The rest is
+/// ungated, because it concerns only the caller's own membership.
 /// </summary>
 /// <remarks>
 /// Separate from <see cref="ITeamManagementService"/> because that interface is wholly team-bound — every
 /// operation names a team in its first argument, which is what lets one registration authorize all of
-/// them. This one names no team, so it cannot be gated the same way and does not belong there.
+/// them. The listing here names no team, so it cannot be gated the same way, and the operations that do
+/// name one ask only about the caller's own membership, which is not somebody else's information to
+/// protect. Neither belongs there.
 /// <para>
 /// It cannot use <c>[RequireScope]</c> for the same reason, and a principal carries scope claims only for
 /// the *selected* team, so there is nothing in the claims to check the others against. The scopes are
