@@ -147,7 +147,7 @@ else
                     <Columns>
                         <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnTime]" Width="160px" Filterable="false" Sortable="true"
                                               Property="@nameof(AuditEntry.Timestamp)">
-                            <Template><DateTimeView Date="context.Timestamp" /></Template>
+                            <Template><DateTimeView Date="context.Timestamp" Display="EDateTimeDisplay.Absolute" /></Template>
                         </RadzenDataGridColumn>
                         <RadzenDataGridColumn Title="@_text[AuditLogViewText.Team]" Width="120px"
                                               Filterable="false" Sortable="false"
@@ -315,7 +315,7 @@ else
                             <RadzenDataGrid Data="@GetSlowest()" TItem="AuditEntry" AllowSorting="false" PageSize="10" Style="max-height:400px">
                                 <Columns>
                                     <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnTime]" Width="160px">
-                                        <Template><DateTimeView Date="context.Timestamp" /></Template>
+                                        <Template><DateTimeView Date="context.Timestamp" Display="EDateTimeDisplay.Absolute" /></Template>
                                     </RadzenDataGridColumn>
                                     <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnFeature]" Property="@nameof(AuditEntry.Feature)" Width="100px" />
                                     <RadzenDataGridColumn Title="@_text[AuditLogViewText.ColumnAction]" Property="@nameof(AuditEntry.Action)" Width="80px" />
