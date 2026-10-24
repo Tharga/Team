@@ -37,11 +37,30 @@ Asked for while testing, second round (2026-10-24):
 - [x] 16. Docs, full build (baseline 14) and the full suite; run the sample.
   - Docs: the support article (answers with links; what it could not do and how its answers were rated) and the `Tharga.Team.Blazor` README. Build at 14 warnings; full suite green: Email 985, MongoDB 463, Blazor 2177, Service 1470, Support 775, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
 
+Asked for while testing, third round (2026-10-24): whether support is online, and a word when nobody answers.
+
+- [x] 17. Who is on the desk: `SupportStaffStatus` (Online, Away, Hidden) and `SupportDeskPresence`, an in-process record of each support person's choice and when they last acted.
+  - Done: Online while one chose Online and acted within `SupportCaseOptions.StaffIdleAfter` (10 minutes); Away while somebody is known and nobody is online, Hidden included; Unknown while nobody is known. One timer, for whoever goes idle first, raises `Changed`. `SupportPresence` combines the desk with Slack (asked only when the desk has nobody online) and is always registered; `ISupportPresence.Changed` is a default member that never raises. Tests: 15 in `SupportDeskPresenceTests`.
+- [x] 18. The service: `SetMyStaffStatusAsync`, `GetMyStaffStatusAsync` and `ReportStaffActivityAsync`.
+  - Done: for `support:all:manage` or `support:unassigned:manage`, anybody else refused; not audited. Answering as support and writing as support count as acting, only for somebody who has set a status. Tests: 8 in `SupportStaffStatusTests`, one through the real registration.
+- [x] 19. `SupportDeskStatus`: the switch (Online, Away, Hidden) with what each means, remembered in the browser; it starts at what another page of theirs set, else the browser's, else Online. `support-desk.js` reports use of the page while it is in front, at most once a minute. Renders nothing for anybody not on the desk, and follows a choice made on another page.
+  - Decided: no "shown as away while idle" line. Using the page is what brings them back, so it would show only for the moment before they move the mouse.
+- [x] 20. Members see it: `SupportPresenceIndicator` ("Support is online", "Support will reply later", reusing the support page's texts) under the panel's header on the Support tab, and above a conversation with a person on the support page; nothing while unknown or with the assistant. `SupportPresenceWatch` follows `Changed`.
+- [x] 21. The notice: `SupportNoAnswerWatch` takes the wait from the member's first message since anybody else wrote, notes left out, and calls back when it runs out. `NoAnswerYet` after `NoAnswerAfter` (60 seconds; on `SupportPanel`, `SupportCasesView` and `SupportCaseConversation`), `NoAnswerAway` at once while away; not while support is writing, not on a closed case or with the assistant, gone when support answers. `SupportTranscript` takes it as `Notice`, on support's side. Tests: 7 watch, 4 conversation, 5 panel.
+- [x] 22. Sample: `SupportDeskStatus` at the top of the support desk page; the sample README.
+- [x] 23. Docs, full build and the full suite; run the sample.
+  - Docs: the support article's "Is anybody on support" (the desk and Slack, what members see), the `Tharga.Team.Blazor` README, the sample README. Build at 14 warnings; full suite green: Email 985, MongoDB 463, Blazor 2209, Service 1470, Support 802, Support.Anthropic 12, Mcp 121, Entra 58, Images 11. The sample runs.
+
 ## Decisions
 
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.
   Friendlier wording per tool can come with the steps recorded with the answer.
+- Online (2026-10-24, the user's choices): each support person picks Online, Away or Hidden, and Online counts as
+  away after ten minutes of doing nothing in support. Hidden works unseen: it never counts as online. With nobody
+  known and no Slack, members see no indicator. The no-answer notice is shown, not stored.
+- The desk record is in-process, like typing: on several instances, each knows only the support people connected to
+  it. Presence is advisory, so a wrong "away" costs a notice, never a refused question.
 
 ## Last session
 
-2026-10-24: steps 2 to 12 done and committed. Next: the user tries the search, the gap list and Slack staying quiet in the sample; then the close-out and the PR, after #384 merges.
+2026-10-24: steps 2 to 23 done and committed. Next: the user tries the desk switch, the indicator and the one-minute notice in the sample; then the close-out and the PR.

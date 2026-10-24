@@ -151,6 +151,16 @@ public class SupportCaseOptions
     /// </remarks>
     public TimeSpan? StaffCloseAfter { get; set; }
 
+    /// <summary>
+    /// How long a support person who chose <see cref="SupportStaffStatus.Online"/> counts as online after they last did
+    /// something in support. Default 10 minutes.
+    /// </summary>
+    /// <remarks>
+    /// Doing something is answering a case, writing an answer, setting a status, or using a page that reports it, as
+    /// <c>SupportDeskStatus</c> does. Past it they count as away until they act again; what they chose stays Online.
+    /// </remarks>
+    public TimeSpan StaffIdleAfter { get; set; } = TimeSpan.FromMinutes(10);
+
     /// <summary>The name the mailbox configured on <see cref="Email"/> is stored under on the cases that come in through it.</summary>
     public const string PrimaryMailboxName = "primary";
 

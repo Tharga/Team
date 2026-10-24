@@ -52,6 +52,18 @@ public static class SupportTranscriptText
     /// <summary>Marks an answer the person it answered found unhelpful, where it cannot be rated.</summary>
     public static readonly TextKey RatedNotHelpful = new("team.support.transcript.ratedNotHelpful", "Rated not helpful");
 
+    /// <summary>To the member, once their message to a person has waited a while with no answer.</summary>
+    public static readonly TextKey NoAnswerYet = new("team.support.transcript.noAnswerYet",
+        "Nobody from support has answered yet. We will get back to you here as soon as we can.");
+
+    /// <summary>The same, at once, while support is away.</summary>
+    public static readonly TextKey NoAnswerAway = new("team.support.transcript.noAnswerAway",
+        "Support is away right now. We will get back to you here as soon as we can.");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, Round, RoundTools, Helpful, NotHelpful, RatedHelpful, RatedNotHelpful];
+    public static readonly TextKey[] All =
+    [
+        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, Round, RoundTools, Helpful, NotHelpful, RatedHelpful, RatedNotHelpful,
+        NoAnswerYet, NoAnswerAway
+    ];
 }

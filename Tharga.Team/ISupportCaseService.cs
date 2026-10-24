@@ -248,6 +248,30 @@ public interface ISupportCaseService
     Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Sets whether the caller, on the support desk, is shown to members as there to answer.
+    /// </summary>
+    /// <remarks>
+    /// For the product's support staff: a caller who may answer across teams or the queue of cases with no team; anybody
+    /// else is refused. Setting it counts as acting in support. Kept in-process and stored nowhere, so it is not audited,
+    /// and it is forgotten when the application restarts. Members see the outcome through <see cref="ISupportPresence"/>.
+    /// </remarks>
+    Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default);
+
+    /// <summary>The caller's status on the support desk, or <c>null</c> when they have set none since the application started.</summary>
+    /// <remarks>Authorized as <see cref="SetMyStaffStatusAsync"/> is.</remarks>
+    Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Says the caller is at work on support right now, so their <see cref="SupportStaffStatus.Online"/> keeps counting.
+    /// </summary>
+    /// <remarks>
+    /// Authorized as <see cref="SetMyStaffStatusAsync"/> is. Answering a case and writing as support count as well, without
+    /// calling this. Online counts as away once the caller has done nothing in support for the host's idle time, ten
+    /// minutes by default, and counts again with the next thing they do.
+    /// </remarks>
+    Task ReportStaffActivityAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// How many of the caller's own cases hold entries they have not read. What a per-user indicator shows.
     /// </summary>
     Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default);

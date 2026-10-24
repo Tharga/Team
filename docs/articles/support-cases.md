@@ -1358,19 +1358,50 @@ customer the assistant could not answer, beside **Talk to a person**, rather tha
 ## Is anybody on support
 
 ```csharp
-@inject ISupportPresence Presence      // resolve with GetService: absent when Slack is not configured
+@inject ISupportPresence Presence      // registered with the support cases; GetService still reads as "say nothing"
 ```
 
-`GetAsync` answers `Online`, `Away` or `Unknown`, from **who is active on the configured support channel** —
-so adding somebody to the channel is how they become support, and there is no second list to keep in step.
+`GetAsync` answers `Online`, `Away` or `Unknown`, from two sources, and is `Online` when either is:
+
+- **The support desk.** Put `<SupportDeskStatus />` on the page support works from. Each support person picks
+  **Online**, **Away** or **Hidden** there; it starts at Online the first time they open it, and keeps their choice in
+  the browser after that. Online counts only while they are active: answering a case, writing an answer, or using that
+  page, which reports at most once a minute. After `o.StaffIdleAfter` with nothing done, ten minutes by default, they
+  count as away until they act again. Hidden answers as usual and never counts as online. Support is `Away` while
+  somebody is known and nobody counts as online, and `Unknown` while nobody has opened the desk since the application
+  started.
+- **Slack**, where a support channel is configured: **who is active on that channel**, so adding somebody to the
+  channel is how they become support there, and there is no second list to keep in step.
 
 **`Unknown` must render as nothing, never as "offline".** Telling a customer not to bother when support is in
 fact there is worse than saying nothing, and unknown is what a rate limit, a network blip and an
-unconfigured workspace all produce. Three separate paths preserve that distinction: an unreadable channel
-keeps the previous roster rather than concluding support is empty, all-unknown presence stays unknown, and a
-transport failure is unknown rather than an error.
+unconfigured workspace all produce. In Slack, three separate paths preserve that distinction: an unreadable
+channel keeps the previous roster rather than concluding support is empty, all-unknown presence stays unknown, and
+a transport failure is unknown rather than an error.
 
 **Advisory, never a gate.** Nothing that raises a case may wait on this or be refused by it.
+
+Only the product's support staff are on the desk: `SetMyStaffStatusAsync`, `GetMyStaffStatusAsync` and
+`ReportStaffActivityAsync` refuse anybody who may not answer across teams (`support:all:manage`) or the cases with no
+team (`support:unassigned:manage`), and `SupportDeskStatus` shows them nothing. Nothing about it is stored or audited.
+`Changed` is raised when somebody on the desk sets a status, goes idle or comes back, so a page showing presence
+follows it.
+
+> **The desk is in-process**, as typing is. On several instances, each knows only the support people connected to it,
+> so a member on another instance may read away while somebody could answer. That costs the member a notice, never a
+> refused question.
+
+### What members see
+
+The side panel's Support tab, and a conversation with a person on the support page, show **Support is online** or
+**Support will reply later**, and nothing while it is unknown or the assistant is answering.
+
+When a member's message to a person has waited a minute with no answer, the conversation says **nobody has answered
+yet, and we will get back to you here**; while support is away, it says so at once. It is not shown while somebody
+from support is writing, goes when support answers, and is stored nowhere: it is worked out from the conversation and
+the clock, so it comes back on a reload. `NoAnswerAfter` on `SupportPanel` and `SupportCasesView` changes the minute.
+
+### Slack presence
 
 **It is cached, and it has to be.** Slack rate-limits `users.getPresence`, and it is per user — so asking
 about a channelful of people on every render is how a deployment gets throttled. The channel roster is

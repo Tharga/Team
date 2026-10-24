@@ -464,6 +464,90 @@ public class SupportPanelTests : BunitContext
         view.WaitForAssertion(() => _cases.Verify(x => x.GetAssistantReadinessAsync("globex", default), Times.Once));
     }
 
+    [Fact]
+    public void TheSupportTab_SaysWhetherSupportIsOnline_AndFollowsIt()
+    {
+        var presence = new TestPresence(SupportPresenceState.Online);
+        Services.AddSingleton<ISupportPresence>(presence);
+        var view = Render(open: true);
+
+        Assert.Empty(view.FindAll("[data-presence]"));
+
+        view.Find("[data-tab='support']").Click();
+        Assert.Contains("Support is online", view.Find("[data-presence='Online']").TextContent);
+
+        presence.Becomes(SupportPresenceState.Away);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-presence='Away']")));
+    }
+
+    [Fact]
+    public void WithNothingKnownAboutSupport_NoIndicatorShows()
+    {
+        Services.AddSingleton<ISupportPresence>(new TestPresence());
+        var view = Render(open: true, offered: [SupportAssistance.None]);
+
+        Assert.Empty(view.FindAll("[data-presence]"));
+    }
+
+    [Fact]
+    public void AMessageToAPersonNobodyAnswers_TellsTheMemberAfterAMinute_UntilSupportAnswers()
+    {
+        var time = new ManualTime();
+        Services.AddSingleton<TimeProvider>(time);
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, messages: Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+        view.Find("[data-tab='support']").Click();
+        Send(view, Question);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-message]")));
+
+        time.Advance(TimeSpan.FromSeconds(59));
+        Assert.Empty(view.FindAll("[data-no-answer]"));
+
+        time.Advance(TimeSpan.FromSeconds(2));
+        view.WaitForAssertion(() => Assert.Equal(SupportTranscriptText.NoAnswerYet.Default, view.Find("[data-no-answer]").TextContent.Trim()));
+
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, raised.Id, null, It.IsAny<int>(), default))
+            .ReturnsAsync(new SupportMessagePage { Items = [Message(1, Question, SupportMessageKind.User), Message(2, "From support.", SupportMessageKind.User, author: "staff")] });
+        _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = raised.Id, Change = SupportCaseChange.Replied, FromChannel = false });
+
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-no-answer]")));
+    }
+
+    [Fact]
+    public void WhileSupportIsAway_TheMemberIsToldAtOnce_ButNotWhileSomebodyWrites()
+    {
+        Services.AddSingleton<TimeProvider>(new ManualTime());
+        Services.AddSingleton<ISupportPresence>(new TestPresence(SupportPresenceState.Away));
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, messages: Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+        view.Find("[data-tab='support']").Click();
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.Equal(SupportTranscriptText.NoAnswerAway.Default, view.Find("[data-no-answer]").TextContent.Trim()));
+
+        _typing.Writes(TeamKey, raised.Id, "staff", asSupport: true, name: "Sam");
+
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-no-answer]")));
+    }
+
+    [Fact]
+    public void WithTheAssistant_NothingIsSaidAboutWaiting()
+    {
+        Services.AddSingleton<TimeProvider>(new ManualTime());
+        Services.AddSingleton<ISupportPresence>(new TestPresence(SupportPresenceState.Away));
+        Raises(Case("case-1"), messages: Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once));
+        Assert.Empty(view.FindAll("[data-no-answer]"));
+        Assert.Empty(view.FindAll("[data-presence]"));
+    }
+
     private sealed class SwitchableAvailability(SupportAssistance[] offered) : ISupportPanelAvailability
     {
         private SupportAssistance[] _offered = offered;

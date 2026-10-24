@@ -54,7 +54,7 @@ else
                                     </TopMenu>
                                     <ChildContent>
                                         <SupportCaseConversation Case="item" Unread="@UnreadIn(item.Id)" Thinking="@(_thinking == item.Id)" AssistantProgress="@(_thinking == item.Id ? _progress : null)" Declined="@(_declined == item.Id)"
-                                                                 TimeTemplate="TimeTemplate" Changed="OnChangedAsync" Read="OnRead" Written="RunAssistantAsync" />
+                                                                 TimeTemplate="TimeTemplate" Changed="OnChangedAsync" Read="OnRead" Written="RunAssistantAsync" NoAnswerAfter="NoAnswerAfter" />
                                     </ChildContent>
                                 </ExpandableCard>
                             </div>
@@ -157,6 +157,9 @@ else
 
     /// <summary>Where the list filter is remembered in the browser.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Cases.Filter";
+
+    /// <summary>How long a message to a person waits for an answer before the member is told we will get back to them. Defaults to 60 seconds; while support is away they are told at once.</summary>
+    [Parameter] public TimeSpan NoAnswerAfter { get; set; } = SupportNoAnswerWatch.DefaultAfter;
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 

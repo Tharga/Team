@@ -348,6 +348,39 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.ReportTypingAsync(teamKey, caseId, asSupport, cancellationToken);
     }
 
+    public async Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportStaffAsync("set a status on the support desk");
+
+        await inner.SetMyStaffStatusAsync(status, cancellationToken);
+    }
+
+    public async Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default)
+    {
+        await RequireSupportStaffAsync("read a status on the support desk");
+
+        return await inner.GetMyStaffStatusAsync(cancellationToken);
+    }
+
+    public async Task ReportStaffActivityAsync(CancellationToken cancellationToken = default)
+    {
+        await RequireSupportStaffAsync("report activity on the support desk");
+
+        await inner.ReportStaffActivityAsync(cancellationToken);
+    }
+
+    /// <remarks>
+    /// The product's support staff, whom members are told about: whoever may answer every team's cases, or the queue
+    /// of cases with no team. A team's own support readers answer their teammates and are not on the desk.
+    /// </remarks>
+    private async Task RequireSupportStaffAsync(string verb)
+    {
+        if (await HasCrossTeamAccessAsync(CaseAccessKind.Write) || await authorizer.HasSystemScopeAsync(SystemSupportScopes.Manage)) return;
+
+        throw new UnauthorizedAccessException(
+            $"Only support staff, who may answer across teams or the cases with no team, may {verb}.");
+    }
+
     /// <remarks>Asking is never refused; somebody outside the team is simply told there is nothing to choose.</remarks>
     public async Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {

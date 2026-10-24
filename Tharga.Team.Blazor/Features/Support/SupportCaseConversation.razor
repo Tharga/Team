@@ -18,8 +18,14 @@
     }
     else
     {
+        @* Only towards a person: the assistant is always there. *@
+        @if (!WithAssistant && _presence?.State is SupportPresenceState.Online or SupportPresenceState.Away)
+        {
+            <SupportPresenceIndicator State="@_presence.State" />
+        }
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AssistantProgress="@AssistantProgress" ThinkingText="@ThinkingText" Rate="RateAsync" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AssistantProgress="@AssistantProgress" ThinkingText="@ThinkingText" Rate="RateAsync"
+                           Notice="@NoAnswerNotice" />
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
@@ -108,12 +114,16 @@
     /// <summary>Raised after a member wrote, so the host can let the assistant answer.</summary>
     [Parameter] public EventCallback<string> Written { get; set; }
 
+    /// <summary>How long a member's message to a person waits for an answer before they are told we will get back to them; while support is away they are told at once.</summary>
+    [Parameter] public TimeSpan NoAnswerAfter { get; set; } = SupportNoAnswerWatch.DefaultAfter;
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
     [Inject] private IServiceProvider Services { get; set; }
 
     private TextSet _member = TextSet.Empty;
     private TextSet _staff = TextSet.Empty;
     private TextSet _mail = TextSet.Empty;
+    private TextSet _transcript = TextSet.Empty;
 
     private SupportCase _shown;
     private SupportAnswerRoute _route;
@@ -125,8 +135,24 @@
     private bool _busy;
     private SupportTypingWatch _typing;
     private SupportTypingReporter _reporter;
+    private SupportPresenceWatch _presence;
+    private SupportNoAnswerWatch _noAnswer;
 
     private SupportCaseTypingEventArgs[] Writing => _typing?.Writing ?? [];
+
+    // For the member, on an open case with a person, and not while somebody from support is writing.
+    private string NoAnswerNotice
+    {
+        get
+        {
+            if (AsStaff || WithAssistant || Case.Status != SupportCaseStatus.Open || Writing.Length > 0 || _noAnswer == null) return null;
+
+            var presence = _presence?.State ?? SupportPresenceState.Unknown;
+            if (!_noAnswer.Shows(presence)) return null;
+
+            return _transcript[presence == SupportPresenceState.Away ? SupportTranscriptText.NoAnswerAway : SupportTranscriptText.NoAnswerYet];
+        }
+    }
 
     private bool NothingToSend => RichTextEditor.IsEmpty(_reply) && _files.Count == 0;
 
@@ -163,14 +189,24 @@
         var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
         _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, () => InvokeAsync(StateHasChanged));
         _reporter = new SupportTypingReporter(SupportCases, time);
+
+        // What the member is told about the wait; support sees neither.
+        if (AsStaff) return;
+
+        _transcript = await TextProvider.ResolveAsync(SupportTranscriptText.All);
+        _presence = new SupportPresenceWatch(Services.GetService(typeof(ISupportPresence)) as ISupportPresence, InvokeAsync, StateHasChanged);
+        _noAnswer = new SupportNoAnswerWatch(time, () => InvokeAsync(StateHasChanged)) { After = NoAnswerAfter };
+        await _presence.ReadAsync();
     }
 
     protected override async Task OnParametersSetAsync()
     {
+        if (_noAnswer != null) _noAnswer.After = NoAnswerAfter;
         if (ReferenceEquals(_shown, Case)) return;
 
         _shown = Case;
         _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
+        _noAnswer?.Follow(_messages, Case.AuthorIdentity);
         _choice = AsStaff ? SupportCaseVisibilityChoice.None : await SupportCases.GetVisibilityChoiceAsync(Case.TeamKey, Case.Id) ?? SupportCaseVisibilityChoice.None;
         _route = AsStaff ? await SupportAnswerPreview.RouteAsync(SupportCases, Case) : null;
 
@@ -292,6 +328,8 @@
     public async ValueTask DisposeAsync()
     {
         _typing?.Dispose();
+        _presence?.Dispose();
+        _noAnswer?.Dispose();
         if (_attention != null) await _attention.DisposeAsync();
     }
 }

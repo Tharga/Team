@@ -161,6 +161,24 @@
         </div>
     }
 
+    @* Said on support's side, and stored nowhere: it is about the wait, not part of the conversation. *@
+    @if (!string.IsNullOrEmpty(Notice))
+    {
+        var onRight = !AuthorOnRight;
+
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")"
+             role="status" data-no-answer>
+            <div style="flex: 0 0 auto;">
+                <span title="@_text[SupportTranscriptText.Support]" aria-label="@_text[SupportTranscriptText.Support]" style="@IconCircle">
+                    <RadzenIcon Icon="support_agent" />
+                </span>
+            </div>
+            <div style="max-width: 75%; min-width: 0; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="font-style: italic; color: var(--rz-text-secondary-color);" data-notice>@Notice</RadzenText>
+            </div>
+        </div>
+    }
+
     @* Not yet kept: dots while the assistant has written nothing, then the answer as it writes it, replaced by the answer once kept. *@
     @if (!string.IsNullOrEmpty(AssistantProgress?.AnswerSoFar) || !string.IsNullOrEmpty(ThinkingText))
     {
@@ -300,6 +318,9 @@
 
     /// <summary>Who is writing an answer right now, shown as flashing dots after the last entry.</summary>
     [Parameter] public SupportCaseTypingEventArgs[] Writing { get; set; } = [];
+
+    /// <summary>A word from support's side after the last entry, such as that nobody has answered yet; null for none.</summary>
+    [Parameter] public string Notice { get; set; }
 
     private readonly HashSet<int> _resending = [];
     private readonly HashSet<string> _opening = [];

@@ -26,6 +26,10 @@ left and the cards on the home page list every page by area.
 - **System → Support desk** (Developer role) is the back office. Open it in a second window, write in the panel's
   Support tab, and answer from the desk: each side reads as a chat. It also lists what the assistant was asked and
   could not do; with the built-in responder, that is every question off its script.
+- **Online, Away or Hidden** at the top of the desk is how you are shown to members. The panel's Support tab says
+  "Support is online" while you are Online and have done something on the desk in the last ten minutes, and
+  "Support will reply later" otherwise. Hidden lets you answer without being shown. A message to support that nobody
+  answers within a minute is followed by a note that we will get back to them; while you are away, at once.
 
 ## Connect Slack
 

@@ -19,6 +19,13 @@ tool it is running. A round is one call to the model; a tool's result going back
 - The sample's scripted client asks for `get_my_cases` when a question is about cases, so the counter shows in the
   sample without a model.
 
+## Asked for while testing
+
+- The assistant answers only the case's author, stays out of Slack, searches the member's cases, records what it
+  could not do, links to cases, and has its answers rated (steps 7 to 16).
+- Whether support is online, from what each support person chose and whether they are active; and a notice when
+  nobody from support answers within a minute (steps 17 to 23).
+
 ## Out of scope (later in the same issue)
 
 - Context in the system prompt, a lower round cap, steps recorded with the answer, usage per answer.

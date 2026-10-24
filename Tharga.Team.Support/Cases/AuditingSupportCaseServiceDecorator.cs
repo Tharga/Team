@@ -383,6 +383,16 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
         => inner.ReportTypingAsync(teamKey, caseId, asSupport, cancellationToken);
 
+    // Not audited, for the same reason: a status on the desk is stored nowhere, and activity is reported every minute.
+    public Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default)
+        => inner.SetMyStaffStatusAsync(status, cancellationToken);
+
+    public Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default)
+        => inner.GetMyStaffStatusAsync(cancellationToken);
+
+    public Task ReportStaffActivityAsync(CancellationToken cancellationToken = default)
+        => inner.ReportStaffActivityAsync(cancellationToken);
+
     public Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetVisibilityChoiceAsync(teamKey, caseId, cancellationToken);
 

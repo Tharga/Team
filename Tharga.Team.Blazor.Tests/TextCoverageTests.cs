@@ -89,6 +89,8 @@ public class TextCoverageTests
         "Features/Support/SupportAttachmentPicker.razor",
         "Features/Support/SupportMailboxAddress.razor",
         "Features/Support/SupportAnswerRouteLine.razor",
+        "Features/Support/SupportDeskStatus.razor",
+        "Features/Support/SupportPresenceIndicator.razor",
         "Framework/MailPreviewDialog.razor",
         "Framework/RichTextEditor.razor",
         "Framework/RichTextView.razor",

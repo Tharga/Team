@@ -260,12 +260,16 @@ public static class SupportRegistration
 
             // Singleton, because the caches are the point: a scoped presence service would ask Slack about
             // the whole support channel once per request, which is how a deployment gets rate-limited.
-            // Registered only with a channel, so a host without Slack resolves nothing and its components
-            // render no presence at all rather than "offline".
-            services.TryAddSingleton<ISupportPresence, SlackSupportPresence>();
+            // Only with a channel, so presence without Slack is the desk's alone.
+            services.TryAddSingleton<SlackSupportPresence>();
         }
 
         services.TryAddSingleton(TimeProvider.System);
+
+        // Singleton, because it is the record of who is on the desk: every circuit and request reads and writes the same one.
+        // A host's own ISupportPresence registered first still wins.
+        services.TryAddSingleton<SupportDeskPresence>();
+        services.TryAddSingleton<ISupportPresence>(sp => new SupportPresence(sp.GetRequiredService<SupportDeskPresence>(), sp.GetService<SlackSupportPresence>()));
 
         // Singleton, and it has to be: an inbound reply is handled in the poller's or the endpoint's own
         // scope while the page waiting for it lives in a circuit's. A scoped notifier would raise the event
@@ -347,7 +351,8 @@ public static class SupportRegistration
                     caseOptions.AssistantDefaultVisibility,
                     sp.GetService<ISupportAttachmentStore>(),
                     sp.GetService<SupportMailboxes>()?.AnswerLimits() ?? SupportAttachmentLimitCheck.LimitsOf(sp.GetService<IOptions<MailOptions>>()?.Value),
-                    sp.GetService<ISupportTypingNotifier>()),
+                    sp.GetService<ISupportTypingNotifier>(),
+                    sp.GetService<SupportDeskPresence>()),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,

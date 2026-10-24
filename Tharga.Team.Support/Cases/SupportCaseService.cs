@@ -29,7 +29,8 @@ internal sealed class SupportCaseService(
     SupportCaseVisibility? assistantDefaultVisibility = null,
     ISupportAttachmentStore attachmentStore = null,
     SupportAttachmentLimits attachmentLimits = null,
-    ISupportTypingNotifier typingNotifier = null) : ISupportCaseService, ISupportCaseTeamQueries
+    ISupportTypingNotifier typingNotifier = null,
+    SupportDeskPresence deskPresence = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
 
@@ -371,6 +372,7 @@ internal sealed class SupportCaseService(
 
         // An answer is unread for whoever raised the case, even when the one answering raised it too.
         if (!asSupport) await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, sequence, cancellationToken);
+        else deskPresence?.Acted(message.AuthorIdentity);
 
         // The first message to a person opens the channels, carrying the conversation with the assistant before it;
         // asking for a person without writing anything has nothing yet for support to answer.
@@ -696,17 +698,29 @@ internal sealed class SupportCaseService(
 
     public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
     {
+        var identity = await authorizer.GetSubjectAsync();
+        if (asSupport) deskPresence?.Acted(identity);
+
         if (typingNotifier == null) return;
 
         typingNotifier.Notify(new SupportCaseTypingEventArgs
         {
             TeamKey = teamKey,
             CaseId = caseId,
-            Identity = await authorizer.GetSubjectAsync(),
+            Identity = identity,
             Name = await DisplayNameAsync(),
             AsSupport = asSupport
         });
     }
+
+    public async Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default)
+        => deskPresence?.Set(await authorizer.GetSubjectAsync(), status);
+
+    public async Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default)
+        => deskPresence?.StatusOf(await authorizer.GetSubjectAsync());
+
+    public async Task ReportStaffActivityAsync(CancellationToken cancellationToken = default)
+        => deskPresence?.Acted(await authorizer.GetSubjectAsync());
 
     public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
     {
