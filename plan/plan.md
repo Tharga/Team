@@ -19,8 +19,9 @@
   - Done: a radio list of the offered kinds. A provider shows its address (prefilled), a write-only key, load models, a model picker, test and save; the platform model and Off show save only. An empty key field keeps the stored key, the same rule as the service, and a typed key is cleared after saving. The stored-key hint is helper text, because Radzen replaces a form field's placeholder for its floating label (found by the tests). The view injects only `ISupportAiConnectionService` and the team state. 20 texts in `SupportAssistantConnectionViewText`; listed as migrated in `TextCoverageTests`, and `ISupportAiConnectionService` added to `ComponentDependencyResolutionTests`' optional-package list. `SupportAssistantConnectionViewTests`: 13 tests; Blazor suite 2091.
 - [x] 10. Sample: the Anthropic package, the key ring, and an "AI assistant" page under Support in `SampleNavigation`.
   - Done: `AddThargaSupportAiConnections()`, `AddThargaSupportAnthropic()`, and `AddDataProtection().SetApplicationName("Tharga.Team.Sample").PersistKeysToThargaMongo()`. The scripted client stays the platform's model. The page is `/assistant`, listed under Support and marked as needing a team.
-- [~] 11. Docs: a new support-cases section on choosing each team's AI connection, the new package's README, the root README (table and tree), and the `Tharga.Team.Support` README.
-- [ ] 12. Full build (baseline 14) and the full suite. Push for testing on approval, then test against the user's Neurolito key.
+- [x] 11. Docs: a new support-cases section on choosing each team's AI connection, the new package's README, the root README (table and tree), and the `Tharga.Team.Support` README.
+  - Done: "Each team chooses its connection" in `docs/articles/support-cases.md` (registration, scope, key handling, verification, audit, key ring); the new package's README; the root README's table and dependency tree; the `Tharga.Team.Support` README; and the `Tharga.Team.MongoDB` README (the connection store and the key ring).
+- [~] 12. Full build (baseline 14) and the full suite. Push for testing on approval, then test against the user's Neurolito key.
 
 ## Decisions
 
