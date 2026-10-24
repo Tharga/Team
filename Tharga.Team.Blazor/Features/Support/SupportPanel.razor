@@ -1,0 +1,551 @@
+@using Blazored.LocalStorage
+@using Microsoft.JSInterop
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Blazor.Features.Team
+@implements IAsyncDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+@inject ITeamStateService TeamState
+@inject ILocalStorageService LocalStorage
+@inject IJSRuntime JsRuntime
+@inject NavigationManager Navigation
+@inject IThargaTextProvider TextProvider
+@inject IServiceProvider Services
+
+@* Help beside every page: the support conversation, and the assistant where the team has one, in a right-hand sidebar
+   the host places inside its RadzenLayout. Modelled on FortDocs' AssistantPanel. Everything goes through
+   ISupportCaseService, so the conversation here is the same case the support page shows. *@
+
+@if (_teamKey != null && (_assistantOffered || _supportOffered))
+{
+    <RadzenSidebar Position="SidebarPosition.Right" Responsive="false"
+                   class="@($"support-panel-sidebar {(_expanded ? "support-panel-sidebar--open" : "support-panel-sidebar--rail")}")"
+                   Style="@($"width: {(_expanded ? $"{_width}px" : RailWidth)};")">
+        <div class="support-panel" data-support-panel="@(_expanded ? "open" : "rail")">
+            @if (_expanded)
+            {
+                <div class="support-panel__resize" @ref="_resizeHandle" role="separator" aria-orientation="vertical"
+                     aria-label="@_text[SupportPanelText.Resize]" title="@_text[SupportPanelText.Resize]"></div>
+
+                <div class="support-panel__header">
+                    <div class="support-panel__who" role="tablist" aria-label="@_text[SupportPanelText.WhoToAsk]">
+                        @if (_assistantOffered)
+                        {
+                            <button type="button" role="tab" class="@WhoClass(false)" aria-selected="@(_support ? "false" : "true")" @onclick="@(() => SwitchToAsync(false))" data-tab="assistant">
+                                <RadzenIcon Icon="smart_toy" />
+                                <span>@_text[SupportPanelText.Assistant]</span>
+                            </button>
+                        }
+                        @if (_supportOffered)
+                        {
+                            <button type="button" role="tab" class="@WhoClass(true)" aria-selected="@(_support ? "true" : "false")" @onclick="@(() => SwitchToAsync(true))" data-tab="support">
+                                <RadzenIcon Icon="support_agent" />
+                                <span>@_text[SupportPanelText.Support]</span>
+                            </button>
+                        }
+                    </div>
+                    <div class="support-panel__actions">
+                        <button type="button" class="support-panel__icon" title="@_text[SupportPanelText.NewConversation]" aria-label="@_text[SupportPanelText.NewConversation]"
+                                @onclick="StartNewAsync" data-new>
+                            <RadzenIcon Icon="add" />
+                        </button>
+                        <button type="button" class="support-panel__icon" title="@_text[SupportPanelText.Earlier]" aria-label="@_text[SupportPanelText.Earlier]"
+                                aria-expanded="@(_earlierOpen ? "true" : "false")" @onclick="ToggleEarlierAsync" data-earlier>
+                            <RadzenIcon Icon="history" />
+                        </button>
+                        @AllConversationsButton
+                        <button type="button" class="support-panel__icon" title="@_text[SupportPanelText.Close]" aria-label="@_text[SupportPanelText.Close]"
+                                aria-expanded="true" @onclick="CollapseAsync" data-close>
+                            <RadzenIcon Icon="chevron_right" />
+                        </button>
+                    </div>
+                </div>
+
+                @if (_earlierOpen)
+                {
+                    <div class="support-panel__earlier" data-earlier-list>
+                        @foreach (var item in _earlier)
+                        {
+                            <button type="button" class="@(item.Id == _caseId ? "support-panel__session support-panel__session--on" : "support-panel__session")"
+                                    @onclick="@(() => OpenAsync(item.Id))" data-session="@item.Id">
+                                <RadzenIcon Icon="@(item.AssistantState == SupportAssistantState.Active ? "smart_toy" : "support_agent")" />
+                                <span>@(string.IsNullOrWhiteSpace(item.Subject) ? _text[SupportPanelText.NewConversation] : item.Subject)</span>
+                            </button>
+                        }
+                        @if (_earlier.Count == 0)
+                        {
+                            <span class="support-panel__empty">@_text[SupportPanelText.NoEarlier]</span>
+                        }
+                    </div>
+                }
+
+                <div class="support-panel__log" @ref="_log" data-log>
+                    <div class="support-panel__msg support-panel__msg--them">
+                        @(_support ? _text[SupportPanelText.SupportGreeting] : _text[SupportPanelText.AssistantGreeting])
+                    </div>
+
+                    @foreach (var message in _messages)
+                    {
+                        <div class="@(message.FromMe ? "support-panel__msg support-panel__msg--me" : "support-panel__msg support-panel__msg--them")" data-message>
+                            @if (message.FromMe)
+                            {
+                                @message.Text
+                            }
+                            else
+                            {
+                                <RadzenMarkdown Text="@message.Text" AllowHtml="false" />
+                            }
+                        </div>
+                    }
+
+                    @if (_declined && _withAssistant && !_busy)
+                    {
+                        <div class="support-panel__msg support-panel__msg--them" data-declined>@_text[SupportCasesViewText.AssistantDeclined]</div>
+                    }
+
+                    @if (_busy)
+                    {
+                        <div class="support-panel__msg support-panel__msg--them support-panel__msg--busy" role="status" aria-live="polite" data-working>
+                            @_text[SupportPanelText.Working]
+                        </div>
+                    }
+                </div>
+
+                <div class="support-panel__composer">
+                    <input class="support-panel__input" type="text" @bind="_draft" @bind:event="oninput" @onkeydown="OnKeyDownAsync"
+                           placeholder="@(_support ? _text[SupportPanelText.WriteToSupport] : _text[SupportPanelText.AskAQuestion])"
+                           aria-label="@_text[SupportPanelText.Message]" data-draft />
+                    <button type="button" class="support-panel__icon support-panel__send" title="@_text[SupportPanelText.Send]" aria-label="@_text[SupportPanelText.Send]"
+                            disabled="@(_busy || string.IsNullOrWhiteSpace(_draft))" @onclick="SendAsync" data-send>
+                        <RadzenIcon Icon="send" />
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="support-panel__rail">
+                    @if (_assistantOffered)
+                    {
+                        <button type="button" class="support-panel__icon" title="@_text[SupportPanelText.Assistant]" aria-label="@_text[SupportPanelText.Assistant]"
+                                aria-expanded="false" @onclick="@(() => OpenWithAsync(false))" data-open="assistant">
+                            <RadzenIcon Icon="smart_toy" />
+                        </button>
+                    }
+                    @if (_supportOffered)
+                    {
+                        <button type="button" class="support-panel__icon" title="@_text[SupportPanelText.Support]" aria-label="@_text[SupportPanelText.Support]"
+                                aria-expanded="false" @onclick="@(() => OpenWithAsync(true))" data-open="support">
+                            <RadzenIcon Icon="support_agent" />
+                        </button>
+                    }
+                    @AllConversationsButton
+                </div>
+            }
+        </div>
+    </RadzenSidebar>
+}
+
+@code {
+    private const string ModulePath = "./_content/Tharga.Team.Blazor/support-panel.js";
+    private const int MinimumWidth = 280;
+    private const string RailWidth = "3.25rem";
+
+    /// <summary>Who may be asked: the assistant, support, or both. Null offers both. Never offers the assistant to a team not ready for one.</summary>
+    [Parameter] public SupportAssistance[] Offered { get; set; }
+
+    /// <summary>The host's full support page, which the panel links to. Defaults to <c>/support</c>.</summary>
+    [Parameter] public string SupportPagePath { get; set; } = "/support";
+
+    /// <summary>The width the panel opens at until somebody drags it, in pixels. Defaults to 320.</summary>
+    [Parameter] public int DefaultWidth { get; set; } = 320;
+
+    /// <summary>Where the open state and the width are remembered in the browser; one panel per key.</summary>
+    [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Panel";
+
+    private sealed record PanelMessage(bool FromMe, string Text);
+
+    private TextSet _text = TextSet.Empty;
+    private readonly List<PanelMessage> _messages = [];
+    private List<SupportCase> _earlier = [];
+    private ISupportPanelAvailability _availability;
+    private IJSObjectReference _module;
+    private DotNetObjectReference<SupportPanel> _self;
+    private SupportAttention _attention;
+    private ElementReference _resizeHandle;
+    private ElementReference _log;
+    private bool _resizeWired;
+    private bool _scrollOnRender;
+
+    private string _teamKey;
+    private bool _assistantOffered;
+    private bool _supportOffered;
+    private bool _expanded;
+    private int _width;
+    private int _unread;
+
+    private bool _support;
+    private string _caseId;
+    private bool _withAssistant;
+    private bool _declined;
+    private bool _earlierOpen;
+    private string _draft;
+    private bool _busy;
+
+    private string OpenKey => $"{StorageKey}.Open";
+    private string WidthKey => $"{StorageKey}.Width";
+
+    private RenderFragment AllConversationsButton => @<button type="button" class="support-panel__icon" title="@_text[SupportPanelText.AllConversations]"
+                                                            aria-label="@_text[SupportPanelText.AllConversations]" @onclick="@(() => Navigation.NavigateTo(SupportPagePath))" data-all>
+        <RadzenIcon Icon="forum" />
+        @if (_unread > 0)
+        {
+            <span class="support-panel__badge" data-unread>@_unread</span>
+        }
+    </button>;
+
+    private string WhoClass(bool support) => support == _support ? "support-panel__who-pick support-panel__who-pick--on" : "support-panel__who-pick";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _width = DefaultWidth;
+        _text = await TextProvider.ResolveAsync(SupportPanelText.All);
+        _availability = Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
+
+        Notifier.CaseUpdated += OnCaseUpdated;
+        TeamState.SelectedTeamChangedEvent += OnSelectedTeamChanged;
+        if (_availability != null) _availability.Changed += OnAvailabilityChanged;
+
+        if (RendererInfo.IsInteractive)
+        {
+            try
+            {
+                _expanded = await LocalStorage.GetItemAsync<bool?>(OpenKey) ?? false;
+                _width = Math.Max(MinimumWidth, await LocalStorage.GetItemAsync<int?>(WidthKey) ?? DefaultWidth);
+            }
+            catch (Exception exception) when (exception is JSException or InvalidOperationException)
+            {
+                // Storage is a convenience: without it the panel opens closed, at its default width.
+            }
+        }
+
+        _teamKey = (await TeamState.GetSelectedTeamAsync())?.Key;
+        await ReadOfferedAsync();
+        await ReadUnreadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!RendererInfo.IsInteractive) return;
+
+        try
+        {
+            _module ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            if (_module == null) return;
+            if (firstRender) await _module.InvokeVoidAsync("install");
+
+            if (_expanded && !_resizeWired)
+            {
+                _resizeWired = true;
+                _self ??= DotNetObjectReference.Create(this);
+                await _module.InvokeVoidAsync("enableResize", _resizeHandle, _self, MinimumWidth);
+            }
+
+            if (_scrollOnRender)
+            {
+                _scrollOnRender = false;
+                await _module.InvokeVoidAsync("scrollToBottom", _log);
+            }
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+            // Resizing and scrolling are conveniences; the conversation works without them.
+        }
+    }
+
+    /// <summary>The width somebody dragged the panel to, remembered for the next page and the next visit.</summary>
+    [JSInvokable]
+    public async Task OnResized(int width)
+    {
+        _width = Math.Max(MinimumWidth, width);
+        await SaveAsync(WidthKey, _width);
+    }
+
+    /// <summary>Who may be asked in the selected team: the host's availability, narrowed by <see cref="Offered"/>, and the assistant only when the team is ready.</summary>
+    private async Task ReadOfferedAsync()
+    {
+        _assistantOffered = false;
+        _supportOffered = false;
+        if (_teamKey == null) return;
+
+        try
+        {
+            SupportAssistance[] offered = [.. Offered ?? [SupportAssistance.Assistant, SupportAssistance.None]];
+            if (_availability != null) offered = [.. offered.Intersect(await _availability.GetOfferedAsync(_teamKey) ?? [])];
+
+            _supportOffered = offered.Contains(SupportAssistance.None);
+            _assistantOffered = offered.Contains(SupportAssistance.Assistant)
+                                && await SupportCases.GetAssistantReadinessAsync(_teamKey) == SupportAssistantReadiness.Ready;
+        }
+        catch (Exception)
+        {
+            // Not knowing who may be asked offers nobody, rather than a channel that then refuses.
+            _assistantOffered = false;
+            _supportOffered = false;
+        }
+
+        if (!_assistantOffered) _support = true;
+        else if (!_supportOffered) _support = false;
+    }
+
+    private async Task ReadUnreadAsync()
+    {
+        if (_teamKey == null) return;
+
+        try
+        {
+            _unread = await SupportCases.GetMyUnreadCountAsync(_teamKey);
+        }
+        catch (Exception)
+        {
+            _unread = 0;
+        }
+    }
+
+    private async Task OpenWithAsync(bool support)
+    {
+        _support = support;
+        _expanded = true;
+        _resizeWired = false;
+        _scrollOnRender = true;
+        await SaveAsync(OpenKey, true);
+        await ReadConversationAsync();
+    }
+
+    private async Task CollapseAsync()
+    {
+        _expanded = false;
+        _earlierOpen = false;
+        await SaveAsync(OpenKey, false);
+    }
+
+    private async Task SwitchToAsync(bool support)
+    {
+        if (_support == support) return;
+
+        // A conversation handed to a person stays theirs, so going back to the assistant starts a new one beside it.
+        if (!support && _caseId != null && !_withAssistant)
+        {
+            _support = false;
+            await StartNewAsync();
+            return;
+        }
+
+        // Choosing support only chooses who the next message goes to; the conversation is handed over when one is sent.
+        _support = support;
+    }
+
+    private Task StartNewAsync()
+    {
+        _caseId = null;
+        _withAssistant = false;
+        _declined = false;
+        _earlierOpen = false;
+        _messages.Clear();
+        return Task.CompletedTask;
+    }
+
+    private async Task ToggleEarlierAsync()
+    {
+        _earlierOpen = !_earlierOpen;
+        if (!_earlierOpen) return;
+
+        try
+        {
+            var page = await SupportCases.GetMyCasesAsync(_teamKey);
+            _earlier = [.. (page?.Items ?? []).Where(x => x.Status == SupportCaseStatus.Open || x.AssistantState == SupportAssistantState.Active)];
+        }
+        catch (Exception)
+        {
+            _earlier = [];
+        }
+    }
+
+    private async Task OpenAsync(string caseId)
+    {
+        _earlierOpen = false;
+        _caseId = caseId;
+        _declined = false;
+        _scrollOnRender = true;
+        await ReadConversationAsync(adoptWhoAnswers: true);
+    }
+
+    /// <summary>Reads the open conversation again, and marks it read once somebody is looking at it.</summary>
+    private async Task ReadConversationAsync(bool adoptWhoAnswers = false)
+    {
+        if (_caseId == null || _teamKey == null)
+        {
+            _messages.Clear();
+            return;
+        }
+
+        var supportCase = await SupportCases.GetCaseAsync(_teamKey, _caseId);
+        if (supportCase == null)
+        {
+            await StartNewAsync();
+            return;
+        }
+
+        var page = await SupportCases.GetMessagesAsync(_teamKey, _caseId);
+
+        _messages.Clear();
+        _messages.AddRange((page?.Items ?? [])
+            .Where(x => x.Kind != SupportMessageKind.System)
+            .Select(x => new PanelMessage(x.Kind == SupportMessageKind.User && !x.AsSupport && x.AuthorIdentity == supportCase.AuthorIdentity, x.Body)));
+
+        _withAssistant = supportCase.AssistantState == SupportAssistantState.Active;
+        if (adoptWhoAnswers) _support = !_withAssistant;
+
+        if (_expanded) await MarkReadWhenSeenAsync(_teamKey, _caseId);
+    }
+
+    private Task MarkReadWhenSeenAsync(string teamKey, string caseId)
+    {
+        _attention ??= new SupportAttention(JsRuntime);
+        return _attention.WhenAttendedAsync(() => InvokeAsync(async () =>
+        {
+            await SupportCases.MarkReadAsync(teamKey, caseId);
+            await ReadUnreadAsync();
+            StateHasChanged();
+        }));
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter" && !args.ShiftKey) await SendAsync();
+    }
+
+    private async Task SendAsync()
+    {
+        var text = _draft?.Trim();
+        if (_busy || string.IsNullOrEmpty(text) || _teamKey == null) return;
+
+        _messages.Add(new PanelMessage(true, text));
+        _draft = null;
+        _declined = false;
+        _busy = true;
+        _scrollOnRender = true;
+        StateHasChanged();
+
+        try
+        {
+            if (_caseId == null)
+            {
+                // No subject is asked for: the service takes one from the first words, so the conversation reads as a chat.
+                var raised = await SupportCases.RaiseCaseAsync(_teamKey, null, text, _support ? SupportAssistance.None : SupportAssistance.Assistant);
+                _caseId = raised.Id;
+                _withAssistant = raised.AssistantState == SupportAssistantState.Active;
+            }
+            else
+            {
+                // Writing to support on a conversation the assistant was answering is what hands it over.
+                if (_support && _withAssistant)
+                {
+                    await SupportCases.RequestHumanAsync(_teamKey, _caseId);
+                    _withAssistant = false;
+                }
+
+                await SupportCases.ReplyToCaseAsync(_teamKey, _caseId, text);
+            }
+
+            // Separate from the write: a model can take tens of seconds, and asking for help must not wait on one.
+            if (!_support && _withAssistant)
+            {
+                _declined = !await SupportCases.RunAssistantAsync(_teamKey, _caseId);
+            }
+
+            await ReadConversationAsync();
+        }
+        catch (Exception)
+        {
+            _messages.Add(new PanelMessage(false, _text[SupportPanelText.Failed]));
+        }
+        finally
+        {
+            _busy = false;
+            _scrollOnRender = true;
+        }
+    }
+
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs args)
+    {
+        if (args.TeamKey != _teamKey) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReadUnreadAsync();
+
+            // A reply arriving from Slack or mail; reading it again marks it read, which is itself announced.
+            if (_caseId != null && args.CaseId == _caseId && args.Change != SupportCaseChange.Read && !_busy)
+            {
+                await ReadConversationAsync();
+                _scrollOnRender = true;
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    // Another team is another set of conversations, and nothing in this panel carries over to it.
+    private void OnSelectedTeamChanged(object sender, SelectedTeamChangedEventArgs args)
+    {
+        if (args?.SelectedTeam?.Key == _teamKey) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            _teamKey = args?.SelectedTeam?.Key;
+            await StartNewAsync();
+            await ReadOfferedAsync();
+            await ReadUnreadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void OnAvailabilityChanged(object sender, EventArgs args) => _ = InvokeAsync(async () =>
+    {
+        await ReadOfferedAsync();
+        StateHasChanged();
+    });
+
+    private async Task SaveAsync<T>(string key, T value)
+    {
+        try
+        {
+            await LocalStorage.SetItemAsync(key, value);
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Notifier.CaseUpdated -= OnCaseUpdated;
+        TeamState.SelectedTeamChangedEvent -= OnSelectedTeamChanged;
+        if (_availability != null) _availability.Changed -= OnAvailabilityChanged;
+        _self?.Dispose();
+
+        if (_attention != null) await _attention.DisposeAsync();
+
+        if (_module != null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+    }
+}

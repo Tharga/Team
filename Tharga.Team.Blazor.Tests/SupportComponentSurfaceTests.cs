@@ -44,6 +44,8 @@ public class SupportComponentSurfaceTests
         "Tharga.Team.Blazor",
         "Tharga.Blazor",
         "Radzen",
+        // Browser storage for what a panel remembers per browser (open state, width); a public package a host reaches as easily.
+        "Blazored.LocalStorage",
         "Microsoft",
         "System"
     ];
