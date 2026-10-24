@@ -365,6 +365,9 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetMyUnreadCountAsync(teamKey, cancellationToken);
 
+    public Task<SupportAssistantReadiness> GetAssistantReadinessAsync(string teamKey, CancellationToken cancellationToken = default)
+        => inner.GetAssistantReadinessAsync(teamKey, cancellationToken);
+
     public Task<int> GetAwaitingSupportCountAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetAwaitingSupportCountAsync(teamKey, cancellationToken);
 

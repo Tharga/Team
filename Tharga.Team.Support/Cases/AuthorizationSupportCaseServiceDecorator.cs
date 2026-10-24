@@ -335,6 +335,13 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.GetMyUnreadCountAsync(teamKey, cancellationToken);
     }
 
+    public async Task<SupportAssistantReadiness> GetAssistantReadinessAsync(string teamKey, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+
+        return await inner.GetAssistantReadinessAsync(teamKey, cancellationToken);
+    }
+
     /// <remarks>
     /// Counts across every case in the team, including cases the caller did not raise — so it is exactly as
     /// privileged as reading them, and takes the same scope.

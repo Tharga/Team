@@ -38,6 +38,15 @@ public interface ISupportResponder
     /// responder cannot answer for is never offered it. A default member answering
     /// <see cref="SupportAssistantReadiness.Ready"/>, so a responder written before readiness existed keeps
     /// compiling and keeps answering for every team, as it did.
+    /// <para>
+    /// Answer <see cref="SupportAssistantReadiness.Ready"/> or <see cref="SupportAssistantReadiness.NotConfigured"/>.
+    /// <see cref="SupportAssistantReadiness.NotRegistered"/> means there is no responder, so from a responder it
+    /// reads as ready: it is what a test double returns when it does not run this default.
+    /// </para>
+    /// <para>
+    /// Throwing reads as <see cref="SupportAssistantReadiness.NotConfigured"/>, so a case is still raised, for a
+    /// person, when the responder's settings cannot be read. Log the cause here; the caller cannot.
+    /// </para>
     /// </remarks>
     Task<SupportAssistantReadiness> GetReadinessAsync(string teamKey, CancellationToken cancellationToken = default)
         => Task.FromResult(SupportAssistantReadiness.Ready);

@@ -51,7 +51,8 @@ internal sealed class SupportCaseService(
         var subjectIdentity = await authorizer.GetSubjectAsync();
         var authorName = await DisplayNameAsync();
 
-        var withAssistant = assistance == SupportAssistance.Assistant && responder != null;
+        var withAssistant = assistance == SupportAssistance.Assistant
+            && await AssistantReadinessAsync(teamKey, cancellationToken) == SupportAssistantReadiness.Ready;
 
         var supportCase = new SupportCase
         {
@@ -96,6 +97,32 @@ internal sealed class SupportCaseService(
         Notify(teamKey, supportCase.Id, SupportCaseChange.Raised);
 
         return supportCase;
+    }
+
+    public Task<SupportAssistantReadiness> GetAssistantReadinessAsync(string teamKey, CancellationToken cancellationToken = default)
+        => AssistantReadinessAsync(teamKey, cancellationToken);
+
+    /// <remarks>
+    /// A responder that throws reads as not configured. Readiness is asked while a case is being raised, and
+    /// somebody reporting a problem must get their case whatever the assistant's settings are doing.
+    /// </remarks>
+    private async Task<SupportAssistantReadiness> AssistantReadinessAsync(string teamKey, CancellationToken cancellationToken)
+    {
+        if (responder == null) return SupportAssistantReadiness.NotRegistered;
+
+        try
+        {
+            var readiness = await responder.GetReadinessAsync(teamKey, cancellationToken);
+
+            // NotRegistered is the service's to say, and a responder exists. From a responder it is the zero
+            // value of one that never said, such as a test double that does not run the default member, and a
+            // responder that never said answers every team, as responders did before readiness existed.
+            return readiness == SupportAssistantReadiness.NotRegistered ? SupportAssistantReadiness.Ready : readiness;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            return SupportAssistantReadiness.NotConfigured;
+        }
     }
 
     public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
