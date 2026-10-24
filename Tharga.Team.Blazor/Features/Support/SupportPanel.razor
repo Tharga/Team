@@ -111,7 +111,13 @@
                         <div class="support-panel__msg support-panel__msg--them" data-declined>@_text[SupportCasesViewText.AssistantDeclined]</div>
                     }
 
-                    @if (_busy)
+                    @if (_busy && !string.IsNullOrEmpty(_answerSoFar))
+                    {
+                        <div class="support-panel__msg support-panel__msg--them" aria-busy="true" data-answer-so-far>
+                            <RadzenMarkdown Text="@_answerSoFar" AllowHtml="false" />
+                        </div>
+                    }
+                    else if (_busy)
                     {
                         <div class="support-panel__msg support-panel__msg--them support-panel__msg--busy" role="status" aria-live="polite" data-working>
                             @_text[SupportPanelText.Working]
@@ -181,6 +187,7 @@
     private SupportAttention _attention;
     private SupportTypingWatch _typing;
     private SupportTypingReporter _reporter;
+    private string _answerSoFar;
     private ElementReference _resizeHandle;
     private ElementReference _log;
     private bool _resizeWired;
@@ -495,7 +502,16 @@
             // Separate from the write: a model can take tens of seconds, and asking for help must not wait on one.
             if (!_support && _withAssistant)
             {
-                _declined = !await SupportCases.RunAssistantAsync(_teamKey, _caseId);
+                // Shown as the model writes it; what is kept is read back with the conversation.
+                var soFar = new SupportAnswerSoFar(InvokeAsync, ShowAnswerSoFar);
+                try
+                {
+                    _declined = !await SupportCases.RunAssistantAsync(_teamKey, _caseId, soFar);
+                }
+                finally
+                {
+                    soFar.End();
+                }
             }
 
             await ReadConversationAsync();
@@ -506,9 +522,18 @@
         }
         finally
         {
+            // Only now, so the answer being written gives way to the answer kept rather than to nothing.
+            _answerSoFar = null;
             _busy = false;
             _scrollOnRender = true;
         }
+    }
+
+    private void ShowAnswerSoFar(string text)
+    {
+        _answerSoFar = text;
+        _scrollOnRender = true;
+        StateHasChanged();
     }
 
     private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs args)

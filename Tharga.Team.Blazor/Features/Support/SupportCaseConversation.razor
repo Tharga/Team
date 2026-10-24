@@ -14,12 +14,12 @@
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="false" TimeTemplate="TimeTemplate"
                            ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" />
     }
     else
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" />
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
@@ -53,7 +53,7 @@
                           ButtonStyle="ButtonStyle.Light" Click="CloseAsync" Disabled="_busy" data-close="@Case.Id" />
         }
 
-        @if (Thinking)
+        @if (Thinking && string.IsNullOrEmpty(AnswerSoFar))
         {
             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_member[SupportCasesViewText.AssistantThinking]</RadzenText>
         }
@@ -91,6 +91,9 @@
 
     /// <summary>Whether the assistant is working on this case right now.</summary>
     [Parameter] public bool Thinking { get; set; }
+
+    /// <summary>The assistant's answer as written so far, shown in the conversation until the answer is kept.</summary>
+    [Parameter] public string AnswerSoFar { get; set; }
 
     /// <summary>
     /// Whether the assistant was just asked and did not answer, so the customer is told and pointed at a person

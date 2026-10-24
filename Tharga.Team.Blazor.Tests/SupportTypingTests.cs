@@ -217,6 +217,24 @@ public class SupportTypingTests : BunitContext
     }
 
     [Fact]
+    public void ATranscript_ShowsTheAnswerBeingWritten_OnTheAssistantsSide()
+    {
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportTranscript>(p => p
+            .Add(x => x.Messages, [])
+            .Add(x => x.CaseAuthorIdentity, Author)
+            .Add(x => x.AuthorOnRight, true)
+            .Add(x => x.AnswerSoFar, "Check the date"));
+
+        var row = view.Find("[data-answer-so-far]");
+        Assert.Equal("left", row.GetAttribute("data-side"));
+        Assert.Equal("true", row.GetAttribute("aria-busy"));
+        Assert.NotNull(row.QuerySelector("[data-sender='assistant']"));
+        Assert.Contains("Check the date", row.TextContent);
+    }
+
+    [Fact]
     public void AWriterWithNoName_IsReadOutAsSupport()
     {
         var view = RenderTranscript(authorOnRight: true, Writer(Staff, asSupport: true, null));

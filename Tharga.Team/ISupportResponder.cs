@@ -31,6 +31,22 @@ public interface ISupportResponder
     Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Answers as <see cref="AnswerAsync(SupportCase, IReadOnlyList{SupportMessage}, CancellationToken)"/> does,
+    /// reporting the answer as written so far while it is being written.
+    /// </summary>
+    /// <remarks>
+    /// <b>Each report is the whole text so far</b>, not the piece just added, so a reader that misses one still shows
+    /// the answer as it stands. What is returned is what is kept: a report is a preview, and an answer that is then
+    /// declined was never given.
+    /// <para>
+    /// A default member answering in one piece and reporting nothing, so a responder written before streaming keeps
+    /// compiling and answering as it did.
+    /// </para>
+    /// </remarks>
+    Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+        => AnswerAsync(supportCase, transcript, cancellationToken);
+
+    /// <summary>
     /// Whether this responder can answer for a team, and if not, why.
     /// </summary>
     /// <remarks>

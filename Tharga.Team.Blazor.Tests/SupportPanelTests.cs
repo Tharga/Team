@@ -83,7 +83,7 @@ public class SupportPanelTests : BunitContext
     private void Raises(SupportCase raised, bool answered = true, params SupportMessage[] messages)
     {
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, null, It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(raised);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, default)).ReturnsAsync(answered);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<string>>(), default)).ReturnsAsync(answered);
         _cases.Setup(x => x.GetCaseAsync(TeamKey, raised.Id, default)).ReturnsAsync(raised);
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, raised.Id, null, It.IsAny<int>(), default)).ReturnsAsync(new SupportMessagePage { Items = messages });
     }
@@ -194,7 +194,7 @@ public class SupportPanelTests : BunitContext
 
         view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
         _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question, SupportAssistance.Assistant, default), Times.Once);
-        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", default), Times.Once);
+        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once);
         Assert.Contains("Check the date range.", view.FindAll("[data-message]")[1].TextContent);
     }
 
@@ -217,14 +217,14 @@ public class SupportPanelTests : BunitContext
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
         var view = Render(open: true);
         Send(view, Question);
-        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", default), Times.Once));
+        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once));
 
         view.Find("[data-tab='support']").Click();
         Send(view, "Please ask a person.");
 
         view.WaitForAssertion(() => _cases.Verify(x => x.ReplyToCaseAsync(TeamKey, "case-1", "Please ask a person.", default), Times.Once));
         _cases.Verify(x => x.RequestHumanAsync(TeamKey, "case-1", default), Times.Once);
-        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", default), Times.Once);
+        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
 
         view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question, SupportAssistance.None, default), Times.Once));
-        _cases.Verify(x => x.RunAssistantAsync(It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
+        _cases.Verify(x => x.RunAssistantAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IProgress<string>>(), default), Times.Never);
     }
 
     [Fact]
@@ -276,6 +276,50 @@ public class SupportPanelTests : BunitContext
         _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = raised.Id, Change = SupportCaseChange.Replied, FromChannel = true });
 
         view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
+    }
+
+    [Fact]
+    public void TheAssistantsAnswer_ShowsAsItIsWritten_ThenAsKept()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
+        var kept = new TaskCompletionSource<bool>();
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<string>>(), default))
+            .Returns((string _, string _, IProgress<string> soFar, CancellationToken _) =>
+            {
+                soFar.Report("Check the");
+                soFar.Report("Check the date range");
+                return kept.Task;
+            });
+        var view = Render(open: true);
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.Contains("Check the date range", view.Find("[data-answer-so-far]").TextContent));
+        Assert.Empty(view.FindAll("[data-working]"));
+
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, raised.Id, null, It.IsAny<int>(), default))
+            .ReturnsAsync(new SupportMessagePage { Items = [Message(1, Question, SupportMessageKind.User), Message(2, "Check the date range.", SupportMessageKind.Assistant, author: null)] });
+        view.InvokeAsync(() => kept.SetResult(true));
+
+        view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
+        Assert.Empty(view.FindAll("[data-answer-so-far]"));
+    }
+
+    [Fact]
+    public void BeforeTheFirstWord_ThePanelSaysItIsWorking()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
+        var kept = new TaskCompletionSource<bool>();
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<string>>(), default)).Returns(kept.Task);
+        var view = Render(open: true);
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-working]")));
+        Assert.Empty(view.FindAll("[data-answer-so-far]"));
+        view.InvokeAsync(() => kept.SetResult(true));
     }
 
     [Fact]
@@ -339,7 +383,7 @@ public class SupportPanelTests : BunitContext
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
         var view = Render(open: true);
         Send(view, Question);
-        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", default), Times.Once));
+        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once));
 
         view.Find("input[data-draft]").Input("And the date");
 

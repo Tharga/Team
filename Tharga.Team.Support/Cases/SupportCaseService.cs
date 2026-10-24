@@ -126,7 +126,10 @@ internal sealed class SupportCaseService(
         }
     }
 
-    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    public Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => RunAssistantAsync(teamKey, caseId, null, cancellationToken);
+
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
     {
         if (responder == null) return false;
 
@@ -135,8 +138,10 @@ internal sealed class SupportCaseService(
 
         var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
 
-        var answer = await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
-        if (!answer.Answered) return false;
+        // A test double does not run the streaming default and answers nothing; it is then asked as it always was.
+        var answer = answerSoFar == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, answerSoFar, cancellationToken);
+        answer ??= await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
+        if (answer?.Answered != true) return false;
 
         var message = new SupportMessage
         {

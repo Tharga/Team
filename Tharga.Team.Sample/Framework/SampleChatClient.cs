@@ -47,6 +47,7 @@ internal sealed class SampleChatClient : IChatClient
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer)));
     }
 
+    // A word at a time, at about the pace of a small local model, so the panel shows an answer being written.
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions options = null,
@@ -56,9 +57,15 @@ internal sealed class SampleChatClient : IChatClient
 
         foreach (var message in response.Messages)
         {
-            yield return new ChatResponseUpdate(message.Role, message.Text);
+            foreach (var word in System.Text.RegularExpressions.Regex.Split(message.Text, @"(?<=\s)"))
+            {
+                await Task.Delay(WordDelay, cancellationToken);
+                yield return new ChatResponseUpdate(message.Role, word);
+            }
         }
     }
+
+    private static readonly TimeSpan WordDelay = TimeSpan.FromMilliseconds(60);
 
     public object GetService(Type serviceType, object serviceKey = null) => null;
 

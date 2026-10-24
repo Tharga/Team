@@ -127,6 +127,24 @@
         </div>
     }
 
+    @* Not yet kept: shown as the assistant writes it, and replaced by the answer once it is. *@
+    @if (!string.IsNullOrEmpty(AnswerSoFar))
+    {
+        var onRight = !AuthorOnRight;
+
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")"
+             aria-busy="true" data-answer-so-far>
+            <div style="flex: 0 0 auto;">
+                <span title="@_text[SupportTranscriptText.Assistant]" aria-label="@_text[SupportTranscriptText.Assistant]" data-sender="assistant" style="@IconCircle">
+                    <RadzenIcon Icon="smart_toy" />
+                </span>
+            </div>
+            <div style="max-width: 75%; min-width: 0; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@AnswerSoFar</RadzenText>
+            </div>
+        </div>
+    }
+
     @* Placed as their message will be, so the answer arrives where the dots were. *@
     @foreach (var writer in Writing ?? [])
     {
@@ -198,6 +216,9 @@
 
     /// <summary>The case the entries belong to; without it files are listed but cannot be opened.</summary>
     [Parameter] public string CaseId { get; set; }
+
+    /// <summary>The assistant's answer as written so far, shown after the last entry until it is kept.</summary>
+    [Parameter] public string AnswerSoFar { get; set; }
 
     /// <summary>Who is writing an answer right now, shown as flashing dots after the last entry.</summary>
     [Parameter] public SupportCaseTypingEventArgs[] Writing { get; set; } = [];

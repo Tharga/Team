@@ -1267,6 +1267,26 @@ await cases.RunAssistantAsync(teamKey, raised.Id);   // returns false when there
 customer has asked for a person, when the host registered no responder, or when the team has no model. The shipped components already
 call it, so a host using `<SupportCasesView />` needs none of this.
 
+### Watching the answer being written
+
+Pass an `IProgress<string>` and the answer is reported while the model writes it. `SupportPanel` and
+`SupportCasesView` do this, so the customer reads the answer as it is written instead of waiting for all of it:
+
+```csharp
+var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<string>(soFar => Show(soFar)));
+```
+
+- **Each report is the whole answer so far**, not the piece just added, so a report that is missed costs nothing.
+- **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
+  it then. An answer that breaks off halfway is declined, and nothing that was shown on the way is kept.
+- **Only the caller sees it on the way.** Reports go to the progress you pass and nowhere else, never through
+  `ISupportCaseNotifier`. The call is authorized and audited exactly as the one without reports.
+- **Reports arrive on another thread**, so a component marshals with `InvokeAsync` before showing one.
+- **The model is streamed only when somebody watches.** Without a progress, it is asked for the answer in one piece,
+  as before. `ChatSupportResponder` streams through `IChatClient.GetStreamingResponseAsync`, tools included, and
+  Neurolito and the Anthropic API both stream. A responder of your own answers in one piece and reports nothing,
+  unless it implements the `ISupportResponder.AnswerAsync` overload that takes the progress.
+
 ### Settings
 
 ```csharp

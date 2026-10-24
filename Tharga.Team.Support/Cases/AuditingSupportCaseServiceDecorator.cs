@@ -63,12 +63,19 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     /// Audited only when it answered. A call that found no assistant on the case did nothing, and a row per
     /// non-event is how an audit log stops being read.
     /// </remarks>
-    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    public Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, cancellationToken));
+
+    // Audited as the run without reports is: what is kept is the same answer, however it was shown on the way.
+    public Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+        => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, answerSoFar, cancellationToken));
+
+    private async Task<bool> AuditAssistantAsync(string teamKey, string caseId, Func<Task<bool>> run)
     {
         var sw = Stopwatch.StartNew();
         try
         {
-            var answered = await inner.RunAssistantAsync(teamKey, caseId, cancellationToken);
+            var answered = await run();
 
             if (answered)
                 Log("assistant-answer", nameof(RunAssistantAsync), sw.ElapsedMilliseconds, true, teamKey,
