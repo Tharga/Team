@@ -64,6 +64,13 @@
                 {
                     <RichTextView Html="@message.BodyHtml" Images="@ImagesOf(message)" Class="rz-text-body2" data-body-html="@message.Sequence" />
                 }
+                else if (message.Kind == SupportMessageKind.Assistant)
+                {
+                    @* The assistant writes Markdown, as the panel shows it, with its links kept only when they stay on the site. *@
+                    <div class="rz-text-body2" style="overflow-wrap: anywhere;" data-body-markdown="@message.Sequence">
+                        <RadzenMarkdown Text="@SupportAnswerLinks.SiteOnly(message.Body)" AllowHtml="false" />
+                    </div>
+                }
                 else
                 {
                     <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@message.Body</RadzenText>
@@ -146,7 +153,9 @@
                 }
                 else
                 {
-                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@AssistantProgress.AnswerSoFar</RadzenText>
+                    <div class="rz-text-body2" style="overflow-wrap: anywhere;">
+                        <RadzenMarkdown Text="@SupportAnswerLinks.SiteOnly(AssistantProgress.AnswerSoFar)" AllowHtml="false" />
+                    </div>
                 }
                 @if (AssistantProgress != null)
                 {

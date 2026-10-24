@@ -86,6 +86,29 @@ public class SupportAssistantToolsTests
         Assert.Equal(SupportAssistantTools.MaxMatches, Matches(await SupportAssistantTools.SearchAsync(alice, TeamA, "export", default)).Length);
     }
 
+    [Fact]
+    public async Task WithACaseLinkTemplate_EveryCaseFoundCarriesItsLink_AndTheModelIsToldToUseIt()
+    {
+        var store = new InMemorySupportCaseStore();
+        var alice = Service(store, Alice);
+        var raised = await alice.RaiseCaseAsync(TeamA, "Tell me a joke", "Anything will do.");
+        var tools = new SupportAssistantTools(new ServiceCollection().AddSingleton(alice).BuildServiceProvider(), new SupportAssistantOptions { CaseLinkTemplate = "/support/{caseId}" });
+
+        var match = Assert.Single(Matches(await SupportAssistantTools.SearchAsync(alice, TeamA, "joke", default, tools.LinkTo)));
+
+        Assert.Equal($"/support/{raised.Id}", match.GetProperty("Link").GetString());
+        Assert.Contains("[subject](link)", (await tools.ForCurrentCallerAsync(TeamA)).Single(x => x.Name == "search_my_cases").Description);
+    }
+
+    [Fact]
+    public async Task WithoutATemplate_NoCaseHasALink_AndNoneIsMentioned()
+    {
+        var tools = new SupportAssistantTools(new ServiceCollection().AddSingleton(Service(new InMemorySupportCaseStore(), Alice)).BuildServiceProvider());
+
+        Assert.Null(tools.LinkTo("case-1"));
+        Assert.DoesNotContain("Link", (await tools.ForCurrentCallerAsync(TeamA)).Single(x => x.Name == "get_my_cases").Description);
+    }
+
     [Theory]
     [InlineData("telling a joke", new[] { "tell", "joke" })]
     [InlineData("Jokes, exports!", new[] { "joke", "export" })]

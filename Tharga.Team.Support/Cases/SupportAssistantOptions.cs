@@ -42,4 +42,14 @@ public class SupportAssistantOptions
     /// the question being asked now matters more than how the case opened.
     /// </remarks>
     public int TranscriptLimit { get; set; } = 20;
+
+    /// <summary>
+    /// Where a case is on this site, as a path with <c>{caseId}</c>, such as <c>/support/{caseId}</c>, so the assistant
+    /// can link to the cases it mentions. Null, the default, gives it no links.
+    /// </summary>
+    /// <remarks>
+    /// A template because the route is the host's to know, as with the case link in notifications. The components show
+    /// a link the assistant writes as a link only when it stays on the site; any other is shown as text.
+    /// </remarks>
+    public string CaseLinkTemplate { get; set; }
 }

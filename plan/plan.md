@@ -28,6 +28,13 @@ Asked for while testing (2026-10-24):
 - [x] 12. Docs, full build (baseline 14) and the full suite; run the sample.
   - Docs: the support article (who the assistant answers, the built-in tools, what it could not do), the notifications article (`WithAssistant`, the built-in routes skip assistant conversations), the `Tharga.Team.Blazor` README and the sample README. Build at 14 warnings; full suite green: Email 985, MongoDB 460, Blazor 2160, Service 1470, Support 768, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
 
+Asked for while testing, second round (2026-10-24):
+
+- [x] 13. The side panel could not be resized: the drag sized the panel inside Radzen's sidebar, which kept its own width, and the saved width was drawn only on the next render. The script now sizes the sidebar, and `OnResized` redraws. Test: a dragged width is drawn and remembered.
+- [x] 14. Answers with links: `SupportAssistantOptions.CaseLinkTemplate` (null by default; the sample sets `/support/{caseId}`) gives every case `get_my_cases` and `search_my_cases` return a `Link`, and their descriptions tell the model to link in Markdown. The panel and, now, the support page render the assistant's Markdown; `SupportAnswerLinks.SiteOnly` keeps a link only when it is a path on the site, and writes any other out as text. Tests: 8 in Blazor (bare addresses are not linked by RadzenMarkdown), 2 in Support.
+- [~] 15. Rating answers up or down: on the assistant's answers in the panel and on the support page, by the person answered; kept on the message, counted on the case, audited; marked on the desk and listed in the feedback view with what it could not do.
+- [ ] 16. Docs, full build (baseline 14) and the full suite; run the sample.
+
 ## Decisions
 
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.

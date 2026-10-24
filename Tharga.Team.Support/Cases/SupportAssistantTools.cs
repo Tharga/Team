@@ -16,7 +16,7 @@ namespace Tharga.Team.Support.Cases;
 /// that holds these tools, so taking it on the constructor would be a cycle in the container graph. By the
 /// time a tool is called the scope is built and this returns the same instance the caller is using.
 /// </remarks>
-internal sealed class SupportAssistantTools(IServiceProvider services) : ISupportAssistantTools
+internal sealed class SupportAssistantTools(IServiceProvider services, SupportAssistantOptions options = null) : ISupportAssistantTools
 {
     /// <summary>How many of the caller's newest cases a search reads; an assistant answers about recent work.</summary>
     internal const int MaxCasesSearched = 100;
@@ -31,6 +31,8 @@ internal sealed class SupportAssistantTools(IServiceProvider services) : ISuppor
     public Task<IReadOnlyList<AITool>> ForCurrentCallerAsync(string teamKey, CancellationToken cancellationToken = default)
     {
         var cases = services.GetRequiredService<ISupportCaseService>();
+        var linked = !string.IsNullOrWhiteSpace(options?.CaseLinkTemplate);
+        var linking = linked ? " Each has its Link on this site: when you mention one, link to it in Markdown, as [subject](link)." : string.Empty;
 
         IReadOnlyList<AITool> tools =
         [
@@ -38,17 +40,17 @@ internal sealed class SupportAssistantTools(IServiceProvider services) : ISuppor
                 async (CancellationToken ct) =>
                 {
                     var page = await cases.GetMyCasesAsync(teamKey, cancellationToken: ct);
-                    return page.Items.Select(x => new { x.Id, x.Subject, Status = x.Status.ToString(), x.CreatedAt }).ToArray();
+                    return page.Items.Select(x => new { x.Id, x.Subject, Status = x.Status.ToString(), x.CreatedAt, Link = LinkTo(x.Id) }).ToArray();
                 },
                 "get_my_cases",
-                "The support cases raised by the person you are answering, newest first."),
+                "The support cases raised by the person you are answering, newest first." + linking),
 
             AIFunctionFactory.Create(
-                (string text, CancellationToken ct) => SearchAsync(cases, teamKey, text, ct),
+                (string text, CancellationToken ct) => SearchAsync(cases, teamKey, text, ct, LinkTo),
                 "search_my_cases",
                 "Finds the person's own support cases about something, by their subject and by everything written in them. " +
                 "Pass a word or a few, such as \"joke\" or \"empty export\". Returns the best matches with the words that matched " +
-                "and where; read one in full with get_case_messages."),
+                "and where; read one in full with get_case_messages." + linking),
 
             AIFunctionFactory.Create(
                 async (string caseId, CancellationToken ct) =>
@@ -67,7 +69,7 @@ internal sealed class SupportAssistantTools(IServiceProvider services) : ISuppor
     /// <b>Through the same service as every other read</b>, so a search finds only cases the caller may read: their own.
     /// A case is read in full only when its subject does not already match every word.
     /// </remarks>
-    internal static async Task<object> SearchAsync(ISupportCaseService cases, string teamKey, string text, CancellationToken cancellationToken)
+    internal static async Task<object> SearchAsync(ISupportCaseService cases, string teamKey, string text, CancellationToken cancellationToken, Func<string, string> linkTo = null)
     {
         var words = WordsOf(text);
         if (words.Length == 0) return "Pass a word to look for, of three letters or more.";
@@ -108,9 +110,13 @@ internal sealed class SupportAssistantTools(IServiceProvider services) : ISuppor
             .OrderByDescending(x => x.Matched.Length)
             .ThenByDescending(x => x.Case.LastMessageAt ?? x.Case.CreatedAt)
             .Take(MaxMatches)
-            .Select(x => new { x.Case.Id, x.Case.Subject, Status = x.Case.Status.ToString(), x.Case.CreatedAt, Matched = x.Matched, Where = x.Where })
+            .Select(x => new { x.Case.Id, x.Case.Subject, Status = x.Case.Status.ToString(), x.Case.CreatedAt, Matched = x.Matched, Where = x.Where, Link = linkTo?.Invoke(x.Case.Id) })
             .ToArray();
     }
+
+    /// <summary>The case's path on this site from the host's template, or null without one.</summary>
+    internal string LinkTo(string caseId)
+        => string.IsNullOrWhiteSpace(options?.CaseLinkTemplate) ? null : options.CaseLinkTemplate.Replace("{caseId}", Uri.EscapeDataString(caseId), StringComparison.Ordinal);
 
     /// <remarks>Words of three letters or more, each cut to a rough stem, so "telling" finds "tell" and "jokes" finds "joke".</remarks>
     internal static string[] WordsOf(string text)

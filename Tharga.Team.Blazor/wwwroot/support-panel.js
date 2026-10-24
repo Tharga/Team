@@ -13,12 +13,13 @@ export function install() {
 }
 
 // The panel is docked right, so its left edge is dragged and its right edge stays put. The width is reported once,
-// on release, so a drag is one save rather than one per pointer move.
+// on release, so a drag is one save rather than one per pointer move. What is sized is the sidebar Radzen renders
+// around the panel: sizing the panel inside it moved nothing, because the sidebar kept its own width.
 export function enableResize(handle, reference, minimumWidth) {
     if (!handle || handle.dataset.supportPanelResize) return;
 
     handle.dataset.supportPanelResize = '1';
-    const panel = handle.closest('.support-panel');
+    const panel = handle.closest('.rz-sidebar') || handle.closest('.support-panel');
     if (!panel) return;
 
     let dragging = false;

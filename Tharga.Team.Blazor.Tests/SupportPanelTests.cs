@@ -175,6 +175,18 @@ public class SupportPanelTests : BunitContext
         Assert.Contains("width: 420px", view.Find(".support-panel-sidebar").GetAttribute("style"));
     }
 
+    /// <summary>A drag ends with the width the panel was dragged to; the sidebar is drawn at it, and it is remembered.</summary>
+    [Fact]
+    public async Task ADraggedWidth_IsWhatThePanelIsDrawnAt_AndIsRemembered()
+    {
+        var view = Render(open: true);
+
+        await view.InvokeAsync(() => view.Instance.OnResized(512));
+
+        Assert.Contains("width: 512px", view.Find(".support-panel-sidebar").GetAttribute("style"));
+        _storage.Verify(x => x.SetItemAsync("Tharga.Team.Support.Panel.Width", 512, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     [Fact]
     public void AWidthBelowTheMinimum_IsRaisedToIt()
     {
