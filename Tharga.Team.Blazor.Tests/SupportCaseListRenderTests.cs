@@ -176,9 +176,7 @@ public class SupportCaseListRenderTests : BunitContext
     [Fact]
     public void WithAnAssistantToOffer_WhoToTalkToIsASelectBar()
     {
-        Services.AddSingleton(Mock.Of<ISupportResponder>());
-
-        var view = RenderCases(out _);
+        var view = RenderCases(out _, readiness: SupportAssistantReadiness.Ready);
 
         Assert.Single(view.FindComponents<RadzenSelectBar<SupportAssistance>>());
     }
@@ -367,11 +365,13 @@ public class SupportCaseListRenderTests : BunitContext
         return Render<SupportAcrossTeamsView>(p => p.Add(x => x.StaffCloseAfter, window));
     }
 
-    private IRenderedComponent<SupportCasesView> RenderCases(out Mock<ISupportCaseService> cases, SupportCase[] items = null, string tab = null, Action<string> tabChanged = null)
+    private IRenderedComponent<SupportCasesView> RenderCases(out Mock<ISupportCaseService> cases, SupportCase[] items = null, string tab = null, Action<string> tabChanged = null,
+        SupportAssistantReadiness readiness = SupportAssistantReadiness.NotRegistered)
     {
         items ??= Cases;
         cases = new Mock<ISupportCaseService>();
         cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = items });
+        cases.Setup(x => x.GetAssistantReadinessAsync(TeamKey, default)).ReturnsAsync(readiness);
         foreach (var item in items)
         {
             cases.Setup(x => x.GetCaseAsync(TeamKey, item.Id, default)).ReturnsAsync(item);

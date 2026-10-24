@@ -57,6 +57,10 @@
         {
             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_member[SupportCasesViewText.AssistantThinking]</RadzenText>
         }
+        else if (Declined && !AsStaff && WithAssistant)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-declined="@Case.Id">@_member[SupportCasesViewText.AssistantDeclined]</RadzenText>
+        }
     </RadzenStack>
 
     @* Offered to the author whenever the host lets each case decide, closed cases included: who reads the history matters after too. *@
@@ -87,6 +91,12 @@
 
     /// <summary>Whether the assistant is working on this case right now.</summary>
     [Parameter] public bool Thinking { get; set; }
+
+    /// <summary>
+    /// Whether the assistant was just asked and did not answer, so the customer is told and pointed at a person
+    /// instead of seeing nothing. Shown only while the case is with the assistant.
+    /// </summary>
+    [Parameter] public bool Declined { get; set; }
 
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 

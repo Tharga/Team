@@ -14,7 +14,7 @@ namespace Tharga.Team.Blazor.Tests;
 
 /// <summary>
 /// Who may be talked to when help is asked for: the assistant and a person as one choice on a select bar, limited to what
-/// the host offers and to what is registered, and no control at all when only one way is left.
+/// the host offers and to whether the team is ready for the assistant, and no control at all when only one way is left.
 /// </summary>
 public class SupportCasesViewOfferedTests : BunitContext
 {
@@ -35,11 +35,12 @@ public class SupportCasesViewOfferedTests : BunitContext
 
     private readonly Mock<ISupportCaseService> _cases = new();
 
-    private IRenderedComponent<SupportCasesView> RenderView(bool assistantRegistered, SupportAssistance[] offered = null, IThargaTextProvider texts = null)
+    private IRenderedComponent<SupportCasesView> RenderView(SupportAssistantReadiness readiness, SupportAssistance[] offered = null, IThargaTextProvider texts = null)
     {
         _cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = [] });
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(Raised);
         _cases.Setup(x => x.GetCaseAsync(TeamKey, Raised.Id, default)).ReturnsAsync(Raised);
+        _cases.Setup(x => x.GetAssistantReadinessAsync(TeamKey, default)).ReturnsAsync(readiness);
 
         var team = new Mock<ITeam>();
         team.SetupGet(x => x.Key).Returns(TeamKey);
@@ -52,7 +53,6 @@ public class SupportCasesViewOfferedTests : BunitContext
         Services.AddSingleton(texts ?? new DefaultThargaTextProvider());
         Services.AddSingleton(Mock.Of<IIconResolver>());
         Services.AddSingleton(Mock.Of<ILocalStorageService>());
-        if (assistantRegistered) Services.AddSingleton(Mock.Of<ISupportResponder>());
         Services.AddRadzenComponents();
 
         JSInterop.Mode = JSRuntimeMode.Loose;
@@ -71,9 +71,9 @@ public class SupportCasesViewOfferedTests : BunitContext
     }
 
     [Fact]
-    public void WithAnAssistantRegistered_BothWaysAreOffered_AsOneChoice_WithSupportChosen()
+    public void WithTheTeamReady_BothWaysAreOffered_AsOneChoice_WithSupportChosen()
     {
-        var view = RenderView(assistantRegistered: true);
+        var view = RenderView(SupportAssistantReadiness.Ready);
 
         var choice = Assert.Single(Choices(view));
         Assert.Contains("Assistant", choice.Markup);
@@ -84,7 +84,7 @@ public class SupportCasesViewOfferedTests : BunitContext
     [Fact]
     public async Task ChoosingTheAssistant_RaisesTheCaseWithIt_AndAsksItToAnswer()
     {
-        var view = RenderView(assistantRegistered: true);
+        var view = RenderView(SupportAssistantReadiness.Ready);
 
         var choice = Assert.Single(Choices(view));
         await view.InvokeAsync(() => choice.Instance.ValueChanged.InvokeAsync(SupportAssistance.Assistant));
@@ -97,7 +97,7 @@ public class SupportCasesViewOfferedTests : BunitContext
     [Fact]
     public void LeavingTheChoiceAlone_RaisesTheCaseForAPerson()
     {
-        var view = RenderView(assistantRegistered: true);
+        var view = RenderView(SupportAssistantReadiness.Ready);
 
         Send(view);
 
@@ -107,7 +107,7 @@ public class SupportCasesViewOfferedTests : BunitContext
     [Fact]
     public void OfferingOnlySupport_ShowsNoChoice_AndRaisesTheCaseForAPerson()
     {
-        var view = RenderView(assistantRegistered: true, offered: [SupportAssistance.None]);
+        var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.None]);
 
         Assert.Empty(Choices(view));
         Send(view);
@@ -118,7 +118,7 @@ public class SupportCasesViewOfferedTests : BunitContext
     [Fact]
     public void OfferingOnlyTheAssistant_ShowsNoChoice_AndRaisesTheCaseWithIt()
     {
-        var view = RenderView(assistantRegistered: true, offered: [SupportAssistance.Assistant]);
+        var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.Assistant]);
 
         Assert.Empty(Choices(view));
         Send(view);
@@ -127,9 +127,9 @@ public class SupportCasesViewOfferedTests : BunitContext
     }
 
     [Fact]
-    public void WithNoAssistantRegistered_OnlySupportIsOffered_WhateverTheHostAsksFor()
+    public void WithNoAssistantInTheDeployment_OnlySupportIsOffered_WhateverTheHostAsksFor()
     {
-        var view = RenderView(assistantRegistered: false, offered: [SupportAssistance.Assistant, SupportAssistance.None]);
+        var view = RenderView(SupportAssistantReadiness.NotRegistered, offered: [SupportAssistance.Assistant, SupportAssistance.None]);
 
         Assert.Empty(Choices(view));
         Send(view);
@@ -138,20 +138,66 @@ public class SupportCasesViewOfferedTests : BunitContext
     }
 
     [Fact]
-    public void AskingOnlyForAnAssistantThatIsNotRegistered_FallsBackToSupport()
+    public void AskingOnlyForAnAssistantThatIsNotThere_FallsBackToSupport()
     {
-        var view = RenderView(assistantRegistered: false, offered: [SupportAssistance.Assistant]);
+        var view = RenderView(SupportAssistantReadiness.NotRegistered, offered: [SupportAssistance.Assistant]);
 
         Assert.Empty(Choices(view));
         Send(view);
 
         _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Help, SupportAssistance.None, default), Times.Once);
+    }
+
+    /// <summary>A deployment with an assistant, but no model for this team: the team is offered a person only.</summary>
+    [Fact]
+    public void ATeamWithoutAModelOfItsOwn_IsOfferedOnlySupport()
+    {
+        var view = RenderView(SupportAssistantReadiness.NotConfigured);
+
+        Assert.Empty(Choices(view));
+        Send(view);
+
+        _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Help, SupportAssistance.None, default), Times.Once);
+    }
+
+    /// <summary>Silence would read as nobody caring, so a case the assistant did not answer says so, beside the way to a person.</summary>
+    [Fact]
+    public void WhenTheAssistantDoesNotAnswer_TheConversationSaysSo()
+    {
+        var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.Assistant]);
+        var withAssistant = Raised with { AssistantState = SupportAssistantState.Active };
+        _cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = [withAssistant] });
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
+        _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
+        _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(false);
+
+        Send(view);
+
+        view.WaitForAssertion(() => Assert.Contains(SupportCasesViewText.AssistantDeclined.Default, view.Find($"[data-declined='{withAssistant.Id}']").TextContent));
+    }
+
+    [Fact]
+    public void WhenTheAssistantAnswers_NothingIsSaidAboutDeclining()
+    {
+        var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.Assistant]);
+        var withAssistant = Raised with { AssistantState = SupportAssistantState.Active };
+        _cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = [withAssistant] });
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
+        _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
+        _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(true);
+
+        Send(view);
+
+        view.WaitForAssertion(() => Assert.NotEmpty(view.FindAll($"[data-conversation='{withAssistant.Id}']")));
+        Assert.Empty(view.FindAll("[data-declined]"));
     }
 
     [Fact]
     public void TheOptionsTexts_AreTranslatedThroughTheTextProvider()
     {
-        var view = RenderView(assistantRegistered: true, texts: new Translating(new Dictionary<string, string>
+        var view = RenderView(SupportAssistantReadiness.Ready, texts: new Translating(new Dictionary<string, string>
         {
             [SupportCasesViewText.AnsweredByAssistant.Key] = "AI-assistent",
             [SupportCasesViewText.AnsweredByHuman.Key] = "Mänsklig support"
