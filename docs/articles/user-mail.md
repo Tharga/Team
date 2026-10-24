@@ -439,7 +439,8 @@ address alone, an address a mail cannot go to, or a mail of kind `Contact` queue
 - **It is not in the user's own history**, only in the log: the reason is for staff, not for the person it was meant for.
 - It expires like any mail that is done. **Failing to record it never changes what the caller hears.**
 
-**Not in the log yet:** a support answer is recorded on its case only.
+**Support answers are not in the log.** An answer goes out through the support mailbox's own channel rather than
+this queue, and its delivery is recorded on the case message it belongs to, so that is where to look for it.
 
 A host with its own `IUserMailOutbox` implements `ListAsync(filter, cursor, pageSize)` to support the log; until it
 does, `ListAllAsync` throws `NotSupportedException`. It implements `AddRefusedAsync(mail, reason, deduplicationKey, at)`
