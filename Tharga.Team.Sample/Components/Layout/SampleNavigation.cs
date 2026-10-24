@@ -27,7 +27,8 @@ internal static class SampleNavigation
         ]),
         new("Support", "support_agent", "Asking for help, with the assistant or a person, and answering it.", SampleAudience.SignedIn,
         [
-            new("Support", "support", "support_agent", "Your cases and a new one, the team's support queue, and cases that belong to no team.")
+            new("Support", "support", "support_agent", "Your cases and a new one, the team's support queue, and cases that belong to no team."),
+            new("AI assistant", "assistant", "smart_toy", "What the assistant answers your team with: the platform's model, Neurolito with your own key, or off.", RequiresTeam: true)
         ]),
         new("Messages", "mail", "Mail to users and to contacts, and what became of each one.", SampleAudience.Developer,
         [
