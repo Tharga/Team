@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@using Tharga.Team.Blazor.Features.Support
 @inject CookieThemeService CookieThemeService
 
 <CustomErrorBoundary>
@@ -18,6 +19,14 @@
             @Body
         </CustomErrorBoundary>
     </RadzenBody>
+    @* Help beside every page: the assistant where the team has one, and support. *@
+    <AuthorizeView>
+        <Authorized>
+            <CustomErrorBoundary>
+                <SupportPanel />
+            </CustomErrorBoundary>
+        </Authorized>
+    </AuthorizeView>
     @* <RadzenFooter>
         Plutus Wave by Thargelion
     </RadzenFooter> *@

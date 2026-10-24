@@ -9,8 +9,9 @@
   - Done: `SupportPanel.razor` and `.razor.css`, following FortDocs' panel. Readiness decides the assistant; `Offered` and the host's availability narrow both channels. Nothing is drawn without a team or with nobody to ask. Hidden on narrow screens, as the issue says; FortDocs has since moved to an overlay drawer there (FD-103), which is a choice for the user. **Found by the tests:** a boolean `aria-selected` or `aria-expanded` renders with no value when true and is dropped when false, so they are written as strings. FortDocs' panel has the same bug.
 - [x] 5. Render tests: the rail per channel; no assistant tab when the team is not ready, or when `Offered` or the availability says no; a message raises a case with the assistant and asks it to answer; writing to support hands over; the decline notice; earlier conversations; open state and width read from and written to local storage; a team change redraws; a case update redraws; listed as migrated in `TextCoverageTests`.
   - Done: `SupportPanelTests`, 16 tests. The panel is listed as migrated in `TextCoverageTests`. `Blazored.LocalStorage` is added to `SupportComponentSurfaceTests`' permitted namespaces: a public UI package a host reaches too. Blazor suite 2113.
-- [~] 6. Sample: `<SupportPanel />` in `MainLayout`.
-- [ ] 7. Docs: a support-cases section, "A side panel beside every page", and the `Tharga.Team.Blazor` README.
+- [x] 6. Sample: `<SupportPanel />` in `MainLayout`.
+  - Done: inside an `AuthorizeView`, so an anonymous visitor makes no calls, and in a `CustomErrorBoundary`, as the menu is.
+- [~] 7. Docs: a support-cases section, "A side panel beside every page", and the `Tharga.Team.Blazor` README.
 - [ ] 8. Full build (baseline 14) and the full suite; run the sample for the user to test.
 
 ## Decisions
