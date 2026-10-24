@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Authors>Daniel Bohlin</Authors>
+    <Company>Thargelion AB</Company>
+    <Product>Tharga Team Support Anthropic</Product>
+    <Description>Lets each team's support assistant answer through its own Neurolito key, over the Anthropic Messages API — the one package that takes the Anthropic SDK.</Description>
+    <PackageIconUrl>https://thargelion.net/assets/component-team.png</PackageIconUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <DebugType>portable</DebugType>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSource>true</IncludeSource>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!--
+      NU5048: PackageIconUrl is deprecated in favour of an embedded PackageIcon.
+      Suppressed deliberately. Tharga packages reference their icon from
+      https://thargelion.net/assets/ so all package icons are maintained in one
+      place and can be updated without republishing a package.
+    -->
+    <NoWarn>1701;1702;CS1591;NU5048</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Anthropic" Version="13.3.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.13" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Tharga.Team.Support\Tharga.Team.Support.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tharga.Team.Support.Anthropic.Tests" />
+  </ItemGroup>
+</Project>

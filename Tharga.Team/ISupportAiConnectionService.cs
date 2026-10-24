@@ -10,7 +10,7 @@ namespace Tharga.Team;
 /// provider in particular is refused unless the provider answers first, which a generic save could not express.
 /// <para>
 /// Every operation requires the <c>assistant:manage</c> scope on the team. Whether a member is offered the assistant
-/// is a different question, answered by <see cref="ISupportCaseService.GetAssistantReadinessAsync"/> to members.
+/// is a different question, answered by <see cref="Support.Cases.ISupportCaseService.GetAssistantReadinessAsync"/> to members.
 /// </para>
 /// <para>
 /// <b>The key goes in and never comes out.</b> It is stored encrypted, and no operation, result, log entry or audit
