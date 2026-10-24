@@ -11,8 +11,9 @@
   - Done: `SupportPanelTests`, 16 tests. The panel is listed as migrated in `TextCoverageTests`. `Blazored.LocalStorage` is added to `SupportComponentSurfaceTests`' permitted namespaces: a public UI package a host reaches too. Blazor suite 2113.
 - [x] 6. Sample: `<SupportPanel />` in `MainLayout`.
   - Done: inside an `AuthorizeView`, so an anonymous visitor makes no calls, and in a `CustomErrorBoundary`, as the menu is.
-- [~] 7. Docs: a support-cases section, "A side panel beside every page", and the `Tharga.Team.Blazor` README.
-- [ ] 8. Full build (baseline 14) and the full suite; run the sample for the user to test.
+- [x] 7. Docs: a support-cases section, "A side panel beside every page", and the `Tharga.Team.Blazor` README.
+  - Done: the components list now starts with `SupportPanel`, and a new section "A side panel beside every page" covers placing it, collapsed and open, handover, what is remembered, narrow screens, and who may be asked (readiness, `Offered`, `ISupportPanelAvailability`). The `Tharga.Team.Blazor` README lists the panel and `SupportAssistantConnectionView`.
+- [~] 8. Full build (baseline 14) and the full suite; run the sample for the user to test.
 
 ## Decisions
 
@@ -23,4 +24,4 @@
 
 ## Last session
 
-2026-10-24: plan written on `feature/support-side-panel`, branched from `feature/support-ai-connection` (PR #383, CI running). Waiting for confirmation before any code.
+2026-10-24: plan written on `feature/support-side-panel`, branched from `feature/support-ai-connection` (PR #383, CI running). Steps 2 to 7 done and committed; the sample runs with the panel for the user to test.

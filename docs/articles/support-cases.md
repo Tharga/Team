@@ -298,9 +298,12 @@ dismissal. It is derived from `ClosedBy`, which the sweep records as `SupportCas
 
 ## Components
 
-Four components ship in `Tharga.Team.Blazor`, and **all are optional**:
+Five components ship in `Tharga.Team.Blazor`, and **all are optional**:
 
 ```razor
+@* Help beside every page: the assistant where the team has one, and support, in a right-hand panel *@
+<SupportPanel />
+
 @* What a team member sees: raise a case, read the conversation, reply, reopen *@
 <SupportCasesView ShowSubject="false" />
 
@@ -318,6 +321,42 @@ Four components ship in `Tharga.Team.Blazor`, and **all are optional**:
 `SupportUnassignedView`, renders a note rather than throwing when the caller holds neither. It names each
 case's team through `ITeamOversightService` when the caller can list teams, and shows the team key when
 they cannot.
+
+### A side panel beside every page
+
+`SupportPanel` is a right-hand sidebar. Place it inside your `RadzenLayout`, beside the `RadzenBody`, for signed-in
+members:
+
+```razor
+<RadzenLayout>
+    <NavMenu />
+    <RadzenBody>@Body</RadzenBody>
+    <AuthorizeView>
+        <Authorized><SupportPanel /></Authorized>
+    </AuthorizeView>
+</RadzenLayout>
+```
+
+- **Collapsed**, it is a narrow rail: a button for each channel offered, and one to your support page carrying the
+  member's unread count.
+- **Open**, it has Assistant and Support tabs, a new conversation, the earlier conversations still open or with the
+  assistant, and the conversation itself. It is the same case `SupportCasesView` shows, so a conversation started in
+  the panel continues on the support page and back.
+- **Writing to support** on a conversation the assistant is answering hands it to a person, keeping the conversation.
+  Going back to the assistant after that starts a new conversation beside it. When the assistant does not answer,
+  the panel says so.
+- **Its width and open state are remembered in the browser**, under `StorageKey`. It opens at `DefaultWidth` (320)
+  until dragged, never narrower than 280 pixels. On a screen 768 pixels wide or less it is hidden, and your support
+  page (`SupportPagePath`, `/support` by default) is where to ask.
+- **An answer is marked read only while the panel is open and the page is looked at**, and the panel redraws when the
+  member changes team or a reply arrives from Slack or mail.
+
+**Who may be asked.** The assistant shows when the team is ready for one (`GetAssistantReadinessAsync`), so a team that
+turned the assistant off, or has no model, gets only support. `Offered` narrows what shows, as on `SupportCasesView`.
+To switch either channel per team, for example behind a feature a team has bought, register an
+`ISupportPanelAvailability`. Its `GetOfferedAsync(teamKey)` says who may be asked, and raising its `Changed` event
+redraws an open panel. It can only narrow: the assistant is never offered to a team that is not ready for it. With
+nobody to ask, or no team selected, the panel is not drawn at all.
 
 **`SupportCasesView`** has two tabs — the cases first, then where help is asked for. `Tab` names the one to
 show (`SupportCasesView.CasesTab` or `NewCaseTab`) and `TabChanged` reports a change, so a page can keep its
