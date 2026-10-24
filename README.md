@@ -415,8 +415,9 @@ builder.Services.AddSingleton<IChatClient>(_ => new OllamaApiClient(uri, "llama3
 ```
 
 Register none and there is no assistant: the choice is never offered and a person answers every case, exactly
-as before. The customer picks when raising a case and can ask for a person at any point, keeping the same
-transcript. An assistant answer takes the case out of support's queue and a customer reply puts it back, so a
+as before. To give each team its own model, or none, register an `ISupportChatClientResolver` instead; the
+assistant is then offered only to a team that has one (`GetAssistantReadinessAsync`). The customer picks when
+raising a case and can ask for a person at any point, keeping the same transcript. An assistant answer takes the case out of support's queue and a customer reply puts it back, so a
 dissatisfied customer is always back in front of a human.
 
 The assistant reads through the same scope-checked services as any caller — it sees what the person it is
