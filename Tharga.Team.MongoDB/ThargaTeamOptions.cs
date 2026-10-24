@@ -41,6 +41,18 @@ public record ThargaTeamOptions
     public string TeamMailKeyCollectionName { get; set; } = "TeamMailKey";
 
     /// <summary>
+    /// Collection holding each team's AI connection for the support assistant, one document per team, the key only
+    /// encrypted. Default <c>SupportAiConnection</c>.
+    /// </summary>
+    public string SupportAiConnectionCollectionName { get; set; } = "SupportAiConnection";
+
+    /// <summary>
+    /// Collection holding the Data Protection key ring, when <c>PersistKeysToThargaMongo</c> keeps it here. Default
+    /// <c>DataProtectionKey</c>.
+    /// </summary>
+    public string DataProtectionKeyCollectionName { get; set; } = "DataProtectionKey";
+
+    /// <summary>
     /// Collection holding received mail for teams' mailboxes and the postmaster — the envelope only; the raw
     /// message is kept by the host's content store. Default <c>InboundMail</c>.
     /// </summary>

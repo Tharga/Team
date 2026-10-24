@@ -1112,6 +1112,46 @@ A host's own `ISupportResponder` answers readiness through `GetReadinessAsync`, 
 `Ready`, so an existing responder is unchanged. A test double that skips the default member answers
 `NotRegistered`, which the service reads as `Ready` too: only the service can say there is no responder.
 
+### Each team chooses its connection
+
+Rather than writing a resolver, let each team choose in a component. A team administrator picks one of:
+
+- **The platform's model**, the `IChatClient` you register. A team that never chose has this.
+- **Neurolito, with the team's own key**, with the model picked from what Neurolito offers that key.
+- **Off**: no assistant for the team, so every case goes to a person.
+
+```csharp
+builder.Services.AddThargaSupportCases();
+builder.Services.AddThargaSupportAiConnections();   // the choice, its service and its component
+builder.Services.AddThargaSupportAnthropic();       // Neurolito as a provider (package Tharga.Team.Support.Anthropic)
+
+builder.Services.AddDataProtection()                // the key is encrypted with Data Protection...
+    .SetApplicationName("MySite")
+    .PersistKeysToThargaMongo();                    // ...so keep the key ring where every instance reads it
+```
+
+```razor
+<SupportAssistantConnectionView />
+```
+
+- **The `assistant:manage` team scope** governs reading and changing the connection. It is granted to team
+  Administrators by default; set `o.ScopeAccessLevel` to change who, or to `null` to grant it by no level.
+  Members are still offered the assistant by readiness, not by this scope.
+- **The key goes in and never comes out.** It is encrypted under a Data Protection purpose of its own, never
+  returned by the service, never logged, and never audited by value; the component clears it once saved. An
+  empty key field keeps the stored key, but only for the same provider and address, so a stored key is never
+  sent somewhere new.
+- **A provider is saved only once it answers.** Saving lists the provider's models for the key and refuses a
+  model the key may not use. **Load models** and **Test** do the same without saving; a refused key, a wrong
+  address or an unreachable server is said in words.
+- **Changes are audited** under `assistant` (`connect`, `test`, `use-platform`, `turn-off`), with the kind, model
+  and host, and purging a team removes its connection.
+
+**Persist the key ring.** Data Protection's default keeps its keys on the local file system. On more than one
+instance, or in a container whose file system does not survive a restart, a key stored by one instance cannot
+be read by another, and the team is asked to enter it again. `PersistKeysToThargaMongo()` keeps the ring in the
+database the toolkit already uses.
+
 ### What the customer sees
 
 The new-case form offers the assistant, unticked, only when the team is ready for one. A case being answered by an

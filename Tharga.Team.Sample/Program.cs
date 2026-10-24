@@ -16,8 +16,10 @@ using Tharga.Team.Images;
 using Tharga.Team.MongoDB;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.AI;
 using Tharga.Team.Support;
+using Tharga.Team.Support.Anthropic;
 using Tharga.Team.Support.Cases;
 using Tharga.Team.Email;
 using Tharga.Team.Email.Users;
@@ -303,6 +305,15 @@ builder.Services.AddThargaSupportCases(o =>
     o.Answers.Signature = ["Kind regards,", "Tharga Team Sample Support"];
     o.Answers.TimeZoneId = "Europe/Stockholm";
 });
+
+// Each team chooses what the assistant answers it with, on the "AI assistant" page: the platform's model (the
+// scripted client above), Neurolito with the team's own key, or off. A team that never chose keeps the platform's.
+// The key is stored encrypted with Data Protection, so the key ring lives in MongoDB where every instance reads it.
+builder.Services.AddThargaSupportAiConnections();
+builder.Services.AddThargaSupportAnthropic();
+builder.Services.AddDataProtection()
+    .SetApplicationName("Tharga.Team.Sample")
+    .PersistKeysToThargaMongo();
 
 // Mail to users: categories each user chooses from on their profile, and a queue sent in the background by
 // whichever instance claims each mail. On the same terms as support mail: with no UserMail settings nothing is

@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -25,6 +26,68 @@ public static class SupportRegistration
 
     private const string SupportManageDescription =
         "Reply to and close any support case in the team.";
+
+    private const string AssistantManageDescription =
+        "Choose what the support assistant answers the team with -- the platform's model, the team's own AI provider, or nothing -- and store the team's key for that provider.";
+
+    /// <summary>
+    /// Lets each team choose what the support assistant answers it with: the platform's model, its own provider, or
+    /// nothing, through <see cref="ISupportAiConnectionService"/> and its component.
+    /// </summary>
+    /// <remarks>
+    /// <b>A team that never chose keeps the platform's model</b>, so calling this changes nothing until somebody chooses.
+    /// Call it with <see cref="AddThargaSupportCases"/>, before or after.
+    /// <list type="bullet">
+    /// <item>The store comes from <c>AddThargaTeamRepository</c> in <c>Tharga.Team.MongoDB</c>.</item>
+    /// <item>Providers come from an <see cref="ISupportChatClientFactory"/>, such as <c>AddThargaSupportAnthropic</c>
+    /// for Neurolito. Without one, a team chooses between the platform's model and off.</item>
+    /// <item>Keys are encrypted with Data Protection. On more than one instance, or where the file system does not
+    /// survive a restart, persist the key ring where every instance reads it, such as
+    /// <c>AddDataProtection().PersistKeysToThargaMongo()</c>, or stored keys become unreadable.</item>
+    /// </list>
+    /// </remarks>
+    public static IServiceCollection AddThargaSupportAiConnections(this IServiceCollection services, Action<SupportAiConnectionOptions> configure = null)
+    {
+        if (services.Any(x => x.ServiceType == typeof(SupportAiConnectionOptions))) return services;
+
+        var options = new SupportAiConnectionOptions();
+        configure?.Invoke(options);
+        services.AddSingleton(options);
+
+        services.AddDataProtection();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddSingleton<SupportAiClientCache>();
+
+        // Replaces the default resolver whichever order the two calls come in: removed here if it is already there,
+        // and AddThargaSupportCases only tries to add it, so a later call leaves this one in place.
+        services.RemoveAll<ISupportChatClientResolver>();
+        services.AddScoped<ISupportChatClientResolver>(sp => new StoredChatClientResolver(
+            sp.GetRequiredService<ISupportAiConnectionStore>(),
+            sp.GetRequiredService<IDataProtectionProvider>(),
+            sp.GetRequiredService<SupportAiClientCache>(),
+            sp.GetRequiredService<ILogger<StoredChatClientResolver>>(),
+            sp.GetService<IChatClient>(),
+            sp.GetService<ISupportChatClientFactory>()));
+
+        services.AddScoped<ISupportAiConnectionService>(sp => new AuditingSupportAiConnectionServiceDecorator(
+            new AuthorizationSupportAiConnectionServiceDecorator(
+                new SupportAiConnectionService(
+                    sp.GetRequiredService<ISupportAiConnectionStore>(),
+                    sp.GetRequiredService<IDataProtectionProvider>(),
+                    sp.GetRequiredService<TeamAuthorizer>(),
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetService<IChatClient>() != null,
+                    sp.GetService<ISupportChatClientFactory>()),
+                sp.GetRequiredService<TeamAuthorizer>()),
+            sp.GetRequiredService<CompositeAuditLogger>(),
+            sp.GetRequiredService<IAuditEntryFactory>()));
+
+        services.AddTransient<ITeamPurgeParticipant, SupportAiConnectionPurgeParticipant>();
+
+        services.AddThargaScopes(scopes => RegisterTeamScope(scopes, SupportScopes.AssistantManage, options.ScopeAccessLevel, AssistantManageDescription));
+
+        return services;
+    }
 
     /// <summary>
     /// Registers Slack notifications: audited events are matched against

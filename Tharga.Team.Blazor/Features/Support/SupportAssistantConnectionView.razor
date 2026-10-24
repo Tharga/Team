@@ -1,0 +1,261 @@
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Blazor.Features.Team
+@inject ISupportAiConnectionService Connections
+@inject ITeamStateService TeamState
+@inject NotificationService NotificationService
+
+@* What the support assistant answers a team with: the platform's model, the team's own provider, or nothing. The
+   service requires assistant:manage on the team, so a reader without it is told rather than shown a form that fails.
+   The key is write-only: it is typed, sent, and cleared; nothing here ever reads one back. *@
+
+<RadzenCard>
+    @if (!_ready)
+    {
+        <Loading />
+    }
+    else if (_teamKey == null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            @_text[SupportAssistantConnectionViewText.SelectTeam]
+        </RadzenAlert>
+    }
+    else if (!_permitted)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+            @_text[SupportAssistantConnectionViewText.NotPermitted]
+        </RadzenAlert>
+    }
+    else
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportAssistantConnectionViewText.Title]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[SupportAssistantConnectionViewText.Explanation]</RadzenText>
+
+            @if (_connection.ChangedAt is { } changedAt)
+            {
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-changed>
+                    @_text.Format(SupportAssistantConnectionViewText.ChangedBy, _connection.ChangedBy, changedAt.ToLocalTime().ToString("g"))
+                </RadzenText>
+            }
+
+            <RadzenRadioButtonList TValue="SupportAiConnectionKind" Value="@_kind" Change="OnKindChanged" Orientation="Orientation.Vertical" Disabled="_busy" data-kinds>
+                <Items>
+                    @foreach (var kind in _choices.Kinds)
+                    {
+                        <RadzenRadioButtonListItem Text="@_text[SupportAssistantConnectionViewText.For(kind)]" Value="@kind" />
+                    }
+                </Items>
+            </RadzenRadioButtonList>
+
+            @if (IsProvider(_kind))
+            {
+                <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-provider="@_kind">
+                    <RadzenFormField Text="@_text[SupportAssistantConnectionViewText.Address]" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="_address" Disabled="_busy" data-address />
+                    </RadzenFormField>
+                    @* The hint is helper text, not a placeholder: inside a form field the placeholder is the floating label's. *@
+                    <RadzenFormField Text="@_text[SupportAssistantConnectionViewText.ApiKey]" Variant="Variant.Outlined">
+                        <ChildContent>
+                            <RadzenPassword @bind-Value="_apiKey" Disabled="_busy" AutoCompleteType="AutoCompleteType.Off" data-key />
+                        </ChildContent>
+                        <Helper>
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-key-hint>
+                                @(KeepsStoredKey ? _text[SupportAssistantConnectionViewText.ApiKeyStored] : _text[SupportAssistantConnectionViewText.ApiKeyPlaceholder])
+                            </RadzenText>
+                        </Helper>
+                    </RadzenFormField>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.End" Wrap="FlexWrap.Wrap">
+                        <RadzenButton Text="@_text[SupportAssistantConnectionViewText.LoadModels]" Icon="list" ButtonStyle="ButtonStyle.Light" Click="LoadModelsAsync" Disabled="_busy" data-load-models />
+                        @if (_models.Length > 0)
+                        {
+                            <RadzenFormField Text="@_text[SupportAssistantConnectionViewText.Model]" Variant="Variant.Outlined">
+                                <RadzenDropDown TValue="string" Data="_models" TextProperty="@nameof(SupportAiModel.DisplayName)" ValueProperty="@nameof(SupportAiModel.Id)"
+                                                @bind-Value="_model" Disabled="_busy" Style="min-width: 16rem;" data-models />
+                            </RadzenFormField>
+                        }
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                        <RadzenButton Text="@_text[SupportAssistantConnectionViewText.Test]" Icon="science" ButtonStyle="ButtonStyle.Light" Click="TestAsync" Disabled="@(_busy || _model == null)" data-test />
+                        <RadzenButton Text="@_text[SupportAssistantConnectionViewText.Save]" Icon="save" Click="SaveAsync" Disabled="@(_busy || _model == null)" data-save />
+                    </RadzenStack>
+                </RadzenStack>
+            }
+            else
+            {
+                <RadzenButton Text="@_text[SupportAssistantConnectionViewText.Save]" Icon="save" Click="SaveAsync" Disabled="_busy" Style="align-self: flex-start;" data-save />
+            }
+
+            @if (_reply != null)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Success" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter" AllowClose="false" data-reply>
+                    @_text[SupportAssistantConnectionViewText.TestReply] @_reply
+                </RadzenAlert>
+            }
+            @if (_problem != null)
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter" AllowClose="false" data-problem>
+                    @_problem
+                </RadzenAlert>
+            }
+        </RadzenStack>
+    }
+</RadzenCard>
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    /// <summary>The team whose assistant is shown and changed; the selected team when not set.</summary>
+    [Parameter] public string TeamKey { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private SupportAiConnectionChoices _choices = new();
+    private SupportAiConnection _connection = new();
+    private SupportAiModel[] _models = [];
+    private SupportAiConnectionKind _kind;
+    private string _address;
+    private string _apiKey;
+    private string _model;
+    private string _reply;
+    private string _problem;
+    private string _loadedFor;
+    private string _teamKey;
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+
+    /// <summary>A stored key is kept only for the provider and address it was entered for, as the service keeps it.</summary>
+    private bool KeepsStoredKey => _connection.HasApiKey
+                                   && _kind == _connection.Kind
+                                   && string.Equals(Trimmed(_address), Trimmed(_connection.BaseAddress), StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_ready && _loadedFor == TeamKey) return;
+
+        _loadedFor = TeamKey;
+        _ready = false;
+        _permitted = true;
+        _text = await TextProvider.ResolveAsync(SupportAssistantConnectionViewText.All);
+        _teamKey = string.IsNullOrWhiteSpace(TeamKey) ? (TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key) : TeamKey;
+
+        if (_teamKey != null)
+        {
+            try
+            {
+                await LoadAsync();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _permitted = false;
+            }
+        }
+
+        _ready = true;
+    }
+
+    private async Task LoadAsync()
+    {
+        _choices = await Connections.GetChoicesAsync(_teamKey);
+        _connection = await Connections.GetConnectionAsync(_teamKey);
+
+        Select(_choices.Kinds.Contains(_connection.Kind) ? _connection.Kind : _choices.Kinds.FirstOrDefault());
+    }
+
+    private void OnKindChanged(SupportAiConnectionKind kind) => Select(kind);
+
+    /// <summary>Shows a kind as the team has it, or as the provider starts when the team has something else.</summary>
+    private void Select(SupportAiConnectionKind kind)
+    {
+        _kind = kind;
+        _apiKey = null;
+        _reply = null;
+        _problem = null;
+
+        var current = kind == _connection.Kind;
+        _address = current && _connection.BaseAddress != null
+            ? _connection.BaseAddress
+            : _choices.ProviderDefaults.FirstOrDefault(x => x.Kind == kind)?.BaseAddress;
+        _model = current ? _connection.Model : null;
+        _models = _model == null ? [] : [new SupportAiModel(_model, _model)];
+    }
+
+    private SupportAiProviderRequest Request() => new()
+    {
+        Kind = _kind,
+        BaseAddress = _address,
+        ApiKey = string.IsNullOrWhiteSpace(_apiKey) ? null : _apiKey,
+        Model = _model
+    };
+
+    private Task LoadModelsAsync() => RunAsync(async () =>
+    {
+        var list = await Connections.ListModelsAsync(_teamKey, Request());
+        if (list.Problem != null)
+        {
+            _problem = list.Problem;
+            return;
+        }
+
+        _models = list.Models;
+        if (_models.All(x => x.Id != _model)) _model = _models.FirstOrDefault()?.Id;
+    });
+
+    private Task TestAsync() => RunAsync(async () =>
+    {
+        var result = await Connections.TestAsync(_teamKey, Request());
+        if (result.Succeeded) _reply = result.Reply;
+        else _problem = result.Problem;
+    });
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        switch (_kind)
+        {
+            case SupportAiConnectionKind.Platform:
+                await Connections.UsePlatformModelAsync(_teamKey);
+                break;
+            case SupportAiConnectionKind.Off:
+                await Connections.TurnOffAsync(_teamKey);
+                break;
+            default:
+                var result = await Connections.ConnectAsync(_teamKey, Request());
+                if (!result.Succeeded)
+                {
+                    _problem = result.Problem;
+                    return;
+                }
+                break;
+        }
+
+        _connection = await Connections.GetConnectionAsync(_teamKey);
+        Select(_kind);
+        NotificationService.Notify(NotificationSeverity.Success, _text[SupportAssistantConnectionViewText.Saved]);
+    });
+
+    private async Task RunAsync(Func<Task> operation)
+    {
+        _busy = true;
+        _reply = null;
+        _problem = null;
+        try
+        {
+            await operation();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+        catch (Exception)
+        {
+            _problem = _text[SupportAssistantConnectionViewText.Failed];
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static bool IsProvider(SupportAiConnectionKind kind) => kind is SupportAiConnectionKind.Neurolito or SupportAiConnectionKind.Anthropic;
+
+    private static string Trimmed(string address) => address?.Trim().TrimEnd('/');
+}
