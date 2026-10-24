@@ -29,4 +29,16 @@ public interface ISupportResponder
     /// the service that calls it, which would otherwise be a dependency cycle.
     /// </remarks>
     Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Whether this responder can answer for a team, and if not, why.
+    /// </summary>
+    /// <remarks>
+    /// Asked before a case is handed to the assistant and before the assistant is offered, so a team the
+    /// responder cannot answer for is never offered it. A default member answering
+    /// <see cref="SupportAssistantReadiness.Ready"/>, so a responder written before readiness existed keeps
+    /// compiling and keeps answering for every team, as it did.
+    /// </remarks>
+    Task<SupportAssistantReadiness> GetReadinessAsync(string teamKey, CancellationToken cancellationToken = default)
+        => Task.FromResult(SupportAssistantReadiness.Ready);
 }
