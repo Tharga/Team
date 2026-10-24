@@ -23,4 +23,16 @@ public static class SupportAuditMetadataKeys
 
     /// <summary>How many files a reply or answer carried; their names are kept out, as bodies are.</summary>
     public const string AttachmentCount = "support.message.attachments";
+
+    /// <summary>
+    /// What the assistant answers a team with after a change: Platform, Off, or a provider.
+    /// </summary>
+    /// <remarks>There is deliberately no key for the API key, for the reason there is none for a body.</remarks>
+    public const string AssistantConnection = "assistant.connection";
+
+    /// <summary>The model chosen at the provider.</summary>
+    public const string AssistantModel = "assistant.model";
+
+    /// <summary>The provider's host, without path or credentials.</summary>
+    public const string AssistantHost = "assistant.host";
 }

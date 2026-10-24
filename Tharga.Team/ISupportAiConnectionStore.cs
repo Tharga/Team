@@ -19,8 +19,8 @@ public interface ISupportAiConnectionStore
     /// <summary>Replaces the team's record with <paramref name="connection"/>.</summary>
     Task SetAsync(StoredSupportAiConnection connection, CancellationToken cancellationToken = default);
 
-    /// <summary>Removes the team's record, when the team itself is removed.</summary>
-    Task DeleteForTeamAsync(string teamKey, CancellationToken cancellationToken = default);
+    /// <summary>Removes the team's record, when the team itself is removed; true when there was one.</summary>
+    Task<bool> DeleteForTeamAsync(string teamKey, CancellationToken cancellationToken = default);
 }
 
 /// <summary>A team's AI connection as stored: the key only as Data Protection protected it.</summary>
