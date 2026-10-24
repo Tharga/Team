@@ -353,6 +353,10 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.MarkReadAsync(teamKey, caseId, cancellationToken);
 
+    // Not audited: nothing is stored, and a writer reports every few seconds.
+    public Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
+        => inner.ReportTypingAsync(teamKey, caseId, asSupport, cancellationToken);
+
     public Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetVisibilityChoiceAsync(teamKey, caseId, cancellationToken);
 

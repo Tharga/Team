@@ -31,6 +31,9 @@ public static class SupportTranscriptText
     /// <summary>The button that sends an undelivered answer again.</summary>
     public static readonly TextKey SendAgain = new("team.support.transcript.sendAgain", "Send again");
 
+    /// <summary>Read out for the dots shown while somebody on the other side is writing; <c>{0}</c> is their name.</summary>
+    public static readonly TextKey Typing = new("team.support.transcript.typing", "{0} is typing…");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Assistant, Support, NotSentYet, NotDelivered, SendAgain];
+    public static readonly TextKey[] All = [Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing];
 }

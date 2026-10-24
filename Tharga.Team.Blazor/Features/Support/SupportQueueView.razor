@@ -65,12 +65,12 @@ else
                                same reader. A copy is what gets extended in one place and not the other. *@
                             <SupportTranscript Messages="_messages" CaseAuthorIdentity="@_selected.AuthorIdentity"
                                                ShowDelivery="true" HasChannels="@(_selected.Bindings is { Length: > 0 })" Resend="ResendAsync"
-                                               TeamKey="@_teamKey" CaseId="@_selected.Id" />
+                                               TeamKey="@_teamKey" CaseId="@_selected.Id" Writing="Writing" />
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {
                                 <SupportAnswerRouteLine Route="_route" />
-                                <RichTextEditor @bind-Value="_answer" Label="@_text[SupportQueueViewText.AnswerLabel]" Disabled="_busy" Height="8rem" />
+                                <RichTextEditor Value="@_answer" ValueChanged="AnswerChanged" Label="@_text[SupportQueueViewText.AnswerLabel]" Disabled="_busy" Height="8rem" />
                                 <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                     <RadzenButton Text="@_text[SupportQueueViewText.AnswerLabel]" Click="AnswerAsync"
@@ -101,6 +101,7 @@ else
 
 @code {
     [Inject] private IThargaTextProvider TextProvider { get; set; }
+    [Inject] private IServiceProvider Services { get; set; }
 
     private TextSet _text = TextSet.Empty;
     private TextSet _mail = TextSet.Empty;
@@ -116,6 +117,10 @@ else
     private SupportCase _selected;
     private SupportAnswerRoute _route;
     private SupportMessage[] _messages = [];
+    private SupportTypingWatch _typing;
+    private SupportTypingReporter _reporter;
+
+    private SupportCaseTypingEventArgs[] Writing => _typing?.Writing ?? [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -124,6 +129,10 @@ else
 
         _teamKey = TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key;
 
+        var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
+        _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, () => InvokeAsync(StateHasChanged));
+        _reporter = new SupportTypingReporter(SupportCases, time);
+
         Notifier.CaseUpdated += OnCaseUpdated;
 
         if (_teamKey != null) await ReloadAsync();
@@ -131,7 +140,11 @@ else
         _ready = true;
     }
 
-    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+    public void Dispose()
+    {
+        Notifier.CaseUpdated -= OnCaseUpdated;
+        _typing?.Dispose();
+    }
 
     /// <remarks>
     /// Marshals before touching state: the notifier is a singleton raised from whichever scope handled the
@@ -144,6 +157,10 @@ else
         _ = InvokeAsync(async () =>
         {
             await ReloadAsync();
+
+            // The open conversation shows what the member just wrote; reading it only marks it read.
+            if (_selected?.Id == e.CaseId && e.Change != SupportCaseChange.Read && !_busy) await SelectAsync(_selected.Id);
+
             StateHasChanged();
         });
     }
@@ -166,6 +183,7 @@ else
         try
         {
             var files = SupportAttachmentPicker.Rewound(_files);
+            await _reporter.SendingAsync();
 
             await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, string.Empty, _answer ?? string.Empty, files);
 
@@ -179,6 +197,12 @@ else
         {
             _busy = false;
         }
+    }
+
+    private void AnswerChanged(string value)
+    {
+        _answer = value;
+        if (_selected != null && !RichTextEditor.IsEmpty(value)) _reporter?.Typed(_teamKey, _selected.Id, asSupport: true);
     }
 
     private async Task PreviewAsync()
@@ -271,6 +295,7 @@ else
             _selected = null;
             _route = null;
             _messages = [];
+            _typing?.Follow(null, null, null, authorOnRight: false);
             return;
         }
 
@@ -282,6 +307,9 @@ else
         _selected = await SupportCases.GetCaseAsync(_teamKey, caseId);
         _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, caseId)).Items;
         _route = await SupportAnswerPreview.RouteAsync(SupportCases, _selected);
+
+        _typing?.Follow(_teamKey, _selected?.Id, _selected?.AuthorIdentity, authorOnRight: false);
+        _typing?.Clear();
     }
 
     private async Task ReloadAsync()

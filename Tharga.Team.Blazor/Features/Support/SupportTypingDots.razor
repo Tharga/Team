@@ -1,0 +1,13 @@
+@* Three flashing dots while somebody on the other side is writing, read out as Label. *@
+
+<span class="support-typing" role="status" data-typing>
+    <span class="support-typing__dot" aria-hidden="true"></span>
+    <span class="support-typing__dot" aria-hidden="true"></span>
+    <span class="support-typing__dot" aria-hidden="true"></span>
+    <span class="support-typing__label">@Label</span>
+</span>
+
+@code {
+    /// <summary>Who is writing, for a screen reader: the dots themselves say nothing.</summary>
+    [Parameter] public string Label { get; set; }
+}

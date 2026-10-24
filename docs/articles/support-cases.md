@@ -440,6 +440,25 @@ differ per page, which reading the options could not express.
 — they are best placed to say the problem is solved, and a case closed while somebody is still typing reads
 as a dismissal. It is advisory: support can still close a case that is finished.
 
+### Who is writing
+
+While somebody on the other side is writing an answer, the open conversation shows three flashing dots where
+their message will appear, and a screen reader hears "Sam is typing…" (`team.support.transcript.typing`). It works
+in the side panel, `SupportCasesView`, `SupportQueueView` and `SupportAcrossTeamsView`. **Nobody sees dots for their
+own side**, so someone who writes as a member in the panel and answers at the desk sees each side from the other. A
+member writing to the assistant tells nobody.
+
+- **A writer reports through the service**, at most once every two seconds while writing: `ReportTypingAsync(teamKey,
+  caseId, asSupport)`. It is authorized exactly as replying, or as answering when `asSupport`, so nobody can show
+  dots in a case they could not answer. Nothing is stored, audited or counted as activity.
+- **The dots go away by themselves**, five seconds after the last report, or when the message arrives. There is no
+  "stopped" signal, so a writer who closes the page never leaves the dots behind.
+- **`ISupportTypingNotifier`** raises the reports, a singleton like `ISupportCaseNotifier` with the same rules:
+  marshal with `InvokeAsync`, and unsubscribe. It is separate because a report changes nothing, and every listener to
+  a case change reads the case again. `SupportCaseTypingEventArgs` says who and where, never what is being written.
+- **It is in-process**, as case changes are: across several instances, only circuits on the writer's instance see
+  the dots. Slack and mail do not report writing, so a reply typed there arrives without dots first.
+
 ## Reading history
 
 Paging uses an **explicit cursor**, and the cursor is the sequence of the last message returned:

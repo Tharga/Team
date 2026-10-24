@@ -126,6 +126,33 @@
             </div>
         </div>
     }
+
+    @* Placed as their message will be, so the answer arrives where the dots were. *@
+    @foreach (var writer in Writing ?? [])
+    {
+        var fromAuthor = SupportTypingWatch.FromAuthor(writer, CaseAuthorIdentity);
+        var onRight = fromAuthor == AuthorOnRight;
+        var name = string.IsNullOrWhiteSpace(writer.Name) ? _text[SupportTranscriptText.Support] : writer.Name;
+
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")"
+             data-writing="@(fromAuthor ? "author" : "support")">
+            <div style="flex: 0 0 auto;">
+                @if (fromAuthor)
+                {
+                    <UserAvatar Name="@writer.Name" Size="32px" />
+                }
+                else
+                {
+                    <span title="@_text[SupportTranscriptText.Support]" aria-label="@_text[SupportTranscriptText.Support]" style="@IconCircle">
+                        <RadzenIcon Icon="support_agent" />
+                    </span>
+                }
+            </div>
+            <div style="padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
+                <SupportTypingDots Label="@_text.Format(SupportTranscriptText.Typing, name)" />
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -171,6 +198,9 @@
 
     /// <summary>The case the entries belong to; without it files are listed but cannot be opened.</summary>
     [Parameter] public string CaseId { get; set; }
+
+    /// <summary>Who is writing an answer right now, shown as flashing dots after the last entry.</summary>
+    [Parameter] public SupportCaseTypingEventArgs[] Writing { get; set; } = [];
 
     private readonly HashSet<int> _resending = [];
     private readonly HashSet<string> _opening = [];

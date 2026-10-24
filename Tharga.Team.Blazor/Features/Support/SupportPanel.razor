@@ -99,6 +99,13 @@
                         </div>
                     }
 
+                    @foreach (var writer in _typing?.Writing ?? [])
+                    {
+                        <div class="support-panel__msg support-panel__msg--them" data-writing>
+                            <SupportTypingDots Label="@_text.Format(SupportTranscriptText.Typing, string.IsNullOrWhiteSpace(writer.Name) ? _text[SupportPanelText.Support] : writer.Name)" />
+                        </div>
+                    }
+
                     @if (_declined && _withAssistant && !_busy)
                     {
                         <div class="support-panel__msg support-panel__msg--them" data-declined>@_text[SupportCasesViewText.AssistantDeclined]</div>
@@ -113,7 +120,7 @@
                 </div>
 
                 <div class="support-panel__composer">
-                    <input class="support-panel__input" type="text" @bind="_draft" @bind:event="oninput" @onkeydown="OnKeyDownAsync"
+                    <input class="support-panel__input" type="text" @bind="_draft" @bind:event="oninput" @bind:after="DraftChanged" @onkeydown="OnKeyDownAsync"
                            placeholder="@(_support ? _text[SupportPanelText.WriteToSupport] : _text[SupportPanelText.AskAQuestion])"
                            aria-label="@_text[SupportPanelText.Message]" data-draft />
                     <button type="button" class="support-panel__icon support-panel__send" title="@_text[SupportPanelText.Send]" aria-label="@_text[SupportPanelText.Send]"
@@ -172,6 +179,8 @@
     private IJSObjectReference _module;
     private DotNetObjectReference<SupportPanel> _self;
     private SupportAttention _attention;
+    private SupportTypingWatch _typing;
+    private SupportTypingReporter _reporter;
     private ElementReference _resizeHandle;
     private ElementReference _log;
     private bool _resizeWired;
@@ -211,6 +220,10 @@
         _width = DefaultWidth;
         _text = await TextProvider.ResolveAsync(SupportPanelText.All);
         _availability = Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
+
+        var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
+        _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, OnWritingChanged);
+        _reporter = new SupportTypingReporter(SupportCases, time);
 
         Notifier.CaseUpdated += OnCaseUpdated;
         TeamState.SelectedTeamChangedEvent += OnSelectedTeamChanged;
@@ -347,6 +360,7 @@
 
     private Task StartNewAsync()
     {
+        _typing?.Follow(null, null, null, authorOnRight: true);
         _caseId = null;
         _withAssistant = false;
         _declined = false;
@@ -385,6 +399,7 @@
     {
         if (_caseId == null || _teamKey == null)
         {
+            _typing?.Follow(null, null, null, authorOnRight: true);
             _messages.Clear();
             return;
         }
@@ -406,6 +421,10 @@
         _withAssistant = supportCase.AssistantState == SupportAssistantState.Active;
         if (adoptWhoAnswers) _support = !_withAssistant;
 
+        // The panel shows only the member's own cases, so they are the author, on the right.
+        _typing?.Follow(_teamKey, _caseId, supportCase.AuthorIdentity, authorOnRight: true);
+        _typing?.Clear();
+
         if (_expanded) await MarkReadWhenSeenAsync(_teamKey, _caseId);
     }
 
@@ -419,6 +438,19 @@
             StateHasChanged();
         }));
     }
+
+    // Only support is told; the assistant answers what is sent.
+    private void DraftChanged()
+    {
+        if (_support && !string.IsNullOrWhiteSpace(_draft)) _reporter?.Typed(_teamKey, _caseId, asSupport: false);
+    }
+
+    // Brought into view as they appear, as a message would be; dots going away move nothing.
+    private void OnWritingChanged() => _ = InvokeAsync(() =>
+    {
+        if (_typing?.Writing.Length > 0) _scrollOnRender = true;
+        StateHasChanged();
+    });
 
     private async Task OnKeyDownAsync(KeyboardEventArgs args)
     {
@@ -439,6 +471,8 @@
 
         try
         {
+            if (_reporter != null) await _reporter.SendingAsync();
+
             if (_caseId == null)
             {
                 // No subject is asked for: the service takes one from the first words, so the conversation reads as a chat.
@@ -532,6 +566,7 @@
     {
         Notifier.CaseUpdated -= OnCaseUpdated;
         TeamState.SelectedTeamChangedEvent -= OnSelectedTeamChanged;
+        _typing?.Dispose();
         if (_availability != null) _availability.Changed -= OnAvailabilityChanged;
         _self?.Dispose();
 

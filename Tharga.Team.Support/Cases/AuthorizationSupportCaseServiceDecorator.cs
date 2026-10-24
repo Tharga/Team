@@ -306,6 +306,15 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.MarkReadAsync(teamKey, caseId, cancellationToken);
     }
 
+    /// <remarks>Checked as the write it announces, so nobody can show dots in a case they could not answer.</remarks>
+    public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
+    {
+        if (asSupport) await RequireSupportAnswerAsync(teamKey, caseId);
+        else await RequireCaseAccessAsync(teamKey, caseId, "write in", CaseAccessKind.Write);
+
+        await inner.ReportTypingAsync(teamKey, caseId, asSupport, cancellationToken);
+    }
+
     /// <remarks>Asking is never refused; somebody outside the team is simply told there is nothing to choose.</remarks>
     public async Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {

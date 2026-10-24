@@ -14,12 +14,12 @@
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="false" TimeTemplate="TimeTemplate"
                            ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" />
     }
     else
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" />
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
@@ -27,7 +27,7 @@
     {
         <SupportAnswerRouteLine Route="_route" />
     }
-    <RichTextEditor @bind-Value="_reply" Label="@ReplyText" Disabled="_busy" Height="8rem" />
+    <RichTextEditor Value="@_reply" ValueChanged="ReplyChanged" Label="@ReplyText" Disabled="_busy" Height="8rem" />
 
     <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
 
@@ -110,6 +110,7 @@
     [Parameter] public EventCallback<string> Written { get; set; }
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
+    [Inject] private IServiceProvider Services { get; set; }
 
     private TextSet _member = TextSet.Empty;
     private TextSet _staff = TextSet.Empty;
@@ -123,6 +124,10 @@
     private string _reply;
     private IReadOnlyList<SupportAttachmentUpload> _files = [];
     private bool _busy;
+    private SupportTypingWatch _typing;
+    private SupportTypingReporter _reporter;
+
+    private SupportCaseTypingEventArgs[] Writing => _typing?.Writing ?? [];
 
     private bool NothingToSend => RichTextEditor.IsEmpty(_reply) && _files.Count == 0;
 
@@ -153,6 +158,10 @@
         _member = await TextProvider.ResolveAsync(SupportCasesViewText.All);
         _staff = await TextProvider.ResolveAsync(SupportAcrossTeamsViewText.All);
         _mail = await TextProvider.ResolveAsync(MailPreviewText.All);
+
+        var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
+        _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, () => InvokeAsync(StateHasChanged));
+        _reporter = new SupportTypingReporter(SupportCases, time);
     }
 
     protected override async Task OnParametersSetAsync()
@@ -163,6 +172,10 @@
         _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
         _choice = AsStaff ? SupportCaseVisibilityChoice.None : await SupportCases.GetVisibilityChoiceAsync(Case.TeamKey, Case.Id) ?? SupportCaseVisibilityChoice.None;
         _route = AsStaff ? await SupportAnswerPreview.RouteAsync(SupportCases, Case) : null;
+
+        // Read again because the case changed, and a message arriving ends the dots that announced it.
+        _typing?.Follow(Case.TeamKey, Case.Id, Case.AuthorIdentity, authorOnRight: !AsStaff);
+        _typing?.Clear();
 
         // Read once somebody is looking: an answer arriving to a page in the background stays unread until then.
         if (!AsStaff && Unread > 0)
@@ -185,6 +198,7 @@
 
         var html = _reply ?? string.Empty;
         var files = SupportAttachmentPicker.Rewound(_files);
+        if (_reporter != null) await _reporter.SendingAsync();
 
         await ActAsync(() => AsStaff
             ? SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files)
@@ -193,6 +207,13 @@
         _files = [];
 
         if (!AsStaff) await Written.InvokeAsync(Case.Id);
+    }
+
+    private void ReplyChanged(string value)
+    {
+        _reply = value;
+        // The assistant answers what is sent; only a person on the other side is told.
+        if (!RichTextEditor.IsEmpty(value) && (AsStaff || !WithAssistant)) _reporter?.Typed(Case.TeamKey, Case.Id, AsStaff);
     }
 
     private async Task PreviewAsync()
@@ -257,6 +278,7 @@
 
     public async ValueTask DisposeAsync()
     {
+        _typing?.Dispose();
         if (_attention != null) await _attention.DisposeAsync();
     }
 }

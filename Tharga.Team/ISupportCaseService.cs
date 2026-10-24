@@ -213,6 +213,17 @@ public interface ISupportCaseService
     Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Says the caller is writing in this case right now, so whoever is reading it on the other side sees an answer coming.
+    /// </summary>
+    /// <remarks>
+    /// Raised through <see cref="ISupportTypingNotifier"/> and stored nowhere, so it is neither audited nor counted as
+    /// activity. Authorized exactly as writing is: replying for a member, answering when
+    /// <paramref name="asSupport"/>. Call it again every few seconds while writing; the signal lapses when no further
+    /// one follows.
+    /// </remarks>
+    Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// How many of the caller's own cases hold entries they have not read. What a per-user indicator shows.
     /// </summary>
     Task<int> GetMyUnreadCountAsync(string teamKey, CancellationToken cancellationToken = default);

@@ -271,6 +271,7 @@ public static class SupportRegistration
         // scope while the page waiting for it lives in a circuit's. A scoped notifier would raise the event
         // on an instance nothing is listening to.
         services.TryAddSingleton<ISupportCaseNotifier, SupportCaseNotifier>();
+        services.TryAddSingleton<ISupportTypingNotifier, SupportTypingNotifier>();
 
         // Purging a team destroys its cases. The store has exposed DeleteCasesForTeamAsync since the cases
         // shipped; this is the wiring that was missing, because the purge site could not reach the store.
@@ -345,7 +346,8 @@ public static class SupportRegistration
                     caseOptions.DefaultVisibility,
                     caseOptions.AssistantDefaultVisibility,
                     sp.GetService<ISupportAttachmentStore>(),
-                    sp.GetService<SupportMailboxes>()?.AnswerLimits() ?? SupportAttachmentLimitCheck.LimitsOf(sp.GetService<IOptions<MailOptions>>()?.Value)),
+                    sp.GetService<SupportMailboxes>()?.AnswerLimits() ?? SupportAttachmentLimitCheck.LimitsOf(sp.GetService<IOptions<MailOptions>>()?.Value),
+                    sp.GetService<ISupportTypingNotifier>()),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,

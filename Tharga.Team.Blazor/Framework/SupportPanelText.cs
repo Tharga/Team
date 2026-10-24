@@ -61,6 +61,7 @@ public static class SupportPanelText
     public static readonly TextKey[] All =
     [
         Assistant, Support, WhoToAsk, NewConversation, Earlier, NoEarlier, AllConversations, Close, Resize, AssistantGreeting,
-        SupportGreeting, Message, AskAQuestion, WriteToSupport, Send, Working, Failed, SelectTeam, SupportCasesViewText.AssistantDeclined
+        SupportGreeting, Message, AskAQuestion, WriteToSupport, Send, Working, Failed, SelectTeam, SupportCasesViewText.AssistantDeclined,
+        SupportTranscriptText.Typing
     ];
 }

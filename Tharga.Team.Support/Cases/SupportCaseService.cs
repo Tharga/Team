@@ -28,7 +28,8 @@ internal sealed class SupportCaseService(
     SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private,
     SupportCaseVisibility? assistantDefaultVisibility = null,
     ISupportAttachmentStore attachmentStore = null,
-    SupportAttachmentLimits attachmentLimits = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportAttachmentLimits attachmentLimits = null,
+    ISupportTypingNotifier typingNotifier = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
 
@@ -675,6 +676,20 @@ internal sealed class SupportCaseService(
 
     public Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => store.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
+
+    public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
+    {
+        if (typingNotifier == null) return;
+
+        typingNotifier.Notify(new SupportCaseTypingEventArgs
+        {
+            TeamKey = teamKey,
+            CaseId = caseId,
+            Identity = await authorizer.GetSubjectAsync(),
+            Name = await DisplayNameAsync(),
+            AsSupport = asSupport
+        });
+    }
 
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {

@@ -23,6 +23,7 @@ public class SupportPanelTests : BunitContext
     private readonly Mock<ISupportCaseNotifier> _notifier = new();
     private readonly Mock<ITeamStateService> _teamState = new();
     private readonly Mock<ILocalStorageService> _storage = new();
+    private readonly TestTypingNotifier _typing = new();
 
     private static SupportCase Case(string id, SupportAssistantState state = SupportAssistantState.Active, SupportCaseStatus status = SupportCaseStatus.Open) => new()
     {
@@ -69,6 +70,7 @@ public class SupportPanelTests : BunitContext
         Services.AddSingleton(_notifier.Object);
         Services.AddSingleton(_teamState.Object);
         Services.AddSingleton(_storage.Object);
+        Services.AddSingleton<ISupportTypingNotifier>(_typing);
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         if (availability != null) Services.AddSingleton(availability);
         Services.AddRadzenComponents();
@@ -274,6 +276,74 @@ public class SupportPanelTests : BunitContext
         _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = raised.Id, Change = SupportCaseChange.Replied, FromChannel = true });
 
         view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
+    }
+
+    [Fact]
+    public void SupportWriting_ShowsDotsInTheOpenConversation_UntilTheAnswerArrives()
+    {
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, messages: Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+        view.Find("[data-tab='support']").Click();
+        Send(view, Question);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-message]")));
+
+        _typing.Writes(TeamKey, raised.Id, "staff", asSupport: true, name: "Sam");
+
+        view.WaitForAssertion(() => Assert.Equal("Sam is typing…", view.Find("[data-writing] .support-typing__label").TextContent));
+
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, raised.Id, null, It.IsAny<int>(), default))
+            .ReturnsAsync(new SupportMessagePage { Items = [Message(1, Question, SupportMessageKind.User), Message(2, "From support.", SupportMessageKind.User, author: "staff")] });
+        _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = raised.Id, Change = SupportCaseChange.Replied, FromChannel = false });
+
+        view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
+        Assert.Empty(view.FindAll("[data-writing]"));
+    }
+
+    [Fact]
+    public void TheMembersOwnWriting_ShowsNoDots()
+    {
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, messages: Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+        view.Find("[data-tab='support']").Click();
+        Send(view, Question);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-message]")));
+
+        _typing.Writes(TeamKey, raised.Id, "alice", asSupport: false);
+
+        Assert.Empty(view.FindAll("[data-writing]"));
+    }
+
+    [Fact]
+    public void WritingToSupport_InAnOpenConversation_TellsSupport()
+    {
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, messages: Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+        view.Find("[data-tab='support']").Click();
+        Send(view, Question);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-message]")));
+
+        view.Find("input[data-draft]").Input("And the");
+        view.Find("input[data-draft]").Input("And the date");
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.ReportTypingAsync(TeamKey, raised.Id, false, default), Times.Once));
+    }
+
+    /// <summary>The assistant answers what is sent; nobody is waiting on the other side to be told.</summary>
+    [Fact]
+    public void WritingToTheAssistant_TellsNobody()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+        Send(view, Question);
+        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", default), Times.Once));
+
+        view.Find("input[data-draft]").Input("And the date");
+
+        _cases.Verify(x => x.ReportTypingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), default), Times.Never);
     }
 
     [Fact]
