@@ -52,7 +52,9 @@ public class ComponentDependencyResolutionTests
         "IContactMessageService",
         // Registered by AddThargaUserNotices in Tharga.Team.Email; only a host with automatic notices places the views.
         "IUserNoticePreferenceService",
-        "IUserNoticeTeamService"
+        "IUserNoticeTeamService",
+        // Registered by AddThargaSupportAiConnections in Tharga.Team.Support; only a host letting teams choose their AI places the view.
+        "ISupportAiConnectionService"
     ];
 
     /// <summary>Services the host supplies by construction — its own storage types and member type.</summary>
