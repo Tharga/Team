@@ -22,6 +22,7 @@
 - [x] 11. Docs: a new support-cases section on choosing each team's AI connection, the new package's README, the root README (table and tree), and the `Tharga.Team.Support` README.
   - Done: "Each team chooses its connection" in `docs/articles/support-cases.md` (registration, scope, key handling, verification, audit, key ring); the new package's README; the root README's table and dependency tree; the `Tharga.Team.Support` README; and the `Tharga.Team.MongoDB` README (the connection store and the key ring).
 - [~] 12. Full build (baseline 14) and the full suite. Push for testing on approval, then test against the user's Neurolito key.
+  - Build at 14 warnings. Full suite green: Email 985, MongoDB 458, Blazor 2092, Service 1470, Support 723, Support.Anthropic 12, Mcp 121, Entra 58, Images 11. The sample runs from the branch for the user to try a real Neurolito key; push waits on approval.
 
 ## Decisions
 
@@ -34,4 +35,4 @@
 
 ## Last session
 
-2026-10-24: plan written, waiting for confirmation before any code.
+2026-10-24: steps 2 to 11 done and committed, and the build and full suite are green. Next: the user tries a real Neurolito key in the sample (`/assistant`), then the branch is pushed on approval, then the close-out.
