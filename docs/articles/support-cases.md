@@ -332,8 +332,9 @@ Where help is asked for, **`Offered`** says who may be talked to: `SupportAssist
 (a person), or both, which is what null offers. With both on offer the customer chooses on a select bar — *Assistant*
 or *Support*, with support chosen until they choose — and the case is raised the way they chose. With one there is
 nothing to choose: the bar gives way to its name and the case is raised that way. **The assistant is never offered
-without an `ISupportResponder`**, whatever is passed, so a responder that is registered but switched off for one
-organisation is a matter of what the host passes for that organisation:
+to a team that is not ready for it** (`GetAssistantReadinessAsync`), whatever is passed. A team with no model of
+its own is handled by the resolver ([A model per team](#a-model-per-team)); an assistant that the team has but
+the host switches off for one organisation is a matter of what the host passes for that organisation:
 
 ```razor
 @* Human support only for this organisation, although the assistant is registered *@
@@ -1075,9 +1076,45 @@ This is also why provider-specific capability is not lost by the toolkit being n
 effort levels, token counting and the rest belong to the client you construct, so they stay available to you:
 you own the object the toolkit calls.
 
+### A model per team
+
+The registered `IChatClient` answers every team. To give teams different models, or none, register an
+`ISupportChatClientResolver`. It is asked for the team's client on every answer, so a team that sets one up
+or removes it is answered accordingly from its next message:
+
+```csharp
+builder.Services.AddScoped<ISupportChatClientResolver, TeamModels>();
+
+internal sealed class TeamModels(IMyTeamAiSettings settings) : ISupportChatClientResolver
+{
+    // Null for a team means no assistant for that team.
+    public Task<IChatClient> GetAsync(string teamKey, CancellationToken cancellationToken = default)
+        => settings.ClientForAsync(teamKey, cancellationToken);
+}
+```
+
+**A resolver is enough on its own:** a host that registers one has an assistant without registering an
+`IChatClient`. Register it before or after `AddThargaSupportCases`; either way it replaces the default.
+
+A team the resolver returns null for is **not configured**:
+
+- the new-case form does not offer it the assistant;
+- a case raised asking for the assistant goes to a person;
+- a case already with the assistant is declined, and the conversation says so beside **Talk to a person**.
+
+**Ask before offering.** `GetAssistantReadinessAsync(teamKey)` answers `Ready`, `NotConfigured`, or
+`NotRegistered` when the deployment has no assistant at all, so a component can say why the assistant is
+missing rather than only hide it. It requires membership of the team, as raising a case does. A resolver that
+throws reads as `NotConfigured`: somebody reporting a problem gets their case whatever the assistant's settings
+are doing.
+
+A host's own `ISupportResponder` answers readiness through `GetReadinessAsync`, a default member answering
+`Ready`, so an existing responder is unchanged. A test double that skips the default member answers
+`NotRegistered`, which the service reads as `Ready` too: only the service can say there is no responder.
+
 ### What the customer sees
 
-The new-case form offers the assistant, unticked, only when one is registered. A case being answered by an
+The new-case form offers the assistant, unticked, only when the team is ready for one. A case being answered by an
 assistant offers **Talk to a person**, which stops the assistant and leaves the same case, with the whole
 transcript, to whoever picks it up. That transition is one-way — handing back after somebody has asked for a
 human would answer a question they have already declined to have answered that way.
@@ -1127,7 +1164,7 @@ await cases.RunAssistantAsync(teamKey, raised.Id);   // returns false when there
 ```
 
 `RunAssistantAsync` is safe to call unconditionally: it does nothing when the case has no assistant, when the
-customer has asked for a person, or when the host registered no responder. The shipped components already
+customer has asked for a person, when the host registered no responder, or when the team has no model. The shipped components already
 call it, so a host using `<SupportCasesView />` needs none of this.
 
 ### Settings
@@ -1141,15 +1178,16 @@ builder.Services.AddThargaSupportCases(o =>
 });
 ```
 
-Configuring these does not turn an assistant on — registering an `IChatClient` does. There is deliberately no
-model, endpoint or key here.
+Configuring these does not turn an assistant on — registering an `IChatClient` or an
+`ISupportChatClientResolver` does. There is deliberately no model, endpoint or key here.
 
 **Replace `Instructions`.** The default says only what is true of every host: answer from the tools, and say
 so rather than guess. A model that knows your product answers very differently from one that does not.
 
 A model that times out, returns nothing, or cannot be reached **declines**, and a decline is an ordinary
 outcome rather than an error: the case stays waiting for a person, which is what the customer would have had
-anyway. A provider being down never stops somebody reporting a problem.
+anyway. A provider being down never stops somebody reporting a problem. `<SupportCasesView />` tells the
+customer the assistant could not answer, beside **Talk to a person**, rather than showing nothing.
 
 ## Is anybody on support
 

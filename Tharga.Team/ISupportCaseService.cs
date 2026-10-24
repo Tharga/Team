@@ -115,6 +115,20 @@ public interface ISupportCaseService
     /// <returns>True when an answer was appended.</returns>
     Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Whether the assistant can answer for this team, and if not, why.
+    /// </summary>
+    /// <remarks>
+    /// <b>Ask this before offering the assistant.</b> A deployment can give each team its own model or none, so
+    /// whether there is an assistant is a question about a team, not about the host. Raising a case that asks
+    /// for the assistant applies the same answer: a team that is not ready gets a person.
+    /// <para>
+    /// Authorized by membership, as raising a case is. A responder that cannot tell, because its settings could
+    /// not be read, reads as <see cref="SupportAssistantReadiness.NotConfigured"/> rather than an error.
+    /// </para>
+    /// </remarks>
+    Task<SupportAssistantReadiness> GetAssistantReadinessAsync(string teamKey, CancellationToken cancellationToken = default);
+
     /// <summary>Closes a case and records who closed it in its transcript.</summary>
     Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 

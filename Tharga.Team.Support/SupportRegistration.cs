@@ -245,15 +245,20 @@ public static class SupportRegistration
         // Resolved rather than injected into a component: an optional dependency taken as a required
         // injection is Tharga/Team#266, where opening a dialog killed the circuit because nothing had
         // registered what it demanded.
+        //
+        // Which model answers is the resolver's to say, per team. The default hands everybody the registered
+        // IChatClient; a host that registers its own resolver, before or after this call, has an assistant
+        // even with no IChatClient of its own, because the resolver is then where the models come from.
         services.AddSingleton(caseOptions.Assistant);
         services.TryAddScoped<ISupportAssistantTools, SupportAssistantTools>();
+        services.TryAddScoped<ISupportChatClientResolver>(sp => new RegisteredChatClientResolver(sp.GetService<IChatClient>()));
         services.TryAddScoped<ISupportResponder>(sp =>
         {
-            var chat = sp.GetService<IChatClient>();
-            if (chat == null) return null;
+            var resolver = sp.GetRequiredService<ISupportChatClientResolver>();
+            if (resolver is RegisteredChatClientResolver && sp.GetService<IChatClient>() == null) return null;
 
             return new ChatSupportResponder(
-                chat,
+                resolver,
                 sp.GetRequiredService<ISupportAssistantTools>(),
                 sp.GetRequiredService<SupportAssistantOptions>(),
                 sp.GetRequiredService<ILogger<ChatSupportResponder>>());

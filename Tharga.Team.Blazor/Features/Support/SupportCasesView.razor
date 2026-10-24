@@ -53,7 +53,7 @@ else
                                         </RadzenText>
                                     </TopMenu>
                                     <ChildContent>
-                                        <SupportCaseConversation Case="item" Unread="@UnreadIn(item.Id)" Thinking="@(_thinking == item.Id)"
+                                        <SupportCaseConversation Case="item" Unread="@UnreadIn(item.Id)" Thinking="@(_thinking == item.Id)" Declined="@(_declined == item.Id)"
                                                                  TimeTemplate="TimeTemplate" Changed="OnChangedAsync" Read="OnRead" Written="RunAssistantAsync" />
                                     </ChildContent>
                                 </ExpandableCard>
@@ -130,8 +130,9 @@ else
     [Parameter] public string CaseId { get; set; }
 
     /// <summary>
-    /// Who may be talked to: the assistant, support, or both. Null offers support, plus the assistant when one
-    /// is registered. The assistant is never offered without an <c>ISupportResponder</c>, whatever is passed.
+    /// Who may be talked to: the assistant, support, or both. Null offers support, plus the assistant when the
+    /// team is ready for one. The assistant is never offered to a team that is not
+    /// (<see cref="ISupportCaseService.GetAssistantReadinessAsync"/>), whatever is passed.
     /// </summary>
     /// <remarks>With both offered the customer chooses on a select bar; with one there is nothing to choose.</remarks>
     [Parameter] public SupportAssistance[] Offered { get; set; }
@@ -160,8 +161,9 @@ else
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     /// <remarks>
-    /// Resolved through the provider rather than injected, because presence and the assistant are registered
-    /// only when the host configured them, and <c>[Inject]</c> on a missing service fails the whole render.
+    /// Resolved through the provider rather than injected, because presence is registered only when the host
+    /// configured it, and <c>[Inject]</c> on a missing service fails the whole render. Whether there is an
+    /// assistant is asked of the case service instead, per team.
     /// </remarks>
     [Inject] private IServiceProvider Services { get; set; }
 
@@ -182,6 +184,7 @@ else
     private string _body;
     private SupportAssistance _answeredBy = SupportAssistance.None;
     private string _thinking;
+    private string _declined;
     private string _opened;
 
     private SupportCaseFilter _filter;
@@ -194,7 +197,7 @@ else
 
         _teamKey = TeamState == null ? null : (await TeamState.GetSelectedTeamAsync())?.Key;
 
-        var assistantAvailable = Services.GetService(typeof(ISupportResponder)) != null;
+        var assistantAvailable = _teamKey != null && await AssistantReadinessAsync() == SupportAssistantReadiness.Ready;
         _offered = [.. (Offered ?? [SupportAssistance.Assistant, SupportAssistance.None])
             .Distinct()
             .Where(x => x != SupportAssistance.Assistant || assistantAvailable)];
@@ -336,14 +339,36 @@ else
         }
     }
 
-    /// <remarks>Unconditional: the service answers nothing when the case has no assistant, so this need not decide.</remarks>
+    /// <remarks>
+    /// The team's own answer, asked once: whether the assistant exists is a question about the team, since a
+    /// deployment can give each team its own model or none. A refusal or a failure offers support alone.
+    /// </remarks>
+    private async Task<SupportAssistantReadiness> AssistantReadinessAsync()
+    {
+        try
+        {
+            return await SupportCases.GetAssistantReadinessAsync(_teamKey);
+        }
+        catch (Exception)
+        {
+            return SupportAssistantReadiness.NotConfigured;
+        }
+    }
+
+    /// <remarks>
+    /// Unconditional: the service answers nothing when the case has no assistant, so this need not decide. When
+    /// nothing is answered the conversation says so, because silence would read as nobody caring; it shows only
+    /// on a case still with the assistant, where talking to a person is offered beside it.
+    /// </remarks>
     private async Task RunAssistantAsync(string caseId)
     {
         _thinking = caseId;
+        _declined = null;
         StateHasChanged();
         try
         {
             if (await SupportCases.RunAssistantAsync(_teamKey, caseId)) await ReloadAsync();
+            else _declined = caseId;
         }
         finally
         {

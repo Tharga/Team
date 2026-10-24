@@ -95,6 +95,10 @@ public static class SupportCasesViewText
     /// <summary>The hand-over action, offered only while an assistant is answering.</summary>
     public static readonly TextKey TalkToAPerson = new("team.support.cases.assistant.handover", "Talk to a person");
 
+    /// <summary>Shown when the assistant was asked and did not answer, beside the hand-over action.</summary>
+    public static readonly TextKey AssistantDeclined = new("team.support.cases.assistant.declined",
+        "The assistant could not answer this. Talk to a person instead.");
+
     /// <summary>Introduces the choice of who in the team may read the case, offered while it is open.</summary>
     public static readonly TextKey VisibilityLabel = new("team.support.cases.visibility.label", "Who can read this case");
 
@@ -107,7 +111,7 @@ public static class SupportCasesViewText
     [
         Title, NewCase, SubjectLabel, MessageLabel, Send, CasesTab, NothingYet, NoneMatch, ReplyLabel, Close, CloseConfirmTitle, CloseConfirmBody, Cancel,
         Open, Closed, WithAssistant, ClosedForInactivity, SelectTeam, SupportOnline, SupportAway,
-        AnsweredByAssistant, AnsweredByHuman, AssistantThinking, TalkToAPerson,
+        AnsweredByAssistant, AnsweredByHuman, AssistantThinking, TalkToAPerson, AssistantDeclined,
         VisibilityLabel, VisibilityTeam, VisibilityPrivate
     ];
 }

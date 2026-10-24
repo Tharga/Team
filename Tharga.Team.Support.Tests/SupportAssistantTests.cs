@@ -161,7 +161,76 @@ public class SupportAssistantTests
         Assert.Equal([Question], responder.SeenTranscript.Select(x => x.Body));
     }
 
-    private sealed class FakeResponder(string answer) : ISupportResponder
+    [Fact]
+    public async Task WithNoResponderRegistered_ATeamHasNoAssistant()
+    {
+        var (service, _) = Build(responder: null, withResponder: false);
+
+        Assert.Equal(SupportAssistantReadiness.NotRegistered, await service.GetAssistantReadinessAsync(TeamA));
+    }
+
+    [Fact]
+    public async Task AResponderThatCanAnswerTheTeam_MakesItReady()
+    {
+        var (service, _) = Build();
+
+        Assert.Equal(SupportAssistantReadiness.Ready, await service.GetAssistantReadinessAsync(TeamA));
+    }
+
+    /// <summary>
+    /// A test double does not run the default member and answers the zero value. Hosts mock responders, and an
+    /// upgrade must not quietly take their assistant away.
+    /// </summary>
+    [Fact]
+    public async Task AResponderThatNeverSays_IsReady_EvenAsATestDouble()
+    {
+        var (service, _) = Build(Substitute.For<ISupportResponder>());
+
+        Assert.Equal(SupportAssistantReadiness.Ready, await service.GetAssistantReadinessAsync(TeamA));
+        Assert.Equal(SupportAssistantState.Active, (await service.RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant)).AssistantState);
+    }
+
+    [Fact]
+    public async Task AResponderWithNothingForTheTeam_MakesItNotConfigured()
+    {
+        var (service, _) = Build(new FakeResponder(Answer, SupportAssistantReadiness.NotConfigured));
+
+        Assert.Equal(SupportAssistantReadiness.NotConfigured, await service.GetAssistantReadinessAsync(TeamA));
+    }
+
+    /// <summary>A team with no model never gets a case waiting on an assistant that would only decline.</summary>
+    [Fact]
+    public async Task ATeamThatIsNotReady_AskingForTheAssistant_GetsAPerson()
+    {
+        var (service, store) = Build(new FakeResponder(Answer, SupportAssistantReadiness.NotConfigured));
+
+        var raised = await service.RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+
+        Assert.Equal(SupportAssistantState.None, raised.AssistantState);
+        Assert.Equal(1, await store.GetAwaitingSupportCountAsync(TeamA));
+    }
+
+    /// <summary>Somebody reporting a problem gets their case even when the assistant's settings cannot be read.</summary>
+    [Fact]
+    public async Task AReadinessThatThrows_StillRaisesTheCase_ForAPerson()
+    {
+        var (service, _) = Build(new FakeResponder(Answer, readinessThrows: true));
+
+        Assert.Equal(SupportAssistantReadiness.NotConfigured, await service.GetAssistantReadinessAsync(TeamA));
+
+        var raised = await service.RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+        Assert.Equal(SupportAssistantState.None, raised.AssistantState);
+    }
+
+    [Fact]
+    public async Task ACallerOutsideTheTeam_IsRefusedItsReadiness()
+    {
+        var (service, _) = Build();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetAssistantReadinessAsync("team-b"));
+    }
+
+    private sealed class FakeResponder(string answer, SupportAssistantReadiness readiness = SupportAssistantReadiness.Ready, bool readinessThrows = false) : ISupportResponder
     {
         public SupportCase SeenCase { get; private set; }
         public IReadOnlyList<SupportMessage> SeenTranscript { get; private set; }
@@ -175,6 +244,9 @@ public class SupportAssistantTests
                 ? SupportAnswer.Declined("Nothing to say.")
                 : SupportAnswer.FromBody(answer));
         }
+
+        public Task<SupportAssistantReadiness> GetReadinessAsync(string teamKey, CancellationToken cancellationToken = default)
+            => readinessThrows ? throw new InvalidOperationException("The settings store is down.") : Task.FromResult(readiness);
     }
 
     private static (ISupportCaseService Service, InMemorySupportCaseStore Store) Build(

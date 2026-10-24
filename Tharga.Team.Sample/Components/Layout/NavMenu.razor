@@ -1,4 +1,5 @@
 ﻿@inject ITeamStateService TeamStateService
+@implements IDisposable
 
 <RadzenHeader>
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.SpaceBetween">
@@ -31,35 +32,27 @@
 </RadzenHeader>
 
 <RadzenSidebar Responsive="false" Style="width: max-content">
-    <RadzenPanelMenu DisplayStyle="@(_menuExpanded ? MenuItemDisplayStyle.IconAndText : MenuItemDisplayStyle.Icon)" ShowArrow="true">
+    @* One section per area, from SampleNavigation, which the dashboard reads too. The section holding the
+       current page opens by itself; the others stay as the reader left them. *@
+    <RadzenPanelMenu DisplayStyle="@(_menuExpanded ? MenuItemDisplayStyle.IconAndText : MenuItemDisplayStyle.Icon)" ShowArrow="true" Multiple="true">
         <RadzenPanelMenuItem Text="Home" Path="" Icon="home" />
         <CascadingAuthenticationState>
 
             <AuthorizeView>
                 <Authorized>
-                    <RadzenPanelMenuItem Text="Profile" Path="account" Icon="person"/>
-                    <RadzenPanelMenuItem Text="Team" Path="team" Icon="groups"/>
-                    <RadzenPanelMenuItem Text="Scopes" Path="scopes" Icon="shield"/>
-                    <RadzenPanelMenuItem Text="Support" Path="support" Icon="support_agent"/>
-                    @* <RadzenPanelMenuItem Text="Invites" Path="invites" Icon="mail"/> *@
-                    <RadzenPanelMenuItem Text="Custom roles" Path="roles" Icon="admin_panel_settings"/>
-                    <RadzenPanelMenuItem Text="Access" Path="access" Icon="verified_user"/>
-                    @if (_hasTeam)
+                    @foreach (var group in SampleNavigation.Groups.Where(x => x.Audience == SampleAudience.SignedIn))
                     {
-                        <RadzenPanelMenuItem Text="Team audit" Path="team-audit" Icon="receipt_long"/>
-                        <RadzenPanelMenuItem Text="API Keys" Path="api-keys" Icon="key"/>
+                        @Section(group)
                     }
                 </Authorized>
             </AuthorizeView>
 
             <AuthorizeView Roles="@Tharga.Team.Blazor.Framework.Roles.Developer">
                 <Authorized>
-                    <RadzenPanelMenuItem Text="System audit" Path="audit" Icon="receipt_long"/>
-                    <RadzenPanelMenuItem Text="System API Keys" Path="system-api-keys" Icon="vpn_key"/>
-                    <RadzenPanelMenuItem Text="Users" Path="users" Icon="people" />
-                    <RadzenPanelMenuItem Text="Messages" Path="messages" Icon="mail" />
-                    <RadzenPanelMenuItem Text="Contacts" Path="contacts" Icon="contact_mail" />
-                    <RadzenPanelMenuItem Text="Icon settings" Path="icon-settings" Icon="image" />
+                    @foreach (var group in SampleNavigation.Groups.Where(x => x.Audience == SampleAudience.Developer))
+                    {
+                        @Section(group)
+                    }
                 </Authorized>
             </AuthorizeView>
 
@@ -70,9 +63,42 @@
 @code {
     bool _menuExpanded = true;
     bool _hasTeam;
+    readonly HashSet<string> _openSections = [];
+
+    [Inject] private NavigationManager Navigation { get; set; }
+
+    private RenderFragment Section(SampleNavigationGroup group) => @<RadzenPanelMenuItem Text="@group.Text" Icon="@group.Icon"
+                                                                        Expanded="@_openSections.Contains(group.Text)"
+                                                                        ExpandedChanged="@(open => SetOpen(group.Text, open))">
+        @foreach (var item in group.Items.Where(x => _hasTeam || !x.RequiresTeam))
+        {
+            <RadzenPanelMenuItem Text="@item.Text" Path="@item.Path" Icon="@item.Icon" />
+        }
+    </RadzenPanelMenuItem>;
+
+    private void SetOpen(string section, bool open)
+    {
+        if (open) _openSections.Add(section);
+        else _openSections.Remove(section);
+    }
+
+    private void OpenCurrentSection()
+    {
+        var group = SampleNavigation.GroupOf(Navigation.ToBaseRelativePath(Navigation.Uri));
+        if (group != null) _openSections.Add(group.Text);
+    }
+
+    private void OnLocationChanged(object sender, LocationChangedEventArgs e)
+    {
+        OpenCurrentSection();
+        InvokeAsync(StateHasChanged);
+    }
 
     protected override async Task OnInitializedAsync()
     {
+        OpenCurrentSection();
+        Navigation.LocationChanged += OnLocationChanged;
+
         // The handler reads the team from the args -- GetSelectedTeamAsync resolves as well as reads, so
         // calling it from a handler asks for the work the handler is reacting to being done again.
         TeamStateService.SelectedTeamChangedEvent += async (_, e) =>
@@ -90,4 +116,6 @@
         var team = await TeamStateService.GetSelectedTeamAsync();
         _hasTeam = team != null;
     }
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
 }
