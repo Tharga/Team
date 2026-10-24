@@ -139,6 +139,12 @@ public static class ThargaTeamRegistration
             services.AddTransient<ITeamMailKeysCollection, TeamMailKeysCollection>();
             services.TrackMongoCollection(typeof(ITeamMailKeysCollection), typeof(TeamMailKeysCollection));
             services.TryAddScoped<ITeamMailKeyStore, MongoTeamMailKeyStore>();
+
+            // Each team's AI connection for the support assistant, one document per team. TryAdd so a host keeping
+            // its own wins.
+            services.AddTransient<ISupportAiConnectionCollection, SupportAiConnectionCollection>();
+            services.TrackMongoCollection(typeof(ISupportAiConnectionCollection), typeof(SupportAiConnectionCollection));
+            services.TryAddScoped<ISupportAiConnectionStore, MongoSupportAiConnectionStore>();
             services.AddTransient<IInboundMailCollection, InboundMailCollection>();
             services.TrackMongoCollection(typeof(IInboundMailCollection), typeof(InboundMailCollection));
             services.TryAddScoped<ITeamMailStore, MongoTeamMailStore>();
