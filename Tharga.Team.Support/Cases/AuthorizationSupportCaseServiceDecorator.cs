@@ -53,6 +53,14 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.RunAssistantAsync(teamKey, caseId, cancellationToken);
     }
 
+    /// <remarks>Authorized as the run without reports: whoever may have the assistant answer may watch it write.</remarks>
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "answer", CaseAccessKind.Write);
+
+        return await inner.RunAssistantAsync(teamKey, caseId, answerSoFar, cancellationToken);
+    }
+
     /// <remarks>Authorized as replying is: whoever may answer a case may decide who answers it.</remarks>
     public async Task RequestHumanAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
@@ -304,6 +312,15 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await RequireCaseAccessAsync(teamKey, caseId, "mark read", CaseAccessKind.Read);
 
         await inner.MarkReadAsync(teamKey, caseId, cancellationToken);
+    }
+
+    /// <remarks>Checked as the write it announces, so nobody can show dots in a case they could not answer.</remarks>
+    public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
+    {
+        if (asSupport) await RequireSupportAnswerAsync(teamKey, caseId);
+        else await RequireCaseAccessAsync(teamKey, caseId, "write in", CaseAccessKind.Write);
+
+        await inner.ReportTypingAsync(teamKey, caseId, asSupport, cancellationToken);
     }
 
     /// <remarks>Asking is never refused; somebody outside the team is simply told there is nothing to choose.</remarks>

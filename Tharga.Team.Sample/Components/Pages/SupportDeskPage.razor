@@ -1,0 +1,29 @@
+@page "/support-desk"
+@attribute [Authorize(Roles = Tharga.Team.Blazor.Framework.Roles.Developer)]
+@using Microsoft.AspNetCore.Authorization
+@using Tharga.Team.Blazor.Features.Support
+
+<PageTitle>Support desk</PageTitle>
+
+@* The back office of support, for the people who run it: every team's cases and the ones with no team, answered in
+   place. Paired with the side panel it is both ends of one conversation -- a member writes in the panel, support
+   answers here, and each side reads as a chat. The Developer role holds the system grants it needs
+   (support:all:manage, support:unassigned:read and :manage), mapped in Program.cs. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
+        Open this page in a second window and write in the side panel's Support tab as a member: the conversation
+        appears here, and what you answer here appears in the panel. A conversation the assistant is answering
+        reaches the desk once the member asks for a person.
+    </RadzenText>
+
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Every team</RadzenText>
+        <SupportAcrossTeamsView />
+    </RadzenCard>
+
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Without a team</RadzenText>
+        <SupportUnassignedView />
+    </RadzenCard>
+</RadzenStack>

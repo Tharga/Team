@@ -116,6 +116,20 @@ public interface ISupportCaseService
     Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Runs the assistant as <see cref="RunAssistantAsync(string, string, CancellationToken)"/> does, reporting its
+    /// answer as written so far to <paramref name="answerSoFar"/> while the model writes it.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only the caller sees the answer before it is kept.</b> Reports go to <paramref name="answerSoFar"/> and
+    /// nowhere else, never through <see cref="ISupportCaseNotifier"/>, which carries no text and no authorization.
+    /// Everybody else reads the answer once it is appended. Each report is the whole text so far; a responder that
+    /// cannot stream reports nothing and answers in one piece. A report may arrive on another thread, so marshal
+    /// before touching component state.
+    /// </remarks>
+    /// <returns>True when an answer was appended. When false, whatever was reported was not kept.</returns>
+    Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Whether the assistant can answer for this team, and if not, why.
     /// </summary>
     /// <remarks>
@@ -211,6 +225,17 @@ public interface ISupportCaseService
     /// cannot see.
     /// </remarks>
     Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Says the caller is writing in this case right now, so whoever is reading it on the other side sees an answer coming.
+    /// </summary>
+    /// <remarks>
+    /// Raised through <see cref="ISupportTypingNotifier"/> and stored nowhere, so it is neither audited nor counted as
+    /// activity. Authorized exactly as writing is: replying for a member, answering when
+    /// <paramref name="asSupport"/>. Call it again every few seconds while writing; the signal lapses when no further
+    /// one follows.
+    /// </remarks>
+    Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// How many of the caller's own cases hold entries they have not read. What a per-user indicator shows.

@@ -126,6 +126,58 @@
             </div>
         </div>
     }
+
+    @* Not yet kept: dots while the assistant has written nothing, then the answer as it writes it, replaced by the answer once kept. *@
+    @if (!string.IsNullOrEmpty(AnswerSoFar) || !string.IsNullOrEmpty(ThinkingText))
+    {
+        var onRight = !AuthorOnRight;
+
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")"
+             aria-busy="true" data-answer-so-far="@(string.IsNullOrEmpty(AnswerSoFar) ? "thinking" : "writing")">
+            <div style="flex: 0 0 auto;">
+                <span title="@_text[SupportTranscriptText.Assistant]" aria-label="@_text[SupportTranscriptText.Assistant]" data-sender="assistant" style="@IconCircle">
+                    <RadzenIcon Icon="smart_toy" />
+                </span>
+            </div>
+            <div style="max-width: 75%; min-width: 0; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
+                @if (string.IsNullOrEmpty(AnswerSoFar))
+                {
+                    <SupportTypingDots Label="@ThinkingText" />
+                }
+                else
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@AnswerSoFar</RadzenText>
+                }
+            </div>
+        </div>
+    }
+
+    @* Placed as their message will be, so the answer arrives where the dots were. *@
+    @foreach (var writer in Writing ?? [])
+    {
+        var fromAuthor = SupportTypingWatch.FromAuthor(writer, CaseAuthorIdentity);
+        var onRight = fromAuthor == AuthorOnRight;
+        var name = string.IsNullOrWhiteSpace(writer.Name) ? _text[SupportTranscriptText.Support] : writer.Name;
+
+        <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")"
+             data-writing="@(fromAuthor ? "author" : "support")">
+            <div style="flex: 0 0 auto;">
+                @if (fromAuthor)
+                {
+                    <UserAvatar Name="@writer.Name" Size="32px" />
+                }
+                else
+                {
+                    <span title="@_text[SupportTranscriptText.Support]" aria-label="@_text[SupportTranscriptText.Support]" style="@IconCircle">
+                        <RadzenIcon Icon="support_agent" />
+                    </span>
+                }
+            </div>
+            <div style="padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
+                <SupportTypingDots Label="@_text.Format(SupportTranscriptText.Typing, name)" />
+            </div>
+        </div>
+    }
 </div>
 
 @code {
@@ -171,6 +223,18 @@
 
     /// <summary>The case the entries belong to; without it files are listed but cannot be opened.</summary>
     [Parameter] public string CaseId { get; set; }
+
+    /// <summary>The assistant's answer as written so far, shown after the last entry until it is kept.</summary>
+    [Parameter] public string AnswerSoFar { get; set; }
+
+    /// <summary>
+    /// While the assistant is working and has written nothing yet, flashing dots on its side, read out as this text;
+    /// null when it is not working.
+    /// </summary>
+    [Parameter] public string ThinkingText { get; set; }
+
+    /// <summary>Who is writing an answer right now, shown as flashing dots after the last entry.</summary>
+    [Parameter] public SupportCaseTypingEventArgs[] Writing { get; set; } = [];
 
     private readonly HashSet<int> _resending = [];
     private readonly HashSet<string> _opening = [];

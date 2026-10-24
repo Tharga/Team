@@ -18,9 +18,13 @@ namespace Tharga.Team.Sample.Framework;
 /// </remarks>
 internal sealed class SampleChatClient : IChatClient
 {
+    // Says what it is, so nobody trying the sample mistakes a script for a model that could not help them.
     private const string Fallback =
-        "I could not work that one out from what I can see on your account. I have left the case open, " +
-        "and somebody will pick it up.";
+        "I am the sample's built-in responder: a short script, not an AI model, so I only answer questions about " +
+        "invitations, API keys, teams and exports. To try a real model, choose one for your team under Support, " +
+        "AI assistant; or ask for a person.";
+
+    private const string Signature = "(Answered by the sample's built-in scripted responder, not an AI model.)";
 
     private static readonly (string Term, string Answer)[] Script =
     [
@@ -37,12 +41,13 @@ internal sealed class SampleChatClient : IChatClient
     {
         var question = messages?.LastOrDefault(x => x.Role == ChatRole.User)?.Text ?? string.Empty;
 
-        var answer = Array.Find(Script, x => question.Contains(x.Term, StringComparison.OrdinalIgnoreCase)).Answer
-            ?? Fallback;
+        var scripted = Array.Find(Script, x => question.Contains(x.Term, StringComparison.OrdinalIgnoreCase)).Answer;
+        var answer = scripted == null ? Fallback : $"{scripted}\n\n{Signature}";
 
         return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer)));
     }
 
+    // A word at a time, at about the pace of a small local model, so the panel shows an answer being written.
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
         IEnumerable<ChatMessage> messages,
         ChatOptions options = null,
@@ -52,9 +57,15 @@ internal sealed class SampleChatClient : IChatClient
 
         foreach (var message in response.Messages)
         {
-            yield return new ChatResponseUpdate(message.Role, message.Text);
+            foreach (var word in System.Text.RegularExpressions.Regex.Split(message.Text, @"(?<=\s)"))
+            {
+                await Task.Delay(WordDelay, cancellationToken);
+                yield return new ChatResponseUpdate(message.Role, word);
+            }
         }
     }
+
+    private static readonly TimeSpan WordDelay = TimeSpan.FromMilliseconds(60);
 
     public object GetService(Type serviceType, object serviceKey = null) => null;
 

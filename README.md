@@ -427,6 +427,10 @@ The assistant reads through the same scope-checked services as any caller — it
 answering sees, and nothing more — and it answers rather than acts: closing, assigning and reopening stay
 with people. Add tools over your own product by implementing `ISupportAssistantTools`.
 
+**Help beside every page.** `<SupportPanel />` is a right-hand sidebar in your layout where a member talks to the
+assistant or to support, in the same case the support page shows. The assistant's answer appears as the model
+writes it, and either side sees flashing dots while the other is writing.
+
 **Support by mail is complete both ways (4.2).** Several mailboxes feed one support and a case is answered from
 the one it came in through; a sender whose DKIM-verified address belongs to one account in one team lands in that
 team, anything less waits unassigned with suggested teams; files and formatting survive both ways through one

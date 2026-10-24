@@ -1,3 +1,4 @@
+using System.Text;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -26,7 +27,11 @@ internal sealed class ChatSupportResponder(
 {
     internal const string NotConfiguredReason = "The assistant is not set up for this team.";
 
-    public async Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default)
+    public Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default)
+        => AnswerAsync(supportCase, transcript, null, cancellationToken);
+
+    /// <remarks>Streams only when somebody is watching; without <paramref name="answerSoFar"/> the model is asked for the answer in one piece, as it always was.</remarks>
+    public async Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
     {
         if (transcript == null || transcript.Count == 0) return SupportAnswer.Declined("The case has no messages to answer.");
 
@@ -47,12 +52,11 @@ internal sealed class ChatSupportResponder(
                 return SupportAnswer.Declined(NotConfiguredReason);
             }
 
-            var response = await chat.GetResponseAsync(
-                history,
-                new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken)] },
-                deadline.Token);
+            var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken)] };
 
-            var body = response.Text?.Trim();
+            var body = answerSoFar == null
+                ? (await chat.GetResponseAsync(history, chatOptions, deadline.Token)).Text?.Trim()
+                : (await StreamAsync(chat, history, chatOptions, answerSoFar, supportCase.Id, deadline.Token)).Trim();
 
             return string.IsNullOrWhiteSpace(body)
                 ? SupportAnswer.Declined("The assistant returned nothing.")
@@ -72,6 +76,36 @@ internal sealed class ChatSupportResponder(
             logger.LogError(ex, "The support assistant failed on case {CaseId}.", supportCase.Id);
             return SupportAnswer.Declined("The assistant could not be reached.");
         }
+    }
+
+    /// <remarks>
+    /// <b>A reader that fails is dropped, not the answer.</b> The reports are a preview for whoever is watching; the
+    /// answer they preview is still kept.
+    /// </remarks>
+    private async Task<string> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<string> answerSoFar, string caseId, CancellationToken cancellationToken)
+    {
+        var text = new StringBuilder();
+        var reporting = true;
+
+        await foreach (var update in chat.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
+        {
+            if (string.IsNullOrEmpty(update.Text)) continue;
+
+            text.Append(update.Text);
+            if (!reporting) continue;
+
+            try
+            {
+                answerSoFar.Report(text.ToString());
+            }
+            catch (Exception ex)
+            {
+                reporting = false;
+                logger.LogWarning(ex, "Showing the support assistant's answer to case {CaseId} as it was written failed; the answer is still kept.", caseId);
+            }
+        }
+
+        return text.ToString();
     }
 
     /// <remarks>

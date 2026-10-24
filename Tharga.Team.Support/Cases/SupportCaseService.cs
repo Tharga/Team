@@ -28,7 +28,8 @@ internal sealed class SupportCaseService(
     SupportCaseVisibility defaultVisibility = SupportCaseVisibility.Private,
     SupportCaseVisibility? assistantDefaultVisibility = null,
     ISupportAttachmentStore attachmentStore = null,
-    SupportAttachmentLimits attachmentLimits = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportAttachmentLimits attachmentLimits = null,
+    ISupportTypingNotifier typingNotifier = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
 
@@ -125,7 +126,10 @@ internal sealed class SupportCaseService(
         }
     }
 
-    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    public Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => RunAssistantAsync(teamKey, caseId, null, cancellationToken);
+
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
     {
         if (responder == null) return false;
 
@@ -134,8 +138,10 @@ internal sealed class SupportCaseService(
 
         var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
 
-        var answer = await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
-        if (!answer.Answered) return false;
+        // A test double does not run the streaming default and answers nothing; it is then asked as it always was.
+        var answer = answerSoFar == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, answerSoFar, cancellationToken);
+        answer ??= await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
+        if (answer?.Answered != true) return false;
 
         var message = new SupportMessage
         {
@@ -675,6 +681,20 @@ internal sealed class SupportCaseService(
 
     public Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => store.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
+
+    public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
+    {
+        if (typingNotifier == null) return;
+
+        typingNotifier.Notify(new SupportCaseTypingEventArgs
+        {
+            TeamKey = teamKey,
+            CaseId = caseId,
+            Identity = await authorizer.GetSubjectAsync(),
+            Name = await DisplayNameAsync(),
+            AsSupport = asSupport
+        });
+    }
 
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {

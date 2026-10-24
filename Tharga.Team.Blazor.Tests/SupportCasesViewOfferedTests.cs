@@ -91,7 +91,7 @@ public class SupportCasesViewOfferedTests : BunitContext
         Send(view);
 
         _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Help, SupportAssistance.Assistant, default), Times.Once);
-        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", default), Times.Once);
+        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class SupportCasesViewOfferedTests : BunitContext
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(false);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default)).ReturnsAsync(false);
 
         Send(view);
 
@@ -186,12 +186,62 @@ public class SupportCasesViewOfferedTests : BunitContext
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(true);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default)).ReturnsAsync(true);
 
         Send(view);
 
         view.WaitForAssertion(() => Assert.NotEmpty(view.FindAll($"[data-conversation='{withAssistant.Id}']")));
         Assert.Empty(view.FindAll("[data-declined]"));
+    }
+
+    [Fact]
+    public void BeforeTheFirstWord_TheConversationShowsTheAssistantsDots()
+    {
+        var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.Assistant]);
+        var withAssistant = Raised with { AssistantState = SupportAssistantState.Active };
+        var kept = new TaskCompletionSource<bool>();
+        _cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = [withAssistant] });
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
+        _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
+        _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default)).Returns(kept.Task);
+
+        Send(view);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find($"[data-conversation='{withAssistant.Id}'] [data-answer-so-far='thinking']")));
+        var thinking = view.Find("[data-answer-so-far='thinking']");
+        Assert.NotNull(thinking.QuerySelector("[data-sender='assistant']"));
+        Assert.Equal(SupportCasesViewText.AssistantThinking.Default, thinking.QuerySelector(".support-typing__label")!.TextContent);
+
+        view.InvokeAsync(() => kept.SetResult(true));
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-answer-so-far]")));
+    }
+
+    [Fact]
+    public void TheAssistantsAnswer_ShowsInTheConversation_AsItIsWritten()
+    {
+        var view = RenderView(SupportAssistantReadiness.Ready, offered: [SupportAssistance.Assistant]);
+        var withAssistant = Raised with { AssistantState = SupportAssistantState.Active };
+        var kept = new TaskCompletionSource<bool>();
+        _cases.Setup(x => x.GetMyCasesAsync(TeamKey, null, 100, default)).ReturnsAsync(new SupportCasePage { Items = [withAssistant] });
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
+        _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
+        _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default))
+            .Returns((string _, string _, IProgress<string> soFar, CancellationToken _) =>
+            {
+                soFar.Report("Check the date");
+                return kept.Task;
+            });
+
+        Send(view);
+
+        view.WaitForAssertion(() => Assert.Contains("Check the date", view.Find($"[data-conversation='{withAssistant.Id}'] [data-answer-so-far]").TextContent));
+        Assert.DoesNotContain(SupportCasesViewText.AssistantThinking.Default, view.Markup);
+
+        view.InvokeAsync(() => kept.SetResult(true));
+
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-answer-so-far]")));
     }
 
     [Fact]

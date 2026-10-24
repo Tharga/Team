@@ -37,6 +37,7 @@ internal static class SampleNavigation
         ]),
         new("System", "settings", "Administration across every team.", SampleAudience.Developer,
         [
+            new("Support desk", "support-desk", "headset_mic", "Every team's support cases, answered in place: the back office for chatting with a member in the side panel."),
             new("Users", "users", "people", "Every user and their teams, and each user's mail."),
             new("System audit", "audit", "receipt_long", "Everything audited, across every team."),
             new("System API keys", "system-api-keys", "vpn_key", "Keys that act across teams rather than in one."),

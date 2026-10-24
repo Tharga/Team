@@ -298,9 +298,12 @@ dismissal. It is derived from `ClosedBy`, which the sweep records as `SupportCas
 
 ## Components
 
-Four components ship in `Tharga.Team.Blazor`, and **all are optional**:
+Five components ship in `Tharga.Team.Blazor`, and **all are optional**:
 
 ```razor
+@* Help beside every page: the assistant where the team has one, and support, in a right-hand panel *@
+<SupportPanel />
+
 @* What a team member sees: raise a case, read the conversation, reply, reopen *@
 <SupportCasesView ShowSubject="false" />
 
@@ -318,6 +321,42 @@ Four components ship in `Tharga.Team.Blazor`, and **all are optional**:
 `SupportUnassignedView`, renders a note rather than throwing when the caller holds neither. It names each
 case's team through `ITeamOversightService` when the caller can list teams, and shows the team key when
 they cannot.
+
+### A side panel beside every page
+
+`SupportPanel` is a right-hand sidebar. Place it inside your `RadzenLayout`, beside the `RadzenBody`, for signed-in
+members:
+
+```razor
+<RadzenLayout>
+    <NavMenu />
+    <RadzenBody>@Body</RadzenBody>
+    <AuthorizeView>
+        <Authorized><SupportPanel /></Authorized>
+    </AuthorizeView>
+</RadzenLayout>
+```
+
+- **Collapsed**, it is a narrow rail: a button for each channel offered, and one to your support page carrying the
+  member's unread count.
+- **Open**, it has Assistant and Support tabs, a new conversation, the earlier conversations still open or with the
+  assistant, and the conversation itself. It is the same case `SupportCasesView` shows, so a conversation started in
+  the panel continues on the support page and back.
+- **Writing to support** on a conversation the assistant is answering hands it to a person, keeping the conversation.
+  Going back to the assistant after that starts a new conversation beside it. When the assistant does not answer,
+  the panel says so.
+- **Its width and open state are remembered in the browser**, under `StorageKey`. It opens at `DefaultWidth` (320)
+  until dragged, never narrower than 280 pixels. On a screen 768 pixels wide or less it is hidden, and your support
+  page (`SupportPagePath`, `/support` by default) is where to ask.
+- **An answer is marked read only while the panel is open and the page is looked at**, and the panel redraws when the
+  member changes team or a reply arrives from Slack or mail.
+
+**Who may be asked.** The assistant shows when the team is ready for one (`GetAssistantReadinessAsync`), so a team that
+turned the assistant off, or has no model, gets only support. `Offered` narrows what shows, as on `SupportCasesView`.
+To switch either channel per team, for example behind a feature a team has bought, register an
+`ISupportPanelAvailability`. Its `GetOfferedAsync(teamKey)` says who may be asked, and raising its `Changed` event
+redraws an open panel. It can only narrow: the assistant is never offered to a team that is not ready for it. With
+nobody to ask, or no team selected, the panel is not drawn at all.
 
 **`SupportCasesView`** has two tabs — the cases first, then where help is asked for. `Tab` names the one to
 show (`SupportCasesView.CasesTab` or `NewCaseTab`) and `TabChanged` reports a change, so a page can keep its
@@ -400,6 +439,25 @@ differ per page, which reading the options could not express.
 **Closing from `SupportQueueView` warns first** and suggests letting the person who raised the case close it
 — they are best placed to say the problem is solved, and a case closed while somebody is still typing reads
 as a dismissal. It is advisory: support can still close a case that is finished.
+
+### Who is writing
+
+While somebody on the other side is writing an answer, the open conversation shows three flashing dots where
+their message will appear, and a screen reader hears "Sam is typing…" (`team.support.transcript.typing`). It works
+in the side panel, `SupportCasesView`, `SupportQueueView` and `SupportAcrossTeamsView`. **Nobody sees dots for their
+own side**, so someone who writes as a member in the panel and answers at the desk sees each side from the other. A
+member writing to the assistant tells nobody.
+
+- **A writer reports through the service**, at most once every two seconds while writing: `ReportTypingAsync(teamKey,
+  caseId, asSupport)`. It is authorized exactly as replying, or as answering when `asSupport`, so nobody can show
+  dots in a case they could not answer. Nothing is stored, audited or counted as activity.
+- **The dots go away by themselves**, five seconds after the last report, or when the message arrives. There is no
+  "stopped" signal, so a writer who closes the page never leaves the dots behind.
+- **`ISupportTypingNotifier`** raises the reports, a singleton like `ISupportCaseNotifier` with the same rules:
+  marshal with `InvokeAsync`, and unsubscribe. It is separate because a report changes nothing, and every listener to
+  a case change reads the case again. `SupportCaseTypingEventArgs` says who and where, never what is being written.
+- **It is in-process**, as case changes are: across several instances, only circuits on the writer's instance see
+  the dots. Slack and mail do not report writing, so a reply typed there arrives without dots first.
 
 ## Reading history
 
@@ -493,7 +551,9 @@ At this point notifications and case threads work. Replies typed in Slack do not
 **Phase two — inbound replies, once you have a public URL:**
 
 4. **Get a public address.** A deployment already has one; locally you need a tunnel — Visual Studio's *Dev
-   Tunnels* or ngrok. Slack cannot reach `localhost`.
+   Tunnels* or ngrok. Slack cannot reach `localhost`. The sample's
+   [README](https://github.com/Tharga/Team/blob/master/Tharga.Team.Sample/README.md#connect-slack) walks
+   through it for the sample, settings and all.
 5. **Event Subscriptions** → enable, and set the request URL to
    `https://your-host/_tharga/support/slack/events`. Slack sends a one-off challenge as you save; the
    endpoint answers it automatically, so a green tick here means the whole inbound path is wired.
@@ -1206,6 +1266,28 @@ await cases.RunAssistantAsync(teamKey, raised.Id);   // returns false when there
 `RunAssistantAsync` is safe to call unconditionally: it does nothing when the case has no assistant, when the
 customer has asked for a person, when the host registered no responder, or when the team has no model. The shipped components already
 call it, so a host using `<SupportCasesView />` needs none of this.
+
+### Watching the answer being written
+
+Pass an `IProgress<string>` and the answer is reported while the model writes it. `SupportPanel` and
+`SupportCasesView` do this, so the customer reads the answer as it is written instead of waiting for all of it:
+
+```csharp
+var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<string>(soFar => Show(soFar)));
+```
+
+- **Until the first words arrive**, the assistant's side shows the same flashing dots as a person writing, read out as
+  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page.
+- **Each report is the whole answer so far**, not the piece just added, so a report that is missed costs nothing.
+- **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
+  it then. An answer that breaks off halfway is declined, and nothing that was shown on the way is kept.
+- **Only the caller sees it on the way.** Reports go to the progress you pass and nowhere else, never through
+  `ISupportCaseNotifier`. The call is authorized and audited exactly as the one without reports.
+- **Reports arrive on another thread**, so a component marshals with `InvokeAsync` before showing one.
+- **The model is streamed only when somebody watches.** Without a progress, it is asked for the answer in one piece,
+  as before. `ChatSupportResponder` streams through `IChatClient.GetStreamingResponseAsync`, tools included, and
+  Neurolito and the Anthropic API both stream. A responder of your own answers in one piece and reports nothing,
+  unless it implements the `ISupportResponder.AnswerAsync` overload that takes the progress.
 
 ### Settings
 
