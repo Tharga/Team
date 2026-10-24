@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 
 namespace Tharga.Team.Sample.Framework;
@@ -21,10 +22,14 @@ internal sealed class SampleChatClient : IChatClient
     // Says what it is, so nobody trying the sample mistakes a script for a model that could not help them.
     private const string Fallback =
         "I am the sample's built-in responder: a short script, not an AI model, so I only answer questions about " +
-        "invitations, API keys, teams and exports. To try a real model, choose one for your team under Support, " +
+        "your cases, invitations, API keys, teams and exports. To try a real model, choose one for your team under Support, " +
         "AI assistant; or ask for a person.";
 
     private const string Signature = "(Answered by the sample's built-in scripted responder, not an AI model.)";
+
+    private const string CasesTool = "get_my_cases";
+
+    private static readonly TimeSpan LookupDelay = TimeSpan.FromMilliseconds(800);
 
     private static readonly (string Term, string Answer)[] Script =
     [
@@ -39,7 +44,23 @@ internal sealed class SampleChatClient : IChatClient
         ChatOptions options = null,
         CancellationToken cancellationToken = default)
     {
-        var question = messages?.LastOrDefault(x => x.Role == ChatRole.User)?.Text ?? string.Empty;
+        var history = messages?.ToList() ?? [];
+        var question = history.LastOrDefault(x => x.Role == ChatRole.User)?.Text ?? string.Empty;
+
+        // A question about cases takes two rounds, as a model's would: ask for the member's cases, then answer from them.
+        if (question.Contains("case", StringComparison.OrdinalIgnoreCase) && options?.Tools?.Any(x => x.Name == CasesTool) == true)
+        {
+            // Tool calls are not kept in the case, so any result here is from this answer's own lookup.
+            var found = history.SelectMany(x => x.Contents).OfType<FunctionResultContent>().LastOrDefault();
+            if (found == null)
+            {
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), CasesTool)])));
+            }
+
+            var count = found.Result is JsonElement { ValueKind: JsonValueKind.Array } list ? list.GetArrayLength() : 0;
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                $"I looked up your support cases in this team: you have {count}. Ask about one of them, or ask for a person.\n\n{Signature}")));
+        }
 
         var scripted = Array.Find(Script, x => question.Contains(x.Term, StringComparison.OrdinalIgnoreCase)).Answer;
         var answer = scripted == null ? Fallback : $"{scripted}\n\n{Signature}";
@@ -57,6 +78,15 @@ internal sealed class SampleChatClient : IChatClient
 
         foreach (var message in response.Messages)
         {
+            var calls = message.Contents.OfType<FunctionCallContent>().ToArray();
+            if (calls.Length > 0)
+            {
+                await Task.Delay(LookupDelay, cancellationToken);
+                yield return new ChatResponseUpdate(message.Role, [.. calls]);
+                await Task.Delay(LookupDelay, cancellationToken);
+                continue;
+            }
+
             foreach (var word in System.Text.RegularExpressions.Regex.Split(message.Text, @"(?<=\s)"))
             {
                 await Task.Delay(WordDelay, cancellationToken);

@@ -129,7 +129,7 @@ internal sealed class SupportCaseService(
     public Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => RunAssistantAsync(teamKey, caseId, null, cancellationToken);
 
-    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         if (responder == null) return false;
 
@@ -139,7 +139,7 @@ internal sealed class SupportCaseService(
         var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
 
         // A test double does not run the streaming default and answers nothing; it is then asked as it always was.
-        var answer = answerSoFar == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, answerSoFar, cancellationToken);
+        var answer = progress == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, progress, cancellationToken);
         answer ??= await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
         if (answer?.Answered != true) return false;
 

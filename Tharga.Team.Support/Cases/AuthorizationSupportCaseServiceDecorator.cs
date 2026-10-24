@@ -54,11 +54,11 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     }
 
     /// <remarks>Authorized as the run without reports: whoever may have the assistant answer may watch it write.</remarks>
-    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "answer", CaseAccessKind.Write);
 
-        return await inner.RunAssistantAsync(teamKey, caseId, answerSoFar, cancellationToken);
+        return await inner.RunAssistantAsync(teamKey, caseId, progress, cancellationToken);
     }
 
     /// <remarks>Authorized as replying is: whoever may answer a case may decide who answers it.</remarks>

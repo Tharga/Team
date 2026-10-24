@@ -14,12 +14,12 @@
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="false" TimeTemplate="TimeTemplate"
                            ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" ThinkingText="@ThinkingText" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AssistantProgress="@AssistantProgress" ThinkingText="@ThinkingText" />
     }
     else
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AnswerSoFar="@AnswerSoFar" ThinkingText="@ThinkingText" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AssistantProgress="@AssistantProgress" ThinkingText="@ThinkingText" />
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
@@ -88,8 +88,8 @@
     /// <summary>Whether the assistant is working on this case right now.</summary>
     [Parameter] public bool Thinking { get; set; }
 
-    /// <summary>The assistant's answer as written so far, shown in the conversation until the answer is kept.</summary>
-    [Parameter] public string AnswerSoFar { get; set; }
+    /// <summary>How far the assistant has got: its round, its tools and its answer so far, shown in the conversation until the answer is kept.</summary>
+    [Parameter] public SupportAssistantProgress AssistantProgress { get; set; }
 
     /// <summary>
     /// Whether the assistant was just asked and did not answer, so the customer is told and pointed at a person

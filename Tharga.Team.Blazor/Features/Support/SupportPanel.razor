@@ -111,16 +111,18 @@
                         <div class="support-panel__msg support-panel__msg--them" data-declined>@_text[SupportCasesViewText.AssistantDeclined]</div>
                     }
 
-                    @if (_busy && !string.IsNullOrEmpty(_answerSoFar))
+                    @if (_busy && !string.IsNullOrEmpty(_progress?.AnswerSoFar))
                     {
                         <div class="support-panel__msg support-panel__msg--them" aria-busy="true" data-answer-so-far>
-                            <RadzenMarkdown Text="@_answerSoFar" AllowHtml="false" />
+                            <RadzenMarkdown Text="@_progress.AnswerSoFar" AllowHtml="false" />
+                            @Step
                         </div>
                     }
                     else if (_busy)
                     {
                         <div class="support-panel__msg support-panel__msg--them" data-working>
                             <SupportTypingDots Label="@_text[SupportPanelText.Working]" />
+                            @Step
                         </div>
                     }
                 </div>
@@ -187,7 +189,7 @@
     private SupportAttention _attention;
     private SupportTypingWatch _typing;
     private SupportTypingReporter _reporter;
-    private string _answerSoFar;
+    private SupportAssistantProgress _progress;
     private ElementReference _resizeHandle;
     private ElementReference _log;
     private bool _resizeWired;
@@ -219,6 +221,10 @@
             <span class="support-panel__badge" data-unread>@_unread</span>
         }
     </button>;
+
+    private RenderFragment Step => _progress == null
+        ? null
+        : @<span class="support-panel__step" data-step>@SupportAssistantSteps.Describe(_text, _progress)</span>;
 
     private string WhoClass(bool support) => support == _support ? "support-panel__who-pick support-panel__who-pick--on" : "support-panel__who-pick";
 
@@ -503,14 +509,14 @@
             if (!_support && _withAssistant)
             {
                 // Shown as the model writes it; what is kept is read back with the conversation.
-                var soFar = new SupportAnswerSoFar(InvokeAsync, ShowAnswerSoFar);
+                var relay = new SupportAssistantRelay(InvokeAsync, ShowProgress);
                 try
                 {
-                    _declined = !await SupportCases.RunAssistantAsync(_teamKey, _caseId, soFar);
+                    _declined = !await SupportCases.RunAssistantAsync(_teamKey, _caseId, relay);
                 }
                 finally
                 {
-                    soFar.End();
+                    relay.End();
                 }
             }
 
@@ -523,15 +529,15 @@
         finally
         {
             // Only now, so the answer being written gives way to the answer kept rather than to nothing.
-            _answerSoFar = null;
+            _progress = null;
             _busy = false;
             _scrollOnRender = true;
         }
     }
 
-    private void ShowAnswerSoFar(string text)
+    private void ShowProgress(SupportAssistantProgress progress)
     {
-        _answerSoFar = text;
+        _progress = progress;
         _scrollOnRender = true;
         StateHasChanged();
     }

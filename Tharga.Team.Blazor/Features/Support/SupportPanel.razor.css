@@ -148,6 +148,13 @@
     background-color: color-mix(in srgb, var(--rz-primary) 20%, transparent);
 }
 
+.support-panel__step {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--rz-text-secondary-color);
+}
+
 .support-panel__composer {
     flex: 0 0 auto;
     display: flex;

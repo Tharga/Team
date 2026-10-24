@@ -34,6 +34,12 @@ public static class SupportTranscriptText
     /// <summary>Read out for the dots shown while somebody on the other side is writing; <c>{0}</c> is their name.</summary>
     public static readonly TextKey Typing = new("team.support.transcript.typing", "{0} is typing…");
 
+    /// <summary>Under the assistant's dots or text while it works: which call to the model it is on, <c>{0}</c>.</summary>
+    public static readonly TextKey Round = new("team.support.transcript.round", "Round {0}");
+
+    /// <summary>The same while it runs tools: <c>{0}</c> is the round, <c>{1}</c> the tools' names.</summary>
+    public static readonly TextKey RoundTools = new("team.support.transcript.roundTools", "Round {0}: {1}");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing];
+    public static readonly TextKey[] All = [Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, Round, RoundTools];
 }

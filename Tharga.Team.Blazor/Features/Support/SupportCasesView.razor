@@ -53,7 +53,7 @@ else
                                         </RadzenText>
                                     </TopMenu>
                                     <ChildContent>
-                                        <SupportCaseConversation Case="item" Unread="@UnreadIn(item.Id)" Thinking="@(_thinking == item.Id)" AnswerSoFar="@(_thinking == item.Id ? _answerSoFar : null)" Declined="@(_declined == item.Id)"
+                                        <SupportCaseConversation Case="item" Unread="@UnreadIn(item.Id)" Thinking="@(_thinking == item.Id)" AssistantProgress="@(_thinking == item.Id ? _progress : null)" Declined="@(_declined == item.Id)"
                                                                  TimeTemplate="TimeTemplate" Changed="OnChangedAsync" Read="OnRead" Written="RunAssistantAsync" />
                                     </ChildContent>
                                 </ExpandableCard>
@@ -184,7 +184,7 @@ else
     private string _body;
     private SupportAssistance _answeredBy = SupportAssistance.None;
     private string _thinking;
-    private string _answerSoFar;
+    private SupportAssistantProgress _progress;
     private string _declined;
     private string _opened;
 
@@ -364,25 +364,25 @@ else
     private async Task RunAssistantAsync(string caseId)
     {
         _thinking = caseId;
-        _answerSoFar = null;
+        _progress = null;
         _declined = null;
         StateHasChanged();
 
-        var soFar = new SupportAnswerSoFar(InvokeAsync, text =>
+        var relay = new SupportAssistantRelay(InvokeAsync, progress =>
         {
-            _answerSoFar = text;
+            _progress = progress;
             StateHasChanged();
         });
         try
         {
-            if (await SupportCases.RunAssistantAsync(_teamKey, caseId, soFar)) await ReloadAsync();
+            if (await SupportCases.RunAssistantAsync(_teamKey, caseId, relay)) await ReloadAsync();
             else _declined = caseId;
         }
         finally
         {
-            soFar.End();
+            relay.End();
             _thinking = null;
-            _answerSoFar = null;
+            _progress = null;
         }
     }
 

@@ -225,13 +225,35 @@ public class SupportTypingTests : BunitContext
             .Add(x => x.Messages, [])
             .Add(x => x.CaseAuthorIdentity, Author)
             .Add(x => x.AuthorOnRight, true)
-            .Add(x => x.AnswerSoFar, "Check the date"));
+            .Add(x => x.AssistantProgress, new SupportAssistantProgress { AnswerSoFar = "Check the date" }));
 
         var row = view.Find("[data-answer-so-far]");
         Assert.Equal("left", row.GetAttribute("data-side"));
         Assert.Equal("true", row.GetAttribute("aria-busy"));
         Assert.NotNull(row.QuerySelector("[data-sender='assistant']"));
         Assert.Contains("Check the date", row.TextContent);
+    }
+
+    [Fact]
+    public void ATranscript_ShowsTheRound_AndTheToolTheAssistantRuns()
+    {
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportTranscript>(p => p
+            .Add(x => x.Messages, [])
+            .Add(x => x.CaseAuthorIdentity, Author)
+            .Add(x => x.AuthorOnRight, true)
+            .Add(x => x.ThinkingText, "Looking into it")
+            .Add(x => x.AssistantProgress, new SupportAssistantProgress { Round = 2, Tools = ["get_my_cases", "get_case_messages"] }));
+
+        Assert.Equal("thinking", view.Find("[data-answer-so-far]").GetAttribute("data-answer-so-far"));
+        Assert.Equal("Round 2: get_my_cases, get_case_messages", view.Find("[data-step]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void NothingReported_ShowsNoRound()
+    {
+        Assert.Null(SupportAssistantSteps.Describe(TextSet.Empty, null));
     }
 
     [Fact]

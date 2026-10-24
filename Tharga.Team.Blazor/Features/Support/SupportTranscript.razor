@@ -128,25 +128,31 @@
     }
 
     @* Not yet kept: dots while the assistant has written nothing, then the answer as it writes it, replaced by the answer once kept. *@
-    @if (!string.IsNullOrEmpty(AnswerSoFar) || !string.IsNullOrEmpty(ThinkingText))
+    @if (!string.IsNullOrEmpty(AssistantProgress?.AnswerSoFar) || !string.IsNullOrEmpty(ThinkingText))
     {
         var onRight = !AuthorOnRight;
 
         <div style="display: flex; gap: 0.5rem; align-items: flex-end; @(onRight ? "flex-direction: row-reverse;" : "")" data-side="@(onRight ? "right" : "left")"
-             aria-busy="true" data-answer-so-far="@(string.IsNullOrEmpty(AnswerSoFar) ? "thinking" : "writing")">
+             aria-busy="true" data-answer-so-far="@(string.IsNullOrEmpty(AssistantProgress?.AnswerSoFar) ? "thinking" : "writing")">
             <div style="flex: 0 0 auto;">
                 <span title="@_text[SupportTranscriptText.Assistant]" aria-label="@_text[SupportTranscriptText.Assistant]" data-sender="assistant" style="@IconCircle">
                     <RadzenIcon Icon="smart_toy" />
                 </span>
             </div>
             <div style="max-width: 75%; min-width: 0; padding: 0.5rem 0.75rem; border-radius: 0.75rem; @(onRight ? RightBubble : LeftBubble)">
-                @if (string.IsNullOrEmpty(AnswerSoFar))
+                @if (string.IsNullOrEmpty(AssistantProgress?.AnswerSoFar))
                 {
                     <SupportTypingDots Label="@ThinkingText" />
                 }
                 else
                 {
-                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@AnswerSoFar</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@AssistantProgress.AnswerSoFar</RadzenText>
+                }
+                @if (AssistantProgress != null)
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0 rz-mt-1" Style="display: block; color: var(--rz-text-secondary-color);" data-step>
+                        @SupportAssistantSteps.Describe(_text, AssistantProgress)
+                    </RadzenText>
                 }
             </div>
         </div>
@@ -224,8 +230,8 @@
     /// <summary>The case the entries belong to; without it files are listed but cannot be opened.</summary>
     [Parameter] public string CaseId { get; set; }
 
-    /// <summary>The assistant's answer as written so far, shown after the last entry until it is kept.</summary>
-    [Parameter] public string AnswerSoFar { get; set; }
+    /// <summary>How far the assistant has got, shown after the last entry until its answer is kept: the text so far, and the round it is on.</summary>
+    [Parameter] public SupportAssistantProgress AssistantProgress { get; set; }
 
     /// <summary>
     /// While the assistant is working and has written nothing yet, flashing dots on its side, read out as this text;

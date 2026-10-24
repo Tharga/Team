@@ -91,7 +91,7 @@ public class SupportCasesViewOfferedTests : BunitContext
         Send(view);
 
         _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Help, SupportAssistance.Assistant, default), Times.Once);
-        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once);
+        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class SupportCasesViewOfferedTests : BunitContext
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default)).ReturnsAsync(false);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default)).ReturnsAsync(false);
 
         Send(view);
 
@@ -186,7 +186,7 @@ public class SupportCasesViewOfferedTests : BunitContext
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default)).ReturnsAsync(true);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default)).ReturnsAsync(true);
 
         Send(view);
 
@@ -204,7 +204,7 @@ public class SupportCasesViewOfferedTests : BunitContext
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default)).Returns(kept.Task);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default)).Returns(kept.Task);
 
         Send(view);
 
@@ -227,10 +227,10 @@ public class SupportCasesViewOfferedTests : BunitContext
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, withAssistant.Id, null, SupportCaseLimits.MaxMessagesPerCase, default)).ReturnsAsync(new SupportMessagePage { Items = [] });
         _cases.Setup(x => x.GetVisibilityChoiceAsync(TeamKey, withAssistant.Id, default)).ReturnsAsync(new SupportCaseVisibilityChoice(false, false));
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(withAssistant);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<string>>(), default))
-            .Returns((string _, string _, IProgress<string> soFar, CancellationToken _) =>
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, withAssistant.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default))
+            .Returns((string _, string _, IProgress<SupportAssistantProgress> soFar, CancellationToken _) =>
             {
-                soFar.Report("Check the date");
+                soFar.Report(new SupportAssistantProgress { AnswerSoFar = "Check the date" });
                 return kept.Task;
             });
 

@@ -67,8 +67,8 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, cancellationToken));
 
     // Audited as the run without reports is: what is kept is the same answer, however it was shown on the way.
-    public Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
-        => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, answerSoFar, cancellationToken));
+    public Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
+        => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, progress, cancellationToken));
 
     private async Task<bool> AuditAssistantAsync(string teamKey, string caseId, Func<Task<bool>> run)
     {

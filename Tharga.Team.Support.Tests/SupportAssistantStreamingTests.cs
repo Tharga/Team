@@ -31,9 +31,28 @@ public class SupportAssistantStreamingTests
 
         var answer = await Responder(chat).AnswerAsync(Case(), Transcript(), seen);
 
-        Assert.Equal(["Check ", "Check the date ", "Check the date range."], seen.Items);
+        Assert.Equal(["", "Check ", "Check the date ", "Check the date range."], seen.Items.Select(x => x.AnswerSoFar));
+        Assert.All(seen.Items, x => Assert.Equal(1, x.Round));
         Assert.Equal("Check the date range.", answer.Body);
         Assert.False(chat.AskedInOnePiece);
+    }
+
+    /// <summary>Through the real tool loop: asking for a tool is shown as it is made, and its result going back starts round two.</summary>
+    [Fact]
+    public async Task ALookup_IsShownAsItsTool_ThenAsTheNextRound()
+    {
+        var chat = new LookingUpChatClient().AsBuilder().UseFunctionInvocation().Build();
+        var responder = new ChatSupportResponder(new RegisteredChatClientResolver(chat), new OneTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
+        var seen = new Reports();
+
+        var answer = await responder.AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Equal("You have 2 cases.", answer.Body);
+        Assert.Contains(seen.Items, x => x.Round == 1 && x.Tools.SequenceEqual(["get_my_cases"]) && x.AnswerSoFar == "");
+        Assert.Contains(seen.Items, x => x.Round == 2 && x.Tools.Length == 0 && x.AnswerSoFar == "");
+        Assert.Equal(2, seen.Items[^1].Round);
+        Assert.Equal("You have 2 cases.", seen.Items[^1].AnswerSoFar);
+        Assert.Equal([1, 2], seen.Items.Select(x => x.Round).Distinct());
     }
 
     [Fact]
@@ -73,7 +92,7 @@ public class SupportAssistantStreamingTests
 
         Assert.True(await world.As(Alice).RunAssistantAsync(TeamA, raised.Id, seen));
 
-        Assert.Equal("Check the date.", seen.Items[^1]);
+        Assert.Equal("Check the date.", seen.Items[^1].AnswerSoFar);
         var last = (await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items[^1];
         Assert.Equal(SupportMessageKind.Assistant, last.Kind);
         Assert.Equal("Check the date.", last.Body);
@@ -185,16 +204,16 @@ public class SupportAssistantStreamingTests
     }
 
     /// <summary>Kept as they come, on the reporting thread, rather than posted on as <see cref="Progress{T}"/> would.</summary>
-    private sealed class Reports : IProgress<string>
+    private sealed class Reports : IProgress<SupportAssistantProgress>
     {
-        public List<string> Items { get; } = [];
+        public List<SupportAssistantProgress> Items { get; } = [];
 
-        public void Report(string value) => Items.Add(value);
+        public void Report(SupportAssistantProgress value) => Items.Add(value);
     }
 
-    private sealed class FailingReports : IProgress<string>
+    private sealed class FailingReports : IProgress<SupportAssistantProgress>
     {
-        public void Report(string value) => throw new InvalidOperationException("The page went away.");
+        public void Report(SupportAssistantProgress value) => throw new InvalidOperationException("The page went away.");
     }
 
     private sealed class OnePieceResponder(string answer) : ISupportResponder
@@ -231,6 +250,39 @@ public class SupportAssistantStreamingTests
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>Asks for get_my_cases until it has the result, then answers from it.</summary>
+    private sealed class LookingUpChatClient : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+
+            if (!messages.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any())
+            {
+                yield return new ChatResponseUpdate(ChatRole.Assistant, [new FunctionCallContent("call-1", "get_my_cases")]);
+                yield break;
+            }
+
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "You have ");
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "2 cases.");
+        }
+
+        public object GetService(Type serviceType, object serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class OneTool : ISupportAssistantTools
+    {
+        public Task<IReadOnlyList<AITool>> ForCurrentCallerAsync(string teamKey, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AITool>>([AIFunctionFactory.Create(() => new[] { "case-1", "case-2" }, "get_my_cases")]);
     }
 
     private sealed class NoTools : ISupportAssistantTools

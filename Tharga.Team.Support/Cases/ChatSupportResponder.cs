@@ -30,8 +30,8 @@ internal sealed class ChatSupportResponder(
     public Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default)
         => AnswerAsync(supportCase, transcript, null, cancellationToken);
 
-    /// <remarks>Streams only when somebody is watching; without <paramref name="answerSoFar"/> the model is asked for the answer in one piece, as it always was.</remarks>
-    public async Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+    /// <remarks>Streams only when somebody is watching; without <paramref name="progress"/> the model is asked for the answer in one piece, as it always was.</remarks>
+    public async Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         if (transcript == null || transcript.Count == 0) return SupportAnswer.Declined("The case has no messages to answer.");
 
@@ -54,9 +54,9 @@ internal sealed class ChatSupportResponder(
 
             var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken)] };
 
-            var body = answerSoFar == null
+            var body = progress == null
                 ? (await chat.GetResponseAsync(history, chatOptions, deadline.Token)).Text?.Trim()
-                : (await StreamAsync(chat, history, chatOptions, answerSoFar, supportCase.Id, deadline.Token)).Trim();
+                : (await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token)).Trim();
 
             return string.IsNullOrWhiteSpace(body)
                 ? SupportAnswer.Declined("The assistant returned nothing.")
@@ -79,30 +79,57 @@ internal sealed class ChatSupportResponder(
     }
 
     /// <remarks>
+    /// <b>Rounds are read from what the tool loop yields:</b> the model's call for a tool comes through as it is made,
+    /// and the tool's result as it goes back, which is when the next call to the model starts.
+    /// <para>
     /// <b>A reader that fails is dropped, not the answer.</b> The reports are a preview for whoever is watching; the
     /// answer they preview is still kept.
+    /// </para>
     /// </remarks>
-    private async Task<string> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<string> answerSoFar, string caseId, CancellationToken cancellationToken)
+    private async Task<string> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, CancellationToken cancellationToken)
     {
         var text = new StringBuilder();
+        var round = 1;
+        List<string> running = [];
         var reporting = true;
 
-        await foreach (var update in chat.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
+        void Report()
         {
-            if (string.IsNullOrEmpty(update.Text)) continue;
-
-            text.Append(update.Text);
-            if (!reporting) continue;
+            if (!reporting) return;
 
             try
             {
-                answerSoFar.Report(text.ToString());
+                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running] });
             }
             catch (Exception ex)
             {
                 reporting = false;
-                logger.LogWarning(ex, "Showing the support assistant's answer to case {CaseId} as it was written failed; the answer is still kept.", caseId);
+                logger.LogWarning(ex, "Showing the support assistant's progress on case {CaseId} failed; the answer is still kept.", caseId);
             }
+        }
+
+        Report();
+
+        await foreach (var update in chat.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
+        {
+            var called = update.Contents.OfType<FunctionCallContent>().Select(x => x.Name).ToArray();
+            if (called.Length > 0)
+            {
+                running.AddRange(called);
+                Report();
+            }
+
+            if (running.Count > 0 && update.Contents.OfType<FunctionResultContent>().Any())
+            {
+                running.Clear();
+                round++;
+                Report();
+            }
+
+            if (string.IsNullOrEmpty(update.Text)) continue;
+
+            text.Append(update.Text);
+            Report();
         }
 
         return text.ToString();

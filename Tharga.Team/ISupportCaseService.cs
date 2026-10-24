@@ -116,18 +116,18 @@ public interface ISupportCaseService
     Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Runs the assistant as <see cref="RunAssistantAsync(string, string, CancellationToken)"/> does, reporting its
-    /// answer as written so far to <paramref name="answerSoFar"/> while the model writes it.
+    /// Runs the assistant as <see cref="RunAssistantAsync(string, string, CancellationToken)"/> does, reporting to
+    /// <paramref name="progress"/> how far it has got: the round, the tools running, and the answer as written so far.
     /// </summary>
     /// <remarks>
-    /// <b>Only the caller sees the answer before it is kept.</b> Reports go to <paramref name="answerSoFar"/> and
+    /// <b>Only the caller sees the answer before it is kept.</b> Reports go to <paramref name="progress"/> and
     /// nowhere else, never through <see cref="ISupportCaseNotifier"/>, which carries no text and no authorization.
-    /// Everybody else reads the answer once it is appended. Each report is the whole text so far; a responder that
-    /// cannot stream reports nothing and answers in one piece. A report may arrive on another thread, so marshal
-    /// before touching component state.
+    /// Everybody else reads the answer once it is appended. Each report is the whole state, the text so far included;
+    /// a responder that cannot stream reports nothing and answers in one piece. A report may arrive on another thread,
+    /// so marshal before touching component state.
     /// </remarks>
     /// <returns>True when an answer was appended. When false, whatever was reported was not kept.</returns>
-    Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default);
+    Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Whether the assistant can answer for this team, and if not, why.

@@ -83,7 +83,7 @@ public class SupportPanelTests : BunitContext
     private void Raises(SupportCase raised, bool answered = true, params SupportMessage[] messages)
     {
         _cases.Setup(x => x.RaiseCaseAsync(TeamKey, null, It.IsAny<string>(), It.IsAny<SupportAssistance>(), default)).ReturnsAsync(raised);
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<string>>(), default)).ReturnsAsync(answered);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default)).ReturnsAsync(answered);
         _cases.Setup(x => x.GetCaseAsync(TeamKey, raised.Id, default)).ReturnsAsync(raised);
         _cases.Setup(x => x.GetMessagesAsync(TeamKey, raised.Id, null, It.IsAny<int>(), default)).ReturnsAsync(new SupportMessagePage { Items = messages });
     }
@@ -194,7 +194,7 @@ public class SupportPanelTests : BunitContext
 
         view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
         _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question, SupportAssistance.Assistant, default), Times.Once);
-        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once);
+        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once);
         Assert.Contains("Check the date range.", view.FindAll("[data-message]")[1].TextContent);
     }
 
@@ -217,14 +217,14 @@ public class SupportPanelTests : BunitContext
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
         var view = Render(open: true);
         Send(view, Question);
-        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once));
+        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once));
 
         view.Find("[data-tab='support']").Click();
         Send(view, "Please ask a person.");
 
         view.WaitForAssertion(() => _cases.Verify(x => x.ReplyToCaseAsync(TeamKey, "case-1", "Please ask a person.", default), Times.Once));
         _cases.Verify(x => x.RequestHumanAsync(TeamKey, "case-1", default), Times.Once);
-        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once);
+        _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once);
     }
 
     [Fact]
@@ -237,7 +237,7 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
 
         view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question, SupportAssistance.None, default), Times.Once));
-        _cases.Verify(x => x.RunAssistantAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IProgress<string>>(), default), Times.Never);
+        _cases.Verify(x => x.RunAssistantAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Never);
     }
 
     [Fact]
@@ -284,11 +284,11 @@ public class SupportPanelTests : BunitContext
         var raised = Case("case-1");
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
         var kept = new TaskCompletionSource<bool>();
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<string>>(), default))
-            .Returns((string _, string _, IProgress<string> soFar, CancellationToken _) =>
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default))
+            .Returns((string _, string _, IProgress<SupportAssistantProgress> soFar, CancellationToken _) =>
             {
-                soFar.Report("Check the");
-                soFar.Report("Check the date range");
+                soFar.Report(new SupportAssistantProgress { AnswerSoFar = "Check the" });
+                soFar.Report(new SupportAssistantProgress { AnswerSoFar = "Check the date range" });
                 return kept.Task;
             });
         var view = Render(open: true);
@@ -307,12 +307,39 @@ public class SupportPanelTests : BunitContext
     }
 
     [Fact]
+    public void WhileTheAssistantWorks_ThePanelShowsItsRound_AndTheToolItRuns()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
+        var kept = new TaskCompletionSource<bool>();
+        IProgress<SupportAssistantProgress> report = null;
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default))
+            .Returns((string _, string _, IProgress<SupportAssistantProgress> progress, CancellationToken _) =>
+            {
+                report = progress;
+                progress.Report(new SupportAssistantProgress { Round = 1, Tools = ["get_my_cases"] });
+                return kept.Task;
+            });
+        var view = Render(open: true);
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.Equal("Round 1: get_my_cases", view.Find("[data-working] [data-step]").TextContent));
+
+        view.InvokeAsync(() => report.Report(new SupportAssistantProgress { Round = 2, AnswerSoFar = "You have two" }));
+
+        view.WaitForAssertion(() => Assert.Equal("Round 2", view.Find("[data-answer-so-far] [data-step]").TextContent));
+        view.InvokeAsync(() => kept.SetResult(true));
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-step]")));
+    }
+
+    [Fact]
     public void BeforeTheFirstWord_ThePanelSaysItIsWorking()
     {
         var raised = Case("case-1");
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
         var kept = new TaskCompletionSource<bool>();
-        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<string>>(), default)).Returns(kept.Task);
+        _cases.Setup(x => x.RunAssistantAsync(TeamKey, raised.Id, It.IsAny<IProgress<SupportAssistantProgress>>(), default)).Returns(kept.Task);
         var view = Render(open: true);
 
         Send(view, Question);
@@ -321,6 +348,7 @@ public class SupportPanelTests : BunitContext
         Assert.Equal(3, view.FindAll("[data-working] .support-typing__dot").Count);
         Assert.Equal("Working…", view.Find("[data-working] .support-typing__label").TextContent);
         Assert.Empty(view.FindAll("[data-answer-so-far]"));
+        Assert.Empty(view.FindAll("[data-step]"));
         view.InvokeAsync(() => kept.SetResult(true));
     }
 
@@ -385,7 +413,7 @@ public class SupportPanelTests : BunitContext
         Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
         var view = Render(open: true);
         Send(view, Question);
-        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<string>>(), default), Times.Once));
+        view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once));
 
         view.Find("input[data-draft]").Input("And the date");
 

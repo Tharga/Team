@@ -1269,16 +1269,23 @@ call it, so a host using `<SupportCasesView />` needs none of this.
 
 ### Watching the answer being written
 
-Pass an `IProgress<string>` and the answer is reported while the model writes it. `SupportPanel` and
-`SupportCasesView` do this, so the customer reads the answer as it is written instead of waiting for all of it:
+Pass an `IProgress<SupportAssistantProgress>` and you are told how far the assistant has got while it works: the answer
+as written so far, which **round** it is on, and the **tools** it is running. `SupportPanel` and `SupportCasesView` do
+this, so the customer reads the answer as it is written instead of waiting for all of it:
 
 ```csharp
-var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<string>(soFar => Show(soFar)));
+var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<SupportAssistantProgress>(p => Show(p.AnswerSoFar, p.Round, p.Tools)));
 ```
 
+- **A round is one call to the model.** The model either writes or asks for tools; when their results go back, the next
+  round starts. An answer that looks something up takes two rounds or more, which the tool loop of
+  `UseFunctionInvocation` runs for you.
 - **Until the first words arrive**, the assistant's side shows the same flashing dots as a person writing, read out as
-  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page.
-- **Each report is the whole answer so far**, not the piece just added, so a report that is missed costs nothing.
+  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page. Under the
+  dots, and under the text as it grows, a line says the round and the tool running: "Round 1: get_my_cases", then
+  "Round 2" (`team.support.transcript.round` and `team.support.transcript.roundTools`).
+- **Each report is the whole state**, the text so far included, not what changed, so a report that is missed costs
+  nothing.
 - **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
   it then. An answer that breaks off halfway is declined, and nothing that was shown on the way is kept.
 - **Only the caller sees it on the way.** Reports go to the progress you pass and nowhere else, never through
