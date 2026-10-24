@@ -13,6 +13,7 @@
   - Done: inside an `AuthorizeView`, so an anonymous visitor makes no calls, and in a `CustomErrorBoundary`, as the menu is.
 - [x] 7. Docs: a support-cases section, "A side panel beside every page", and the `Tharga.Team.Blazor` README.
   - Done: the components list now starts with `SupportPanel`, and a new section "A side panel beside every page" covers placing it, collapsed and open, handover, what is remembered, narrow screens, and who may be asked (readiness, `Offered`, `ISupportPanelAvailability`). The `Tharga.Team.Blazor` README lists the panel and `SupportAssistantConnectionView`.
+- [x] 7b. Asked for while testing (2026-10-24): the sample's scripted client says it is a built-in sample responder, in its fallback and after every scripted answer; a sample README covers running the sample and connecting Slack (settings, a tunnel, the request URL, and how to check it), linked from the Slack section of the support article; a Support desk page (System, Developer role) shows `SupportAcrossTeamsView` and `SupportUnassignedView`, so a developer answers in one window while writing as a member in the panel. The Developer role gains `support:all:manage` and `support:unassigned:read`/`:manage` for it.
 - [~] 8. Full build (baseline 14) and the full suite; run the sample for the user to test.
 
 ## Decisions

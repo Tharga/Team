@@ -532,7 +532,9 @@ At this point notifications and case threads work. Replies typed in Slack do not
 **Phase two — inbound replies, once you have a public URL:**
 
 4. **Get a public address.** A deployment already has one; locally you need a tunnel — Visual Studio's *Dev
-   Tunnels* or ngrok. Slack cannot reach `localhost`.
+   Tunnels* or ngrok. Slack cannot reach `localhost`. The sample's
+   [README](https://github.com/Tharga/Team/blob/master/Tharga.Team.Sample/README.md#connect-slack) walks
+   through it for the sample, settings and all.
 5. **Event Subscriptions** → enable, and set the request URL to
    `https://your-host/_tharga/support/slack/events`. Slack sends a one-off challenge as you save; the
    endpoint answers it automatically, so a green tick here means the whole inbound path is wired.

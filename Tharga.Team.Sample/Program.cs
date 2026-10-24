@@ -172,7 +172,12 @@ builder.AddThargaTeam(o =>
         // until 4.0; mapping it here is what keeps it after that (Tharga/Team#323).
         //
         // messages:send lets a Developer write to users of any team from /messages and read what was sent.
-        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send, SystemContactScopes.Send);
+        //
+        // support:all:manage and support:unassigned:read/manage let a Developer staff the support desk at
+        // /support-desk: every team's cases and the ones with no team, answered in place. That is the back-office
+        // half of trying support out -- write as a member in the side panel, answer here in another window.
+        roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send, SystemContactScopes.Send,
+            SystemSupportScopes.AllManage, SystemSupportScopes.Read, SystemSupportScopes.Manage);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at
