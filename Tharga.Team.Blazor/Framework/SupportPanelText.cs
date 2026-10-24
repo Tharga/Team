@@ -48,8 +48,8 @@ public static class SupportPanelText
     /// <summary>Sends the message.</summary>
     public static readonly TextKey Send = new("team.support.panel.send", "Send");
 
-    /// <summary>While the assistant is answering.</summary>
-    public static readonly TextKey Working = new("team.support.panel.working", "Working…");
+    /// <summary>Before the assistant's dots while it answers; the dots stand for the "…".</summary>
+    public static readonly TextKey Working = new("team.support.panel.working", "Working");
 
     /// <summary>When a message could not be sent.</summary>
     public static readonly TextKey Failed = new("team.support.panel.failed", "Something went wrong. Please try again.");
@@ -62,7 +62,7 @@ public static class SupportPanelText
     [
         Assistant, Support, WhoToAsk, NewConversation, Earlier, NoEarlier, AllConversations, Close, Resize, AssistantGreeting,
         SupportGreeting, Message, AskAQuestion, WriteToSupport, Send, Working, Failed, SelectTeam, SupportCasesViewText.AssistantDeclined,
-        SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.ServiceCall, SupportTranscriptText.ServiceCalls, SupportTranscriptText.Helpful,
+        SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.Helpful,
         SupportTranscriptText.NotHelpful, SupportTranscriptText.NoAnswerYet, SupportTranscriptText.NoAnswerAway
     ];
 }

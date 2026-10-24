@@ -16,14 +16,14 @@ public sealed class SupportDisplayOptions
     public bool RateAnswers { get; set; } = true;
 
     /// <summary>
-    /// Who sees the service calls the assistant made, listed under its answers. Default
-    /// <see cref="SupportServiceCallsAudience.Everyone"/>.
+    /// Who sees what an answer took, folded under it: the service calls the assistant made and the tokens the model
+    /// reported. Default <see cref="SupportAnswerDetailsAudience.Everyone"/>.
     /// </summary>
-    public SupportServiceCallsAudience ServiceCallsShownTo { get; set; } = SupportServiceCallsAudience.Everyone;
+    public SupportAnswerDetailsAudience AnswerDetailsShownTo { get; set; } = SupportAnswerDetailsAudience.Everyone;
 }
 
-/// <summary>Who sees the service calls under the assistant's answers.</summary>
-public enum SupportServiceCallsAudience
+/// <summary>Who sees the details under the assistant's answers: its service calls and its tokens.</summary>
+public enum SupportAnswerDetailsAudience
 {
     /// <summary>The person answered, and support.</summary>
     Everyone,

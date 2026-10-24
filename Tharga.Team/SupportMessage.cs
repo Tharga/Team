@@ -86,4 +86,7 @@ public record SupportMessage
 
     /// <summary>The service calls the assistant made for this answer, in order; empty for any other entry, and for an answer that looked nothing up.</summary>
     public SupportAssistantCall[] AssistantCalls { get; init; } = [];
+
+    /// <summary>The tokens the model reported for this answer, or <c>null</c> for any other entry and when it reported none.</summary>
+    public SupportAssistantUsage AssistantUsage { get; init; }
 }

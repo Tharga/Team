@@ -32,6 +32,16 @@ internal static class SupportAssistantSteps
     public static string Counted(TextSet text, SupportAssistantCall[] calls)
         => calls.Length == 1 ? text[SupportTranscriptText.ServiceCall] : text.Format(SupportTranscriptText.ServiceCalls, calls.Length);
 
+    /// <summary>"2 service calls · 830 tokens", what the folded details under an answer say; each part only when there is one.</summary>
+    public static string Summary(TextSet text, SupportAssistantCall[] calls, SupportAssistantUsage usage)
+    {
+        List<string> parts = [];
+        if (calls.Length > 0) parts.Add(Counted(text, calls));
+        if (usage != null) parts.Add(text.Format(SupportTranscriptText.Tokens, usage.TotalTokens.ToString("N0", System.Globalization.CultureInfo.CurrentCulture)));
+
+        return string.Join(" · ", parts);
+    }
+
     /// <summary>One call as a row: <c>search_my_cases(text: "export")</c>.</summary>
     public static string Row(SupportAssistantCall call) => $"{call.Name}({call.Arguments})";
 }

@@ -51,6 +51,13 @@ internal sealed class SampleChatClient : IChatClient
         CancellationToken cancellationToken = default)
     {
         var history = messages?.ToList() ?? [];
+        var reply = Reply(history, options);
+
+        return Task.FromResult(new ChatResponse(reply) { Usage = Estimated(history, reply) });
+    }
+
+    private static ChatMessage Reply(List<ChatMessage> history, ChatOptions options)
+    {
         var question = history.LastOrDefault(x => x.Role == ChatRole.User)?.Text ?? string.Empty;
 
         // A question about cases looks things up as a model would: the member's cases, then, when the question names
@@ -68,7 +75,7 @@ internal sealed class SampleChatClient : IChatClient
             var answer = $"I looked up your support cases in this team: you have {Count(found[0])}.";
             if (searches) answer += $" {Count(found[1])} of them mention \"{term}\".";
 
-            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, $"{answer} Ask about one of them, or ask for a person.\n\n{Signature}")));
+            return new ChatMessage(ChatRole.Assistant, $"{answer} Ask about one of them, or ask for a person.\n\n{Signature}");
         }
 
         var scripted = Array.Find(Script, x => question.Contains(x.Term, StringComparison.OrdinalIgnoreCase)).Answer;
@@ -81,13 +88,35 @@ internal sealed class SampleChatClient : IChatClient
             return Call(MissingSkillTool, new Dictionary<string, object> { ["what"] = what });
         }
 
-        var reply = scripted == null ? Fallback : $"{scripted}\n\n{Signature}";
-
-        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, reply)));
+        return new ChatMessage(ChatRole.Assistant, scripted == null ? Fallback : $"{scripted}\n\n{Signature}");
     }
 
-    private static Task<ChatResponse> Call(string tool, IDictionary<string, object> arguments = null)
-        => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), tool, arguments)])));
+    private static ChatMessage Call(string tool, IDictionary<string, object> arguments = null)
+        => new(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), tool, arguments)]);
+
+    /// <summary>
+    /// Not counted but estimated, at about four characters a token, so the sample fills the line a real model's own count
+    /// fills. A script reads nothing and writes nothing; the numbers only stand in for a model's.
+    /// </summary>
+    private static UsageDetails Estimated(IEnumerable<ChatMessage> read, ChatMessage written)
+    {
+        long input = TokensFor(read.Sum(LengthOf));
+        long output = TokensFor(LengthOf(written));
+
+        return new UsageDetails { InputTokenCount = input, OutputTokenCount = output, TotalTokenCount = input + output };
+    }
+
+    private static int LengthOf(ChatMessage message) => message.Contents.Sum(x => x switch
+    {
+        TextContent text => text.Text?.Length ?? 0,
+        FunctionCallContent call => call.Name.Length + JsonSerializer.Serialize(call.Arguments).Length,
+        FunctionResultContent result => JsonSerializer.Serialize(result.Result).Length,
+        _ => 0
+    });
+
+    private static int TokensFor(int characters) => Math.Max(1, (characters + CharactersPerToken - 1) / CharactersPerToken);
+
+    private const int CharactersPerToken = 4;
 
     private static int Count(FunctionResultContent result)
         => result.Result is JsonElement { ValueKind: JsonValueKind.Array } list ? list.GetArrayLength() : 0;
@@ -129,6 +158,9 @@ internal sealed class SampleChatClient : IChatClient
                 yield return new ChatResponseUpdate(message.Role, word);
             }
         }
+
+        // Last, as a provider reports it once the call is done.
+        if (response.Usage != null) yield return new ChatResponseUpdate(ChatRole.Assistant, [new UsageContent(response.Usage)]);
     }
 
     private static readonly TimeSpan WordDelay = TimeSpan.FromMilliseconds(60);

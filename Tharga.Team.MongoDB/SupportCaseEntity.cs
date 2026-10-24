@@ -197,6 +197,10 @@ public record SupportMessageEntity
     /// <summary>The service calls the assistant made for the entry; absent when it made none, as on every entry written before they were kept.</summary>
     [BsonIgnoreIfNull]
     public SupportAssistantCallEntity[] AssistantCalls { get; init; }
+
+    /// <summary>The tokens the model reported for the entry; absent when it reported none, and on every entry written before they were kept.</summary>
+    [BsonIgnoreIfNull]
+    public SupportAssistantUsageEntity AssistantUsage { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system.</summary>

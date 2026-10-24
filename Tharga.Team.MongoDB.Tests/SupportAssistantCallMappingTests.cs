@@ -35,6 +35,23 @@ public class SupportAssistantCallMappingTests
     }
 
     [Fact]
+    public void TheTokens_RoundTrip()
+    {
+        var stored = MongoSupportCaseStore.ToEntity(Answer() with { AssistantUsage = new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830 } });
+
+        Assert.Equal(new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830 }, MongoSupportCaseStore.ToMessage(stored).AssistantUsage);
+    }
+
+    [Fact]
+    public void AnEntryWithoutTokens_StoresNone()
+    {
+        var stored = MongoSupportCaseStore.ToEntity(Answer());
+
+        Assert.False(stored.ToBsonDocument().Contains(nameof(SupportMessageEntity.AssistantUsage)));
+        Assert.Null(MongoSupportCaseStore.ToMessage(stored).AssistantUsage);
+    }
+
+    [Fact]
     public void AnEntryWithoutCalls_StoresNoneAndReadsEmpty()
     {
         var stored = MongoSupportCaseStore.ToEntity(Answer());

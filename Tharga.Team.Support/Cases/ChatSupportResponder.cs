@@ -63,16 +63,19 @@ internal sealed class ChatSupportResponder(
 
             string body;
             SupportAssistantCall[] calls;
+            SupportAssistantUsage usage;
 
             if (progress == null)
             {
+                // The tool loop adds up the usage of its rounds into the response it returns.
                 var response = await chat.GetResponseAsync(history, chatOptions, deadline.Token);
                 body = response.Text?.Trim();
                 calls = [.. response.Messages.SelectMany(x => x.Contents).OfType<FunctionCallContent>().Where(IsServiceCall).Select(CallOf)];
+                usage = UsageOf([response.Usage]);
             }
             else
             {
-                (body, calls) = await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token);
+                (body, calls, usage) = await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token);
                 body = body.Trim();
             }
 
@@ -80,7 +83,7 @@ internal sealed class ChatSupportResponder(
                 ? SupportAnswer.Declined("The assistant returned nothing.")
                 : SupportAnswer.FromBody(body);
 
-            return answer with { Gaps = [.. gaps], Calls = calls };
+            return answer with { Gaps = [.. gaps], Calls = calls, Usage = usage };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -122,12 +125,13 @@ internal sealed class ChatSupportResponder(
     /// answer they preview is still kept.
     /// </para>
     /// </remarks>
-    private async Task<(string Body, SupportAssistantCall[] Calls)> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, CancellationToken cancellationToken)
+    private async Task<(string Body, SupportAssistantCall[] Calls, SupportAssistantUsage Usage)> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, CancellationToken cancellationToken)
     {
         var text = new StringBuilder();
         var round = 1;
         List<string> running = [];
         List<SupportAssistantCall> calls = [];
+        List<UsageDetails> usage = [];
         var waiting = false;
         var reporting = true;
 
@@ -150,6 +154,9 @@ internal sealed class ChatSupportResponder(
 
         await foreach (var update in chat.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
         {
+            // Streamed, each round reports its own, and nothing adds them up.
+            usage.AddRange(update.Contents.OfType<UsageContent>().Select(x => x.Details));
+
             var asked = update.Contents.OfType<FunctionCallContent>().ToArray();
             if (asked.Length > 0)
             {
@@ -174,7 +181,21 @@ internal sealed class ChatSupportResponder(
             Report();
         }
 
-        return (text.ToString(), [.. calls]);
+        return (text.ToString(), [.. calls], UsageOf(usage));
+    }
+
+    /// <summary>The tokens reported, added up; <c>null</c> when nothing was reported, so no count reads as zero.</summary>
+    internal static SupportAssistantUsage UsageOf(IEnumerable<UsageDetails> reported)
+    {
+        var details = reported.Where(x => x != null).ToArray();
+        if (details.Length == 0) return null;
+
+        return new SupportAssistantUsage
+        {
+            InputTokens = details.Sum(x => x.InputTokenCount ?? 0),
+            OutputTokens = details.Sum(x => x.OutputTokenCount ?? 0),
+            TotalTokens = details.Sum(x => x.TotalTokenCount ?? (x.InputTokenCount ?? 0) + (x.OutputTokenCount ?? 0))
+        };
     }
 
     /// <remarks>Noting what the assistant could not do is not a call on the host's services, so it is neither shown nor kept as one.</remarks>

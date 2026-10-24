@@ -703,7 +703,10 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AsSupport = entity.AsSupport,
         Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)],
         Rating = entity.Rating,
-        AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty })]
+        AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty })],
+        AssistantUsage = entity.AssistantUsage is { } usage
+            ? new SupportAssistantUsage { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens }
+            : null
     };
 
     internal static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -723,6 +726,9 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Rating = message.Rating,
         AssistantCalls = message.AssistantCalls is { Length: > 0 } calls
             ? [.. calls.Select(x => new SupportAssistantCallEntity { Name = x.Name, Arguments = string.IsNullOrEmpty(x.Arguments) ? null : x.Arguments })]
+            : null,
+        AssistantUsage = message.AssistantUsage is { } usage
+            ? new SupportAssistantUsageEntity { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens }
             : null
     };
 

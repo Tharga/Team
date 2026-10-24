@@ -336,12 +336,12 @@ public class SupportPanelTests : BunitContext
 
         Send(view, Question);
 
-        view.WaitForAssertion(() => Assert.Equal("Working 1…", view.Find("[data-working] .support-typing__label--shown").TextContent));
+        view.WaitForAssertion(() => Assert.Equal("Working 1", view.Find("[data-working] .support-typing__label--shown").TextContent));
 
         SupportAssistantCall[] made = [new() { Name = "get_my_cases" }, new() { Name = "search_my_cases", Arguments = "text: \"export\"" }];
         view.InvokeAsync(() => report.Report(new SupportAssistantProgress { Round = 2, AnswerSoFar = "You have two", Tools = ["search_my_cases"], Calls = made }));
 
-        view.WaitForAssertion(() => Assert.Equal("Working 2…", view.Find("[data-answer-so-far] [data-step]").TextContent));
+        view.WaitForAssertion(() => Assert.Equal("Working 2", view.Find("[data-answer-so-far] [data-step] .support-typing__label--shown").TextContent));
 
         view.InvokeAsync(() => report.Report(new SupportAssistantProgress { Round = 3, AnswerSoFar = "You have two cases.", Calls = made }));
 
@@ -355,7 +355,7 @@ public class SupportPanelTests : BunitContext
         Services.Configure<ThargaBlazorOptions>(o =>
         {
             o.Support.RateAnswers = false;
-            o.Support.ServiceCallsShownTo = SupportServiceCallsAudience.Support;
+            o.Support.AnswerDetailsShownTo = SupportAnswerDetailsAudience.Support;
         });
         var answer = Message(2, "You have two cases.", SupportMessageKind.Assistant, author: null) with { AssistantCalls = [new() { Name = "get_my_cases" }] };
         Raises(Case("case-1"), answered: true, Message(1, Question, SupportMessageKind.User), answer);
@@ -418,7 +418,7 @@ public class SupportPanelTests : BunitContext
 
         view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-working]")));
         Assert.Equal(3, view.FindAll("[data-working] .support-typing__dot").Count);
-        Assert.Equal("Working…", view.Find("[data-working] .support-typing__label--shown").TextContent);
+        Assert.Equal("Working", view.Find("[data-working] .support-typing__label--shown").TextContent);
         Assert.Empty(view.FindAll("[data-answer-so-far]"));
         Assert.Empty(view.FindAll("[data-step]"));
         view.InvokeAsync(() => kept.SetResult(true));

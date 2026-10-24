@@ -155,7 +155,8 @@ internal sealed class SupportCaseService(
             AuthorName = SupportCaseActors.AssistantName,
             Body = answer.Body,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
-            AssistantCalls = BoundedCalls(answer.Calls)
+            AssistantCalls = BoundedCalls(answer.Calls),
+            AssistantUsage = answer.Usage
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);

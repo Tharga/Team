@@ -1319,10 +1319,10 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<Suppo
 - **A round is one call to the model.** The model either writes or asks for tools; when their results go back, the next
   round starts. An answer that looks something up takes two rounds or more, which the tool loop of
   `UseFunctionInvocation` runs for you.
-- **Until the first words arrive**, the assistant's side shows flashing dots with what it is doing beside them:
-  "Working…" (`team.support.panel.working` in the panel, `team.support.cases.assistant.thinking` on the support page),
-  then "Working 2…" once it has gone round the tool loop twice, counting each time it asks for service calls
-  (`team.support.transcript.workingLoop`). A service call part way through the text is said under it.
+- **Until the first words arrive**, the assistant's side says what it is doing, followed by flashing dots that stand
+  for the "…": "Working" (`team.support.panel.working` in the panel, `team.support.cases.assistant.thinking` on the
+  support page), then "Working 2" once it has gone round the tool loop twice, counting each time it asks for service
+  calls (`team.support.transcript.workingLoop`). A service call part way through the text is said the same way under it.
 - **Each report is the whole state**, the text so far included, not what changed, so a report that is missed costs
   nothing.
 - **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
@@ -1335,12 +1335,16 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<Suppo
   Neurolito and the Anthropic API both stream. A responder of your own answers in one piece and reports nothing,
   unless it implements the `ISupportResponder.AnswerAsync` overload that takes the progress.
 
-### The service calls behind an answer
+### What an answer took
 
 The calls the assistant made for an answer are kept with it, as `SupportMessage.AssistantCalls`: each tool's name and
-what it was asked for, written out short as `text: "export"`. The panel and the support page show them under the
-answer, folded as **2 service calls**, one row per call such as `search_my_cases(text: "export")`, for the person
-answered and for support alike.
+what it was asked for, written out short as `text: "export"`. So are the tokens the model reported, every round of the
+tool loop added up, as `SupportMessage.AssistantUsage` (input, output and total). The panel and the support page show
+them under the answer, folded as **2 service calls · 830 tokens**, opening to a row per call such as
+`search_my_cases(text: "export")` and **Tokens: 610 in, 220 out**.
+
+- **The tokens are the provider's own count**, read from what the tool loop returns in one piece, or added up from each
+  round's report when streamed. A provider that reports none leaves the usage empty rather than zero.
 
 - **Asked in one piece or streamed**, they are read from what the tool loop yields, so a host's own tools are listed
   as well as the built-in ones. `report_missing_skill` is not: it notes what the assistant could not do, which is
@@ -1349,9 +1353,10 @@ answered and for support alike.
   answer, each written out to at most `MaxAssistantCallArgumentsLength` (200) characters.
 - **What a call was asked for can hold words from the conversation**, such as what the member searched for, so it is
   kept on the case and shown only where the case can be read. It is not audited.
-- **Who sees them** is the host's choice, `o.Blazor.Support.ServiceCallsShownTo`: `Everyone`, the default; `Support`,
+- **Who sees them** is the host's choice, `o.Blazor.Support.AnswerDetailsShownTo`: `Everyone`, the default; `Support`,
   only whoever reads the case from the support side; or `Nobody`. They are kept either way.
-- **A responder of your own** lists its calls by returning them on `SupportAnswer.Calls`.
+- **A responder of your own** lists its calls and tokens by returning them on `SupportAnswer.Calls` and
+  `SupportAnswer.Usage`.
 
 ### Settings
 

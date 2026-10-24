@@ -265,13 +265,13 @@ public record ThargaBlazorOptions : BlazorOptions
     public ConsentOptions Consent { get; set; } = new();
 
     /// <summary>
-    /// What the support views show beside the assistant's answers: whether they can be rated, and who sees the service
-    /// calls behind them.
+    /// What the support views show beside the assistant's answers: whether they can be rated, and who sees what they
+    /// took, the service calls and the tokens.
     /// </summary>
     /// <example>
     /// <code>
     /// o.Blazor.Support.RateAnswers = false;
-    /// o.Blazor.Support.ServiceCallsShownTo = SupportServiceCallsAudience.Support;
+    /// o.Blazor.Support.AnswerDetailsShownTo = SupportAnswerDetailsAudience.Support;
     /// </code>
     /// </example>
     public SupportDisplayOptions Support { get; set; } = new();

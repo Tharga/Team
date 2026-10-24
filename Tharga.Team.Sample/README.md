@@ -31,6 +31,9 @@ left and the cards on the home page list every page by area.
   "Support will reply later" while you are Away or idle. Hidden lets you answer while members are told nothing about
   support. A message to support that nobody answers within a minute is followed by a note that we will get back to
   them; while you are away, at once.
+- **What an answer took** is folded under each of the assistant's answers: the service calls and the tokens. The
+  built-in responder estimates its tokens at about four characters each, so the line is filled; a real model reports
+  its own count.
 
 ## Connect Slack
 

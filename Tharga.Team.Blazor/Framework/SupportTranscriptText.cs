@@ -34,14 +34,20 @@ public static class SupportTranscriptText
     /// <summary>Read out for the dots shown while somebody on the other side is writing; <c>{0}</c> is their name.</summary>
     public static readonly TextKey Typing = new("team.support.transcript.typing", "{0} is typing…");
 
-    /// <summary>Beside the assistant's dots once it has gone round the tool loop: <c>{0}</c> is how many times it has.</summary>
-    public static readonly TextKey WorkingLoop = new("team.support.transcript.workingLoop", "Working {0}…");
+    /// <summary>Before the assistant's dots once it has gone round the tool loop: <c>{0}</c> is how many times it has. The dots stand for the "…".</summary>
+    public static readonly TextKey WorkingLoop = new("team.support.transcript.workingLoop", "Working {0}");
 
     /// <summary>Opens the list under an answer of the one service call the assistant made for it.</summary>
     public static readonly TextKey ServiceCall = new("team.support.transcript.serviceCall", "1 service call");
 
     /// <summary>Opens the list under an answer of the service calls the assistant made for it: <c>{0}</c> is how many.</summary>
     public static readonly TextKey ServiceCalls = new("team.support.transcript.serviceCalls", "{0} service calls");
+
+    /// <summary>Beside the service calls under an answer: <c>{0}</c> is how many tokens the model reported for it.</summary>
+    public static readonly TextKey Tokens = new("team.support.transcript.tokens", "{0} tokens");
+
+    /// <summary>In the details under an answer, the tokens split: <c>{0}</c> read, <c>{1}</c> written.</summary>
+    public static readonly TextKey TokensInOut = new("team.support.transcript.tokensInOut", "Tokens: {0} in, {1} out");
 
     /// <summary>The button that rates one of the assistant's answers as helpful, or takes that back.</summary>
     public static readonly TextKey Helpful = new("team.support.transcript.helpful", "Helpful");
@@ -66,7 +72,7 @@ public static class SupportTranscriptText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, WorkingLoop, ServiceCall, ServiceCalls,
+        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, WorkingLoop, ServiceCall, ServiceCalls, Tokens, TokensInOut,
         Helpful, NotHelpful, RatedHelpful, RatedNotHelpful, NoAnswerYet, NoAnswerAway
     ];
 }

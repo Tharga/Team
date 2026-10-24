@@ -69,6 +69,49 @@ public class SupportAssistantStreamingTests
         Assert.Equal("text: \"exportåäö\", limit: 5", call.Arguments);
     }
 
+    /// <summary>The tool loop adds up its rounds in one piece; streamed, each round reports its own and they are added here.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheTokens_OfEveryRound_AreAddedUp(bool streamed)
+    {
+        var responder = Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" }, new UsageDetails { InputTokenCount = 100, OutputTokenCount = 10, TotalTokenCount = 110 });
+
+        var answer = streamed ? await responder.AnswerAsync(Case(), Transcript(), new Reports()) : await responder.AnswerAsync(Case(), Transcript());
+
+        Assert.Equal(new SupportAssistantUsage { InputTokens = 200, OutputTokens = 20, TotalTokens = 220 }, answer.Usage);
+    }
+
+    [Fact]
+    public async Task AProviderThatReportsNoTokens_LeavesNoUsage()
+    {
+        var answer = await Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" }).AnswerAsync(Case(), Transcript(), new Reports());
+
+        Assert.Null(answer.Usage);
+    }
+
+    [Fact]
+    public void ATotalNotReported_IsInputAndOutputAddedUp()
+    {
+        var usage = ChatSupportResponder.UsageOf([new UsageDetails { InputTokenCount = 7, OutputTokenCount = 3 }, null]);
+
+        Assert.Equal(10, usage.TotalTokens);
+    }
+
+    [Fact]
+    public async Task TheTokens_AreKeptOnTheAnswer()
+    {
+        var responder = Substitute.For<ISupportResponder>();
+        responder.AnswerAsync(Arg.Any<SupportCase>(), Arg.Any<IReadOnlyList<SupportMessage>>(), Arg.Any<CancellationToken>())
+            .Returns(SupportAnswer.FromBody("Done.") with { Usage = new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830 } });
+        var world = new World(responder);
+        var raised = await world.As(Alice).RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+
+        await world.As(Alice).RunAssistantAsync(TeamA, raised.Id);
+
+        Assert.Equal(830, (await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items[^1].AssistantUsage.TotalTokens);
+    }
+
     [Fact]
     public async Task Streamed_TheServiceCalls_AreReported_AndKept()
     {
@@ -239,9 +282,9 @@ public class SupportAssistantStreamingTests
         Assert.Equal(["raise", "assistant-answer"], world.Audit.Entries.Select(x => x.Action));
     }
 
-    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments)
+    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments, UsageDetails usage = null)
     {
-        var chat = new CallingChatClient(tool, arguments).AsBuilder().UseFunctionInvocation().Build();
+        var chat = new CallingChatClient(tool, arguments, usage).AsBuilder().UseFunctionInvocation().Build();
 
         return new ChatSupportResponder(new RegisteredChatClientResolver(chat), new SearchTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
     }
@@ -367,17 +410,18 @@ public class SupportAssistantStreamingTests
         }
     }
 
-    /// <summary>Calls one tool with the arguments given until it has the result, then answers; in one piece or streamed.</summary>
-    private sealed class CallingChatClient(string tool, Dictionary<string, object> arguments) : IChatClient
+    /// <summary>Calls one tool with the arguments given until it has the result, then answers; in one piece or streamed, reporting <paramref name="usage"/> for each round.</summary>
+    private sealed class CallingChatClient(string tool, Dictionary<string, object> arguments, UsageDetails usage = null) : IChatClient
     {
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ChatResponse(Next(messages)));
+            => Task.FromResult(new ChatResponse(Next(messages)) { Usage = usage == null ? null : new UsageDetails { InputTokenCount = usage.InputTokenCount, OutputTokenCount = usage.OutputTokenCount, TotalTokenCount = usage.TotalTokenCount } });
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.Yield();
             var next = Next(messages);
             yield return new ChatResponseUpdate(next.Role, next.Contents);
+            if (usage != null) yield return new ChatResponseUpdate(ChatRole.Assistant, [new UsageContent(usage)]);
         }
 
         private ChatMessage Next(IEnumerable<ChatMessage> messages)

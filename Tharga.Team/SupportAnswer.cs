@@ -24,6 +24,9 @@ public record SupportAnswer
     /// <summary>The service calls the assistant made to answer, in order; kept with the answer as <see cref="SupportMessage.AssistantCalls"/>.</summary>
     public SupportAssistantCall[] Calls { get; init; } = [];
 
+    /// <summary>The tokens the model reported for the answer, or <c>null</c> when it reported none; kept as <see cref="SupportMessage.AssistantUsage"/>.</summary>
+    public SupportAssistantUsage Usage { get; init; }
+
     /// <summary>True when there is an answer to append.</summary>
     public bool Answered => !string.IsNullOrWhiteSpace(Body);
 

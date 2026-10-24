@@ -103,16 +103,10 @@
                     }
                 }
 
-                @* How the assistant came to the answer, folded: each service call with what it was asked for. *@
-                @if (message.AssistantCalls is { Length: > 0 } calls && ShowsCalls)
+                @* How the assistant came to the answer, folded: each service call with what it was asked for, and the tokens. *@
+                @if (message.Kind == SupportMessageKind.Assistant && ShowsDetails)
                 {
-                    <details style="margin-top: 0.25rem; font-size: 0.75rem; color: var(--rz-text-secondary-color);" data-calls="@message.Sequence">
-                        <summary style="cursor: pointer;">@SupportAssistantSteps.Counted(_text, calls)</summary>
-                        @foreach (var call in calls)
-                        {
-                            <div style="padding-left: 0.75rem; font-family: var(--rz-font-family-monospace, monospace); overflow-wrap: anywhere;" data-call>@SupportAssistantSteps.Row(call)</div>
-                        }
-                    </details>
+                    <SupportAnswerDetails Sequence="@message.Sequence" Calls="@message.AssistantCalls" Usage="@message.AssistantUsage" />
                 }
 
                 @* Rated by the person it answered, where they may; shown as a mark wherever they may not, as for support. *@
@@ -217,7 +211,7 @@
                     @* Under text already written, when the model looks something up part way through. *@
                     @if (step != null)
                     {
-                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0 rz-mt-1" Style="display: block; color: var(--rz-text-secondary-color);" data-step>@step</RadzenText>
+                        <div class="rz-mt-1" data-step><SupportTypingDots Label="@step" ShowLabel="true" /></div>
                     }
                 }
             </div>
@@ -488,8 +482,8 @@
     private SupportDisplayOptions _display = new();
 
     // The support side is whoever does not read the case from the author's seat.
-    private bool ShowsCalls => _display.ServiceCallsShownTo == SupportServiceCallsAudience.Everyone
-                               || (_display.ServiceCallsShownTo == SupportServiceCallsAudience.Support && !AuthorOnRight);
+    private bool ShowsDetails => _display.AnswerDetailsShownTo == SupportAnswerDetailsAudience.Everyone
+                                 || (_display.AnswerDetailsShownTo == SupportAnswerDetailsAudience.Support && !AuthorOnRight);
 
     protected override async Task OnInitializedAsync()
     {

@@ -67,6 +67,11 @@ Asked for while testing, fourth round (2026-10-24): the round counter looked str
 - [x] 29. Text beside the dots, always (the user still saw dots alone: "First lookup…" showed only while a call ran, under a second in the sample, and never for a model that calls nothing): "Working…", then "Working n…" where n counts the tool loops, kept while the model reads what came back.
   - Done: `SupportAssistantSteps.Describe` takes the idle text; `Running` for the line under text already written; `WorkingLoop` ("Working {0}…") replaces the lookup texts, which were not released. The support page's `AssistantThinking` (released) now defaults to "Working…" so both places read alike. Build at 14 warnings; full suite green (Blazor 2224).
 
+- [x] 30. The text first, the animated dots last: "Working 2 •••", the dots standing for the "…" the texts no longer end with. The line under text already written reads the same, dots included.
+- [x] 31. The tokens with the service calls (#381 step 3, usage per answer): `SupportAssistantUsage` (input, output, total) on `SupportAnswer.Usage` and `SupportMessage.AssistantUsage`, MongoDB `SupportAssistantUsageEntity`. In one piece from the tool loop's response, which adds its rounds up (checked through the real `FunctionInvokingChatClient`); streamed, each round's `UsageContent` added up here; none reported is null, not zero. `SupportAnswerDetails` shows "2 service calls · 830 tokens", opening to the calls and "Tokens: 610 in, 220 out", in the panel and the transcript. `ServiceCallsShownTo` became `AnswerDetailsShownTo` (`SupportAnswerDetailsAudience`), unreleased. The sample's script estimates its tokens at four characters each.
+  - Not yet: a usage row per answer for billing and per-team totals behind a system scope (#378, and the rest of #381 step 3).
+  - Tests: 4 Support, 2 MongoDB, 3 Blazor. Build at 14 warnings; full suite green: Email 985, MongoDB 468, Blazor 2231, Service 1470, Support 814, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
+
 ## Decisions
 
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.

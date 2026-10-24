@@ -49,7 +49,7 @@ public class SupportDisplayOptionsTests : BunitContext
     [Fact]
     public void CallsShownToSupport_AreHiddenFromTheMember()
     {
-        var member = RenderTranscript(asMember: true, o => o.ServiceCallsShownTo = SupportServiceCallsAudience.Support);
+        var member = RenderTranscript(asMember: true, o => o.AnswerDetailsShownTo = SupportAnswerDetailsAudience.Support);
         var staff = Render<SupportTranscript>(p => p.Add(x => x.Messages, Conversation()).Add(x => x.CaseAuthorIdentity, "alice").Add(x => x.AuthorOnRight, false));
 
         Assert.Empty(member.FindAll("[data-calls]"));
@@ -59,7 +59,7 @@ public class SupportDisplayOptionsTests : BunitContext
     [Fact]
     public void CallsShownToNobody_AreHiddenFromSupportToo()
     {
-        RenderTranscript(asMember: true, o => o.ServiceCallsShownTo = SupportServiceCallsAudience.Nobody);
+        RenderTranscript(asMember: true, o => o.AnswerDetailsShownTo = SupportAnswerDetailsAudience.Nobody);
         var staff = Render<SupportTranscript>(p => p.Add(x => x.Messages, Conversation()).Add(x => x.CaseAuthorIdentity, "alice").Add(x => x.AuthorOnRight, false));
 
         Assert.Empty(staff.FindAll("[data-calls]"));
@@ -82,7 +82,7 @@ public class SupportDisplayOptionsTests : BunitContext
         var display = SupportDisplay.Of(new ServiceCollection().BuildServiceProvider());
 
         Assert.True(display.RateAnswers);
-        Assert.Equal(SupportServiceCallsAudience.Everyone, display.ServiceCallsShownTo);
+        Assert.Equal(SupportAnswerDetailsAudience.Everyone, display.AnswerDetailsShownTo);
     }
 
     private IRenderedComponent<SupportTranscript> RenderTranscript(bool asMember, Action<SupportDisplayOptions> configure = null)
