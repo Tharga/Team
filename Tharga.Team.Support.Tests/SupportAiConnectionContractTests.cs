@@ -39,6 +39,16 @@ public class SupportAiConnectionContractTests
         Assert.Contains("claude-qwen3-coder:30b", text);
     }
 
+    /// <summary>The endpoint carries the decrypted key to the factory, so its text must hide it too.</summary>
+    [Fact]
+    public void AnEndpointsText_NeverShowsTheKey()
+    {
+        var endpoint = new Tharga.Team.Support.Cases.SupportAiEndpoint(SupportAiConnectionKind.Neurolito, "https://neurolito.com", Key, "claude-qwen3-coder:30b");
+
+        Assert.DoesNotContain(Key, endpoint.ToString());
+        Assert.Contains("(hidden)", endpoint.ToString());
+    }
+
     [Fact]
     public void ARequestWithoutAKey_SaysSo()
     {
