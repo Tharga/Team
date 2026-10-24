@@ -253,7 +253,7 @@ public static class SupportRegistration
             if (chat == null) return null;
 
             return new ChatSupportResponder(
-                chat,
+                new RegisteredChatClientResolver(chat),
                 sp.GetRequiredService<ISupportAssistantTools>(),
                 sp.GetRequiredService<SupportAssistantOptions>(),
                 sp.GetRequiredService<ILogger<ChatSupportResponder>>());
