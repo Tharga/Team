@@ -11,9 +11,10 @@ using Tharga.Team.Support.Cases;
 namespace Tharga.Team.Blazor.Tests;
 
 /// <summary>
-/// What the assistant was asked and could not do, listed for the people who build it, and marked on the desk.
+/// How the assistant is doing: what it was asked and could not do, and how its answers were rated, listed for the people
+/// who build it and marked on the desk.
 /// </summary>
-public class SupportAssistantGapsViewTests : BunitContext
+public class SupportAssistantFeedbackViewTests : BunitContext
 {
     private const string BySubject = "search cases by subject";
 
@@ -40,7 +41,7 @@ public class SupportAssistantGapsViewTests : BunitContext
     [Fact]
     public void TheSameThingAskedInSeveralCases_IsOneEntry_MostAskedFirst()
     {
-        var gaps = SupportAssistantGapsView.GapsOf(
+        var gaps = SupportAssistantFeedbackView.GapsOf(
         [
             Case("c1", "acme", Monday, BySubject),
             Case("c2", "globex", Monday.AddDays(1), "Search Cases By Subject", "close my case"),
@@ -58,11 +59,11 @@ public class SupportAssistantGapsViewTests : BunitContext
         var view = Render([Case("c1", "acme", Monday, BySubject), Case("c2", "globex", Monday, BySubject)]);
 
         Assert.Equal("2", view.Find($"[data-gap='{BySubject}'] [data-cases]").GetAttribute("data-cases"));
-        Assert.Empty(view.FindAll("[data-gap-case]"));
+        Assert.Empty(view.FindAll("[data-feedback-case]"));
 
         view.Find($"[data-gap='{BySubject}'] [style*='cursor: pointer']").Click();
 
-        Assert.Equal(["c1", "c2"], view.FindAll("[data-gap-case]").Select(x => x.GetAttribute("data-gap-case")).Order());
+        Assert.Equal(["c1", "c2"], view.FindAll("[data-feedback-case]").Select(x => x.GetAttribute("data-feedback-case")).Order());
     }
 
     [Fact]
@@ -70,7 +71,7 @@ public class SupportAssistantGapsViewTests : BunitContext
     {
         var view = Render([Case("c1", "acme", Monday)]);
 
-        Assert.Equal(SupportAssistantGapsViewText.NoGaps.Default, view.Find("[data-no-gaps]").TextContent);
+        Assert.Equal(SupportAssistantFeedbackViewText.NoGaps.Default, view.Find("[data-no-gaps]").TextContent);
     }
 
     [Fact]
@@ -80,7 +81,44 @@ public class SupportAssistantGapsViewTests : BunitContext
 
         var view = Render(null);
 
-        Assert.Contains(SupportAssistantGapsViewText.NotPermitted.Default, view.Markup);
+        Assert.Contains(SupportAssistantFeedbackViewText.NotPermitted.Default, view.Markup);
+    }
+
+    [Fact]
+    public void RatedAnswers_AreListedByHowTheyWereRated_NewestFirst()
+    {
+        var view = Render(
+        [
+            Case("c1", "acme", Monday) with { AnswersRatedDown = 2 },
+            Case("c2", "acme", Monday.AddDays(1)) with { AnswersRatedDown = 1, AnswersRatedUp = 1 },
+            Case("c3", "acme", Monday.AddDays(2)) with { AnswersRatedUp = 3 }
+        ]);
+
+        Assert.Equal(["c2", "c1"], view.FindAll("[data-feedback='down'] [data-feedback-case]").Select(x => x.GetAttribute("data-feedback-case")));
+        Assert.Equal(["c3", "c2"], view.FindAll("[data-feedback='up'] [data-feedback-case]").Select(x => x.GetAttribute("data-feedback-case")));
+        Assert.Equal("2", view.Find("[data-feedback='down'] [data-feedback-case='c1'] [data-answers]").GetAttribute("data-answers"));
+    }
+
+    [Fact]
+    public void WithNothingRated_EachRatingSaysSo()
+    {
+        var view = Render([Case("c1", "acme", Monday)]);
+
+        Assert.Equal(2, view.FindAll("[data-none-rated]").Count);
+    }
+
+    [Fact]
+    public void TheDesk_MarksACaseWithARatedAnswer()
+    {
+        _cases.Setup(x => x.GetCasesAcrossTeamsAsync(It.IsAny<string>(), It.IsAny<int>(), default))
+            .ReturnsAsync(new SupportCasePage { Items = [Case("c1", "acme", Monday) with { AnswersRatedDown = 1, AssistantState = SupportAssistantState.HandedOff }, Case("c2", "acme", Monday) with { AnswersRatedUp = 1, AssistantState = SupportAssistantState.HandedOff }] });
+        AddServices();
+
+        var view = Render<SupportAcrossTeamsView>();
+
+        Assert.NotNull(view.Find("[data-rated-down='c1']"));
+        Assert.Empty(view.FindAll("[data-rated-up='c1']"));
+        Assert.NotNull(view.Find("[data-rated-up='c2']"));
     }
 
     [Fact]
@@ -96,13 +134,13 @@ public class SupportAssistantGapsViewTests : BunitContext
         Assert.Equal($"{BySubject}; close my case", badge.GetAttribute("title"));
     }
 
-    private IRenderedComponent<SupportAssistantGapsView> Render(SupportCase[] cases)
+    private IRenderedComponent<SupportAssistantFeedbackView> Render(SupportCase[] cases)
     {
         if (cases != null)
             _cases.Setup(x => x.GetCasesAcrossTeamsAsync(It.IsAny<string>(), It.IsAny<int>(), default)).ReturnsAsync(new SupportCasePage { Items = cases });
         AddServices();
 
-        return Render<SupportAssistantGapsView>();
+        return Render<SupportAssistantFeedbackView>();
     }
 
     private void AddServices()

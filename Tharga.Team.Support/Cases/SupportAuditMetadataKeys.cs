@@ -33,6 +33,9 @@ public static class SupportAuditMetadataKeys
     /// </remarks>
     public const string WithAssistant = "support.case.withAssistant";
 
+    /// <summary>How an answer was rated: Up, Down, or None when a rating was taken back.</summary>
+    public const string Rating = "support.message.rating";
+
     /// <summary>
     /// What the assistant answers a team with after a change: Platform, Off, or a provider.
     /// </summary>

@@ -27,9 +27,10 @@
         <SupportUnassignedView />
     </RadzenCard>
 
-    @* What members asked the assistant for that it had no tool to do: the list to build the next tools from. *@
+    @* What members asked the assistant for that it had no tool to do, and how they rated its answers: the list to
+       build the next tools from. *@
     <RadzenCard>
-        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">What the assistant could not do</RadzenText>
-        <SupportAssistantGapsView />
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">How the assistant is doing</RadzenText>
+        <SupportAssistantFeedbackView />
     </RadzenCard>
 </RadzenStack>

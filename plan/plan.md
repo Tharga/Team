@@ -32,8 +32,10 @@ Asked for while testing, second round (2026-10-24):
 
 - [x] 13. The side panel could not be resized: the drag sized the panel inside Radzen's sidebar, which kept its own width, and the saved width was drawn only on the next render. The script now sizes the sidebar, and `OnResized` redraws. Test: a dragged width is drawn and remembered.
 - [x] 14. Answers with links: `SupportAssistantOptions.CaseLinkTemplate` (null by default; the sample sets `/support/{caseId}`) gives every case `get_my_cases` and `search_my_cases` return a `Link`, and their descriptions tell the model to link in Markdown. The panel and, now, the support page render the assistant's Markdown; `SupportAnswerLinks.SiteOnly` keeps a link only when it is a path on the site, and writes any other out as text. Tests: 8 in Blazor (bare addresses are not linked by RadzenMarkdown), 2 in Support.
-- [~] 15. Rating answers up or down: on the assistant's answers in the panel and on the support page, by the person answered; kept on the message, counted on the case, audited; marked on the desk and listed in the feedback view with what it could not do.
-- [ ] 16. Docs, full build (baseline 14) and the full suite; run the sample.
+- [x] 15. Rating answers up or down: on the assistant's answers in the panel and on the support page, by the person answered; kept on the message, counted on the case, audited; marked on the desk and listed in the feedback view with what it could not do.
+  - Done: `SupportAnswerRating` (None, Up, Down) on `SupportMessage.Rating`, counted as `SupportCase.AnswersRatedUp`/`AnswersRatedDown`; `RateAnswerAsync` lets only the author rate, only the assistant's answers, audited as `rate-answer`, announced as `SupportCaseChange.Rated`; `ISupportCaseStore.SetAnswerRatingAsync` (default throws), MongoDB by the entry's position, counts read from the entries. Thumbs in the panel and the support page, the same again taking it back; a mark for support. `SupportAssistantGapsView` became `SupportAssistantFeedbackView`, adding the rated cases; the desk marks them. Tests: 5 Support, 3 MongoDB, 4 + 1 + 3 Blazor.
+- [x] 16. Docs, full build (baseline 14) and the full suite; run the sample.
+  - Docs: the support article (answers with links; what it could not do and how its answers were rated) and the `Tharga.Team.Blazor` README. Build at 14 warnings; full suite green: Email 985, MongoDB 463, Blazor 2177, Service 1470, Support 775, Support.Anthropic 12, Mcp 121, Entra 58, Images 11.
 
 ## Decisions
 

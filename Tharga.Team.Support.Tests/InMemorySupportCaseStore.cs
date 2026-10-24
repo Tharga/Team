@@ -189,6 +189,22 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     /// rather than appending. A fake that grew the list on every mark would hide exactly the defect the
     /// idempotency test exists to catch.
     /// </remarks>
+    public Task SetAnswerRatingAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+        var index = found.Messages.FindIndex(x => x.Sequence == sequence);
+        if (index < 0) throw new InvalidOperationException($"Support case {caseId} has no entry {sequence}.");
+
+        found.Messages[index] = found.Messages[index] with { Rating = rating };
+        Replace(found.Case with
+        {
+            AnswersRatedUp = found.Messages.Count(x => x.Rating == SupportAnswerRating.Up),
+            AnswersRatedDown = found.Messages.Count(x => x.Rating == SupportAnswerRating.Down)
+        }, found.Messages);
+
+        return Task.CompletedTask;
+    }
+
     public Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

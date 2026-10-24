@@ -322,6 +322,16 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     /// write on that case, so it must be exactly as hard as reading it — a second check that merely resembles
     /// the first is how the two drift apart until one of them is wrong.
     /// </remarks>
+    /// <remarks>Read access, and then the author alone: it is them the assistant answered, so it is their verdict to give.</remarks>
+    public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "rate an answer in", CaseAccessKind.Read);
+        if (!await AsksForThemselvesAsync(teamKey, caseId))
+            throw new UnauthorizedAccessException($"Only the member who raised support case '{caseId}' may rate the assistant's answers in it.");
+
+        await inner.RateAnswerAsync(teamKey, caseId, sequence, rating, cancellationToken);
+    }
+
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "mark read", CaseAccessKind.Read);

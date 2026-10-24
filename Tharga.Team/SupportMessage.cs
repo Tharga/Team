@@ -80,4 +80,7 @@ public record SupportMessage
 
     /// <summary>The files this entry carries, in the order they arrived; empty for none.</summary>
     public SupportAttachment[] Attachments { get; init; } = [];
+
+    /// <summary>How the person the assistant answered rated this answer; only the assistant's answers are rated.</summary>
+    public SupportAnswerRating Rating { get; init; }
 }

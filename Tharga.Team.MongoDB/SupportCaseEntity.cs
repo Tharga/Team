@@ -188,6 +188,11 @@ public record SupportMessageEntity
     /// <summary>The files the entry carries, metadata only; absent when it carries none, as on every entry written before files were kept.</summary>
     [BsonIgnoreIfNull]
     public SupportAttachmentEntity[] Attachments { get; init; }
+
+    /// <summary>How the person answered rated the entry, by name; absent until they do.</summary>
+    [BsonIgnoreIfDefault]
+    [BsonRepresentation(BsonType.String)]
+    public SupportAnswerRating Rating { get; init; }
 }
 
 /// <summary>An embedded projection onto an external system.</summary>

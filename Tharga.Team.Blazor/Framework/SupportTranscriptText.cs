@@ -40,6 +40,18 @@ public static class SupportTranscriptText
     /// <summary>The same while it runs tools: <c>{0}</c> is the round, <c>{1}</c> the tools' names.</summary>
     public static readonly TextKey RoundTools = new("team.support.transcript.roundTools", "Round {0}: {1}");
 
+    /// <summary>The button that rates one of the assistant's answers as helpful, or takes that back.</summary>
+    public static readonly TextKey Helpful = new("team.support.transcript.helpful", "Helpful");
+
+    /// <summary>The button that rates one of the assistant's answers as not helpful, or takes that back.</summary>
+    public static readonly TextKey NotHelpful = new("team.support.transcript.notHelpful", "Not helpful");
+
+    /// <summary>Marks an answer the person it answered found helpful, where it cannot be rated, as for support.</summary>
+    public static readonly TextKey RatedHelpful = new("team.support.transcript.ratedHelpful", "Rated helpful");
+
+    /// <summary>Marks an answer the person it answered found unhelpful, where it cannot be rated.</summary>
+    public static readonly TextKey RatedNotHelpful = new("team.support.transcript.ratedNotHelpful", "Rated not helpful");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, Round, RoundTools];
+    public static readonly TextKey[] All = [Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, Round, RoundTools, Helpful, NotHelpful, RatedHelpful, RatedNotHelpful];
 }

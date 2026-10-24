@@ -58,10 +58,16 @@ public static class SupportAcrossTeamsViewText
     /// <summary>On a case where the assistant was asked for something it had no way to do; what it was shows on hover.</summary>
     public static readonly TextKey AssistantCouldNot = new("team.support.acrossTeams.assistantCouldNot", "The assistant could not help");
 
+    /// <summary>On a case with an answer by the assistant that the person it answered found unhelpful.</summary>
+    public static readonly TextKey RatedDown = new("team.support.acrossTeams.ratedDown", "Rated not helpful");
+
+    /// <summary>On a case with an answer by the assistant that the person it answered found helpful.</summary>
+    public static readonly TextKey RatedUp = new("team.support.acrossTeams.ratedUp", "Rated helpful");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         Awaiting, NoCases, NoneMatch, AnswerLabel, Close, CloseWarningTitle, CloseWarning, CloseAnyway, OnlyTheAuthor, Open, Closed, WithAssistant,
-        ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant, AssistantCouldNot
+        ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant, AssistantCouldNot, RatedDown, RatedUp
     ];
 }

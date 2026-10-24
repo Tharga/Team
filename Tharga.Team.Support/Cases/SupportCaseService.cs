@@ -708,6 +708,17 @@ internal sealed class SupportCaseService(
         });
     }
 
+    public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+        if (!messages.Any(x => x.Sequence == sequence && x.Kind == SupportMessageKind.Assistant))
+            throw new InvalidOperationException($"Entry {sequence} of support case '{caseId}' is not an answer by the assistant, so it cannot be rated.");
+
+        await store.SetAnswerRatingAsync(teamKey, caseId, sequence, rating, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Rated);
+    }
+
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         var existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);

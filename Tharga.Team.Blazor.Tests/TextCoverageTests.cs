@@ -56,7 +56,7 @@ public class TextCoverageTests
         "Features/Support/SupportAssistantConnectionView.razor",
         "Features/Support/SupportPanel.razor",
         "Features/Support/SupportTypingDots.razor",
-        "Features/Support/SupportAssistantGapsView.razor",
+        "Features/Support/SupportAssistantFeedbackView.razor",
         "Features/Team/TeamIconDialog.razor",
         "Features/Simulation/AccessSimulationCard.razor",
         "Features/Simulation/AccessSimulationBar.razor",

@@ -1257,18 +1257,37 @@ set, or resolve the built-in one and add to what it returns. Keep every tool rea
 service — a tool that reaches the store directly is a second enforcement point, and the assistant would be
 the one caller able to use it.
 
-### What it could not do
+### Answers with links
+
+Set `o.Assistant.CaseLinkTemplate` to where a case is on your site, as a path such as `/support/{caseId}`, and every
+case `get_my_cases` and `search_my_cases` return carries its `Link`; their descriptions tell the model to link to a case
+it mentions, in Markdown. Unset, the default, the assistant has no links to give.
+
+`SupportPanel` and `SupportCasesView` render the assistant's answers as Markdown with HTML off. **A link stays a link
+only when it is a path on your site**, such as `/support/abc`. Any other, to another host or with a scheme such as
+`javascript:`, is written out as its text and address: the model writes these, a member's own words can steer it, and a
+link off the site is how a steered answer would send somebody to a page that only looks like yours.
+
+### What it could not do, and how its answers were rated
 
 Whatever tools the host supplies, the assistant is also given `report_missing_skill`. When a member asks for
 something none of its tools can do, the model calls it with what was asked, in a few words, and then says it cannot
 help. What it reports comes back as `SupportAnswer.Gaps` and is kept on the case as `SupportCase.AssistantGaps`,
 whether it answered or declined: trimmed, at most 200 characters each, once each, the newest 20 per case.
 
-`SupportAssistantGapsView` lists them across every team for the people who build the assistant, the same thing asked
-in several cases as one entry, most asked first, and each case opens as on the desk. It reads through
-`GetCasesAcrossTeamsAsync`, so it needs `support:all:read`. `SupportAcrossTeamsView` marks such a case with
-**The assistant could not help**, and what it was shows on hover. A store of your own keeps them by implementing
-`ISupportCaseStore.AddAssistantGapsAsync`; the default keeps nothing.
+**The person answered rates each answer**, thumbs up or down, in the panel and on the support page; the same thumb
+again takes it back (`RateAnswerAsync`, with `SupportAnswerRating.None`). Only the person who raised the case may rate,
+because it is them the assistant answered, and only the assistant's answers can be rated. The rating is kept on the
+answer (`SupportMessage.Rating`), counted on the case (`AnswersRatedUp`, `AnswersRatedDown`), audited as
+`support:rate-answer`, and shown to support as a mark on the answer.
+
+`SupportAssistantFeedbackView` lists all of it across every team for the people who build the assistant: what it could
+not do, the same thing asked in several cases as one entry, most asked first; and the cases with an answer rated not
+helpful, and helpful, newest first. Each case opens as on the desk. It reads through `GetCasesAcrossTeamsAsync`, so it
+needs `support:all:read`. `SupportAcrossTeamsView` marks a case with **The assistant could not help** (what it was
+shows on hover), **Rated not helpful** or **Rated helpful**. A store of your own keeps them by implementing
+`ISupportCaseStore.AddAssistantGapsAsync`, whose default keeps nothing, and `SetAnswerRatingAsync`, whose default
+throws.
 
 ### Running it
 

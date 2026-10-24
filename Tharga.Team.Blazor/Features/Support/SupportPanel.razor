@@ -95,6 +95,19 @@
                             else
                             {
                                 <RadzenMarkdown Text="@SupportAnswerLinks.SiteOnly(message.Text)" AllowHtml="false" />
+                                @if (message.ByAssistant)
+                                {
+                                    <div class="support-panel__rate" data-rate="@message.Sequence">
+                                        @foreach (var choice in Ratings)
+                                        {
+                                            var label = _text[choice == SupportAnswerRating.Up ? SupportTranscriptText.Helpful : SupportTranscriptText.NotHelpful];
+                                            <button type="button" class="support-panel__rate-pick" title="@label" aria-label="@label"
+                                                    aria-pressed="@(message.Rating == choice ? "true" : "false")" @onclick="@(() => RateAsync(message, choice))" data-rate-choice="@choice">
+                                                <RadzenIcon Icon="@(choice == SupportAnswerRating.Up ? "thumb_up" : "thumb_down")" />
+                                            </button>
+                                        }
+                                    </div>
+                                }
                             }
                         </div>
                     }
@@ -178,7 +191,9 @@
     /// <summary>Where the open state and the width are remembered in the browser; one panel per key.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Panel";
 
-    private sealed record PanelMessage(bool FromMe, string Text);
+    private sealed record PanelMessage(bool FromMe, string Text, int Sequence = 0, bool ByAssistant = false, SupportAnswerRating Rating = SupportAnswerRating.None);
+
+    private static readonly SupportAnswerRating[] Ratings = [SupportAnswerRating.Up, SupportAnswerRating.Down];
 
     private TextSet _text = TextSet.Empty;
     private readonly List<PanelMessage> _messages = [];
@@ -430,7 +445,8 @@
         _messages.Clear();
         _messages.AddRange((page?.Items ?? [])
             .Where(x => x.Kind != SupportMessageKind.System)
-            .Select(x => new PanelMessage(x.Kind == SupportMessageKind.User && !x.AsSupport && x.AuthorIdentity == supportCase.AuthorIdentity, x.Body)));
+            .Select(x => new PanelMessage(x.Kind == SupportMessageKind.User && !x.AsSupport && x.AuthorIdentity == supportCase.AuthorIdentity, x.Body,
+                x.Sequence, x.Kind == SupportMessageKind.Assistant, x.Rating)));
 
         _withAssistant = supportCase.AssistantState == SupportAssistantState.Active;
         if (adoptWhoAnswers) _support = !_withAssistant;
@@ -465,6 +481,23 @@
         if (_typing?.Writing.Length > 0) _scrollOnRender = true;
         StateHasChanged();
     });
+
+    /// <remarks>The same rating again takes it back. A rating the service refuses changes nothing on screen.</remarks>
+    private async Task RateAsync(PanelMessage message, SupportAnswerRating choice)
+    {
+        var rating = message.Rating == choice ? SupportAnswerRating.None : choice;
+
+        try
+        {
+            await SupportCases.RateAnswerAsync(_teamKey, _caseId, message.Sequence, rating);
+
+            var index = _messages.IndexOf(message);
+            if (index >= 0) _messages[index] = message with { Rating = rating };
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     private async Task OnKeyDownAsync(KeyboardEventArgs args)
     {

@@ -103,6 +103,33 @@
                     }
                 }
 
+                @* Rated by the person it answered, where they may; shown as a mark wherever they may not, as for support. *@
+                @if (message.Kind == SupportMessageKind.Assistant)
+                {
+                    if (Rate.HasDelegate)
+                    {
+                        <div style="display: flex; gap: 0.125rem; margin-top: 0.25rem;" data-rate="@message.Sequence">
+                            @foreach (var choice in Ratings)
+                            {
+                                var picked = message.Rating == choice;
+                                var label = _text[choice == SupportAnswerRating.Up ? SupportTranscriptText.Helpful : SupportTranscriptText.NotHelpful];
+                                <RadzenButton Icon="@(choice == SupportAnswerRating.Up ? "thumb_up" : "thumb_down")" Size="ButtonSize.ExtraSmall"
+                                              Variant="@(picked ? Variant.Flat : Variant.Text)" ButtonStyle="@(picked ? ButtonStyle.Primary : ButtonStyle.Base)"
+                                              Disabled="@_rating.Contains(message.Sequence)" Click="@(() => RateAsync(message, choice))"
+                                              title="@label" aria-label="@label" aria-pressed="@(picked ? "true" : "false")"
+                                              data-rate-choice="@choice" />
+                            }
+                        </div>
+                    }
+                    else if (message.Rating != SupportAnswerRating.None)
+                    {
+                        var rated = _text[message.Rating == SupportAnswerRating.Up ? SupportTranscriptText.RatedHelpful : SupportTranscriptText.RatedNotHelpful];
+                        <span title="@rated" aria-label="@rated" style="display: inline-flex; margin-top: 0.25rem;" data-rated="@message.Rating">
+                            <RadzenIcon Icon="@(message.Rating == SupportAnswerRating.Up ? "thumb_up" : "thumb_down")" Style="font-size: 1rem;" />
+                        </span>
+                    }
+                }
+
                 @* Only an answer is followed to its channel; what the customer wrote reached us by definition. *@
                 @if (ShowDelivery && !fromAuthor && message.Kind == SupportMessageKind.User)
                 {
@@ -238,6 +265,29 @@
 
     /// <summary>The case the entries belong to; without it files are listed but cannot be opened.</summary>
     [Parameter] public string CaseId { get; set; }
+
+    /// <summary>
+    /// Rates one of the assistant's answers, with the rating chosen: the same one again takes it back as
+    /// <see cref="SupportAnswerRating.None"/>. Offered only when set, so pass it only for the person the assistant answered.
+    /// </summary>
+    [Parameter] public EventCallback<(SupportMessage Message, SupportAnswerRating Rating)> Rate { get; set; }
+
+    private static readonly SupportAnswerRating[] Ratings = [SupportAnswerRating.Up, SupportAnswerRating.Down];
+    private readonly HashSet<int> _rating = [];
+
+    private async Task RateAsync(SupportMessage message, SupportAnswerRating choice)
+    {
+        if (!_rating.Add(message.Sequence)) return;
+
+        try
+        {
+            await Rate.InvokeAsync((message, message.Rating == choice ? SupportAnswerRating.None : choice));
+        }
+        finally
+        {
+            _rating.Remove(message.Sequence);
+        }
+    }
 
     /// <summary>How far the assistant has got, shown after the last entry until its answer is kept: the text so far, and the round it is on.</summary>
     [Parameter] public SupportAssistantProgress AssistantProgress { get; set; }

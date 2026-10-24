@@ -355,6 +355,24 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetCaseAsync(teamKey, caseId, cancellationToken);
 
+    /// <remarks>Audited, as the verdict it is: who rated which answer how is what the people building the assistant go back to.</remarks>
+    public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var metadata = Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.Rating, rating.ToString()));
+        try
+        {
+            await inner.RateAnswerAsync(teamKey, caseId, sequence, rating, cancellationToken);
+
+            Log("rate-answer", nameof(RateAnswerAsync), sw.ElapsedMilliseconds, true, teamKey, metadata: metadata);
+        }
+        catch (Exception ex)
+        {
+            Log("rate-answer", nameof(RateAnswerAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message, metadata);
+            throw;
+        }
+    }
+
     // Reads and counters, not audited - consistent with every other read. Marking a case read is a write,
     // but it records that somebody looked at something rather than that anything changed, and auditing it
     // would fill the log with one entry per page view.

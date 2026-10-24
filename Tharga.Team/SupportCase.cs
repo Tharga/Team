@@ -125,6 +125,12 @@ public record SupportCase
     /// </remarks>
     public string[] AssistantGaps { get; init; } = [];
 
+    /// <summary>How many of the assistant's answers in this case the person it answered found helpful.</summary>
+    public int AnswersRatedUp { get; init; }
+
+    /// <summary>How many of the assistant's answers in this case the person it answered found unhelpful.</summary>
+    public int AnswersRatedDown { get; init; }
+
     /// <summary>
     /// Whether the team's support readers may read this case, when the host lets each case decide.
     /// </summary>

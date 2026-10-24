@@ -346,6 +346,26 @@ public class SupportPanelTests : BunitContext
     }
 
     [Fact]
+    public void AnAnswerByTheAssistant_CanBeRated_AndTheSameAgainTakesItBack()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User), Message(2, "Check the date range.", SupportMessageKind.Assistant, author: null));
+        var view = Render(open: true);
+        Send(view, Question);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-rate]")));
+
+        view.Find("[data-rate='2'] [data-rate-choice='Up']").Click();
+
+        view.WaitForAssertion(() => Assert.Equal("true", view.Find("[data-rate='2'] [data-rate-choice='Up']").GetAttribute("aria-pressed")));
+        _cases.Verify(x => x.RateAnswerAsync(TeamKey, raised.Id, 2, SupportAnswerRating.Up, default), Times.Once);
+
+        view.Find("[data-rate='2'] [data-rate-choice='Up']").Click();
+
+        view.WaitForAssertion(() => Assert.Equal("false", view.Find("[data-rate='2'] [data-rate-choice='Up']").GetAttribute("aria-pressed")));
+        _cases.Verify(x => x.RateAnswerAsync(TeamKey, raised.Id, 2, SupportAnswerRating.None, default), Times.Once);
+    }
+
+    [Fact]
     public void BeforeTheFirstWord_ThePanelSaysItIsWorking()
     {
         var raised = Case("case-1");

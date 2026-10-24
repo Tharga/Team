@@ -19,7 +19,7 @@
     else
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="true" TimeTemplate="TimeTemplate"
-                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AssistantProgress="@AssistantProgress" ThinkingText="@ThinkingText" />
+                           TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AssistantProgress="@AssistantProgress" ThinkingText="@ThinkingText" Rate="RateAsync" />
     }
 
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
@@ -232,6 +232,18 @@
 
         await SupportAnswerPreview.ShowAsync(DialogService, _mail, preview, _files);
     }
+
+    /// <remarks>Somebody reading a teammate's case is refused by the service, as only the author rates; nothing is shown for it.</remarks>
+    private Task RateAsync((SupportMessage Message, SupportAnswerRating Rating) change) => ActAsync(async () =>
+    {
+        try
+        {
+            await SupportCases.RateAnswerAsync(Case.TeamKey, Case.Id, change.Message.Sequence, change.Rating);
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    });
 
     private Task RequestHumanAsync() => ActAsync(() => SupportCases.RequestHumanAsync(Case.TeamKey, Case.Id));
 

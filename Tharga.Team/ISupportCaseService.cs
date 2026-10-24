@@ -228,6 +228,15 @@ public interface ISupportCaseService
     Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Rates one of the assistant's answers in this case, or takes a rating back with <see cref="SupportAnswerRating.None"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the person who raised the case rates, because it is them the assistant answered; anybody else is refused.
+    /// Only an answer by the assistant can be rated. The case counts its ratings, for the people who build the assistant.
+    /// </remarks>
+    Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Says the caller is writing in this case right now, so whoever is reading it on the other side sees an answer coming.
     /// </summary>
     /// <remarks>

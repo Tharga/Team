@@ -346,6 +346,19 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     internal static UpdateDefinition<SupportCaseEntity> AddGaps(string[] gaps)
         => Builders<SupportCaseEntity>.Update.PushEach(x => x.AssistantGaps, gaps, slice: -SupportCaseLimits.MaxAssistantGaps);
 
+    public async Task SetAnswerRatingAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        var entity = await RequireCaseAsync(teamKey, caseId);
+        var index = Array.FindIndex(entity.Messages, x => x.Sequence == sequence);
+        if (index < 0) throw new InvalidOperationException($"Support case {caseId} has no entry {sequence}.");
+
+        await UpdateAsync(teamKey, caseId, RateAnswer(index, rating));
+    }
+
+    /// <summary>Sets one entry's rating, found by its position; the case's counts are read from its entries.</summary>
+    internal static UpdateDefinition<SupportCaseEntity> RateAnswer(int index, SupportAnswerRating rating)
+        => Builders<SupportCaseEntity>.Update.Set(x => x.Messages[index].Rating, rating);
+
     public async Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
     {
         await RequireCaseAsync(teamKey, caseId);
@@ -644,7 +657,9 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             ? []
             : [.. entity.SuggestedTeams.Select(x => new SupportCaseTeam { Key = x.Key, Name = x.Name })],
         SuggestionReason = entity.SuggestionReason,
-        AssistantGaps = entity.AssistantGaps ?? []
+        AssistantGaps = entity.AssistantGaps ?? [],
+        AnswersRatedUp = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Up),
+        AnswersRatedDown = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Down)
     };
 
     private static SupportCaseTeamEntity ToEntity(SupportCaseTeam team) => new()
@@ -686,7 +701,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         DeliveryError = entity.Delivery == SupportMessageDelivery.Failed ? entity.DeliveryError : null,
         Source = entity.Source,
         AsSupport = entity.AsSupport,
-        Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)]
+        Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)],
+        Rating = entity.Rating
     };
 
     internal static SupportMessageEntity ToEntity(SupportMessage message) => new()
@@ -702,7 +718,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         DeliveryError = message.Delivery == SupportMessageDelivery.Failed ? message.DeliveryError : null,
         Source = message.Source,
         AsSupport = message.AsSupport,
-        Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null
+        Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null,
+        Rating = message.Rating
     };
 
     private static SupportAttachment ToAttachment(SupportAttachmentEntity entity) => new()
