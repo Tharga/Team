@@ -1367,9 +1367,9 @@ customer the assistant could not answer, beside **Talk to a person**, rather tha
   **Online**, **Away** or **Hidden** there; it starts at Online the first time they open it, and keeps their choice in
   the browser after that. Online counts only while they are active: answering a case, writing an answer, or using that
   page, which reports at most once a minute. After `o.StaffIdleAfter` with nothing done, ten minutes by default, they
-  count as away until they act again. Hidden answers as usual and never counts as online. Support is `Away` while
-  somebody is known and nobody counts as online, and `Unknown` while nobody has opened the desk since the application
-  started.
+  count as away until they act again. Hidden answers as usual and is not counted at all. Support is `Away` while
+  somebody chose Online or Away and nobody counts as online, and `Unknown` otherwise: while nobody has opened the desk
+  since the application started, and while everybody there chose Hidden.
 - **Slack**, where a support channel is configured: **who is active on that channel**, so adding somebody to the
   channel is how they become support there, and there is no second list to keep in step.
 

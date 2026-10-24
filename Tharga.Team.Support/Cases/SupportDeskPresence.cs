@@ -8,9 +8,10 @@ namespace Tharga.Team.Support.Cases;
 /// </summary>
 /// <remarks>
 /// <b>Online</b> while somebody chose <see cref="SupportStaffStatus.Online"/> and acted within
-/// <see cref="SupportCaseOptions.StaffIdleAfter"/>. <b>Away</b> while somebody is known and nobody is online, those who
-/// chose Hidden included, since they answer unseen. <b>Unknown</b> while nobody is known, which renders as nothing.
-/// Somebody known stays known until the application restarts, so after hours members are told support will reply later.
+/// <see cref="SupportCaseOptions.StaffIdleAfter"/>. <b>Away</b> while somebody chose Online or Away and nobody is online.
+/// <b>Unknown</b> otherwise, which renders as nothing: those who chose Hidden are not counted at all, so members are told
+/// nothing about support while they answer. Somebody known stays known until the application restarts, so after hours
+/// members are told support will reply later.
 /// <para>
 /// In-process for the same reason as <see cref="SupportTypingNotifier"/>, and with the same consequence: on several
 /// instances, each knows only the support people connected to it. Presence is advisory, so a wrong answer costs a
@@ -82,9 +83,9 @@ internal sealed class SupportDeskPresence(IOptions<SupportCaseOptions> options, 
 
     private SupportPresenceState StateAt(DateTimeOffset now)
     {
-        if (_staff.Count == 0) return SupportPresenceState.Unknown;
+        if (_staff.Values.Any(x => IsOnline(x, now))) return SupportPresenceState.Online;
 
-        return _staff.Values.Any(x => IsOnline(x, now)) ? SupportPresenceState.Online : SupportPresenceState.Away;
+        return _staff.Values.Any(x => x.Status != SupportStaffStatus.Hidden) ? SupportPresenceState.Away : SupportPresenceState.Unknown;
     }
 
     private bool IsOnline((SupportStaffStatus Status, DateTimeOffset ActedAt) entry, DateTimeOffset now)

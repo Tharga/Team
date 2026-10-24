@@ -23,7 +23,7 @@ public static class SupportDeskStatusText
     public static readonly TextKey AwayHint = new("team.support.desk.status.awayHint", "Members are told support will reply later.");
 
     /// <summary>What choosing Hidden means.</summary>
-    public static readonly TextKey HiddenHint = new("team.support.desk.status.hiddenHint", "You can answer as usual, and you are never shown as online.");
+    public static readonly TextKey HiddenHint = new("team.support.desk.status.hiddenHint", "You can answer as usual, and members are told nothing about whether you are there.");
 
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All = [Label, Online, Away, Hidden, OnlineHint, AwayHint, HiddenHint];

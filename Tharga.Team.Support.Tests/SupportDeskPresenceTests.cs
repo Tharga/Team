@@ -50,19 +50,41 @@ public class SupportDeskPresenceTests
         Assert.Equal(SupportPresenceState.Away, desk.State);
     }
 
-    /// <summary>
-    /// Hidden answers unseen: support is known to exist, so members are told it will reply later, and nobody is shown
-    /// as there.
-    /// </summary>
+    /// <summary>Hidden answers unseen: members are told nothing about support, not even that it will reply later.</summary>
     [Fact]
-    public void Hidden_NeverCountsAsOnline()
+    public void Hidden_IsNotCountedAtAll()
     {
         var (desk, _) = Build();
 
         desk.Set(Ann, SupportStaffStatus.Hidden);
         desk.Acted(Ann);
 
+        Assert.Equal(SupportPresenceState.Unknown, desk.State);
+    }
+
+    [Fact]
+    public void SomebodyAway_BesideSomebodyHidden_IsAway()
+    {
+        var (desk, _) = Build();
+
+        desk.Set(Ann, SupportStaffStatus.Hidden);
+        desk.Set(Ben, SupportStaffStatus.Away);
+
         Assert.Equal(SupportPresenceState.Away, desk.State);
+    }
+
+    [Fact]
+    public void GoingHidden_TakesSupportOffTheIndicator_AndSaysSo()
+    {
+        var (desk, _) = Build();
+        desk.Set(Ann, SupportStaffStatus.Online);
+        var changes = 0;
+        desk.Changed += (_, _) => changes++;
+
+        desk.Set(Ann, SupportStaffStatus.Hidden);
+
+        Assert.Equal(SupportPresenceState.Unknown, desk.State);
+        Assert.Equal(1, changes);
     }
 
     [Fact]

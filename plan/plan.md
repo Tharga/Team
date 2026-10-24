@@ -49,6 +49,8 @@ Asked for while testing, third round (2026-10-24): whether support is online, an
 - [x] 21. The notice: `SupportNoAnswerWatch` takes the wait from the member's first message since anybody else wrote, notes left out, and calls back when it runs out. `NoAnswerYet` after `NoAnswerAfter` (60 seconds; on `SupportPanel`, `SupportCasesView` and `SupportCaseConversation`), `NoAnswerAway` at once while away; not while support is writing, not on a closed case or with the assistant, gone when support answers. `SupportTranscript` takes it as `Notice`, on support's side. Tests: 7 watch, 4 conversation, 5 panel.
 - [x] 22. Sample: `SupportDeskStatus` at the top of the support desk page; the sample README.
 - [x] 23. Docs, full build and the full suite; run the sample.
+- [x] 24. Hidden is not counted at all (the user, 2026-10-24): with only Hidden people on the desk, members see no indicator, not "Support will reply later". Away beside Hidden is still away.
+  - Done: `SupportDeskPresence` counts only Online and Away; the hint, the docs and the READMEs say so. Tests: 3 more in `SupportDeskPresenceTests`. Build at 14 warnings; full suite green (Support 804, Blazor 2209).
   - Docs: the support article's "Is anybody on support" (the desk and Slack, what members see), the `Tharga.Team.Blazor` README, the sample README. Build at 14 warnings; full suite green: Email 985, MongoDB 463, Blazor 2209, Service 1470, Support 802, Support.Anthropic 12, Mcp 121, Entra 58, Images 11. The sample runs.
 
 ## Decisions
@@ -56,8 +58,8 @@ Asked for while testing, third round (2026-10-24): whether support is online, an
 - The user asked for a simple loop counter (2026-10-24), so the round and the tool's own name are shown as they are.
   Friendlier wording per tool can come with the steps recorded with the answer.
 - Online (2026-10-24, the user's choices): each support person picks Online, Away or Hidden, and Online counts as
-  away after ten minutes of doing nothing in support. Hidden works unseen: it never counts as online. With nobody
-  known and no Slack, members see no indicator. The no-answer notice is shown, not stored.
+  away after ten minutes of doing nothing in support. Hidden works unseen and is not counted at all (changed
+  the same day: at first it counted as away). With nobody known and no Slack, members see no indicator. The no-answer notice is shown, not stored.
 - The desk record is in-process, like typing: on several instances, each knows only the support people connected to
   it. Presence is advisory, so a wrong "away" costs a notice, never a refused question.
 

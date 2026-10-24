@@ -15,6 +15,9 @@ public enum SupportStaffStatus
     /// <summary>Not answering now. Members are told support will reply later.</summary>
     Away,
 
-    /// <summary>Answering as usual without being shown: never counted as online.</summary>
+    /// <summary>
+    /// Answering as usual without being counted: with only Hidden people on the desk, members are told nothing about
+    /// support, neither online nor that it will reply later.
+    /// </summary>
     Hidden
 }
