@@ -51,7 +51,7 @@ Branch `feature/scope-registration-check`, from `master` at `1fb6f14` (4.4.0).
     authorization actually happens"). The implementation guide already says the attribute alone enforces
     nothing; the guard is internal to this repo, so consumers get no pointer.
 - [x] 8. Full suite and the warning baseline (14). Green and 14 (2026-10-25).
-- [~] 9. Notes: mark Plan 01 §3b done (option 1, with a pointer to this feature), and update the backlog's
+- [x] 9. Notes: mark Plan 01 §3b done (option 1, with a pointer to this feature), and update the backlog's
       *Authorization guards* line so only §6b remains.
 
 ## Inventory
@@ -95,5 +95,11 @@ Support, Support.Anthropic, MongoDB, Entra, Images and Blazor declare no scope-b
 
 ## Last session
 
-2026-10-25: plan confirmed; steps 2–6 done and committed. Next: step 7 (docs), and the issue draft for the
-invitation `userKey`.
+2026-10-25: all steps done and committed.
+- Plan 01 now records §3b as done (PR pending), and `TransferOwnershipAsync` under *Related defects* as fixed.
+- The backlog line now names only §6b.
+- Next: the user reviews the issue draft for the invitation `userKey`, approves pushing the branch, and tests.
+  Then close-out.
+
+README: no change needed. Nothing a consumer configures changed. The PR description should name the two
+removed labels and the new `team:manage` check on ownership transfer.
