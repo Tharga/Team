@@ -113,10 +113,27 @@ public interface ITeamManagementService
     [RequireScope(TeamScopes.Manage)]
     Task SetTeamCustomRolesAsync(string teamKey, IReadOnlyList<TenantRoleDefinition> customRoles);
 
-    [RequireScope(TeamScopes.Read)]
+    /// <summary>
+    /// Records that the current user is active in the team. Throttled, and a no-op for a non-member.
+    /// </summary>
+    /// <remarks>
+    /// <b>Carries no scope</b>, like <see cref="ITeamDirectoryService.LeaveTeamAsync"/>: it stamps the caller's
+    /// own membership and takes no user key, so there is nothing to point at anyone else. Selecting a team calls
+    /// it, so requiring <c>team:read</c> would throw, on every selection, for a member on a custom level
+    /// without it.
+    /// </remarks>
     Task SetMemberLastSeenAsync(string teamKey);
 
-    [RequireScope(TeamScopes.Read)]
+    /// <summary>
+    /// Accepts or declines the invitation holding <paramref name="inviteCode"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Carries no scope: the invite code is the check</b>, because whoever follows an invitation link holds
+    /// nothing on the team yet. <c>TeamServiceBase</c> refuses a code it cannot find when
+    /// <see cref="InvitationOptions.Lifetime"/> is set, and a store records a response only against the
+    /// invitation holding that code. The response is recorded for whichever <paramref name="userKey"/> is passed,
+    /// so pass the signed-in user's.
+    /// </remarks>
     Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept);
 
     /// <summary>What the team exposes to an oversight caller. Requires <c>team:manage</c> on that team.</summary>

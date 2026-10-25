@@ -93,7 +93,18 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     /// an invitation link holds nothing on the team yet.
     /// </summary>
     public Task<string> GetTeamKeyByInviteKeyAsync(string inviteKey) => _inner.GetTeamKeyByInviteKeyAsync(inviteKey);
-    public Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember => _inner.TransferOwnershipAsync<TMember>(teamKey, newOwnerUserKey);
+    /// <remarks>
+    /// <b>Checked twice, and the two are different rules.</b> Here: <c>team:manage</c> on the team, so a caller
+    /// holding nothing on it is refused before the team is read. In <c>TeamServiceBase</c>: that the caller is
+    /// the current Owner, which is the real rule and one no scope can express, since an Administrator holds every
+    /// scope an Owner does. The operator's path is <see cref="SetOwnerAsync{TMember}"/>, so a system grant does
+    /// not count here.
+    /// </remarks>
+    public async Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember
+    {
+        await RequireTeamScopeAsync(TeamScopes.Manage, teamKey);
+        await _inner.TransferOwnershipAsync<TMember>(teamKey, newOwnerUserKey);
+    }
 
     /// <remarks>
     /// Gated on <c>users:manage</c>, the scope that already authorizes removing this user from every one

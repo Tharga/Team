@@ -19,7 +19,8 @@ namespace Tharga.Team;
 /// The <c>[RequireScope]</c> attributes on <see cref="ITeamManagementService"/> are <b>documentation</b>.
 /// They would be enforced by <c>ScopeProxy&lt;T&gt;</c> if this were registered through
 /// <c>AddTeamService</c>, and it is not — so nothing derives from them at runtime. Do not add a read to
-/// this class and assume the attribute covers it.
+/// this class and assume the attribute covers it: <c>ScopeEnforcementProofTests</c> fails for any attributed
+/// method that lets a caller holding nothing through.
 /// </para>
 /// Generic methods (GetTeamsAsync, DeleteTeamAsync, RenameTeamAsync) call non-generic
 /// internal versions since the proxy resolves the member type from the team data.

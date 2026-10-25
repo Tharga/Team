@@ -177,6 +177,40 @@ public class AuthorizationTeamServiceDecoratorTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.RenameTeamAsync<TestMember>("T1", "new"));
     }
 
+    // ---- Transfer ownership: team:manage here; that the caller is the Owner, in TeamServiceBase ----
+    [Fact]
+    public async Task TransferOwnership_Owner_Delegates()
+    {
+        var (sut, inner) = Build(At("T1", AccessLevel.Owner));
+        await sut.TransferOwnershipAsync<TestMember>("T1", "u2");
+        await inner.Received(1).TransferOwnershipAsync<TestMember>("T1", "u2");
+    }
+
+    [Fact]
+    public async Task TransferOwnership_WithoutTeamManage_Throws()
+    {
+        var (sut, inner) = Build(Principal("T1", TeamScopes.Read));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.TransferOwnershipAsync<TestMember>("T1", "u2"));
+        await inner.DidNotReceive().TransferOwnershipAsync<TestMember>(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    /// <summary>Owning one team must not reach another's ownership.</summary>
+    [Fact]
+    public async Task TransferOwnership_DifferentTeam_Throws()
+    {
+        var (sut, inner) = Build(At("T1", AccessLevel.Owner));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.TransferOwnershipAsync<TestMember>("T2", "u2"));
+        await inner.DidNotReceive().TransferOwnershipAsync<TestMember>(Arg.Any<string>(), Arg.Any<string>());
+    }
+
+    /// <summary>The operator's path is SetOwnerAsync, so the cross-team manage grant does not count here.</summary>
+    [Fact]
+    public async Task TransferOwnership_SystemManageOnly_Throws()
+    {
+        var (sut, _) = Build(Principal(null, [], [SystemTeamScopes.Manage]));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.TransferOwnershipAsync<TestMember>("T1", "u2"));
+    }
+
     [Fact]
     public async Task Consent_TeamManage_Delegates()
     {
