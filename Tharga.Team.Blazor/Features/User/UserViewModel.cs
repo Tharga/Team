@@ -1,4 +1,4 @@
-﻿namespace Tharga.Team.Blazor.Features.User;
+namespace Tharga.Team.Blazor.Features.User;
 
 /// <summary>
 /// View model for a user row in the users list view.

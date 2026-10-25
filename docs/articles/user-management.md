@@ -1,4 +1,4 @@
-﻿# User management & directory verification
+# User management & directory verification
 
 The platform stores a user record for everyone who signs in. This article covers the administration
 features built on top of that store: per-user activity tracking (last seen), verifying users against an

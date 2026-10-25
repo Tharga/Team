@@ -1,4 +1,4 @@
-﻿# Tharga.Team.Entra
+# Tharga.Team.Entra
 
 Microsoft Entra ID user-directory provider for Tharga Team. Implements `IUserDirectoryService` over
 Microsoft Graph so the platform can:

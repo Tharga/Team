@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using Tharga.Team;
 using Tharga.Team.Service.Audit;
 

@@ -1,4 +1,4 @@
-﻿namespace Tharga.Team.Blazor.Framework;
+namespace Tharga.Team.Blazor.Framework;
 
 /// <summary>Localizable strings rendered by <c>UsersListView</c> — the Users tab of <c>UsersView</c>.</summary>
 /// <remarks>
