@@ -548,7 +548,7 @@ reads the directory's name afresh and shows it in a frame titled **Entra**, offe
 | In the dialog | Does | Offered when |
 |---|---|---|
 | **Use this name** | Fills in the directory's name, to be taken here | The directory holds a real name that differs from the one entered |
-| **Also update the name in Entra** (below the frame) | Writes the entered name to the directory | `o.Blazor.WriteNameToDirectory` is on, the user was found in the directory, and the entered name is a real one that differs from the directory's — so it disappears after **Use this name**. Ticked from the start when the directory holds no real name |
+| **Also update the name in Entra** (below the frame) | Writes the entered name to the directory | `o.Blazor.WriteNameToDirectory` is on and the user was found in the directory. Disabled and unticked while the entered name is empty or the same as the directory's, as after **Use this name**. Ticked from the start when the directory holds no real name |
 
 **Saving asks first whenever the directory is involved**: taking its name here, or writing a name to it. The
 confirmation names the change ("Name in Entra: unknown → Ann Larsson") before anything is saved. A

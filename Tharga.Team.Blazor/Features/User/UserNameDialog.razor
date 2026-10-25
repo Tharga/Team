@@ -53,11 +53,11 @@
                     </RadzenStack>
                 </RadzenFieldset>
 
-                @* Shown only with a name to write: after "Use this name" the two names agree, and there is nothing to give Entra. *@
-                @if (CanWriteToDirectory && HasNameToWrite)
+                @* Disabled and unticked without a name to write: after "Use this name" the two names agree, and there is nothing to give Entra. *@
+                @if (CanWriteToDirectory)
                 {
                     <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                        <RadzenCheckBox TValue="bool" @bind-Value="@_writeToDirectory" Name="WriteToDirectory" Disabled="@_busy" data-write-to-directory />
+                        <RadzenCheckBox TValue="bool" @bind-Value="@_writeToDirectory" Name="WriteToDirectory" Disabled="@(_busy || !HasNameToWrite)" data-write-to-directory />
                         <RadzenLabel Component="WriteToDirectory" Text="@_text.Format(UserNameDialogText.AlsoWriteToDirectory, Directory)" />
                     </RadzenStack>
                 }

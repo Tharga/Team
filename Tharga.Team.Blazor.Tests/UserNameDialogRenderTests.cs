@@ -102,27 +102,33 @@ public class UserNameDialogRenderTests : BunitContext
         Assert.False(view.FindComponent<RadzenCheckBox<bool>>().Instance.Value);
     }
 
-    /// <summary>Nothing to write without a real name here, so there is no box to tick.</summary>
+    /// <summary>Nothing to write without a real name here: the box stays in view, disabled and unticked.</summary>
     [Fact]
-    public void NoNameHereEither_OffersNoWrite()
+    public void NoNameHereEither_DisablesTheWriteBox()
     {
         var view = Render(currentName: null, directoryName: "unknown");
 
-        Assert.Empty(view.FindAll("[data-write-to-directory]"));
+        var box = view.FindComponent<RadzenCheckBox<bool>>().Instance;
+        Assert.True(box.Disabled);
+        Assert.False(box.Value);
     }
 
     /// <summary>After "Use this name" the two names agree, so writing to Entra would change nothing.</summary>
     [Fact]
-    public void UsingEntrasName_HidesTheWriteBox_UntilTheNameDiffersAgain()
+    public async Task UsingEntrasName_DisablesAndUnticksTheWriteBox_UntilTheNameDiffersAgain()
     {
         var view = Render(currentName: "Ann", directoryName: "Ann Larsson");
-        Assert.NotEmpty(view.FindAll("[data-write-to-directory]"));
+        var box = view.FindComponent<RadzenCheckBox<bool>>();
+        await view.InvokeAsync(() => box.Instance.ValueChanged.InvokeAsync(true));
+        Assert.True(box.Instance.Value);
 
         view.Find("button[data-use-directory-name]").Click();
-        Assert.Empty(view.FindAll("[data-write-to-directory]"));
+        Assert.True(box.Instance.Disabled);
+        Assert.False(box.Instance.Value);
 
         view.Find("input[data-name]").Input("Ann B. Larsson");
-        Assert.NotEmpty(view.FindAll("[data-write-to-directory]"));
+        Assert.False(box.Instance.Disabled);
+        Assert.False(box.Instance.Value);
     }
 
     [Fact]
