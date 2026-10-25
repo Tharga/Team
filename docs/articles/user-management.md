@@ -1,4 +1,4 @@
-# User management & directory verification
+﻿# User management & directory verification
 
 The platform stores a user record for everyone who signs in. This article covers the administration
 features built on top of that store: per-user activity tracking (last seen), verifying users against an
@@ -414,32 +414,41 @@ A user has one **root name** (`IUser.Name`), shared everywhere, and optionally a
 
 ### Writing the name back to the directory
 
-By default a rename stays in this application. Set **`o.Blazor.WriteNameToDirectory = true`** and an
-**administrative** rename also writes `displayName` to the external directory.
+By default a rename stays in this application. Writing it to the external directory as well takes two
+things: the host allows it with **`o.Blazor.WriteNameToDirectory = true`**, and the caller asks for it on that
+rename.
 
 ```csharp
-var result = await userManagementService.SetUserNameAsync(userKey, "Real Name");
+var result = await userManagementService.SetUserNameAsync(userKey, "Real Name", writeToDirectory: true);
 // result.DirectoryUpdated, result.DirectoryError
 ```
 
 | Situation | Result |
 |---|---|
-| Option off | Local write only. `DirectoryUpdated: false`, no error |
-| User not linked to a directory account | Local write only. **Not an error** — there is nothing to write to |
+| `writeToDirectory: false` | Local write only, whatever the option says. `DirectoryUpdated: false`, no error |
+| `writeToDirectory: true`, and the option off, no directory registered, the user not linked, or a placeholder name | **Refused before anything changes** — nothing is written here or there |
 | Directory write succeeded | `DirectoryUpdated: true` |
 | Directory write failed | `DirectoryError` set. **The local write is not rolled back** |
 
-**Self-service renaming is never pushed**, whatever the option says: a user editing their own display
-name here should not silently rewrite the organization's directory.
+On the Users page the choice is a box in the rename dialog, **Also update the name in the directory**, shown
+only when the option is on and the user was found in the directory, unticked by default, and confirmed before
+anything is written.
+
+**Self-service renaming is never pushed**: a user editing their own display name here should not silently
+rewrite the organization's directory.
 
 The two writes fail independently on purpose. Coupling them would let a directory outage block renaming a
 user in this application, so the UI reports a directory failure as a warning rather than a failed rename
 — because the rename did happen.
 
-Which side owns display names is a per-host decision, which is why this is off by default. A host
+Which side owns display names is a per-host decision, which is why writing is off by default. A host
 federating from a corporate directory wants the directory authoritative; an application that collects no
 attributes at sign-up is the opposite case, holding the real name while the directory holds a
 placeholder.
+
+> **Changed in this release:** `SetUserNameAsync` used to take no `writeToDirectory` and wrote to the
+> directory on every administrative rename whenever the option was on. The option now only allows the write;
+> each caller says whether it wants one, and existing calls no longer compile until they do.
 
 The team surface never writes the root name. Submitting a member's displayed name unchanged stores *no*
 override, so the row keeps tracking that user's later renames rather than pinning a copy of the name.
@@ -532,28 +541,35 @@ finding, not a lookup miss.
 
 Verification also returns the directory's display name (`DirectoryVerificationResult.DirectoryName`). When
 a found user's name here differs from it, a **Name differs** badge appears beside the name — its tooltip
-gives the directory's name — and the row's menu offers to reconcile it:
+gives the directory's name. Clicking it, or **Rename** in the row's menu, opens the rename dialog, which
+reads the directory's name afresh and offers both directions:
 
-| Action | Does | Offered when |
+| In the dialog | Does | Offered when |
 |---|---|---|
-| **Use name from directory** | Sets the name here to the directory's name | The directory holds a real name |
-| **Write name to directory** | Writes the name here to the directory | `o.Blazor.WriteNameToDirectory` is on, the user is linked, and has a name here |
+| **Use this name** | Fills in the directory's name, to be taken here | The directory holds a real name that differs from the one entered |
+| **Also update the name in the directory** | Writes the entered name to the directory | `o.Blazor.WriteNameToDirectory` is on and the user was found in the directory |
+
+**Saving asks first whenever the directory is involved**: taking its name here, or writing a name to it. The
+confirmation names the change ("Name in the directory: unknown → Ann Larsson") before anything is saved. A
+rename that stays here is saved at once, as before.
 
 The same operations are on `IUserManagementService`, both requiring `users:manage` and both audited:
 
 ```csharp
-var name = await userManagementService.UseDirectoryNameAsync(userKey);
-await userManagementService.WriteNameToDirectoryAsync(userKey);
+var name = await userManagementService.UseDirectoryNameAsync(userKey);                  // take the directory's name
+await userManagementService.SetUserNameAsync(userKey, name, writeToDirectory: true);   // write a name there
 ```
 
-**`unknown` is never taken.** Entra External ID names an account `unknown` when its sign-up flow collects
-no display name, so a directory holding that (in any case) or nothing is treated as having no name:
-`UseDirectoryNameAsync` refuses it, and a row whose two names are both placeholders is not flagged.
-`DirectoryNames.IsPlaceholder` and `DirectoryNames.Differ` hold the rule.
+`UseDirectoryNameAsync` reads the directory itself rather than taking a name from the caller, so the audit
+entry records a name that really came from there.
 
-Both operations read the directory or the stored name themselves rather than taking a name from the
-caller. `WriteNameToDirectoryAsync` throws when the option is off: an explicit push is still a write to the
-directory, and the option is the host's statement that this application may make one.
+**`unknown` is never taken or written.** Entra External ID names an account `unknown` when its sign-up flow
+collects no display name, so a directory holding that (in any case) or nothing is treated as having no name:
+`UseDirectoryNameAsync` refuses it, the dialog does not offer it, and a row whose two names are both
+placeholders is not flagged. `DirectoryNames.IsPlaceholder` and `DirectoryNames.Differ` hold the rule.
+
+The dialog's texts say "the directory", like the rest of the page; a host that wants them to say "Entra"
+supplies its own wording through `IThargaTextProvider` (keys in `UserNameDialogText`).
 
 ## Directory-only users
 
