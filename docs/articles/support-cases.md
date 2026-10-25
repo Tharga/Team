@@ -1176,7 +1176,9 @@ A host's own `ISupportResponder` answers readiness through `GetReadinessAsync`, 
 
 Rather than writing a resolver, let each team choose in a component. A team administrator picks one of:
 
-- **The platform's model**, the `IChatClient` you register. A team that never chose has this.
+- **The platform's model**, the `IChatClient` you register. A team that never chose has this. The page names it, such
+  as "The platform's model (ollama, llama3)", from the `ChatClientMetadata` the client reports; a client that reports
+  none is shown without a name.
 - **Neurolito, with the team's own key**, with the model picked from what Neurolito offers that key.
 - **Anthropic, with the team's own API key**, with the model picked from what Anthropic offers that key.
 - **Off**: no assistant for the team, so every case goes to a person.
