@@ -117,4 +117,36 @@ public class UserEvictionTests
         Assert.Equal(1, userService.CallCount);
         Assert.Same(principal, userService.ReceivedPrincipal);
     }
+
+    /// <summary>
+    /// The check runs every interval on an idle tab too, which is not the user doing anything, so it must not record
+    /// them as active. (<see cref="FakeUserService"/> implements only the one-argument resolve, as a host's own service
+    /// may, and the tests above show the check still reaches it.)
+    /// </summary>
+    [Fact]
+    public async Task TheCheck_DoesNotCountAsTheUserBeingActive()
+    {
+        var userService = new ActivityAwareUserService(new FakeUser("u1", "alice", "alice@example.com", null));
+
+        await TeamRevalidatingAuthenticationStateProvider.IsDisabledAsync(Services(userService), Principal());
+
+        Assert.Equal([false], userService.RecordActivity);
+    }
+
+    private sealed class ActivityAwareUserService(IUser user) : IUserService
+    {
+        public List<bool> RecordActivity { get; } = [];
+
+        public Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal = null) => GetCurrentUserAsync(claimsPrincipal, recordActivity: true);
+
+        public Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal, bool recordActivity)
+        {
+            RecordActivity.Add(recordActivity);
+            return Task.FromResult(user);
+        }
+
+        public IAsyncEnumerable<IUser> GetAsync() => throw new NotSupportedException();
+        public Task SetUserNameAsync(string userKey, string name) => Task.CompletedTask;
+        public Task SeedUserNameAsync(string userKey, string name) => Task.CompletedTask;
+    }
 }

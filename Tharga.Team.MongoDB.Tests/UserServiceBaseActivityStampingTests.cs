@@ -65,6 +65,51 @@ public class UserServiceBaseActivityStampingTests
         Assert.Equal(key, user.Key);
     }
 
+    /// <summary>A resolve that is not the user doing anything, such as claim revalidation on an idle tab, is not last seen.</summary>
+    [Fact]
+    public async Task GetCurrentUserAsync_NotRecordingActivity_DoesNotStampLastSeen()
+    {
+        var (sut, repo, principal, key) = Build();
+
+        var user = await sut.GetCurrentUserAsync(principal, recordActivity: false);
+
+        Assert.Equal(key, user.Key);
+        await repo.DidNotReceiveWithAnyArgs().SetLastSeenAsync(default, default);
+    }
+
+    /// <summary>A read that records nothing must not use up the throttle either, or the next real request would go unrecorded.</summary>
+    [Fact]
+    public async Task GetCurrentUserAsync_NotRecordingActivity_LeavesTheNextResolveToStamp()
+    {
+        var (sut, repo, principal, key) = Build();
+
+        await sut.GetCurrentUserAsync(principal, recordActivity: false);
+        await sut.GetCurrentUserAsync(principal);
+
+        await repo.Received(1).SetLastSeenAsync(key, Arg.Any<DateTime>());
+    }
+
+    [Fact]
+    public async Task GetCurrentUserAsync_RecordingActivity_StampsAsTheOrdinaryResolveDoes()
+    {
+        var (sut, repo, principal, key) = Build();
+
+        await sut.GetCurrentUserAsync(principal, recordActivity: true);
+
+        await repo.Received(1).SetLastSeenAsync(key, Arg.Any<DateTime>());
+    }
+
+    /// <summary>Filling in the directory id keeps the record right; it is not activity, so it still happens.</summary>
+    [Fact]
+    public async Task GetCurrentUserAsync_NotRecordingActivity_StillBackfillsTheDirectoryId()
+    {
+        var (sut, repo, principal, key) = Build(oid: "oid-quiet");
+
+        await sut.GetCurrentUserAsync(principal, recordActivity: false);
+
+        await repo.Received(1).SetDirectoryIdAsync(key, "oid-quiet");
+    }
+
     [Fact]
     public async Task GetCurrentUserAsync_NoDirectoryId_BackfillsFromOidClaimOnce()
     {

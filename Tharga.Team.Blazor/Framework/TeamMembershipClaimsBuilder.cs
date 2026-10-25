@@ -35,13 +35,21 @@ internal sealed class TeamMembershipClaimsBuilder
         _resolver = new TeamGrantResolver(teamService, scopeRegistry, tenantRoleService);
     }
 
-    public async Task<IReadOnlyList<Claim>> BuildAsync(ClaimsPrincipal principal, string teamKey)
+    /// <param name="principal">The caller.</param>
+    /// <param name="teamKey">The team to build the claims for.</param>
+    /// <param name="recordActivity">
+    /// Whether resolving the caller counts as them being active. True for a request; false for the periodic
+    /// revalidation, which runs for an idle tab too.
+    /// </param>
+    public async Task<IReadOnlyList<Claim>> BuildAsync(ClaimsPrincipal principal, string teamKey, bool recordActivity = true)
     {
         var claims = new List<Claim>();
         if (string.IsNullOrEmpty(teamKey))
             return claims;
 
-        var user = await _userService.GetCurrentUserAsync(principal);
+        var user = recordActivity
+            ? await _userService.GetCurrentUserAsync(principal)
+            : await _userService.GetCurrentUserAsync(principal, recordActivity: false);
 
         // Membership, suspension and consent are all decided by TeamGrantResolver, which the MCP surface
         // reads too. This method's job is only to express the answer as claims — two copies of the rule

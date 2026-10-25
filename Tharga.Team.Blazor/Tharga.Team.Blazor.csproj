@@ -48,10 +48,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Identity.Web" Version="4.16.1" />
     <PackageReference Include="System.Linq.Async" Version="7.0.1" />
-    <PackageReference Include="Tharga.Blazor" Version="2.3.6" />
+    <PackageReference Include="Tharga.Blazor" Version="2.3.7" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     <!--
       Microsoft.Identity.Web.TokenCache 4.16.1 depends on System.Security.Cryptography.Xml 10.0.10, which has three
       high-severity advisories fixed in 10.0.13 (GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj, GHSA-r955-8q5j-3h83).
@@ -59,7 +59,7 @@
       a test project, restores the package and gets NU1903 three times (Tharga/Team#380). Drop this pin once
       Microsoft.Identity.Web depends on a patched version, and KeepCryptographyXmlPin below with it.
     -->
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.14" />
   </ItemGroup>
   <!--
     The shared framework ships this assembly, so the SDK prunes the package, and pack then leaves the pin out of the

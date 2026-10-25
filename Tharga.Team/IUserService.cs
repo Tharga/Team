@@ -12,6 +12,22 @@ public interface IUserService
 {
     Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal = null);
 
+    /// <summary>
+    /// The user for <paramref name="claimsPrincipal"/>, resolved as <see cref="GetCurrentUserAsync(ClaimsPrincipal)"/>
+    /// does, saying whether the resolve is the user being active.
+    /// </summary>
+    /// <param name="claimsPrincipal">The caller; null for the one on the current circuit.</param>
+    /// <param name="recordActivity">
+    /// Whether this resolve counts towards <see cref="IUser.LastSeen"/>. Pass <c>false</c> from code that reads the user
+    /// on a schedule rather than because they did something, such as claim revalidation on an idle tab.
+    /// </param>
+    /// <remarks>
+    /// Only the last-seen stamp depends on it; keeping the record right from the sign-in (the directory id, a trusted
+    /// profile refresh) happens either way. The default forwards to <see cref="GetCurrentUserAsync(ClaimsPrincipal)"/>,
+    /// so a host's own store keeps compiling and records whatever it recorded before.
+    /// </remarks>
+    Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal, bool recordActivity) => GetCurrentUserAsync(claimsPrincipal);
+
     /// <summary>All users. Cross-user enumeration — requires <see cref="SystemUserScopes.Manage"/>.</summary>
     [RequireScope(SystemUserScopes.Manage)]
     IAsyncEnumerable<IUser> GetAsync();

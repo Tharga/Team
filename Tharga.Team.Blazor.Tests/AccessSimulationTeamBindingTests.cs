@@ -148,6 +148,8 @@ public class AccessSimulationTeamBindingTests
         var userService = new Mock<IUserService>();
         userService.Setup(x => x.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>()))
             .ReturnsAsync(Mock.Of<IUser>(u => u.Key == UserKey));
+        userService.Setup(x => x.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<bool>()))
+            .ReturnsAsync(Mock.Of<IUser>(u => u.Key == UserKey));
 
         var scopeRegistry = new Mock<IScopeRegistry>();
         scopeRegistry.Setup(x => x.GetEffectiveScopes(It.IsAny<AccessLevel>(), It.IsAny<IEnumerable<string>>(), It.IsAny<IEnumerable<string>>()))
