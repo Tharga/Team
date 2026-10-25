@@ -1320,6 +1320,7 @@ builder.Services.AddAuthentication()
     o.AutoLockKeys = false;               // default: false — auto-lock keys after creation
     o.MaxExpiryDays = 365;                // default: 365 — maximum key expiry in days (null = no cap)
     o.LastUsedThrottle = TimeSpan.FromMinutes(1); // default: 1 min — min interval between "last used" timestamp writes per key (TimeSpan.Zero = stamp every request)
+    o.VerificationCacheDuration = TimeSpan.FromMinutes(10); // default: 10 min — a repeat request skips PBKDF2; the key is still read every request, so changes apply at once (TimeSpan.Zero = verify every request)
     o.MinKeyLength = 32;            // default: 32 — alphanumeric chars in the key secret; fixed length unless MaxKeyLength is set (floor 24 ≈143-bit; team + system keys)
     o.MaxKeyLength = null;          // default: null — when set, the length is random in [MinKeyLength, MaxKeyLength] per key instead of fixed
 });

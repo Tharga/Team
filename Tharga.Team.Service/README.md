@@ -261,8 +261,19 @@ API key behaviour is configured via `ApiKeyOptions` (passed to `AddThargaApiKeyA
 | `AutoLockKeys` | `false` | Lock keys immediately after creation so the raw value is shown only once. |
 | `MaxExpiryDays` | `365` | Caps expiry for team and system keys. `null` = no cap. |
 | `LastUsedThrottle` | `1 min` | Minimum interval between `LastUsedAt` writes for a key (avoids a DB write per request). `TimeSpan.Zero` = stamp every request. |
-| `MinKeyLength` / `MaxKeyLength` | `24` / `32` | Random alphanumeric length of the key secret (base62, ≈5.95 bits/char). The length is chosen at random in `[Min, Max]` per key. ~190-bit at the default 32; 43 ≈ 256-bit. Floor 24 (≈143-bit). |
+| `VerificationCacheDuration` | `10 min` | How long a successful key verification is remembered, sliding from the key's last use, so a repeat request skips the PBKDF2 work. The key is still read from the store on every request, so disabling, deleting, refreshing or changing a key takes effect at once. `TimeSpan.Zero` = verify every request. |
+| `MinKeyLength` / `MaxKeyLength` | `32` / `null` | Random alphanumeric length of the key secret (base62, ≈5.95 bits/char). Fixed at `MinKeyLength` unless `MaxKeyLength` is set, in which case the length is chosen at random in `[Min, Max]` per key. ~190-bit at the default 32; 43 ≈ 256-bit. Floor 24 (≈143-bit). |
 | `OwnerRemovedAction` | `Delete` | What happens to a member's private (owner-scoped) keys when they stop being a member of the team: `Delete` or `Disable`. Either way such a key is already refused at authentication — see [Private keys](../docs/articles/implementation-guide.md#a-private-key-ends-with-its-owner). |
+
+### What authenticating a key costs
+
+The default `ApiKeyAdministrationService` stores a lookup value with each key, so authenticating one reads a single
+candidate and verifies it once; a repeat request within `VerificationCacheDuration` does no PBKDF2 work. An unknown key
+is verified against nothing.
+
+A key minted before this lookup value existed is found by its old prefix, which every key of its team shares, and is
+moved to a lookup value on its first use. Until then an unknown key carrying that team's prefix is verified against
+each such key; refreshing a key that is not in use moves it at once.
 
 ## Audit logging
 
