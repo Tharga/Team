@@ -11,6 +11,13 @@ The user service stamps `LastSeen` on the user record whenever the user makes an
 throttled to at most one write per interval (default **15 minutes**, per process). The stamp happens in
 the user-resolve path, so it works whether or not a team is selected.
 
+**An open tab alone does not count.** The toolkit re-checks every signed-in circuit on a schedule
+(`ClaimRevalidation.Interval`, 30 minutes) to evict a disabled user and refresh team claims. Those checks resolve the
+user with `GetCurrentUserAsync(principal, recordActivity: false)`, so a tab left open overnight does not read as seen
+all night. Code of your own that reads the user on a schedule should do the same; every ordinary resolve still stamps.
+A user service of your own that implements only `GetCurrentUserAsync(principal)` keeps working, and decides for itself
+what it records.
+
 Tracking is **opt-in by entity shape**: declare the property on your user entity and the toolkit starts
 writing it — leave it off and nothing is written.
 
