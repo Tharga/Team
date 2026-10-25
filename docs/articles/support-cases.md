@@ -1178,12 +1178,13 @@ Rather than writing a resolver, let each team choose in a component. A team admi
 
 - **The platform's model**, the `IChatClient` you register. A team that never chose has this.
 - **Neurolito, with the team's own key**, with the model picked from what Neurolito offers that key.
+- **Anthropic, with the team's own API key**, with the model picked from what Anthropic offers that key.
 - **Off**: no assistant for the team, so every case goes to a person.
 
 ```csharp
 builder.Services.AddThargaSupportCases();
 builder.Services.AddThargaSupportAiConnections();   // the choice, its service and its component
-builder.Services.AddThargaSupportAnthropic();       // Neurolito as a provider (package Tharga.Team.Support.Anthropic)
+builder.Services.AddThargaSupportAiProviders();     // Neurolito and Anthropic (package Tharga.Team.Support.Anthropic)
 
 builder.Services.AddDataProtection()                // the key is encrypted with Data Protection...
     .SetApplicationName("MySite")
@@ -1193,6 +1194,12 @@ builder.Services.AddDataProtection()                // the key is encrypted with
 ```razor
 <SupportAssistantConnectionView />
 ```
+
+- **Anthropic is offered wherever the providers are registered.** To keep teams on Neurolito, the platform's model or
+  off, set `o.OfferAnthropic = false` in `AddThargaSupportAiProviders`. A team already connected to Anthropic is then
+  treated as having no connection until it chooses again.
+- **`AddThargaSupportAiProviders` was called `AddThargaSupportAnthropic` until 4.5.** The old name still works and is
+  marked obsolete.
 
 - **The `assistant:manage` team scope** governs reading and changing the connection. It is granted to team
   Administrators by default; set `o.ScopeAccessLevel` to change who, or to `null` to grant it by no level.

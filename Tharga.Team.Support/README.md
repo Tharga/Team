@@ -210,8 +210,8 @@ Full documentation: [Support cases](https://github.com/Tharga/Team/blob/master/d
 An AI assistant that answers first has been added, on whatever chat model the host registers: one model for
 every team, or one per team through `ISupportChatClientResolver`, with the assistant offered only to a team
 that has one. With `AddThargaSupportAiConnections()` each team chooses in `<SupportAssistantConnectionView />`:
-the platform's model, its own Neurolito key through `Tharga.Team.Support.Anthropic`, or off. Planned: usage per
-answer, Anthropic as a provider, and Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
+the platform's model, its own Neurolito or Anthropic key through `Tharga.Team.Support.Anthropic`, or off, and the
+tokens each answer used are kept and shown under it. Planned: Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
 package rather than part of `Tharga.Team.Service`.
 
 ## Links
