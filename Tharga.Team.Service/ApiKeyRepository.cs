@@ -57,6 +57,15 @@ internal class ApiKeyRepository : IApiKeyRepository
         return _collection.UpdateOneAsync(filter, update);
     }
 
+    public Task SetPrefixAsync(string key, string prefix)
+    {
+        var filter = new FilterDefinitionBuilder<ApiKeyEntity>()
+            .Eq(x => x.Key, key);
+        var update = new UpdateDefinitionBuilder<ApiKeyEntity>()
+            .Set(x => x.ApiKeyPrefix, prefix);
+        return _collection.UpdateOneAsync(filter, update);
+    }
+
     public async Task UpdateAsync(string key, ApiKeyEntity apiKeyEntity)
     {
         var item = await _collection.GetOneAsync(x => x.Key == key);

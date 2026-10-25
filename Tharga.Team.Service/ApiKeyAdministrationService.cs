@@ -1,4 +1,7 @@
+using System.Security.Cryptography;
+using System.Text;
 using MongoDB.Bson;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tharga.Team;
@@ -12,38 +15,54 @@ namespace Tharga.Team.Service;
 /// </summary>
 public class ApiKeyAdministrationService : IApiKeyAdministrationService
 {
+    private const string VerificationCacheKeyPrefix = "Tharga.Team.ApiKeyVerified:";
+    private const int LegacyPrefixLength = 8;
+    private const int LookupValueBytes = 16;
+
     private readonly IApiKeyRepository _repository;
     private readonly IApiKeyService _apiKeyService;
     private readonly ILogger<ApiKeyAdministrationService> _logger;
     private readonly Tharga.Team.ApiKeyOptions _options;
+    private readonly IMemoryCache _verificationCache;
 
     /// <summary>
-    /// Creates a new instance using the specified repository and key hashing service.
+    /// Creates a new instance using the specified repository and key hashing service. The cache remembers
+    /// successful verifications for <see cref="Tharga.Team.ApiKeyOptions.VerificationCacheDuration"/>; without
+    /// one, every request is verified.
     /// </summary>
-    public ApiKeyAdministrationService(IApiKeyRepository repository, IApiKeyService apiKeyService, IOptions<Tharga.Team.ApiKeyOptions> options = null, ILogger<ApiKeyAdministrationService> logger = null)
+    public ApiKeyAdministrationService(IApiKeyRepository repository, IApiKeyService apiKeyService, IOptions<Tharga.Team.ApiKeyOptions> options = null, ILogger<ApiKeyAdministrationService> logger = null, IMemoryCache verificationCache = null)
     {
         _repository = repository;
         _apiKeyService = apiKeyService;
         _logger = logger;
         _options = options?.Value ?? new Tharga.Team.ApiKeyOptions();
+        _verificationCache = verificationCache;
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Candidates are narrowed by the key's lookup value, then by the legacy prefix, then to keys stored
+    /// without either; a key found by the last two is moved to its lookup value, so it is one candidate from
+    /// then on (Tharga/Team#387).
+    /// </remarks>
     public async Task<IApiKey> GetByApiKeyAsync(string apiKey)
     {
-        var prefix = GetPrefix(apiKey);
-        ApiKeyEntity item = null;
+        if (string.IsNullOrEmpty(apiKey)) return null;
 
-        if (prefix != null)
-        {
-            var candidates = await _repository.GetByPrefixAsync(prefix).ToArrayAsync();
-            item = candidates.PickOneOrDefault(x => _apiKeyService.Verify(apiKey, x.ApiKeyHash), _logger, $"ApiKey verify prefix={prefix}");
-        }
+        var digest = Digest(apiKey);
+        var lookupValue = GetLookupValue(digest);
+        var fingerprint = Convert.ToBase64String(digest);
 
+        var item = await FindVerifiedAsync(lookupValue, apiKey, fingerprint);
         if (item == null)
         {
-            var allItems = await _repository.GetAsync().ToArrayAsync();
-            item = allItems.PickOneOrDefault(x => _apiKeyService.Verify(apiKey, x.ApiKeyHash), _logger, "ApiKey verify full-scan");
+            var legacyPrefix = GetLegacyPrefix(apiKey);
+            if (legacyPrefix != null)
+                item = await FindVerifiedAsync(legacyPrefix, apiKey, fingerprint);
+            item ??= await FindVerifiedAsync(null, apiKey, fingerprint);
+
+            if (item != null)
+                await MoveToLookupValueAsync(item, lookupValue);
         }
 
         if (item?.ExpiryDate != null && item.ExpiryDate < DateTime.UtcNow)
@@ -53,6 +72,57 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
             await TouchLastUsedAsync(item);
 
         return item;
+    }
+
+    /// <summary>
+    /// The first candidate stored under <paramref name="prefix"/> that the key verifies against. Rows with the
+    /// identical hash are duplicates (Tharga/Team#64): they are logged, and cost no further verification.
+    /// </summary>
+    private async Task<ApiKeyEntity> FindVerifiedAsync(string prefix, string apiKey, string fingerprint)
+    {
+        var candidates = await _repository.GetByPrefixAsync(prefix).ToArrayAsync();
+        var verified = candidates.FirstOrDefault(x => IsVerified(apiKey, fingerprint, x.ApiKeyHash));
+        if (verified == null) return null;
+
+        return candidates.PickOneOrDefault(x => x.ApiKeyHash == verified.ApiKeyHash, _logger, $"ApiKey verify prefix={prefix ?? "none"}");
+    }
+
+    /// <summary>
+    /// Whether the key matches the stored hash, remembering a match so the next request skips PBKDF2. A match
+    /// stays true for as long as the hash is stored, so the cache needs no eviction: a refresh stores a new hash.
+    /// </summary>
+    private bool IsVerified(string apiKey, string fingerprint, string apiKeyHash)
+    {
+        var cacheKey = VerificationCacheKeyPrefix + fingerprint;
+        var duration = _options.VerificationCacheDuration;
+        var useCache = _verificationCache != null && duration > TimeSpan.Zero;
+
+        if (useCache && _verificationCache.TryGetValue(cacheKey, out string verifiedHash) && verifiedHash == apiKeyHash)
+            return true;
+
+        if (!_apiKeyService.Verify(apiKey, apiKeyHash))
+            return false;
+
+        if (useCache)
+            _verificationCache.Set(cacheKey, apiKeyHash, new MemoryCacheEntryOptions { SlidingExpiration = duration, Size = 1 });
+
+        return true;
+    }
+
+    /// <summary>
+    /// Stores the key's lookup value in place of its legacy prefix. Best-effort, like
+    /// <see cref="TouchLastUsedAsync"/>: the key was verified, and the next request can do this again.
+    /// </summary>
+    private async Task MoveToLookupValueAsync(ApiKeyEntity item, string lookupValue)
+    {
+        try
+        {
+            await _repository.SetPrefixAsync(item.Key, lookupValue);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Failed to store the lookup value for API key {Key}.", item.Key);
+        }
     }
 
     /// <summary>
@@ -314,7 +384,7 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
             Key = Guid.NewGuid().ToString(),
             Name = name,
             ApiKey = apiKey,
-            ApiKeyPrefix = GetPrefix(apiKey),
+            ApiKeyPrefix = GetLookupValue(apiKey),
             TeamKey = teamKey,
             Tags = tags,
             ApiKeyHash = encryptedApiKey,
@@ -343,7 +413,7 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
             Key = Guid.NewGuid().ToString(),
             Name = name,
             ApiKey = apiKey,
-            ApiKeyPrefix = GetPrefix(apiKey),
+            ApiKeyPrefix = GetLookupValue(apiKey),
             TeamKey = null,
             ApiKeyHash = encryptedApiKey,
             SystemScopes = scopes,
@@ -356,8 +426,28 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
         };
     }
 
-    private static string GetPrefix(string apiKey)
+    private static byte[] Digest(string apiKey)
     {
-        return apiKey?.Length >= 8 ? apiKey[..8] : null;
+        return SHA256.HashData(Encoding.UTF8.GetBytes(apiKey));
+    }
+
+    /// <summary>
+    /// The first bytes of the key's SHA-256, as hex: one candidate per lookup, and never equal to a legacy
+    /// prefix, since the lengths differ. A fast hash beside the PBKDF2 one is safe only because every secret is
+    /// at least <see cref="Tharga.Team.ApiKeyOptions.KeyLengthFloor"/> random characters (≈143 bits).
+    /// </summary>
+    private static string GetLookupValue(byte[] digest)
+    {
+        return Convert.ToHexStringLower(digest, 0, LookupValueBytes);
+    }
+
+    private static string GetLookupValue(string apiKey)
+    {
+        return GetLookupValue(Digest(apiKey));
+    }
+
+    private static string GetLegacyPrefix(string apiKey)
+    {
+        return apiKey.Length >= LegacyPrefixLength ? apiKey[..LegacyPrefixLength] : null;
     }
 }

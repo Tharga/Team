@@ -18,7 +18,7 @@ public class ApiKeyAdministrationServiceTests
     public async Task GetByApiKeyAsync_With_Matching_Hash_Returns_Key()
     {
         var entity = CreateEntity("key-1", "hash-1", "team-1");
-        _repository.GetAsync().Returns(ToAsyncEnumerable(entity));
+        _repository.GetByPrefixAsync(null).Returns(ToAsyncEnumerable(entity));
         _apiKeyService.Verify("raw-key", "hash-1").Returns(true);
 
         var result = await _sut.GetByApiKeyAsync("raw-key");
@@ -35,7 +35,7 @@ public class ApiKeyAdministrationServiceTests
         // After Tharga/Team#64 fix: resilient pick returns the first match and logs a warning.
         var entity1 = CreateEntity("key-1", "hash-1", "team-1");
         var entity2 = CreateEntity("key-2", "hash-2", "team-2");
-        _repository.GetAsync().Returns(ToAsyncEnumerable(entity1, entity2));
+        _repository.GetByPrefixAsync(null).Returns(ToAsyncEnumerable(entity1, entity2));
         _apiKeyService.Verify("raw-key", "hash-1").Returns(true);
         _apiKeyService.Verify("raw-key", "hash-2").Returns(true);
 
@@ -49,7 +49,7 @@ public class ApiKeyAdministrationServiceTests
     public async Task GetByApiKeyAsync_With_No_Match_Returns_Null()
     {
         var entity = CreateEntity("key-1", "hash-1", "team-1");
-        _repository.GetAsync().Returns(ToAsyncEnumerable(entity));
+        _repository.GetByPrefixAsync(null).Returns(ToAsyncEnumerable(entity));
         _apiKeyService.Verify("wrong-key", "hash-1").Returns(false);
 
         var result = await _sut.GetByApiKeyAsync("wrong-key");
@@ -61,7 +61,7 @@ public class ApiKeyAdministrationServiceTests
     public async Task GetByApiKeyAsync_StampsLastUsed_WhenNeverUsed()
     {
         var entity = CreateEntity("key-1", "hash-1", "team-1");
-        _repository.GetAsync().Returns(ToAsyncEnumerable(entity));
+        _repository.GetByPrefixAsync(null).Returns(ToAsyncEnumerable(entity));
         _apiKeyService.Verify("raw-key", "hash-1").Returns(true);
 
         await _sut.GetByApiKeyAsync("raw-key");
@@ -73,7 +73,7 @@ public class ApiKeyAdministrationServiceTests
     public async Task GetByApiKeyAsync_DoesNotStampLastUsed_WithinThrottleWindow()
     {
         var entity = CreateEntity("key-1", "hash-1", "team-1") with { LastUsedAt = DateTime.UtcNow };
-        _repository.GetAsync().Returns(ToAsyncEnumerable(entity));
+        _repository.GetByPrefixAsync(null).Returns(ToAsyncEnumerable(entity));
         _apiKeyService.Verify("raw-key", "hash-1").Returns(true);
 
         await _sut.GetByApiKeyAsync("raw-key");
@@ -85,7 +85,7 @@ public class ApiKeyAdministrationServiceTests
     public async Task GetByApiKeyAsync_StampsLastUsed_AfterThrottleWindow()
     {
         var entity = CreateEntity("key-1", "hash-1", "team-1") with { LastUsedAt = DateTime.UtcNow.AddMinutes(-5) };
-        _repository.GetAsync().Returns(ToAsyncEnumerable(entity));
+        _repository.GetByPrefixAsync(null).Returns(ToAsyncEnumerable(entity));
         _apiKeyService.Verify("raw-key", "hash-1").Returns(true);
 
         await _sut.GetByApiKeyAsync("raw-key");
@@ -97,7 +97,7 @@ public class ApiKeyAdministrationServiceTests
     public async Task GetByApiKeyAsync_LastUsedWriteFailure_DoesNotBreakAuthentication()
     {
         var entity = CreateEntity("key-1", "hash-1", "team-1");
-        _repository.GetAsync().Returns(ToAsyncEnumerable(entity));
+        _repository.GetByPrefixAsync(null).Returns(ToAsyncEnumerable(entity));
         _apiKeyService.Verify("raw-key", "hash-1").Returns(true);
         _repository.SetLastUsedAsync(Arg.Any<string>(), Arg.Any<DateTime>()).Returns(Task.FromException(new Exception("db down")));
 
