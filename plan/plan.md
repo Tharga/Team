@@ -15,7 +15,12 @@
   - Verification results now survive the list reload after a rename/delete/pull.
 - [x] 6. Full test suite, commit. 3282 passed.
 - [x] 7. Docs: new "Names that differ from the directory" section in `docs/articles/user-management.md`; paragraph in `Tharga.Team.Entra/README.md`.
-- [ ] 8. User tests in the sample app; then close-out (re-check NuGet, archive plan, remove `plan/`, PR).
+- [x] 7b. Rebased onto master (2026-10-25; 303 commits behind, never pushed, so nothing shared was rewritten).
+  - Conflicts in 7 files, all both-sides-added: master had gained `SetUserEmailAsync` and `GetSignInIdentitiesAsync` at the same places. Kept both everywhere.
+  - Decision: `UseDirectoryNameAsync` and `WriteNameToDirectoryAsync` got default bodies that throw `NotSupportedException`, the convention master adopted for new `IUserManagementService` members since, so a host's own implementation keeps compiling. Pinned by `HostImplementation_WithoutNameSync_SaysWhatItDoesNotImplement`.
+  - Build at the warning baseline (14). Full suite green: Service 1530, Blazor 2308, Email 985, Support 814, MongoDB 468, Mcp 121, Entra 58, Support.Anthropic 12, Images 11.
+- [~] 8. User tests in the sample app; then close-out (re-check NuGet, archive plan, remove `plan/`, PR).
+  - The sample has the Entra client secret on this machine, so Verify shows. `o.Blazor.WriteNameToDirectory` is off in the sample, so "Write name to directory" stays hidden unless it is turned on for the test.
 
 ## Decisions
 - "Write name to directory" only when `o.Blazor.WriteNameToDirectory` is on — the service refuses otherwise, the UI hides it. Pull is always available.
@@ -23,3 +28,6 @@
 
 ## Last session
 2026-10-13: steps 1-6 done and committed. Docs done. Next: user tests on the pushed branch.
+
+2026-10-25: rebased onto master (4.4 line), conflicts resolved, default bodies added for the two new interface
+members, full suite green. Next: user tests in the sample, then close-out.

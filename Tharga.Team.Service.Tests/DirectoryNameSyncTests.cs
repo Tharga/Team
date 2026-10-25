@@ -147,4 +147,29 @@ public class DirectoryNameSyncTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.WriteNameToDirectoryAsync("u-1"));
         Assert.Empty(directory.NameWrites);
     }
+
+    /// <summary>A host's own implementation written before these operations existed still compiles, and says what it lacks.</summary>
+    [Fact]
+    public async Task HostImplementation_WithoutNameSync_SaysWhatItDoesNotImplement()
+    {
+        IUserManagementService sut = new HostUserManagementWithoutNameSync();
+
+        var pull = await Assert.ThrowsAsync<NotSupportedException>(() => sut.UseDirectoryNameAsync("u-1"));
+        var push = await Assert.ThrowsAsync<NotSupportedException>(() => sut.WriteNameToDirectoryAsync("u-1"));
+
+        Assert.Contains(nameof(IUserManagementService.UseDirectoryNameAsync), pull.Message);
+        Assert.Contains(nameof(IUserManagementService.WriteNameToDirectoryAsync), push.Message);
+        Assert.Contains(nameof(HostUserManagementWithoutNameSync), push.Message);
+    }
+
+    private sealed class HostUserManagementWithoutNameSync : IUserManagementService
+    {
+        public Task<DirectoryVerificationResult> VerifyUserAsync(string userKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public IAsyncEnumerable<UserVerificationResult> VerifyAllAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<UserDeleteResult> DeleteUserAsync(string userKey, bool deleteFromDirectory = false, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task SetUserDisabledAsync(string userKey, bool disabled, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<IReadOnlyList<ITeam>> GetOwnedTeamsAsync(string userKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public IAsyncEnumerable<DirectoryUser> GetDirectoryOnlyUsersAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    }
 }
