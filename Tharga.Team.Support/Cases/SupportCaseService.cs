@@ -29,7 +29,8 @@ internal sealed class SupportCaseService(
     SupportCaseVisibility? assistantDefaultVisibility = null,
     ISupportAttachmentStore attachmentStore = null,
     SupportAttachmentLimits attachmentLimits = null,
-    ISupportTypingNotifier typingNotifier = null) : ISupportCaseService, ISupportCaseTeamQueries
+    ISupportTypingNotifier typingNotifier = null,
+    SupportDeskPresence deskPresence = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
 
@@ -129,7 +130,7 @@ internal sealed class SupportCaseService(
     public Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => RunAssistantAsync(teamKey, caseId, null, cancellationToken);
 
-    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         if (responder == null) return false;
 
@@ -139,8 +140,12 @@ internal sealed class SupportCaseService(
         var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
 
         // A test double does not run the streaming default and answers nothing; it is then asked as it always was.
-        var answer = answerSoFar == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, answerSoFar, cancellationToken);
+        var answer = progress == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, progress, cancellationToken);
         answer ??= await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
+        // Kept whether or not it answered: a decline because it could not do what was asked is the more telling one.
+        var gaps = Bounded(answer?.Gaps);
+        if (gaps.Length > 0) await store.AddAssistantGapsAsync(teamKey, caseId, gaps, cancellationToken);
+
         if (answer?.Answered != true) return false;
 
         var message = new SupportMessage
@@ -149,7 +154,9 @@ internal sealed class SupportCaseService(
             Kind = SupportMessageKind.Assistant,
             AuthorName = SupportCaseActors.AssistantName,
             Body = answer.Body,
-            SentAt = timeProvider.GetUtcNow().UtcDateTime
+            SentAt = timeProvider.GetUtcNow().UtcDateTime,
+            AssistantCalls = BoundedCalls(answer.Calls),
+            AssistantUsage = answer.Usage
         };
 
         await store.AppendMessageAsync(teamKey, caseId, message, cancellationToken);
@@ -367,6 +374,7 @@ internal sealed class SupportCaseService(
 
         // An answer is unread for whoever raised the case, even when the one answering raised it too.
         if (!asSupport) await MarkOwnMessageReadAsync(teamKey, caseId, message.AuthorIdentity, sequence, cancellationToken);
+        else deskPresence?.Acted(message.AuthorIdentity);
 
         // The first message to a person opens the channels, carrying the conversation with the assistant before it;
         // asking for a person without writing anything has nothing yet for support to answer.
@@ -682,18 +690,61 @@ internal sealed class SupportCaseService(
     public Task<SupportMessagePage> GetMessagesAsync(string teamKey, string caseId, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => store.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
 
+    private static string[] Bounded(string[] gaps)
+        => [.. (gaps ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Select(x => x.Length > SupportCaseLimits.MaxAssistantGapLength ? x[..SupportCaseLimits.MaxAssistantGapLength] : x)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(SupportCaseLimits.MaxAssistantGaps)];
+
+    /// <remarks>The model chose these, so they are bounded like anything else it writes.</remarks>
+    internal static SupportAssistantCall[] BoundedCalls(SupportAssistantCall[] calls)
+        => [.. (calls ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x?.Name))
+            .Take(SupportCaseLimits.MaxAssistantCalls)
+            .Select(x => x with
+            {
+                Arguments = x.Arguments is { Length: > SupportCaseLimits.MaxAssistantCallArgumentsLength } arguments
+                    ? $"{arguments[..(SupportCaseLimits.MaxAssistantCallArgumentsLength - 1)]}…"
+                    : x.Arguments ?? string.Empty
+            })];
+
     public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
     {
+        var identity = await authorizer.GetSubjectAsync();
+        if (asSupport) deskPresence?.Acted(identity);
+
         if (typingNotifier == null) return;
 
         typingNotifier.Notify(new SupportCaseTypingEventArgs
         {
             TeamKey = teamKey,
             CaseId = caseId,
-            Identity = await authorizer.GetSubjectAsync(),
+            Identity = identity,
             Name = await DisplayNameAsync(),
             AsSupport = asSupport
         });
+    }
+
+    public async Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default)
+        => deskPresence?.Set(await authorizer.GetSubjectAsync(), status);
+
+    public async Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default)
+        => deskPresence?.StatusOf(await authorizer.GetSubjectAsync());
+
+    public async Task ReportStaffActivityAsync(CancellationToken cancellationToken = default)
+        => deskPresence?.Acted(await authorizer.GetSubjectAsync());
+
+    public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+        if (!messages.Any(x => x.Sequence == sequence && x.Kind == SupportMessageKind.Assistant))
+            throw new InvalidOperationException($"Entry {sequence} of support case '{caseId}' is not an answer by the assistant, so it cannot be rated.");
+
+        await store.SetAnswerRatingAsync(teamKey, caseId, sequence, rating, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Rated);
     }
 
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)

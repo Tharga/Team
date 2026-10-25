@@ -1,0 +1,41 @@
+@using System.Globalization
+@using Tharga.Team.Blazor.Framework
+@inject IThargaTextProvider TextProvider
+
+@* What an answer took, folded under it: the service calls the assistant made, each with what it was asked for, and the
+   tokens the model reported. Nothing at all for an answer that has neither. *@
+
+@if (Calls is { Length: > 0 } || Usage != null)
+{
+    <details class="support-answer-details" data-calls="@Sequence">
+        <summary>@SupportAssistantSteps.Summary(_text, Calls ?? [], Usage)</summary>
+        @foreach (var call in Calls ?? [])
+        {
+            <div class="support-answer-details__row" data-call>@SupportAssistantSteps.Row(call)</div>
+        }
+        @if (Usage != null)
+        {
+            <div class="support-answer-details__usage" data-usage>@_text.Format(SupportTranscriptText.TokensInOut, Number(Usage.InputTokens), Number(Usage.OutputTokens))</div>
+        }
+    </details>
+}
+
+@code {
+    /// <summary>The answer's position in the transcript.</summary>
+    [Parameter] public int Sequence { get; set; }
+
+    /// <summary>The service calls the assistant made for the answer.</summary>
+    [Parameter] public SupportAssistantCall[] Calls { get; set; }
+
+    /// <summary>The tokens the model reported for the answer, or null when it reported none.</summary>
+    [Parameter] public SupportAssistantUsage Usage { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportTranscriptText.All);
+    }
+
+    private static string Number(long value) => value.ToString("N0", CultureInfo.CurrentCulture);
+}

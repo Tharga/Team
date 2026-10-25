@@ -1,0 +1,19 @@
+.support-answer-details {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--rz-text-secondary-color);
+}
+
+.support-answer-details > summary {
+    cursor: pointer;
+}
+
+.support-answer-details__row,
+.support-answer-details__usage {
+    padding-left: 0.75rem;
+    overflow-wrap: anywhere;
+}
+
+.support-answer-details__row {
+    font-family: var(--rz-font-family-monospace, monospace);
+}

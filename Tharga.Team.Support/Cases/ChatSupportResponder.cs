@@ -1,4 +1,6 @@
 using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
@@ -27,11 +29,15 @@ internal sealed class ChatSupportResponder(
 {
     internal const string NotConfiguredReason = "The assistant is not set up for this team.";
 
+    internal const string MissingSkillTool = "report_missing_skill";
+
+    internal const string MissingSkillNoted = "Noted for the people who build this assistant. Now tell the person plainly that you cannot do this, and that a person can help.";
+
     public Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default)
         => AnswerAsync(supportCase, transcript, null, cancellationToken);
 
-    /// <remarks>Streams only when somebody is watching; without <paramref name="answerSoFar"/> the model is asked for the answer in one piece, as it always was.</remarks>
-    public async Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+    /// <remarks>Streams only when somebody is watching; without <paramref name="progress"/> the model is asked for the answer in one piece, as it always was.</remarks>
+    public async Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         if (transcript == null || transcript.Count == 0) return SupportAnswer.Declined("The case has no messages to answer.");
 
@@ -52,15 +58,32 @@ internal sealed class ChatSupportResponder(
                 return SupportAnswer.Declined(NotConfiguredReason);
             }
 
-            var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken)] };
+            var gaps = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken), MissingSkill(gaps)] };
 
-            var body = answerSoFar == null
-                ? (await chat.GetResponseAsync(history, chatOptions, deadline.Token)).Text?.Trim()
-                : (await StreamAsync(chat, history, chatOptions, answerSoFar, supportCase.Id, deadline.Token)).Trim();
+            string body;
+            SupportAssistantCall[] calls;
+            SupportAssistantUsage usage;
 
-            return string.IsNullOrWhiteSpace(body)
+            if (progress == null)
+            {
+                // The tool loop adds up the usage of its rounds into the response it returns.
+                var response = await chat.GetResponseAsync(history, chatOptions, deadline.Token);
+                body = response.Text?.Trim();
+                calls = [.. response.Messages.SelectMany(x => x.Contents).OfType<FunctionCallContent>().Where(IsServiceCall).Select(CallOf)];
+                usage = UsageOf([response.Usage]);
+            }
+            else
+            {
+                (body, calls, usage) = await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token);
+                body = body.Trim();
+            }
+
+            var answer = string.IsNullOrWhiteSpace(body)
                 ? SupportAnswer.Declined("The assistant returned nothing.")
                 : SupportAnswer.FromBody(body);
+
+            return answer with { Gaps = [.. gaps], Calls = calls, Usage = usage };
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
@@ -79,34 +102,122 @@ internal sealed class ChatSupportResponder(
     }
 
     /// <remarks>
+    /// <b>Always given, whatever tools the host supplies</b>, because what the assistant could not do is what tells
+    /// the people building it what to add. It changes nothing but the list it is given.
+    /// </remarks>
+    private static AIFunction MissingSkill(System.Collections.Concurrent.ConcurrentQueue<string> gaps) =>
+        AIFunctionFactory.Create(
+            (string what) =>
+            {
+                if (!string.IsNullOrWhiteSpace(what)) gaps.Enqueue(what);
+                return MissingSkillNoted;
+            },
+            MissingSkillTool,
+            "Call this when the person asks for something none of your other tools can do, so the people who build this " +
+            "assistant can add it. Pass what they asked for in a few words, such as \"search cases by subject\". Then tell " +
+            "them plainly that you cannot do it.");
+
+    /// <remarks>
+    /// <b>Rounds are read from what the tool loop yields:</b> the model's call for a tool comes through as it is made,
+    /// and the tool's result as it goes back, which is when the next call to the model starts.
+    /// <para>
     /// <b>A reader that fails is dropped, not the answer.</b> The reports are a preview for whoever is watching; the
     /// answer they preview is still kept.
+    /// </para>
     /// </remarks>
-    private async Task<string> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<string> answerSoFar, string caseId, CancellationToken cancellationToken)
+    private async Task<(string Body, SupportAssistantCall[] Calls, SupportAssistantUsage Usage)> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, CancellationToken cancellationToken)
     {
         var text = new StringBuilder();
+        var round = 1;
+        List<string> running = [];
+        List<SupportAssistantCall> calls = [];
+        List<UsageDetails> usage = [];
+        var waiting = false;
         var reporting = true;
 
-        await foreach (var update in chat.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
+        void Report()
         {
-            if (string.IsNullOrEmpty(update.Text)) continue;
-
-            text.Append(update.Text);
-            if (!reporting) continue;
+            if (!reporting) return;
 
             try
             {
-                answerSoFar.Report(text.ToString());
+                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running], Calls = [.. calls] });
             }
             catch (Exception ex)
             {
                 reporting = false;
-                logger.LogWarning(ex, "Showing the support assistant's answer to case {CaseId} as it was written failed; the answer is still kept.", caseId);
+                logger.LogWarning(ex, "Showing the support assistant's progress on case {CaseId} failed; the answer is still kept.", caseId);
             }
         }
 
-        return text.ToString();
+        Report();
+
+        await foreach (var update in chat.GetStreamingResponseAsync(history, chatOptions, cancellationToken))
+        {
+            // Streamed, each round reports its own, and nothing adds them up.
+            usage.AddRange(update.Contents.OfType<UsageContent>().Select(x => x.Details));
+
+            var asked = update.Contents.OfType<FunctionCallContent>().ToArray();
+            if (asked.Length > 0)
+            {
+                waiting = true;
+                var shown = asked.Where(IsServiceCall).ToArray();
+                running.AddRange(shown.Select(x => x.Name));
+                calls.AddRange(shown.Select(CallOf));
+                Report();
+            }
+
+            if (waiting && update.Contents.OfType<FunctionResultContent>().Any())
+            {
+                waiting = false;
+                running.Clear();
+                round++;
+                Report();
+            }
+
+            if (string.IsNullOrEmpty(update.Text)) continue;
+
+            text.Append(update.Text);
+            Report();
+        }
+
+        return (text.ToString(), [.. calls], UsageOf(usage));
     }
+
+    /// <summary>The tokens reported, added up; <c>null</c> when nothing was reported, so no count reads as zero.</summary>
+    internal static SupportAssistantUsage UsageOf(IEnumerable<UsageDetails> reported)
+    {
+        var details = reported.Where(x => x != null).ToArray();
+        if (details.Length == 0) return null;
+
+        return new SupportAssistantUsage
+        {
+            InputTokens = details.Sum(x => x.InputTokenCount ?? 0),
+            OutputTokens = details.Sum(x => x.OutputTokenCount ?? 0),
+            TotalTokens = details.Sum(x => x.TotalTokenCount ?? (x.InputTokenCount ?? 0) + (x.OutputTokenCount ?? 0))
+        };
+    }
+
+    /// <remarks>Noting what the assistant could not do is not a call on the host's services, so it is neither shown nor kept as one.</remarks>
+    private static bool IsServiceCall(FunctionCallContent call) => call.Name != MissingSkillTool;
+
+    private static readonly JsonSerializerOptions Written = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+    /// <summary>The call as a person reads it: <c>text: "export", pageSize: 10</c>, values as the model passed them.</summary>
+    internal static SupportAssistantCall CallOf(FunctionCallContent call) => new()
+    {
+        Name = call.Name,
+        Arguments = call.Arguments is { Count: > 0 } arguments
+            ? string.Join(", ", arguments.Select(x => $"{x.Key}: {ValueOf(x.Value)}"))
+            : string.Empty
+    };
+
+    private static string ValueOf(object value) => value switch
+    {
+        null => "null",
+        JsonElement element => element.GetRawText(),
+        _ => JsonSerializer.Serialize(value, Written)
+    };
 
     /// <remarks>
     /// <b>A failing lookup reads as not configured, never as an exception.</b> Readiness is asked while a case

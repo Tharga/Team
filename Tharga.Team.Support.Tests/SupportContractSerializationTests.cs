@@ -35,7 +35,7 @@ public class SupportContractSerializationTests
         var restored = RoundTrip(message);
 
         Assert.Empty(restored.Attachments);
-        Assert.Equal(message, restored with { Attachments = message.Attachments });
+        Assert.Equal(message, restored with { Attachments = message.Attachments, AssistantCalls = message.AssistantCalls });
     }
 
     /// <summary>Arrays compare by reference, so the files are asserted one by one rather than by record equality.</summary>
@@ -55,6 +55,22 @@ public class SupportContractSerializationTests
         var restored = RoundTrip(message);
 
         Assert.Equal(attachment, Assert.Single(restored.Attachments));
+    }
+
+    [Fact]
+    public void AnAnswer_RoundTrips_WithItsServiceCalls()
+    {
+        SupportAssistantCall[] calls = [new() { Name = "get_my_cases" }, new() { Name = "search_my_cases", Arguments = "text: \"export\"" }];
+        var message = new SupportMessage
+        {
+            Sequence = 2,
+            Kind = SupportMessageKind.Assistant,
+            Body = "You have two cases.",
+            SentAt = new DateTime(2026, 10, 24, 12, 0, 0, DateTimeKind.Utc),
+            AssistantCalls = calls
+        };
+
+        Assert.Equal(calls, RoundTrip(message).AssistantCalls);
     }
 
     [Fact]
@@ -80,7 +96,7 @@ public class SupportContractSerializationTests
         var restored = RoundTrip(message);
 
         Assert.Null(restored.Source);
-        Assert.Equal(message, restored with { Attachments = message.Attachments });
+        Assert.Equal(message, restored with { Attachments = message.Attachments, AssistantCalls = message.AssistantCalls });
     }
 
     [Fact]

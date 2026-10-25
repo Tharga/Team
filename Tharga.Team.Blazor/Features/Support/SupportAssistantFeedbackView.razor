@@ -1,0 +1,184 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Blazor
+@implements IDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+
+@* How the assistant is doing, across every team, for the people who build it: what it was asked and had no way to do,
+   and the answers the people it answered rated. The same thing asked in several cases is one entry, most asked first,
+   and every case opens as it does on the desk. Read through the cross-team listing, so it needs exactly what
+   SupportAcrossTeamsView needs. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[SupportAssistantFeedbackViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1.25rem">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-feedback="gaps">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[SupportAssistantFeedbackViewText.CouldNotDo]</RadzenText>
+            @if (_gaps.Length == 0)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-gaps>@_text[SupportAssistantFeedbackViewText.NoGaps]</RadzenText>
+            }
+            @foreach (var gap in _gaps)
+            {
+                <div @key="gap.Text" data-gap="@gap.Text">
+                    <ExpandableCard Text="@gap.Text" Icon="build" AllowSaveState="false">
+                        <TopMenu>
+                            <RadzenBadge Text="@_text.Format(SupportAssistantFeedbackViewText.Cases, gap.Cases.Length)" BadgeStyle="BadgeStyle.Light" data-cases="@gap.Cases.Length" />
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">@Time(gap.Last)</RadzenText>
+                        </TopMenu>
+                        <ChildContent>
+                            <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                                @foreach (var item in gap.Cases)
+                                {
+                                    @CaseCard(item, null)
+                                }
+                            </RadzenStack>
+                        </ChildContent>
+                    </ExpandableCard>
+                </div>
+            }
+        </RadzenStack>
+
+        @Rated(SupportAnswerRating.Down, _ratedDown)
+        @Rated(SupportAnswerRating.Up, _ratedUp)
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _permitted = true;
+    private Gap[] _gaps = [];
+    private SupportCase[] _ratedDown = [];
+    private SupportCase[] _ratedUp = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportAssistantFeedbackViewText.All);
+        Notifier.CaseUpdated += OnCaseUpdated;
+
+        await ReloadAsync();
+        _ready = true;
+    }
+
+    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <summary>Reads the lists again, for a host that hears of a change the in-process notifier cannot carry.</summary>
+    public Task RefreshAsync() => InvokeAsync(async () =>
+    {
+        await ReloadAsync();
+        StateHasChanged();
+    });
+
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
+    {
+        if (e.TeamKey == null || e.Change == SupportCaseChange.Read) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await ReloadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private Task OnChangedAsync(string caseId) => ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            var cases = await SupportCasePaging.AllAsync(cursor => SupportCases.GetCasesAcrossTeamsAsync(cursor, SupportCasePaging.PageSize));
+            _gaps = GapsOf(cases);
+            _ratedDown = RatedOf(cases, SupportAnswerRating.Down);
+            _ratedUp = RatedOf(cases, SupportAnswerRating.Up);
+            _permitted = true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _gaps = [];
+            _ratedDown = [];
+            _ratedUp = [];
+            _permitted = false;
+        }
+    }
+
+    /// <summary>One entry per thing asked, however it was capitalised, with its cases newest first; the most asked first.</summary>
+    internal static Gap[] GapsOf(IEnumerable<SupportCase> cases)
+        => [.. cases
+            .SelectMany(c => (c.AssistantGaps ?? []).Select(g => (Text: g, Case: c)))
+            .GroupBy(x => x.Text, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                SupportCase[] gapCases = [.. g.Select(x => x.Case).DistinctBy(x => x.Id).OrderByDescending(x => x.LastMessageAt ?? x.CreatedAt)];
+                return new Gap(g.First().Text, gapCases, gapCases.Max(x => x.LastMessageAt ?? x.CreatedAt));
+            })
+            .OrderByDescending(x => x.Cases.Length)
+            .ThenByDescending(x => x.Last)];
+
+    /// <summary>The cases with an answer rated <paramref name="rating"/>, newest first.</summary>
+    internal static SupportCase[] RatedOf(IEnumerable<SupportCase> cases, SupportAnswerRating rating)
+        => [.. cases.Where(x => CountOf(x, rating) > 0).OrderByDescending(x => x.LastMessageAt ?? x.CreatedAt)];
+
+    private static int CountOf(SupportCase item, SupportAnswerRating rating)
+        => rating == SupportAnswerRating.Up ? item.AnswersRatedUp : item.AnswersRatedDown;
+
+    private RenderFragment Rated(SupportAnswerRating rating, SupportCase[] cases) => __builder =>
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-feedback="@(rating == SupportAnswerRating.Up ? "up" : "down")">
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">
+                @_text[rating == SupportAnswerRating.Up ? SupportAssistantFeedbackViewText.RatedUp : SupportAssistantFeedbackViewText.RatedDown]
+            </RadzenText>
+            @if (cases.Length == 0)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-none-rated>@_text[SupportAssistantFeedbackViewText.NoneRated]</RadzenText>
+            }
+            @foreach (var item in cases)
+            {
+                @CaseCard(item, rating)
+            }
+        </RadzenStack>
+    };
+
+    private RenderFragment CaseCard(SupportCase item, SupportAnswerRating? rating) => __builder =>
+    {
+        <div @key="item.Id" data-feedback-case="@item.Id">
+            <ExpandableCard Text="@(string.IsNullOrWhiteSpace(item.Subject) ? item.Id : item.Subject)"
+                            Icon="@(item.AssistantState == SupportAssistantState.Active ? "smart_toy" : "support_agent")" AllowSaveState="false">
+                <TopMenu>
+                    @if (rating is { } rated)
+                    {
+                        <RadzenBadge Text="@_text.Format(SupportAssistantFeedbackViewText.Answers, CountOf(item, rated))"
+                                     BadgeStyle="@(rated == SupportAnswerRating.Up ? BadgeStyle.Success : BadgeStyle.Danger)" data-answers="@CountOf(item, rated)" />
+                    }
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@(item.TeamName ?? item.TeamKey)</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">@Time(item.LastMessageAt ?? item.CreatedAt)</RadzenText>
+                </TopMenu>
+                <ChildContent>
+                    <SupportCaseConversation Case="item" AsStaff="true" TimeTemplate="TimeTemplate" Changed="OnChangedAsync" />
+                </ChildContent>
+            </ExpandableCard>
+        </div>
+    };
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
+
+    /// <summary>One thing the assistant could not do, and the cases it was asked in.</summary>
+    internal sealed record Gap(string Text, SupportCase[] Cases, DateTime Last);
+}

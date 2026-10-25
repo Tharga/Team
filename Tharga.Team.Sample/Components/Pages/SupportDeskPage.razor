@@ -17,6 +17,13 @@
         reaches the desk once the member asks for a person.
     </RadzenText>
 
+    @* What members see in the panel: "Support is online" while you are Online and active here, "Support will reply
+       later" while you are Away or idle, and nothing while you are Hidden. A member nobody answers within a minute is
+       told we will get back to them. *@
+    <RadzenCard>
+        <SupportDeskStatus />
+    </RadzenCard>
+
     <RadzenCard>
         <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Every team</RadzenText>
         <SupportAcrossTeamsView />
@@ -25,5 +32,12 @@
     <RadzenCard>
         <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Without a team</RadzenText>
         <SupportUnassignedView />
+    </RadzenCard>
+
+    @* What members asked the assistant for that it had no tool to do, and how they rated its answers: the list to
+       build the next tools from. *@
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">How the assistant is doing</RadzenText>
+        <SupportAssistantFeedbackView />
     </RadzenCard>
 </RadzenStack>

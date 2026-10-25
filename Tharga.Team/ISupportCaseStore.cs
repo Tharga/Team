@@ -307,6 +307,16 @@ public interface ISupportCaseStore
         => Task.FromResult<SupportCase>(null);
 
     /// <summary>
+    /// Adds to what the assistant could not do in a case, keeping the newest <see cref="SupportCaseLimits.MaxAssistantGaps"/>.
+    /// </summary>
+    /// <remarks>
+    /// The default keeps nothing, so a store written before this existed loses only that list: the answer, and
+    /// everything else about the case, is unaffected.
+    /// </remarks>
+    Task AddAssistantGapsAsync(string teamKey, string caseId, string[] gaps, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
+    /// <summary>
     /// Moves a case to <paramref name="state"/>.
     /// </summary>
     /// <remarks>
@@ -317,6 +327,16 @@ public interface ISupportCaseStore
     Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
         => throw new NotSupportedException(
             $"This store does not implement {nameof(SetAssistantStateAsync)}, so a case cannot be handed from an assistant to a person. Implement it, or do not register an {nameof(ISupportResponder)}.");
+
+    /// <summary>
+    /// Sets the rating of the entry at <paramref name="sequence"/>, and what the case counts of its ratings.
+    /// </summary>
+    /// <remarks>
+    /// <b>The default throws rather than no-opping</b>, as handing over does: a rating that silently went nowhere would
+    /// tell the person who gave it that it was kept.
+    /// </remarks>
+    Task SetAnswerRatingAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"This store does not implement {nameof(SetAnswerRatingAsync)}, so answers cannot be rated.");
 
     /// <summary>
     /// Records that someone has read a case up to <paramref name="sequence"/>.

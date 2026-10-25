@@ -31,9 +31,129 @@ public class SupportAssistantStreamingTests
 
         var answer = await Responder(chat).AnswerAsync(Case(), Transcript(), seen);
 
-        Assert.Equal(["Check ", "Check the date ", "Check the date range."], seen.Items);
+        Assert.Equal(["", "Check ", "Check the date ", "Check the date range."], seen.Items.Select(x => x.AnswerSoFar));
+        Assert.All(seen.Items, x => Assert.Equal(1, x.Round));
         Assert.Equal("Check the date range.", answer.Body);
         Assert.False(chat.AskedInOnePiece);
+    }
+
+    /// <summary>Through the real tool loop: asking for a tool is shown as it is made, and its result going back starts round two.</summary>
+    [Fact]
+    public async Task ALookup_IsShownAsItsTool_ThenAsTheNextRound()
+    {
+        var chat = new LookingUpChatClient().AsBuilder().UseFunctionInvocation().Build();
+        var responder = new ChatSupportResponder(new RegisteredChatClientResolver(chat), new OneTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
+        var seen = new Reports();
+
+        var answer = await responder.AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Equal("You have 2 cases.", answer.Body);
+        Assert.Contains(seen.Items, x => x.Round == 1 && x.Tools.SequenceEqual(["get_my_cases"]) && x.AnswerSoFar == "");
+        Assert.Contains(seen.Items, x => x.Round == 2 && x.Tools.Length == 0 && x.AnswerSoFar == "");
+        Assert.Equal(2, seen.Items[^1].Round);
+        Assert.Equal("You have 2 cases.", seen.Items[^1].AnswerSoFar);
+        Assert.Equal([1, 2], seen.Items.Select(x => x.Round).Distinct());
+        Assert.Equal(["get_my_cases"], seen.Items[^1].Calls.Select(x => x.Name));
+        Assert.Equal(["get_my_cases"], answer.Calls.Select(x => x.Name));
+    }
+
+    /// <summary>Asked in one piece through the real tool loop, the calls are read from the messages it returns.</summary>
+    [Fact]
+    public async Task InOnePiece_TheServiceCalls_AreKeptWithTheAnswer_WithWhatTheyWereAskedFor()
+    {
+        var answer = await Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "exportåäö", ["limit"] = 5 }).AnswerAsync(Case(), Transcript());
+
+        Assert.Equal("Found it.", answer.Body);
+        var call = Assert.Single(answer.Calls);
+        Assert.Equal("search_my_cases", call.Name);
+        Assert.Equal("text: \"exportåäö\", limit: 5", call.Arguments);
+    }
+
+    /// <summary>The tool loop adds up its rounds in one piece; streamed, each round reports its own and they are added here.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheTokens_OfEveryRound_AreAddedUp(bool streamed)
+    {
+        var responder = Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" }, new UsageDetails { InputTokenCount = 100, OutputTokenCount = 10, TotalTokenCount = 110 });
+
+        var answer = streamed ? await responder.AnswerAsync(Case(), Transcript(), new Reports()) : await responder.AnswerAsync(Case(), Transcript());
+
+        Assert.Equal(new SupportAssistantUsage { InputTokens = 200, OutputTokens = 20, TotalTokens = 220 }, answer.Usage);
+    }
+
+    [Fact]
+    public async Task AProviderThatReportsNoTokens_LeavesNoUsage()
+    {
+        var answer = await Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" }).AnswerAsync(Case(), Transcript(), new Reports());
+
+        Assert.Null(answer.Usage);
+    }
+
+    [Fact]
+    public void ATotalNotReported_IsInputAndOutputAddedUp()
+    {
+        var usage = ChatSupportResponder.UsageOf([new UsageDetails { InputTokenCount = 7, OutputTokenCount = 3 }, null]);
+
+        Assert.Equal(10, usage.TotalTokens);
+    }
+
+    [Fact]
+    public async Task TheTokens_AreKeptOnTheAnswer()
+    {
+        var responder = Substitute.For<ISupportResponder>();
+        responder.AnswerAsync(Arg.Any<SupportCase>(), Arg.Any<IReadOnlyList<SupportMessage>>(), Arg.Any<CancellationToken>())
+            .Returns(SupportAnswer.FromBody("Done.") with { Usage = new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830 } });
+        var world = new World(responder);
+        var raised = await world.As(Alice).RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+
+        await world.As(Alice).RunAssistantAsync(TeamA, raised.Id);
+
+        Assert.Equal(830, (await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items[^1].AssistantUsage.TotalTokens);
+    }
+
+    [Fact]
+    public async Task Streamed_TheServiceCalls_AreReported_AndKept()
+    {
+        var seen = new Reports();
+
+        var answer = await Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" }).AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Contains(seen.Items, x => x.Tools.SequenceEqual(["search_my_cases"]) && x.Calls.Length == 1);
+        Assert.Equal("text: \"export\"", Assert.Single(answer.Calls).Arguments);
+    }
+
+    /// <summary>Noting what it could not do is the assistant's own bookkeeping, not a call on the host's services.</summary>
+    [Fact]
+    public async Task NotingWhatItCouldNotDo_IsNotAServiceCall()
+    {
+        var seen = new Reports();
+
+        var answer = await Calling(ChatSupportResponder.MissingSkillTool, new Dictionary<string, object> { ["what"] = "close my case" }).AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Empty(answer.Calls);
+        Assert.All(seen.Items, x => Assert.Empty(x.Calls));
+        Assert.Equal(["close my case"], answer.Gaps);
+        Assert.Equal(2, seen.Items[^1].Round);
+    }
+
+    [Fact]
+    public async Task TheCalls_AreKeptOnTheAnswer_Bounded()
+    {
+        var calls = Enumerable.Range(0, 25).Select(i => new SupportAssistantCall { Name = $"tool_{i}", Arguments = new string('x', 300) }).ToArray();
+        var responder = Substitute.For<ISupportResponder>();
+        responder.AnswerAsync(Arg.Any<SupportCase>(), Arg.Any<IReadOnlyList<SupportMessage>>(), Arg.Any<CancellationToken>())
+            .Returns(SupportAnswer.FromBody("Done.") with { Calls = calls });
+        var world = new World(responder);
+        var raised = await world.As(Alice).RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+
+        Assert.True(await world.As(Alice).RunAssistantAsync(TeamA, raised.Id));
+
+        var kept = (await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items[^1].AssistantCalls;
+        Assert.Equal(SupportCaseLimits.MaxAssistantCalls, kept.Length);
+        Assert.Equal("tool_0", kept[0].Name);
+        Assert.Equal(SupportCaseLimits.MaxAssistantCallArgumentsLength, kept[0].Arguments.Length);
+        Assert.EndsWith("…", kept[0].Arguments);
     }
 
     [Fact]
@@ -73,7 +193,7 @@ public class SupportAssistantStreamingTests
 
         Assert.True(await world.As(Alice).RunAssistantAsync(TeamA, raised.Id, seen));
 
-        Assert.Equal("Check the date.", seen.Items[^1]);
+        Assert.Equal("Check the date.", seen.Items[^1].AnswerSoFar);
         var last = (await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items[^1];
         Assert.Equal(SupportMessageKind.Assistant, last.Kind);
         Assert.Equal("Check the date.", last.Body);
@@ -131,6 +251,26 @@ public class SupportAssistantStreamingTests
         Assert.Empty(seen.Items);
     }
 
+    /// <summary>
+    /// The tools read with the caller's rights and the answer is kept where the author reads it, so somebody else who
+    /// may write in the case, here support across teams, does not get the assistant to answer it.
+    /// </summary>
+    [Fact]
+    public async Task SomebodyElseWhoMayWrite_DoesNotGetTheAssistantToAnswer()
+    {
+        var responder = new OnePieceResponder("Reindex the export.");
+        var world = new World(responder);
+        var raised = await world.As(Alice).RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+        var staff = world.As("staff-subject", team: null, systemScopes: [SystemSupportScopes.AllManage]);
+
+        Assert.False(await staff.RunAssistantAsync(TeamA, raised.Id));
+        Assert.False(await staff.RunAssistantAsync(TeamA, raised.Id, new Reports()));
+
+        Assert.Equal(0, responder.Calls);
+        Assert.Single((await world.As(Alice).GetMessagesAsync(TeamA, raised.Id)).Items);
+        Assert.True(await world.As(Alice).RunAssistantAsync(TeamA, raised.Id));
+    }
+
     [Fact]
     public async Task AWatchedAnswer_IsAuditedAsAnyAnswer()
     {
@@ -140,6 +280,13 @@ public class SupportAssistantStreamingTests
         await world.As(Alice).RunAssistantAsync(TeamA, raised.Id, new Reports());
 
         Assert.Equal(["raise", "assistant-answer"], world.Audit.Entries.Select(x => x.Action));
+    }
+
+    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments, UsageDetails usage = null)
+    {
+        var chat = new CallingChatClient(tool, arguments, usage).AsBuilder().UseFunctionInvocation().Build();
+
+        return new ChatSupportResponder(new RegisteredChatClientResolver(chat), new SearchTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
     }
 
     private static ChatSupportResponder Responder(IChatClient chat)
@@ -167,14 +314,12 @@ public class SupportAssistantStreamingTests
 
         public CollectingAuditLogger Audit { get; } = new();
 
-        public ISupportCaseService As(string subject)
+        public ISupportCaseService As(string subject, string team = TeamA, string[] systemScopes = null)
         {
-            var principal = new ClaimsPrincipal(new ClaimsIdentity(
-            [
-                new Claim(ClaimTypes.NameIdentifier, subject),
-                new Claim(ClaimTypes.Name, subject),
-                new Claim(TeamClaimTypes.TeamKey, TeamA)
-            ], "test"));
+            List<Claim> claims = [new(ClaimTypes.NameIdentifier, subject), new(ClaimTypes.Name, subject)];
+            if (team != null) claims.Add(new Claim(TeamClaimTypes.TeamKey, team));
+            claims.AddRange((systemScopes ?? []).Select(x => new Claim(TeamClaimTypes.SystemScope, x)));
+            var principal = new ClaimsPrincipal(new ClaimsIdentity(claims, "test"));
             var authorizer = new TeamAuthorizer(new FixedPrincipalAccessor(principal));
 
             return new AuditingSupportCaseServiceDecorator(
@@ -185,22 +330,27 @@ public class SupportAssistantStreamingTests
     }
 
     /// <summary>Kept as they come, on the reporting thread, rather than posted on as <see cref="Progress{T}"/> would.</summary>
-    private sealed class Reports : IProgress<string>
+    private sealed class Reports : IProgress<SupportAssistantProgress>
     {
-        public List<string> Items { get; } = [];
+        public List<SupportAssistantProgress> Items { get; } = [];
 
-        public void Report(string value) => Items.Add(value);
+        public void Report(SupportAssistantProgress value) => Items.Add(value);
     }
 
-    private sealed class FailingReports : IProgress<string>
+    private sealed class FailingReports : IProgress<SupportAssistantProgress>
     {
-        public void Report(string value) => throw new InvalidOperationException("The page went away.");
+        public void Report(SupportAssistantProgress value) => throw new InvalidOperationException("The page went away.");
     }
 
     private sealed class OnePieceResponder(string answer) : ISupportResponder
     {
+        public int Calls { get; private set; }
+
         public Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, CancellationToken cancellationToken = default)
-            => Task.FromResult(SupportAnswer.FromBody(answer));
+        {
+            Calls++;
+            return Task.FromResult(SupportAnswer.FromBody(answer));
+        }
     }
 
     private sealed class StreamingChatClient(params string[] pieces) : IChatClient
@@ -231,6 +381,71 @@ public class SupportAssistantStreamingTests
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>Asks for get_my_cases until it has the result, then answers from it.</summary>
+    private sealed class LookingUpChatClient : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+
+            if (!messages.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any())
+            {
+                yield return new ChatResponseUpdate(ChatRole.Assistant, [new FunctionCallContent("call-1", "get_my_cases")]);
+                yield break;
+            }
+
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "You have ");
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "2 cases.");
+        }
+
+        public object GetService(Type serviceType, object serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    /// <summary>Calls one tool with the arguments given until it has the result, then answers; in one piece or streamed, reporting <paramref name="usage"/> for each round.</summary>
+    private sealed class CallingChatClient(string tool, Dictionary<string, object> arguments, UsageDetails usage = null) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default)
+            => Task.FromResult(new ChatResponse(Next(messages)) { Usage = usage == null ? null : new UsageDetails { InputTokenCount = usage.InputTokenCount, OutputTokenCount = usage.OutputTokenCount, TotalTokenCount = usage.TotalTokenCount } });
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+            var next = Next(messages);
+            yield return new ChatResponseUpdate(next.Role, next.Contents);
+            if (usage != null) yield return new ChatResponseUpdate(ChatRole.Assistant, [new UsageContent(usage)]);
+        }
+
+        private ChatMessage Next(IEnumerable<ChatMessage> messages)
+            => messages.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any()
+                ? new ChatMessage(ChatRole.Assistant, "Found it.")
+                : new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("call-1", tool, arguments)]);
+
+        public object GetService(Type serviceType, object serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    private sealed class SearchTool : ISupportAssistantTools
+    {
+        public Task<IReadOnlyList<AITool>> ForCurrentCallerAsync(string teamKey, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AITool>>([AIFunctionFactory.Create((string text, int limit = 10) => new[] { "case-1" }, "search_my_cases")]);
+    }
+
+    private sealed class OneTool : ISupportAssistantTools
+    {
+        public Task<IReadOnlyList<AITool>> ForCurrentCallerAsync(string teamKey, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AITool>>([AIFunctionFactory.Create(() => new[] { "case-1", "case-2" }, "get_my_cases")]);
     }
 
     private sealed class NoTools : ISupportAssistantTools

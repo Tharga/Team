@@ -1,0 +1,19 @@
+.support-presence {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--rz-text-secondary-color);
+}
+
+.support-presence__dot {
+    flex: 0 0 auto;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background-color: var(--rz-base-500);
+}
+
+.support-presence--online .support-presence__dot {
+    background-color: var(--rz-success);
+}

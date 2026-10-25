@@ -47,7 +47,8 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             // derives one, so recording the argument records nothing -- and a notification worded around
             // {support.case.subject} then names the case with an empty string.
             Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject), (AuditMetadataKeys.TeamName, raised.TeamName)));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject), (AuditMetadataKeys.TeamName, raised.TeamName),
+                    (SupportAuditMetadataKeys.WithAssistant, Flag(raised.AssistantState == SupportAssistantState.Active))));
 
             return raised;
         }
@@ -67,8 +68,8 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, cancellationToken));
 
     // Audited as the run without reports is: what is kept is the same answer, however it was shown on the way.
-    public Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
-        => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, answerSoFar, cancellationToken));
+    public Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
+        => AuditAssistantAsync(teamKey, caseId, () => inner.RunAssistantAsync(teamKey, caseId, progress, cancellationToken));
 
     private async Task<bool> AuditAssistantAsync(string teamKey, string caseId, Func<Task<bool>> run)
     {
@@ -121,7 +122,7 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             await inner.ReplyToCaseAsync(teamKey, caseId, body, cancellationToken);
 
             Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.WithAssistant, await WithAssistantAsync(teamKey, caseId))));
         }
         catch (Exception ex)
         {
@@ -140,7 +141,7 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             await inner.ReplyToCaseAsync(teamKey, caseId, body, attachments, cancellationToken);
 
             Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.WithAssistant, await WithAssistantAsync(teamKey, caseId)), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
         }
         catch (Exception ex)
         {
@@ -178,7 +179,7 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
 
             Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
-                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.WithAssistant, await WithAssistantAsync(teamKey, caseId)), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
         }
         catch (Exception ex)
         {
@@ -354,6 +355,24 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetCaseAsync(teamKey, caseId, cancellationToken);
 
+    /// <remarks>Audited, as the verdict it is: who rated which answer how is what the people building the assistant go back to.</remarks>
+    public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var metadata = Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.Rating, rating.ToString()));
+        try
+        {
+            await inner.RateAnswerAsync(teamKey, caseId, sequence, rating, cancellationToken);
+
+            Log("rate-answer", nameof(RateAnswerAsync), sw.ElapsedMilliseconds, true, teamKey, metadata: metadata);
+        }
+        catch (Exception ex)
+        {
+            Log("rate-answer", nameof(RateAnswerAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message, metadata);
+            throw;
+        }
+    }
+
     // Reads and counters, not audited - consistent with every other read. Marking a case read is a write,
     // but it records that somebody looked at something rather than that anything changed, and auditing it
     // would fill the log with one entry per page view.
@@ -363,6 +382,16 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     // Not audited: nothing is stored, and a writer reports every few seconds.
     public Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
         => inner.ReportTypingAsync(teamKey, caseId, asSupport, cancellationToken);
+
+    // Not audited, for the same reason: a status on the desk is stored nowhere, and activity is reported every minute.
+    public Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default)
+        => inner.SetMyStaffStatusAsync(status, cancellationToken);
+
+    public Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default)
+        => inner.GetMyStaffStatusAsync(cancellationToken);
+
+    public Task ReportStaffActivityAsync(CancellationToken cancellationToken = default)
+        => inner.ReportStaffActivityAsync(cancellationToken);
 
     public Task<SupportCaseVisibilityChoice> GetVisibilityChoiceAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetVisibilityChoiceAsync(teamKey, caseId, cancellationToken);
@@ -408,6 +437,25 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         var entry = auditEntryFactory.Create(Feature, action, methodName, durationMs, success, errorMessage, teamKey, metadata);
 
         auditLogger.Log(entry);
+    }
+
+    private static string Flag(bool value) => value ? "true" : "false";
+
+    /// <remarks>
+    /// Read after the reply, which is what a notification is about. Not knowing leaves the key out, and a route then
+    /// treats the reply as support's: a missed post is worse than an extra one.
+    /// </remarks>
+    private async Task<string> WithAssistantAsync(string teamKey, string caseId)
+    {
+        try
+        {
+            var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+            return supportCase == null ? null : Flag(supportCase.AssistantState == SupportAssistantState.Active);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return null;
+        }
     }
 
     private static string CountOf(IReadOnlyList<SupportAttachmentUpload> attachments)

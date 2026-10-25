@@ -265,6 +265,18 @@ public record ThargaBlazorOptions : BlazorOptions
     public ConsentOptions Consent { get; set; } = new();
 
     /// <summary>
+    /// What the support views show beside the assistant's answers: whether they can be rated, and who sees what they
+    /// took, the service calls and the tokens.
+    /// </summary>
+    /// <example>
+    /// <code>
+    /// o.Blazor.Support.RateAnswers = false;
+    /// o.Blazor.Support.AnswerDetailsShownTo = SupportAnswerDetailsAudience.Support;
+    /// </code>
+    /// </example>
+    public SupportDisplayOptions Support { get; set; } = new();
+
+    /// <summary>
     /// Access levels the built-in selectors will not offer. Empty by default, which is exactly today's
     /// behaviour.
     /// </summary>

@@ -34,7 +34,7 @@ public static class SupportAssistantConnectionViewText
     public static readonly TextKey ApiKeyPlaceholder = new("team.support.assistant.connection.apiKeyPlaceholder", "Paste the key");
 
     /// <summary>Under the key field when a key is stored and would be kept.</summary>
-    public static readonly TextKey ApiKeyStored = new("team.support.assistant.connection.apiKeyStored", "A key is stored. Leave this empty to keep it.");
+    public static readonly TextKey ApiKeyStored = new("team.support.assistant.connection.apiKeyStored", "A key is stored. Type a new one to replace it.");
 
     /// <summary>Lists the models the key may use.</summary>
     public static readonly TextKey LoadModels = new("team.support.assistant.connection.loadModels", "Load models");

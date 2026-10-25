@@ -15,6 +15,18 @@ public record SupportAnswer
     /// <summary>Why the assistant declined, or <c>null</c> when it answered.</summary>
     public string Reason { get; init; }
 
+    /// <summary>
+    /// What the person asked for that the assistant had no way to do, in its own words, whether it answered or not.
+    /// </summary>
+    /// <remarks>Kept on the case for the people who build the assistant, as <see cref="SupportCase.AssistantGaps"/>.</remarks>
+    public string[] Gaps { get; init; } = [];
+
+    /// <summary>The service calls the assistant made to answer, in order; kept with the answer as <see cref="SupportMessage.AssistantCalls"/>.</summary>
+    public SupportAssistantCall[] Calls { get; init; } = [];
+
+    /// <summary>The tokens the model reported for the answer, or <c>null</c> when it reported none; kept as <see cref="SupportMessage.AssistantUsage"/>.</summary>
+    public SupportAssistantUsage Usage { get; init; }
+
     /// <summary>True when there is an answer to append.</summary>
     public bool Answered => !string.IsNullOrWhiteSpace(Body);
 

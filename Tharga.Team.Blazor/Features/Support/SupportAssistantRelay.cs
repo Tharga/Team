@@ -1,17 +1,17 @@
 namespace Tharga.Team.Blazor.Features.Support;
 
 /// <summary>
-/// The assistant's answer as written so far, brought onto the component's own thread as it grows.
+/// How far the assistant has got, brought onto the component's own thread as it changes.
 /// </summary>
 /// <remarks>
 /// Reports arrive on whatever thread the model's stream is read on. Once the answer is kept or declined,
 /// <see cref="End"/> stops any report still on its way from drawing over the conversation read back.
 /// </remarks>
-internal sealed class SupportAnswerSoFar(Func<Action, Task> invoke, Action<string> show) : IProgress<string>
+internal sealed class SupportAssistantRelay(Func<Action, Task> invoke, Action<SupportAssistantProgress> show) : IProgress<SupportAssistantProgress>
 {
     private volatile bool _ended;
 
-    public void Report(string value)
+    public void Report(SupportAssistantProgress value)
     {
         if (_ended) return;
 

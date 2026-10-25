@@ -1,0 +1,28 @@
+@using Tharga.Team.Blazor.Framework
+
+@* Whether anybody is on support, for a member about to write to a person. Unknown renders nothing: saying "offline"
+   when nobody can tell discourages asking for help that is there. *@
+
+@if (State != SupportPresenceState.Unknown)
+{
+    var online = State == SupportPresenceState.Online;
+
+    <span class="@($"support-presence {(online ? "support-presence--online" : "support-presence--away")}")" role="status" data-presence="@State">
+        <span class="support-presence__dot" aria-hidden="true"></span>
+        <span>@_text[online ? SupportCasesViewText.SupportOnline : SupportCasesViewText.SupportAway]</span>
+    </span>
+}
+
+@code {
+    /// <summary>What is known about support being there; <see cref="SupportPresenceState.Unknown"/> shows nothing.</summary>
+    [Parameter] public SupportPresenceState State { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync([SupportCasesViewText.SupportOnline, SupportCasesViewText.SupportAway]);
+    }
+}

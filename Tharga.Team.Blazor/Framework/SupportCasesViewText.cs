@@ -89,8 +89,7 @@ public static class SupportCasesViewText
     public static readonly TextKey AnsweredByHuman = new("team.support.cases.answeredBy.human", "Support");
 
     /// <summary>Read out for the dots shown while the assistant is working, so a slow model does not read as a broken page.</summary>
-    public static readonly TextKey AssistantThinking = new("team.support.cases.assistant.thinking",
-        "The assistant is looking into it…");
+    public static readonly TextKey AssistantThinking = new("team.support.cases.assistant.thinking", "Working");
 
     /// <summary>The hand-over action, offered only while an assistant is answering.</summary>
     public static readonly TextKey TalkToAPerson = new("team.support.cases.assistant.handover", "Talk to a person");

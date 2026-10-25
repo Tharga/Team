@@ -225,13 +225,127 @@ public class SupportTypingTests : BunitContext
             .Add(x => x.Messages, [])
             .Add(x => x.CaseAuthorIdentity, Author)
             .Add(x => x.AuthorOnRight, true)
-            .Add(x => x.AnswerSoFar, "Check the date"));
+            .Add(x => x.AssistantProgress, new SupportAssistantProgress { AnswerSoFar = "Check the date" }));
 
         var row = view.Find("[data-answer-so-far]");
         Assert.Equal("left", row.GetAttribute("data-side"));
         Assert.Equal("true", row.GetAttribute("aria-busy"));
         Assert.NotNull(row.QuerySelector("[data-sender='assistant']"));
         Assert.Contains("Check the date", row.TextContent);
+    }
+
+    private static SupportAssistantCall Call(string name, string arguments = "") => new() { Name = name, Arguments = arguments };
+
+    [Fact]
+    public void ATranscript_SaysHowManyTimesTheAssistantHasLoopedForTools_BesideItsDots()
+    {
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportTranscript>(p => p
+            .Add(x => x.Messages, [])
+            .Add(x => x.CaseAuthorIdentity, Author)
+            .Add(x => x.AuthorOnRight, true)
+            .Add(x => x.ThinkingText, "Looking into it")
+            .Add(x => x.AssistantProgress, new SupportAssistantProgress { Round = 2, Tools = ["get_case_messages"], Calls = [Call("get_my_cases"), Call("get_case_messages")] }));
+
+        Assert.Equal("thinking", view.Find("[data-answer-so-far]").GetAttribute("data-answer-so-far"));
+        Assert.Equal("Working 2", view.Find("[data-answer-so-far] .support-typing__label--shown").TextContent);
+        Assert.Empty(view.FindAll("[data-step]"));
+    }
+
+    /// <summary>Working until the model asks for tools, then the loop it is on, kept while it reads what came back.</summary>
+    [Theory]
+    [InlineData(1, false, "Working")]
+    [InlineData(1, true, "Working 1")]
+    [InlineData(2, false, "Working 1")]
+    [InlineData(2, true, "Working 2")]
+    [InlineData(4, false, "Working 3")]
+    public async Task TheLoops_AreCounted(int round, bool toolsRunning, string expected)
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+        var progress = new SupportAssistantProgress { Round = round, Tools = toolsRunning ? ["get_my_cases"] : [] };
+
+        Assert.Equal(expected, SupportAssistantSteps.Describe(text, progress, "Working"));
+    }
+
+    [Fact]
+    public async Task BeforeAnythingIsReported_ItIsWorking()
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+
+        Assert.Equal("Working", SupportAssistantSteps.Describe(text, null, "Working"));
+        Assert.Null(SupportAssistantSteps.Running(text, null));
+        Assert.Null(SupportAssistantSteps.Running(text, new SupportAssistantProgress { Round = 2 }));
+    }
+
+    [Fact]
+    public void AnAnswer_ShowsItsServiceCalls_Folded_WithWhatEachWasAskedFor()
+    {
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportTranscript>(p => p
+            .Add(x => x.Messages,
+            [
+                new SupportMessage { Sequence = 1, Kind = SupportMessageKind.User, AuthorIdentity = Author, AuthorName = "Alice", Body = "Where is my export case?", SentAt = DateTime.UtcNow },
+                new SupportMessage
+                {
+                    Sequence = 2, Kind = SupportMessageKind.Assistant, AuthorName = "Assistant", Body = "Here it is.", SentAt = DateTime.UtcNow,
+                    AssistantCalls = [Call("get_my_cases"), Call("search_my_cases", "text: \"export\"")]
+                }
+            ])
+            .Add(x => x.CaseAuthorIdentity, Author)
+            .Add(x => x.AuthorOnRight, true));
+
+        var calls = view.Find("[data-calls='2']");
+        Assert.False(calls.HasAttribute("open"));
+        Assert.Equal("2 service calls", calls.QuerySelector("summary")!.TextContent.Trim());
+        Assert.Equal(["get_my_cases()", "search_my_cases(text: \"export\")"], view.FindAll("[data-calls='2'] [data-call]").Select(x => x.TextContent.Trim()));
+        Assert.Single(view.FindAll("[data-calls]"));
+    }
+
+    [Fact]
+    public void TheTokens_AreSummedUpBesideTheCalls_AndSplitInside()
+    {
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportAnswerDetails>(p => p
+            .Add(x => x.Sequence, 2)
+            .Add(x => x.Calls, [Call("get_my_cases"), Call("search_my_cases", "text: \"export\"")])
+            .Add(x => x.Usage, new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830 }));
+
+        Assert.Equal("2 service calls · 830 tokens", view.Find("summary").TextContent.Trim());
+        Assert.Equal("Tokens: 610 in, 220 out", view.Find("[data-usage]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void AnAnswerThatCalledNothing_StillShowsItsTokens()
+    {
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportAnswerDetails>(p => p
+            .Add(x => x.Sequence, 2)
+            .Add(x => x.Usage, new SupportAssistantUsage { InputTokens = 400, OutputTokens = 90, TotalTokens = 490 }));
+
+        Assert.Equal("490 tokens", view.Find("summary").TextContent.Trim());
+        Assert.Empty(view.FindAll("[data-call]"));
+    }
+
+    [Fact]
+    public void AnAnswerWithNeither_ShowsNoDetails()
+    {
+        AddServices(new Mock<ISupportCaseService>());
+
+        var view = Render<SupportAnswerDetails>(p => p.Add(x => x.Sequence, 2));
+
+        Assert.Empty(view.FindAll("[data-calls]"));
+    }
+
+    [Fact]
+    public async Task OneServiceCall_IsCountedAsOne()
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+
+        Assert.Equal("1 service call", SupportAssistantSteps.Counted(text, [Call("get_my_cases")]));
     }
 
     [Fact]

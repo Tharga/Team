@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.AI;
 
 namespace Tharga.Team.Sample.Framework;
@@ -21,10 +22,20 @@ internal sealed class SampleChatClient : IChatClient
     // Says what it is, so nobody trying the sample mistakes a script for a model that could not help them.
     private const string Fallback =
         "I am the sample's built-in responder: a short script, not an AI model, so I only answer questions about " +
-        "invitations, API keys, teams and exports. To try a real model, choose one for your team under Support, " +
+        "your cases, invitations, API keys, teams and exports. To try a real model, choose one for your team under Support, " +
         "AI assistant; or ask for a person.";
 
     private const string Signature = "(Answered by the sample's built-in scripted responder, not an AI model.)";
+
+    private const string CasesTool = "get_my_cases";
+
+    private const string SearchTool = "search_my_cases";
+
+    private const string MissingSkillTool = "report_missing_skill";
+
+    private const int MaxReportedLength = 80;
+
+    private static readonly TimeSpan LookupDelay = TimeSpan.FromMilliseconds(800);
 
     private static readonly (string Term, string Answer)[] Script =
     [
@@ -39,13 +50,88 @@ internal sealed class SampleChatClient : IChatClient
         ChatOptions options = null,
         CancellationToken cancellationToken = default)
     {
-        var question = messages?.LastOrDefault(x => x.Role == ChatRole.User)?.Text ?? string.Empty;
+        var history = messages?.ToList() ?? [];
+        var reply = Reply(history, options);
+
+        return Task.FromResult(new ChatResponse(reply) { Usage = Estimated(history, reply) });
+    }
+
+    private static ChatMessage Reply(List<ChatMessage> history, ChatOptions options)
+    {
+        var question = history.LastOrDefault(x => x.Role == ChatRole.User)?.Text ?? string.Empty;
+
+        // A question about cases looks things up as a model would: the member's cases, then, when the question names
+        // something, the cases that mention it; then it answers from what it found.
+        if (question.Contains("case", StringComparison.OrdinalIgnoreCase) && options?.Tools?.Any(x => x.Name == CasesTool) == true)
+        {
+            // Tool calls are not kept in the case, so any result here is from this answer's own lookups.
+            var found = history.SelectMany(x => x.Contents).OfType<FunctionResultContent>().ToArray();
+            if (found.Length == 0) return Call(CasesTool);
+
+            var term = SearchTerm(question);
+            var searches = term != null && options.Tools.Any(x => x.Name == SearchTool);
+            if (searches && found.Length == 1) return Call(SearchTool, new Dictionary<string, object> { ["text"] = term });
+
+            var answer = $"I looked up your support cases in this team: you have {Count(found[0])}.";
+            if (searches) answer += $" {Count(found[1])} of them mention \"{term}\".";
+
+            return new ChatMessage(ChatRole.Assistant, $"{answer} Ask about one of them, or ask for a person.\n\n{Signature}");
+        }
 
         var scripted = Array.Find(Script, x => question.Contains(x.Term, StringComparison.OrdinalIgnoreCase)).Answer;
-        var answer = scripted == null ? Fallback : $"{scripted}\n\n{Signature}";
 
-        return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, answer)));
+        // Off the script, it says so as a model should: report what was asked, then tell the member. The desk lists it.
+        if (scripted == null && options?.Tools?.Any(x => x.Name == MissingSkillTool) == true
+            && !history.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any())
+        {
+            var what = question.Length > MaxReportedLength ? question[..MaxReportedLength] : question;
+            return Call(MissingSkillTool, new Dictionary<string, object> { ["what"] = what });
+        }
+
+        return new ChatMessage(ChatRole.Assistant, scripted == null ? Fallback : $"{scripted}\n\n{Signature}");
     }
+
+    private static ChatMessage Call(string tool, IDictionary<string, object> arguments = null)
+        => new(ChatRole.Assistant, [new FunctionCallContent(Guid.NewGuid().ToString("N"), tool, arguments)]);
+
+    /// <summary>
+    /// Not counted but estimated, at about four characters a token, so the sample fills the line a real model's own count
+    /// fills. A script reads nothing and writes nothing; the numbers only stand in for a model's.
+    /// </summary>
+    private static UsageDetails Estimated(IEnumerable<ChatMessage> read, ChatMessage written)
+    {
+        long input = TokensFor(read.Sum(LengthOf));
+        long output = TokensFor(LengthOf(written));
+
+        return new UsageDetails { InputTokenCount = input, OutputTokenCount = output, TotalTokenCount = input + output };
+    }
+
+    private static int LengthOf(ChatMessage message) => message.Contents.Sum(x => x switch
+    {
+        TextContent text => text.Text?.Length ?? 0,
+        FunctionCallContent call => call.Name.Length + JsonSerializer.Serialize(call.Arguments).Length,
+        FunctionResultContent result => JsonSerializer.Serialize(result.Result).Length,
+        _ => 0
+    });
+
+    private static int TokensFor(int characters) => Math.Max(1, (characters + CharactersPerToken - 1) / CharactersPerToken);
+
+    private const int CharactersPerToken = 4;
+
+    private static int Count(FunctionResultContent result)
+        => result.Result is JsonElement { ValueKind: JsonValueKind.Array } list ? list.GetArrayLength() : 0;
+
+    /// <summary>The last word worth searching for, such as "export" in "show me my case about the export"; null when there is none.</summary>
+    private static string SearchTerm(string question)
+        => System.Text.RegularExpressions.Regex.Matches(question, @"\p{L}{4,}")
+            .Select(x => x.Value)
+            .LastOrDefault(x => !NotSearchedFor.Contains(x));
+
+    private static readonly HashSet<string> NotSearchedFor = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "case", "cases", "about", "have", "many", "show", "find", "what", "which", "where", "with", "from", "that", "this",
+        "there", "their", "your", "mine", "open", "does", "need", "help", "please", "could", "would", "list", "tell"
+    };
 
     // A word at a time, at about the pace of a small local model, so the panel shows an answer being written.
     public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
@@ -57,12 +143,24 @@ internal sealed class SampleChatClient : IChatClient
 
         foreach (var message in response.Messages)
         {
+            var calls = message.Contents.OfType<FunctionCallContent>().ToArray();
+            if (calls.Length > 0)
+            {
+                await Task.Delay(LookupDelay, cancellationToken);
+                yield return new ChatResponseUpdate(message.Role, [.. calls]);
+                await Task.Delay(LookupDelay, cancellationToken);
+                continue;
+            }
+
             foreach (var word in System.Text.RegularExpressions.Regex.Split(message.Text, @"(?<=\s)"))
             {
                 await Task.Delay(WordDelay, cancellationToken);
                 yield return new ChatResponseUpdate(message.Role, word);
             }
         }
+
+        // Last, as a provider reports it once the call is done.
+        if (response.Usage != null) yield return new ChatResponseUpdate(ChatRole.Assistant, [new UsageContent(response.Usage)]);
     }
 
     private static readonly TimeSpan WordDelay = TimeSpan.FromMilliseconds(60);

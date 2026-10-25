@@ -53,6 +53,7 @@ services.AddThargaSupport(o =>
 | `Channel` | Channel name or id. Omit to use `DefaultChannel`. |
 | `Template` | The message. Omit for a readable default built from the event. |
 | `Success` | Restrict to successes (`true`) or failures (`false`). Omit for both. |
+| `WithAssistant` | Restrict to events in a conversation the assistant is answering (`true`), or outside one (`false`). Omit for both. Read from the entry's `support.case.withAssistant`; an entry without it counts as outside one. |
 
 **Every matching route fires**, not just the first — so one event can go to two channels worded two
 ways. The flip side is that a `*` route alongside a specific one posts twice.
@@ -80,6 +81,11 @@ stay dormant until one is set, rather than posting into a channel nobody picked.
 
 `support:raise` and `support:reply` are only ever emitted when `AddThargaSupportCases` is registered, so a
 host using notifications alone simply never triggers them.
+
+**A member talking to the assistant posts nothing.** Both built-in support routes say `WithAssistant = false`: a
+conversation the assistant is answering is not work arriving for support. It reaches the channel when the member
+asks for a person and writes, which is also when the case's own thread opens. A route of your own for these events
+keeps posting them unless it says the same.
 
 > **A reply reaches Slack twice, on purpose, and they are not duplicates.** The *notification* goes to
 > `DefaultChannel` for whoever watches for work arriving. The message itself goes into the **case's own

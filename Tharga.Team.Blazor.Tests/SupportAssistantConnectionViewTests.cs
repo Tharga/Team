@@ -153,7 +153,7 @@ public class SupportAssistantConnectionViewTests : BunitContext
         view.WaitForAssertion(() => Assert.Contains("I can answer.", view.Find("[data-reply]").TextContent));
     }
 
-    /// <summary>Kept out of the request when left empty, so the service keeps the stored key; cleared after saving, so it is never shown.</summary>
+    /// <summary>Kept out of the request when left as it is, so the service keeps the stored key; the typed one is never shown again after saving.</summary>
     [Fact]
     public void Saving_KeepsTheStoredKey_WhenNoneIsTyped_AndClearsATypedOne()
     {
@@ -173,7 +173,54 @@ public class SupportAssistantConnectionViewTests : BunitContext
 
         view.WaitForAssertion(() => Assert.Equal(2, requests.Count));
         Assert.Equal(Key, requests[1].ApiKey);
-        view.WaitForAssertion(() => Assert.Null(view.FindComponent<RadzenPassword>().Instance.Value));
+        view.WaitForAssertion(() => Assert.Equal(SupportAssistantConnectionView.StoredKeyMask, view.FindComponent<RadzenPassword>().Instance.Value));
+    }
+
+    /// <summary>A stored key fills the field with a mask, so it does not look empty; the mask itself is never sent.</summary>
+    [Fact]
+    public void AStoredKey_ShowsAsAMask_ThatIsNeverSent()
+    {
+        SupportAiProviderRequest sent = null;
+        _connections.Setup(x => x.ConnectAsync(TeamKey, It.IsAny<SupportAiProviderRequest>(), default))
+            .Callback<string, SupportAiProviderRequest, CancellationToken>((_, request, _) => sent = request)
+            .ReturnsAsync(SupportAiConnectionResult.Success());
+        var view = Render(Neurolito());
+
+        Assert.Equal(SupportAssistantConnectionView.StoredKeyMask, view.Find("input[data-key]").GetAttribute("value"));
+
+        view.Find("input[data-key]").Change(SupportAssistantConnectionView.StoredKeyMask);
+        view.Find("[data-save]").Click();
+
+        view.WaitForAssertion(() => Assert.NotNull(sent));
+        Assert.Null(sent.ApiKey);
+    }
+
+    [Theory]
+    [InlineData("••••••••••••" + Key)]
+    [InlineData("••••" + Key + "••")]
+    public void TypingIntoTheMask_SendsOnlyWhatWasTyped(string typed)
+    {
+        SupportAiProviderRequest sent = null;
+        _connections.Setup(x => x.ConnectAsync(TeamKey, It.IsAny<SupportAiProviderRequest>(), default))
+            .Callback<string, SupportAiProviderRequest, CancellationToken>((_, request, _) => sent = request)
+            .ReturnsAsync(SupportAiConnectionResult.Success());
+        var view = Render(Neurolito());
+
+        view.Find("input[data-key]").Change(typed);
+        view.Find("[data-save]").Click();
+
+        view.WaitForAssertion(() => Assert.Equal(Key, sent?.ApiKey));
+    }
+
+    /// <summary>A key is kept only for the address it was entered for, so another address starts with the field empty.</summary>
+    [Fact]
+    public void AnotherAddress_HasNoMask()
+    {
+        var view = Render(Neurolito());
+
+        view.Find("input[data-address]").Change("https://elsewhere.example/");
+
+        Assert.True(string.IsNullOrEmpty(view.Find("input[data-key]").GetAttribute("value")));
     }
 
     [Fact]

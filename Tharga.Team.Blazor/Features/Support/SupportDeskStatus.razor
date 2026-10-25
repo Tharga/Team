@@ -1,0 +1,191 @@
+@using Blazored.LocalStorage
+@using Microsoft.JSInterop
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@implements IAsyncDisposable
+@inject ISupportCaseService SupportCases
+@inject ILocalStorageService LocalStorage
+@inject IJSRuntime JsRuntime
+@inject IThargaTextProvider TextProvider
+@inject IServiceProvider Services
+
+@* How a support person is shown to members: Online, Away or Hidden, chosen here, with Online counting only while they
+   are active in support. Using this page counts, reported at most once a minute. Renders nothing for anybody who is
+   not on the support desk. *@
+
+@if (_allowed)
+{
+    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap" data-desk-status="@_status">
+        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[SupportDeskStatusText.Label]</RadzenText>
+        <div role="group" aria-label="@_text[SupportDeskStatusText.Label]" style="display: inline-flex; gap: 0.25rem;">
+            @foreach (var status in Statuses)
+            {
+                var picked = status == _status;
+                <RadzenButton Text="@_text[TextOf(status)]" Icon="@IconOf(status)" Size="ButtonSize.Small"
+                              Variant="@(picked ? Variant.Flat : Variant.Outlined)" ButtonStyle="@(picked ? ButtonStyle.Primary : ButtonStyle.Base)"
+                              Click="@(() => SetAsync(status))" title="@_text[HintOf(status)]" aria-pressed="@(picked ? "true" : "false")"
+                              data-status-choice="@status" />
+            }
+        </div>
+        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-status-hint>@_text[HintOf(_status)]</RadzenText>
+    </RadzenStack>
+}
+
+@code {
+    private const string ModulePath = "./_content/Tharga.Team.Blazor/support-desk.js";
+    private static readonly TimeSpan ActivityInterval = TimeSpan.FromMinutes(1);
+    private static readonly SupportStaffStatus[] Statuses = [SupportStaffStatus.Online, SupportStaffStatus.Away, SupportStaffStatus.Hidden];
+
+    /// <summary>Where the choice is remembered in the browser, for the next visit.</summary>
+    [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.DeskStatus";
+
+    private readonly string _id = Guid.NewGuid().ToString("N");
+    private TextSet _text = TextSet.Empty;
+    private bool _allowed;
+    private bool _watching;
+    private SupportStaffStatus _status = SupportStaffStatus.Online;
+    private ISupportPresence _presence;
+    private IJSObjectReference _module;
+    private DotNetObjectReference<SupportDeskStatus> _self;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportDeskStatusText.All);
+
+        // Only once the page is live: a prerender would put somebody on the desk before they see it.
+        if (!RendererInfo.IsInteractive) return;
+
+        SupportStaffStatus? set;
+        try
+        {
+            set = await SupportCases.GetMyStaffStatusAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return;
+        }
+
+        // What another page of theirs set since the application started, else their choice last time in this browser,
+        // else Online, since they just opened the desk.
+        _status = set ?? await RememberedAsync() ?? SupportStaffStatus.Online;
+        await SupportCases.SetMyStaffStatusAsync(_status);
+        _allowed = true;
+
+        _presence = Services.GetService(typeof(ISupportPresence)) as ISupportPresence;
+        if (_presence != null) _presence.Changed += OnPresenceChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_allowed || _watching) return;
+        _watching = true;
+
+        try
+        {
+            _module ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            if (_module == null) return;
+
+            _self ??= DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("watchActivity", _id, _self, (int)ActivityInterval.TotalMilliseconds);
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+            // Without it only answering and writing count as acting; the choice still holds.
+        }
+    }
+
+    /// <summary>Somebody used the page while it was in front of them.</summary>
+    [JSInvokable]
+    public async Task OnActivity()
+    {
+        try
+        {
+            await SupportCases.ReportStaffActivityAsync();
+        }
+        catch (Exception)
+        {
+            // Presence is advisory; a report that does not arrive is caught up by the next one.
+        }
+    }
+
+    private async Task SetAsync(SupportStaffStatus status)
+    {
+        _status = status;
+        await SupportCases.SetMyStaffStatusAsync(status);
+
+        try
+        {
+            await LocalStorage.SetItemAsync(StorageKey, status);
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+        }
+    }
+
+    private async Task<SupportStaffStatus?> RememberedAsync()
+    {
+        try
+        {
+            return await LocalStorage.GetItemAsync<SupportStaffStatus?>(StorageKey);
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
+
+    // Another page of the same person may have chosen differently.
+    private void OnPresenceChanged(object sender, EventArgs args) => _ = InvokeAsync(async () =>
+    {
+        try
+        {
+            if (await SupportCases.GetMyStaffStatusAsync() is not { } status || status == _status) return;
+
+            _status = status;
+            StateHasChanged();
+        }
+        catch (Exception)
+        {
+        }
+    });
+
+    private static TextKey TextOf(SupportStaffStatus status) => status switch
+    {
+        SupportStaffStatus.Online => SupportDeskStatusText.Online,
+        SupportStaffStatus.Away => SupportDeskStatusText.Away,
+        _ => SupportDeskStatusText.Hidden
+    };
+
+    private static TextKey HintOf(SupportStaffStatus status) => status switch
+    {
+        SupportStaffStatus.Online => SupportDeskStatusText.OnlineHint,
+        SupportStaffStatus.Away => SupportDeskStatusText.AwayHint,
+        _ => SupportDeskStatusText.HiddenHint
+    };
+
+    private static string IconOf(SupportStaffStatus status) => status switch
+    {
+        SupportStaffStatus.Online => "radio_button_checked",
+        SupportStaffStatus.Away => "schedule",
+        _ => "visibility_off"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_presence != null) _presence.Changed -= OnPresenceChanged;
+
+        if (_module != null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("stopWatching", _id);
+                await _module.DisposeAsync();
+            }
+            catch (Exception exception) when (exception is JSException or JSDisconnectedException)
+            {
+            }
+        }
+
+        _self?.Dispose();
+    }
+}

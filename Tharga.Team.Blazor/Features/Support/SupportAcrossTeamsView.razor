@@ -51,6 +51,19 @@ else
                             {
                                 <RadzenBadge Text="@_text[SupportAcrossTeamsViewText.NeedsAnswer]" BadgeStyle="BadgeStyle.Danger" data-needs-answer="@item.Id" />
                             }
+                            @if (item.AssistantGaps is { Length: > 0 })
+                            {
+                                <RadzenBadge Text="@_text[SupportAcrossTeamsViewText.AssistantCouldNot]" BadgeStyle="BadgeStyle.Warning"
+                                             title="@string.Join("; ", item.AssistantGaps)" data-assistant-gaps="@item.Id" />
+                            }
+                            @if (item.AnswersRatedDown > 0)
+                            {
+                                <RadzenBadge Text="@_text[SupportAcrossTeamsViewText.RatedDown]" BadgeStyle="BadgeStyle.Danger" Variant="Variant.Outlined" data-rated-down="@item.Id" />
+                            }
+                            @if (item.AnswersRatedUp > 0)
+                            {
+                                <RadzenBadge Text="@_text[SupportAcrossTeamsViewText.RatedUp]" BadgeStyle="BadgeStyle.Success" Variant="Variant.Outlined" data-rated-up="@item.Id" />
+                            }
                             @if (item.Visibility == SupportCaseVisibility.Private)
                             {
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-readers="author" title="@TeamName(item)">

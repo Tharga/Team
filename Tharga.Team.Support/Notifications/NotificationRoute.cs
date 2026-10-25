@@ -57,4 +57,15 @@ public record NotificationRoute
     /// success also narrates the times the operation threw.
     /// </remarks>
     public bool? Success { get; init; }
+
+    /// <summary>
+    /// Restricts the route to events in a conversation the assistant is answering (<c>true</c>), or to events outside
+    /// one (<c>false</c>). Null, the default, matches both.
+    /// </summary>
+    /// <remarks>
+    /// Read from <c>support.case.withAssistant</c>; an event without it counts as outside one. The default
+    /// <c>support:raise</c> and <c>support:reply</c> routes say <c>false</c>: a member talking to the assistant is not
+    /// work arriving for support, and the conversation reaches the channel once they ask for a person and write.
+    /// </remarks>
+    public bool? WithAssistant { get; init; }
 }

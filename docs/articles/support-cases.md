@@ -1239,8 +1239,13 @@ start gets the channel at once.
 
 ### It answers; it does not act
 
-The built-in tools are reads: the caller's own cases, and one case's transcript. Closing, assigning and
+The built-in tools are reads: the caller's own cases (`get_my_cases`), a search through them by subject and by what
+was written in them (`search_my_cases`), and one case's transcript (`get_case_messages`). Closing, assigning and
 reopening stay with people — an assistant that can close its own cases can close the ones it answered badly.
+
+**It answers only the person who raised the case.** `RunAssistantAsync` does nothing for anybody else, even somebody
+who may write in the case. The tools read with the caller's rights, and the answer is kept where everybody who reads
+the case sees it, so run by a teammate or by support with wider rights it could quote what the author may not see.
 
 Every tool reads through the same scope-checked service any other caller uses, so the assistant sees exactly
 what the person it is answering would see. The responder is handed the case and its transcript rather than
@@ -1251,6 +1256,40 @@ product your customer is actually asking about. Implement `ISupportAssistantTool
 set, or resolve the built-in one and add to what it returns. Keep every tool reading through a scope-checked
 service — a tool that reaches the store directly is a second enforcement point, and the assistant would be
 the one caller able to use it.
+
+### Answers with links
+
+Set `o.Assistant.CaseLinkTemplate` to where a case is on your site, as a path such as `/support/{caseId}`, and every
+case `get_my_cases` and `search_my_cases` return carries its `Link`; their descriptions tell the model to link to a case
+it mentions, in Markdown. Unset, the default, the assistant has no links to give.
+
+`SupportPanel` and `SupportCasesView` render the assistant's answers as Markdown with HTML off. **A link stays a link
+only when it is a path on your site**, such as `/support/abc`. Any other, to another host or with a scheme such as
+`javascript:`, is written out as its text and address: the model writes these, a member's own words can steer it, and a
+link off the site is how a steered answer would send somebody to a page that only looks like yours.
+
+### What it could not do, and how its answers were rated
+
+Whatever tools the host supplies, the assistant is also given `report_missing_skill`. When a member asks for
+something none of its tools can do, the model calls it with what was asked, in a few words, and then says it cannot
+help. What it reports comes back as `SupportAnswer.Gaps` and is kept on the case as `SupportCase.AssistantGaps`,
+whether it answered or declined: trimmed, at most 200 characters each, once each, the newest 20 per case.
+
+**The person answered rates each answer**, thumbs up or down, in the panel and on the support page; the same thumb
+again takes it back (`RateAnswerAsync`, with `SupportAnswerRating.None`). Only the person who raised the case may rate,
+because it is them the assistant answered, and only the assistant's answers can be rated. The rating is kept on the
+answer (`SupportMessage.Rating`), counted on the case (`AnswersRatedUp`, `AnswersRatedDown`), audited as
+`support:rate-answer`, and shown to support as a mark on the answer. **Rating is off by default**:
+`o.Blazor.Support.RateAnswers = true` puts the thumbs and the marks on the panel and the support page. Turned off
+again, ratings already given are kept.
+
+`SupportAssistantFeedbackView` lists all of it across every team for the people who build the assistant: what it could
+not do, the same thing asked in several cases as one entry, most asked first; and the cases with an answer rated not
+helpful, and helpful, newest first. Each case opens as on the desk. It reads through `GetCasesAcrossTeamsAsync`, so it
+needs `support:all:read`. `SupportAcrossTeamsView` marks a case with **The assistant could not help** (what it was
+shows on hover), **Rated not helpful** or **Rated helpful**. A store of your own keeps them by implementing
+`ISupportCaseStore.AddAssistantGapsAsync`, whose default keeps nothing, and `SetAnswerRatingAsync`, whose default
+throws.
 
 ### Running it
 
@@ -1269,16 +1308,24 @@ call it, so a host using `<SupportCasesView />` needs none of this.
 
 ### Watching the answer being written
 
-Pass an `IProgress<string>` and the answer is reported while the model writes it. `SupportPanel` and
-`SupportCasesView` do this, so the customer reads the answer as it is written instead of waiting for all of it:
+Pass an `IProgress<SupportAssistantProgress>` and you are told how far the assistant has got while it works: the answer
+as written so far, which **round** it is on, the **tools** running now, and every **service call** it has made.
+`SupportPanel` and `SupportCasesView` do this, so the customer reads the answer as it is written instead of waiting for
+all of it:
 
 ```csharp
-var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<string>(soFar => Show(soFar)));
+var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<SupportAssistantProgress>(p => Show(p.AnswerSoFar, p.Tools, p.Calls)));
 ```
 
-- **Until the first words arrive**, the assistant's side shows the same flashing dots as a person writing, read out as
-  `team.support.panel.working` in the panel and `team.support.cases.assistant.thinking` on the support page.
-- **Each report is the whole answer so far**, not the piece just added, so a report that is missed costs nothing.
+- **A round is one call to the model.** The model either writes or asks for tools; when their results go back, the next
+  round starts. An answer that looks something up takes two rounds or more, which the tool loop of
+  `UseFunctionInvocation` runs for you.
+- **Until the first words arrive**, the assistant's side says what it is doing, followed by flashing dots that stand
+  for the "…": "Working" (`team.support.panel.working` in the panel, `team.support.cases.assistant.thinking` on the
+  support page), then "Working 2" once it has gone round the tool loop twice, counting each time it asks for service
+  calls (`team.support.transcript.workingLoop`). A service call part way through the text is said the same way under it.
+- **Each report is the whole state**, the text so far included, not what changed, so a report that is missed costs
+  nothing.
 - **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
   it then. An answer that breaks off halfway is declined, and nothing that was shown on the way is kept.
 - **Only the caller sees it on the way.** Reports go to the progress you pass and nowhere else, never through
@@ -1288,6 +1335,29 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<strin
   as before. `ChatSupportResponder` streams through `IChatClient.GetStreamingResponseAsync`, tools included, and
   Neurolito and the Anthropic API both stream. A responder of your own answers in one piece and reports nothing,
   unless it implements the `ISupportResponder.AnswerAsync` overload that takes the progress.
+
+### What an answer took
+
+The calls the assistant made for an answer are kept with it, as `SupportMessage.AssistantCalls`: each tool's name and
+what it was asked for, written out short as `text: "export"`. So are the tokens the model reported, every round of the
+tool loop added up, as `SupportMessage.AssistantUsage` (input, output and total). The panel and the support page show
+them under the answer, folded as **2 service calls · 830 tokens**, opening to a row per call such as
+`search_my_cases(text: "export")` and **Tokens: 610 in, 220 out**.
+
+- **The tokens are the provider's own count**, read from what the tool loop returns in one piece, or added up from each
+  round's report when streamed. A provider that reports none leaves the usage empty rather than zero.
+
+- **Asked in one piece or streamed**, they are read from what the tool loop yields, so a host's own tools are listed
+  as well as the built-in ones. `report_missing_skill` is not: it notes what the assistant could not do, which is
+  listed on its own.
+- **They are bounded** like anything else the model writes: the first `SupportCaseLimits.MaxAssistantCalls` (20) of an
+  answer, each written out to at most `MaxAssistantCallArgumentsLength` (200) characters.
+- **What a call was asked for can hold words from the conversation**, such as what the member searched for, so it is
+  kept on the case and shown only where the case can be read. It is not audited.
+- **Who sees them** is the host's choice, `o.Blazor.Support.AnswerDetailsShownTo`: `Everyone`, the default; `Support`,
+  only whoever reads the case from the support side; or `Nobody`. They are kept either way.
+- **A responder of your own** lists its calls and tokens by returning them on `SupportAnswer.Calls` and
+  `SupportAnswer.Usage`.
 
 ### Settings
 
@@ -1314,19 +1384,50 @@ customer the assistant could not answer, beside **Talk to a person**, rather tha
 ## Is anybody on support
 
 ```csharp
-@inject ISupportPresence Presence      // resolve with GetService: absent when Slack is not configured
+@inject ISupportPresence Presence      // registered with the support cases; GetService still reads as "say nothing"
 ```
 
-`GetAsync` answers `Online`, `Away` or `Unknown`, from **who is active on the configured support channel** —
-so adding somebody to the channel is how they become support, and there is no second list to keep in step.
+`GetAsync` answers `Online`, `Away` or `Unknown`, from two sources, and is `Online` when either is:
+
+- **The support desk.** Put `<SupportDeskStatus />` on the page support works from. Each support person picks
+  **Online**, **Away** or **Hidden** there; it starts at Online the first time they open it, and keeps their choice in
+  the browser after that. Online counts only while they are active: answering a case, writing an answer, or using that
+  page, which reports at most once a minute. After `o.StaffIdleAfter` with nothing done, ten minutes by default, they
+  count as away until they act again. Hidden answers as usual and is not counted at all. Support is `Away` while
+  somebody chose Online or Away and nobody counts as online, and `Unknown` otherwise: while nobody has opened the desk
+  since the application started, and while everybody there chose Hidden.
+- **Slack**, where a support channel is configured: **who is active on that channel**, so adding somebody to the
+  channel is how they become support there, and there is no second list to keep in step.
 
 **`Unknown` must render as nothing, never as "offline".** Telling a customer not to bother when support is in
 fact there is worse than saying nothing, and unknown is what a rate limit, a network blip and an
-unconfigured workspace all produce. Three separate paths preserve that distinction: an unreadable channel
-keeps the previous roster rather than concluding support is empty, all-unknown presence stays unknown, and a
-transport failure is unknown rather than an error.
+unconfigured workspace all produce. In Slack, three separate paths preserve that distinction: an unreadable
+channel keeps the previous roster rather than concluding support is empty, all-unknown presence stays unknown, and
+a transport failure is unknown rather than an error.
 
 **Advisory, never a gate.** Nothing that raises a case may wait on this or be refused by it.
+
+Only the product's support staff are on the desk: `SetMyStaffStatusAsync`, `GetMyStaffStatusAsync` and
+`ReportStaffActivityAsync` refuse anybody who may not answer across teams (`support:all:manage`) or the cases with no
+team (`support:unassigned:manage`), and `SupportDeskStatus` shows them nothing. Nothing about it is stored or audited.
+`Changed` is raised when somebody on the desk sets a status, goes idle or comes back, so a page showing presence
+follows it.
+
+> **The desk is in-process**, as typing is. On several instances, each knows only the support people connected to it,
+> so a member on another instance may read away while somebody could answer. That costs the member a notice, never a
+> refused question.
+
+### What members see
+
+The side panel's Support tab, and a conversation with a person on the support page, show **Support is online** or
+**Support will reply later**, and nothing while it is unknown or the assistant is answering.
+
+When a member's message to a person has waited a minute with no answer, the conversation says **nobody has answered
+yet, and we will get back to you here**; while support is away, it says so at once. It is not shown while somebody
+from support is writing, goes when support answers, and is stored nowhere: it is worked out from the conversation and
+the clock, so it comes back on a reload. `NoAnswerAfter` on `SupportPanel` and `SupportCasesView` changes the minute.
+
+### Slack presence
 
 **It is cached, and it has to be.** Slack rate-limits `users.getPresence`, and it is per user — so asking
 about a channelful of people on every render is how a deployment gets throttled. The channel roster is

@@ -32,6 +32,19 @@
     white-space: nowrap;
 }
 
+/* Before the dots, which stand for the "…" it would otherwise end with. */
+.support-typing__label--shown {
+    order: -1;
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+    margin-right: 0.25rem;
+    font-size: 0.8125rem;
+    color: var(--rz-text-secondary-color);
+}
+
 @keyframes support-typing-flash {
     0%, 80%, 100% {
         opacity: 0.25;

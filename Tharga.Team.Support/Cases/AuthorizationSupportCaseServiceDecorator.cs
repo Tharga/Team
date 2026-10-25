@@ -45,20 +45,35 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.RaiseCaseAsync(teamKey, subject, body, assistance, cancellationToken);
     }
 
-    /// <remarks>Authorized as replying is — the answer lands in the transcript exactly as a reply does.</remarks>
+    /// <remarks>Authorized as replying is — the answer lands in the transcript exactly as a reply does — and run only for the person who raised the case.</remarks>
     public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "answer", CaseAccessKind.Write);
+        if (!await AsksForThemselvesAsync(teamKey, caseId)) return false;
 
         return await inner.RunAssistantAsync(teamKey, caseId, cancellationToken);
     }
 
     /// <remarks>Authorized as the run without reports: whoever may have the assistant answer may watch it write.</remarks>
-    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default)
+    public async Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "answer", CaseAccessKind.Write);
+        if (!await AsksForThemselvesAsync(teamKey, caseId)) return false;
 
-        return await inner.RunAssistantAsync(teamKey, caseId, answerSoFar, cancellationToken);
+        return await inner.RunAssistantAsync(teamKey, caseId, progress, cancellationToken);
+    }
+
+    /// <remarks>
+    /// <b>The assistant answers only the person who raised the case.</b> Its tools read with the caller's rights, and
+    /// its answer is kept where everybody who reads the case sees it. Run by a teammate or by support, with wider
+    /// rights than the author, it could quote what the author may not see. Nothing is done rather than refused, as
+    /// for every other case the assistant has no answer for.
+    /// </remarks>
+    private async Task<bool> AsksForThemselvesAsync(string teamKey, string caseId)
+    {
+        var supportCase = await inner.GetCaseAsync(teamKey, caseId);
+
+        return supportCase != null && supportCase.AuthorIdentity == await authorizer.GetSubjectAsync();
     }
 
     /// <remarks>Authorized as replying is: whoever may answer a case may decide who answers it.</remarks>
@@ -307,6 +322,16 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     /// write on that case, so it must be exactly as hard as reading it — a second check that merely resembles
     /// the first is how the two drift apart until one of them is wrong.
     /// </remarks>
+    /// <remarks>Read access, and then the author alone: it is them the assistant answered, so it is their verdict to give.</remarks>
+    public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "rate an answer in", CaseAccessKind.Read);
+        if (!await AsksForThemselvesAsync(teamKey, caseId))
+            throw new UnauthorizedAccessException($"Only the member who raised support case '{caseId}' may rate the assistant's answers in it.");
+
+        await inner.RateAnswerAsync(teamKey, caseId, sequence, rating, cancellationToken);
+    }
+
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "mark read", CaseAccessKind.Read);
@@ -321,6 +346,39 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         else await RequireCaseAccessAsync(teamKey, caseId, "write in", CaseAccessKind.Write);
 
         await inner.ReportTypingAsync(teamKey, caseId, asSupport, cancellationToken);
+    }
+
+    public async Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportStaffAsync("set a status on the support desk");
+
+        await inner.SetMyStaffStatusAsync(status, cancellationToken);
+    }
+
+    public async Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default)
+    {
+        await RequireSupportStaffAsync("read a status on the support desk");
+
+        return await inner.GetMyStaffStatusAsync(cancellationToken);
+    }
+
+    public async Task ReportStaffActivityAsync(CancellationToken cancellationToken = default)
+    {
+        await RequireSupportStaffAsync("report activity on the support desk");
+
+        await inner.ReportStaffActivityAsync(cancellationToken);
+    }
+
+    /// <remarks>
+    /// The product's support staff, whom members are told about: whoever may answer every team's cases, or the queue
+    /// of cases with no team. A team's own support readers answer their teammates and are not on the desk.
+    /// </remarks>
+    private async Task RequireSupportStaffAsync(string verb)
+    {
+        if (await HasCrossTeamAccessAsync(CaseAccessKind.Write) || await authorizer.HasSystemScopeAsync(SystemSupportScopes.Manage)) return;
+
+        throw new UnauthorizedAccessException(
+            $"Only support staff, who may answer across teams or the cases with no team, may {verb}.");
     }
 
     /// <remarks>Asking is never refused; somebody outside the team is simply told there is nothing to choose.</remarks>

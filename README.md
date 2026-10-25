@@ -431,6 +431,12 @@ with people. Add tools over your own product by implementing `ISupportAssistantT
 assistant or to support, in the same case the support page shows. The assistant's answer appears as the model
 writes it, and either side sees flashing dots while the other is writing.
 
+**What the assistant is doing, and whether support is there (4.4).** While it works the assistant says "Working 2" for
+each round of service calls, and under every answer it keeps what it took: the calls, with what each was asked for,
+and the tokens the model reported. It searches the member's own cases, links to them, and records what it was asked
+and could not do, for the people who build it. Support staff are Online, Away or Hidden on the desk, members see
+whether support is online, and a message nobody answers within a minute is told we will get back to them.
+
 **Support by mail is complete both ways (4.2).** Several mailboxes feed one support and a case is answered from
 the one it came in through; a sender whose DKIM-verified address belongs to one account in one team lands in that
 team, anything less waits unassigned with suggested teams; files and formatting survive both ways through one

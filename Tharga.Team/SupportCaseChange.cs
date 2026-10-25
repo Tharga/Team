@@ -29,5 +29,8 @@ public enum SupportCaseChange
     /// <summary>
     /// Whether an entry reached its channel changed: a bounce came back for it, or it was sent again.
     /// </summary>
-    DeliveryChanged
+    DeliveryChanged,
+
+    /// <summary>The person the assistant answered rated one of its answers, or took a rating back.</summary>
+    Rated
 }

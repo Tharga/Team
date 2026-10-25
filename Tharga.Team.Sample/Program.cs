@@ -279,6 +279,9 @@ builder.Services.AddThargaSupportCases(o =>
     o.SlackChannel = builder.Configuration["Slack:SupportChannel"];
     o.SigningSecret = builder.Configuration["Slack:SigningSecret"];
 
+    // Where SupportPage shows one case, so the assistant can link to the cases it mentions.
+    o.Assistant.CaseLinkTemplate = "/support/{caseId}";
+
     // The support mailbox, on the same terms as Slack: read from configuration, so it stays dormant with
     // nothing checked in and the wiring still resolves in the real application graph. With no host set,
     // no channel and no poller are registered at all.

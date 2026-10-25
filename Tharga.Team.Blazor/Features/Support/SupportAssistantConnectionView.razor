@@ -56,7 +56,7 @@
                     @* The hint is helper text, not a placeholder: inside a form field the placeholder is the floating label's. *@
                     <RadzenFormField Text="@_text[SupportAssistantConnectionViewText.ApiKey]" Variant="Variant.Outlined">
                         <ChildContent>
-                            <RadzenPassword @bind-Value="_apiKey" Disabled="_busy" AutoCompleteType="AutoCompleteType.Off" data-key />
+                            <RadzenPassword Value="@ShownKey" ValueChanged="@((string value) => KeyTyped(value))" Disabled="_busy" AutoCompleteType="AutoCompleteType.Off" data-key />
                         </ChildContent>
                         <Helper>
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-key-hint>
@@ -123,10 +123,27 @@
     private bool _permitted = true;
     private bool _busy;
 
+    /// <summary>
+    /// Shown in the key field while a stored key would be kept, so the field does not look empty. Never sent: no key
+    /// holds this character, and it is taken out of whatever is typed.
+    /// </summary>
+    internal const string StoredKeyMask = "••••••••••••";
+
+    private const char MaskCharacter = '•';
+
     /// <summary>A stored key is kept only for the provider and address it was entered for, as the service keeps it.</summary>
     private bool KeepsStoredKey => _connection.HasApiKey
                                    && _kind == _connection.Kind
                                    && string.Equals(Trimmed(_address), Trimmed(_connection.BaseAddress), StringComparison.OrdinalIgnoreCase);
+
+    private string ShownKey => _apiKey ?? (KeepsStoredKey ? StoredKeyMask : null);
+
+    /// <remarks>What is left once the mask is taken out is the new key; nothing left keeps the stored one.</remarks>
+    private void KeyTyped(string value)
+    {
+        var typed = (value ?? string.Empty).Replace(MaskCharacter.ToString(), string.Empty, StringComparison.Ordinal).Trim();
+        _apiKey = typed.Length == 0 ? null : typed;
+    }
 
     protected override async Task OnParametersSetAsync()
     {

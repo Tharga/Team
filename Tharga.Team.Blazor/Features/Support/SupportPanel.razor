@@ -62,6 +62,14 @@
                     </div>
                 </div>
 
+                @* Only towards a person: the assistant is always there. *@
+                @if (_support && _presence?.State is SupportPresenceState.Online or SupportPresenceState.Away)
+                {
+                    <div class="support-panel__presence">
+                        <SupportPresenceIndicator State="@_presence.State" />
+                    </div>
+                }
+
                 @if (_earlierOpen)
                 {
                     <div class="support-panel__earlier" data-earlier-list>
@@ -94,7 +102,24 @@
                             }
                             else
                             {
-                                <RadzenMarkdown Text="@message.Text" AllowHtml="false" />
+                                <RadzenMarkdown Text="@SupportAnswerLinks.SiteOnly(message.Text)" AllowHtml="false" />
+                                @if (_display.AnswerDetailsShownTo == SupportAnswerDetailsAudience.Everyone)
+                                {
+                                    <SupportAnswerDetails Sequence="@message.Sequence" Calls="@message.Calls" Usage="@message.Usage" />
+                                }
+                                @if (message.ByAssistant && _display.RateAnswers)
+                                {
+                                    <div class="support-panel__rate" data-rate="@message.Sequence">
+                                        @foreach (var choice in Ratings)
+                                        {
+                                            var label = _text[choice == SupportAnswerRating.Up ? SupportTranscriptText.Helpful : SupportTranscriptText.NotHelpful];
+                                            <button type="button" class="support-panel__rate-pick" title="@label" aria-label="@label"
+                                                    aria-pressed="@(message.Rating == choice ? "true" : "false")" @onclick="@(() => RateAsync(message, choice))" data-rate-choice="@choice">
+                                                <RadzenIcon Icon="@(choice == SupportAnswerRating.Up ? "thumb_up" : "thumb_down")" />
+                                            </button>
+                                        }
+                                    </div>
+                                }
                             }
                         </div>
                     }
@@ -106,21 +131,29 @@
                         </div>
                     }
 
+                    @if (NoAnswerShows)
+                    {
+                        <div class="support-panel__msg support-panel__msg--them support-panel__msg--notice" role="status" data-no-answer>
+                            @_text[_presence.State == SupportPresenceState.Away ? SupportTranscriptText.NoAnswerAway : SupportTranscriptText.NoAnswerYet]
+                        </div>
+                    }
+
                     @if (_declined && _withAssistant && !_busy)
                     {
                         <div class="support-panel__msg support-panel__msg--them" data-declined>@_text[SupportCasesViewText.AssistantDeclined]</div>
                     }
 
-                    @if (_busy && !string.IsNullOrEmpty(_answerSoFar))
+                    @if (_busy && !string.IsNullOrEmpty(_progress?.AnswerSoFar))
                     {
                         <div class="support-panel__msg support-panel__msg--them" aria-busy="true" data-answer-so-far>
-                            <RadzenMarkdown Text="@_answerSoFar" AllowHtml="false" />
+                            <RadzenMarkdown Text="@SupportAnswerLinks.SiteOnly(_progress.AnswerSoFar)" AllowHtml="false" />
+                            @Step
                         </div>
                     }
                     else if (_busy)
                     {
                         <div class="support-panel__msg support-panel__msg--them" data-working>
-                            <SupportTypingDots Label="@_text[SupportPanelText.Working]" />
+                            <SupportTypingDots Label="@SupportAssistantSteps.Describe(_text, _progress, _text[SupportPanelText.Working])" ShowLabel="true" />
                         </div>
                     }
                 </div>
@@ -176,9 +209,16 @@
     /// <summary>Where the open state and the width are remembered in the browser; one panel per key.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Panel";
 
-    private sealed record PanelMessage(bool FromMe, string Text);
+    /// <summary>How long a message to a person waits for an answer before the member is told we will get back to them. Defaults to 60 seconds; while support is away they are told at once.</summary>
+    [Parameter] public TimeSpan NoAnswerAfter { get; set; } = SupportNoAnswerWatch.DefaultAfter;
+
+    private sealed record PanelMessage(bool FromMe, string Text, int Sequence = 0, bool ByAssistant = false, SupportAnswerRating Rating = SupportAnswerRating.None, SupportAssistantCall[] Calls = null,
+        SupportAssistantUsage Usage = null);
+
+    private static readonly SupportAnswerRating[] Ratings = [SupportAnswerRating.Up, SupportAnswerRating.Down];
 
     private TextSet _text = TextSet.Empty;
+    private SupportDisplayOptions _display = new();
     private readonly List<PanelMessage> _messages = [];
     private List<SupportCase> _earlier = [];
     private ISupportPanelAvailability _availability;
@@ -187,7 +227,9 @@
     private SupportAttention _attention;
     private SupportTypingWatch _typing;
     private SupportTypingReporter _reporter;
-    private string _answerSoFar;
+    private SupportPresenceWatch _presence;
+    private SupportNoAnswerWatch _noAnswer;
+    private SupportAssistantProgress _progress;
     private ElementReference _resizeHandle;
     private ElementReference _log;
     private bool _resizeWired;
@@ -220,17 +262,34 @@
         }
     </button>;
 
+    // Under text already written, when the model looks something up part way through.
+    private RenderFragment Step => SupportAssistantSteps.Running(_text, _progress) is not { } step
+        ? null
+        : @<span class="support-panel__step" data-step><SupportTypingDots Label="@step" ShowLabel="true" /></span>;
+
     private string WhoClass(bool support) => support == _support ? "support-panel__who-pick support-panel__who-pick--on" : "support-panel__who-pick";
+
+    // Not while somebody from support is writing: an answer is on its way.
+    private bool NoAnswerShows => _caseId != null && !_withAssistant && !_busy && (_typing?.Writing.Length ?? 0) == 0
+                                  && _noAnswer?.Shows(_presence?.State ?? SupportPresenceState.Unknown) == true;
+
+    protected override void OnParametersSet()
+    {
+        if (_noAnswer != null) _noAnswer.After = NoAnswerAfter;
+    }
 
     protected override async Task OnInitializedAsync()
     {
         _width = DefaultWidth;
+        _display = SupportDisplay.Of(Services);
         _text = await TextProvider.ResolveAsync(SupportPanelText.All);
-        _availability = Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
+        _availability =Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
 
         var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
         _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, OnWritingChanged);
         _reporter = new SupportTypingReporter(SupportCases, time);
+        _presence = new SupportPresenceWatch(Services.GetService(typeof(ISupportPresence)) as ISupportPresence, InvokeAsync, StateHasChanged);
+        _noAnswer = new SupportNoAnswerWatch(time, OnNoAnswerDue) { After = NoAnswerAfter };
 
         Notifier.CaseUpdated += OnCaseUpdated;
         TeamState.SelectedTeamChangedEvent += OnSelectedTeamChanged;
@@ -252,6 +311,7 @@
         _teamKey = (await TeamState.GetSelectedTeamAsync())?.Key;
         await ReadOfferedAsync();
         await ReadUnreadAsync();
+        await _presence.ReadAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -288,6 +348,7 @@
     public async Task OnResized(int width)
     {
         _width = Math.Max(MinimumWidth, width);
+        StateHasChanged();
         await SaveAsync(WidthKey, _width);
     }
 
@@ -368,6 +429,7 @@
     private Task StartNewAsync()
     {
         _typing?.Follow(null, null, null, authorOnRight: true);
+        _noAnswer?.Clear();
         _caseId = null;
         _withAssistant = false;
         _declined = false;
@@ -407,6 +469,7 @@
         if (_caseId == null || _teamKey == null)
         {
             _typing?.Follow(null, null, null, authorOnRight: true);
+            _noAnswer?.Clear();
             _messages.Clear();
             return;
         }
@@ -423,10 +486,12 @@
         _messages.Clear();
         _messages.AddRange((page?.Items ?? [])
             .Where(x => x.Kind != SupportMessageKind.System)
-            .Select(x => new PanelMessage(x.Kind == SupportMessageKind.User && !x.AsSupport && x.AuthorIdentity == supportCase.AuthorIdentity, x.Body)));
+            .Select(x => new PanelMessage(x.Kind == SupportMessageKind.User && !x.AsSupport && x.AuthorIdentity == supportCase.AuthorIdentity, x.Body,
+                x.Sequence, x.Kind == SupportMessageKind.Assistant, x.Rating, x.AssistantCalls, x.AssistantUsage)));
 
         _withAssistant = supportCase.AssistantState == SupportAssistantState.Active;
         if (adoptWhoAnswers) _support = !_withAssistant;
+        _noAnswer?.Follow(page?.Items, supportCase.AuthorIdentity);
 
         // The panel shows only the member's own cases, so they are the author, on the right.
         _typing?.Follow(_teamKey, _caseId, supportCase.AuthorIdentity, authorOnRight: true);
@@ -458,6 +523,23 @@
         if (_typing?.Writing.Length > 0) _scrollOnRender = true;
         StateHasChanged();
     });
+
+    /// <remarks>The same rating again takes it back. A rating the service refuses changes nothing on screen.</remarks>
+    private async Task RateAsync(PanelMessage message, SupportAnswerRating choice)
+    {
+        var rating = message.Rating == choice ? SupportAnswerRating.None : choice;
+
+        try
+        {
+            await SupportCases.RateAnswerAsync(_teamKey, _caseId, message.Sequence, rating);
+
+            var index = _messages.IndexOf(message);
+            if (index >= 0) _messages[index] = message with { Rating = rating };
+        }
+        catch (Exception)
+        {
+        }
+    }
 
     private async Task OnKeyDownAsync(KeyboardEventArgs args)
     {
@@ -503,14 +585,14 @@
             if (!_support && _withAssistant)
             {
                 // Shown as the model writes it; what is kept is read back with the conversation.
-                var soFar = new SupportAnswerSoFar(InvokeAsync, ShowAnswerSoFar);
+                var relay = new SupportAssistantRelay(InvokeAsync, ShowProgress);
                 try
                 {
-                    _declined = !await SupportCases.RunAssistantAsync(_teamKey, _caseId, soFar);
+                    _declined = !await SupportCases.RunAssistantAsync(_teamKey, _caseId, relay);
                 }
                 finally
                 {
-                    soFar.End();
+                    relay.End();
                 }
             }
 
@@ -523,15 +605,22 @@
         finally
         {
             // Only now, so the answer being written gives way to the answer kept rather than to nothing.
-            _answerSoFar = null;
+            _progress = null;
             _busy = false;
             _scrollOnRender = true;
         }
     }
 
-    private void ShowAnswerSoFar(string text)
+    // Brought into view as a message would be.
+    private void OnNoAnswerDue() => _ = InvokeAsync(() =>
     {
-        _answerSoFar = text;
+        _scrollOnRender = true;
+        StateHasChanged();
+    });
+
+    private void ShowProgress(SupportAssistantProgress progress)
+    {
+        _progress = progress;
         _scrollOnRender = true;
         StateHasChanged();
     }
@@ -592,6 +681,8 @@
         Notifier.CaseUpdated -= OnCaseUpdated;
         TeamState.SelectedTeamChangedEvent -= OnSelectedTeamChanged;
         _typing?.Dispose();
+        _presence?.Dispose();
+        _noAnswer?.Dispose();
         if (_availability != null) _availability.Changed -= OnAvailabilityChanged;
         _self?.Dispose();
 

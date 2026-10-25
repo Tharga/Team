@@ -8,10 +8,10 @@ namespace Tharga.Team;
 /// customer expects — not whether they may ask. Nothing on the path that raises a case may wait on this or
 /// be refused by it.
 /// <para>
-/// <b>Registered only when a support channel and a bot token are configured</b>, so resolve it with
-/// <c>GetService</c> rather than <c>GetRequiredService</c>: absent is the ordinary state for a host that
-/// does not use Slack, and it means the same thing as <see cref="SupportPresenceState.Unknown"/> — say
-/// nothing.
+/// <b>Two sources</b>: the support desk, where each support person sets a <see cref="SupportStaffStatus"/>, and
+/// Slack, where a support channel is configured. Online when either says so. Registered with the support cases;
+/// resolve it with <c>GetService</c> rather than <c>GetRequiredService</c> all the same, because absent means the
+/// same thing as <see cref="SupportPresenceState.Unknown"/> — say nothing.
 /// </para>
 /// <para>
 /// <b>It lives here, with the contracts, rather than in the support package</b> for the same reason
@@ -29,6 +29,20 @@ public interface ISupportPresence
     /// configuration all come back as <see cref="SupportPresenceState.Unknown"/>.
     /// </remarks>
     Task<SupportPresenceState> GetAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Raised when the answer may have changed, so a page showing it asks again.
+    /// </summary>
+    /// <remarks>
+    /// Raised on whichever thread made the change: marshal with <c>InvokeAsync</c>, and unsubscribe in <c>Dispose</c>.
+    /// The toolkit's own raises it when somebody on the support desk sets a status, goes idle or comes back; Slack's
+    /// answer is read again when a page next asks. An implementation of your own need not raise it.
+    /// </remarks>
+    event EventHandler Changed
+    {
+        add { }
+        remove { }
+    }
 }
 
 /// <summary>

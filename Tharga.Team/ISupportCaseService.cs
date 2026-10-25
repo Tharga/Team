@@ -108,26 +108,27 @@ public interface ISupportCaseService
     /// assistant is thinking.
     /// <para>
     /// Does nothing and returns <c>false</c> when the case has no assistant, when the customer has already
-    /// asked for a person, or when the host registered no responder. Every one of those is an ordinary state
-    /// rather than an error, so a caller can call this unconditionally.
+    /// asked for a person, when the host registered no responder, or when the caller is not the person who
+    /// raised the case: the assistant's tools read with the caller's rights, so it answers only its author.
+    /// Every one of those is an ordinary state rather than an error, so a caller can call this unconditionally.
     /// </para>
     /// </remarks>
     /// <returns>True when an answer was appended.</returns>
     Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Runs the assistant as <see cref="RunAssistantAsync(string, string, CancellationToken)"/> does, reporting its
-    /// answer as written so far to <paramref name="answerSoFar"/> while the model writes it.
+    /// Runs the assistant as <see cref="RunAssistantAsync(string, string, CancellationToken)"/> does, reporting to
+    /// <paramref name="progress"/> how far it has got: the round, the tools running, and the answer as written so far.
     /// </summary>
     /// <remarks>
-    /// <b>Only the caller sees the answer before it is kept.</b> Reports go to <paramref name="answerSoFar"/> and
+    /// <b>Only the caller sees the answer before it is kept.</b> Reports go to <paramref name="progress"/> and
     /// nowhere else, never through <see cref="ISupportCaseNotifier"/>, which carries no text and no authorization.
-    /// Everybody else reads the answer once it is appended. Each report is the whole text so far; a responder that
-    /// cannot stream reports nothing and answers in one piece. A report may arrive on another thread, so marshal
-    /// before touching component state.
+    /// Everybody else reads the answer once it is appended. Each report is the whole state, the text so far included;
+    /// a responder that cannot stream reports nothing and answers in one piece. A report may arrive on another thread,
+    /// so marshal before touching component state.
     /// </remarks>
     /// <returns>True when an answer was appended. When false, whatever was reported was not kept.</returns>
-    Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<string> answerSoFar, CancellationToken cancellationToken = default);
+    Task<bool> RunAssistantAsync(string teamKey, string caseId, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Whether the assistant can answer for this team, and if not, why.
@@ -227,6 +228,15 @@ public interface ISupportCaseService
     Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Rates one of the assistant's answers in this case, or takes a rating back with <see cref="SupportAnswerRating.None"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the person who raised the case rates, because it is them the assistant answered; anybody else is refused.
+    /// Only an answer by the assistant can be rated. The case counts its ratings, for the people who build the assistant.
+    /// </remarks>
+    Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Says the caller is writing in this case right now, so whoever is reading it on the other side sees an answer coming.
     /// </summary>
     /// <remarks>
@@ -236,6 +246,30 @@ public interface ISupportCaseService
     /// one follows.
     /// </remarks>
     Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sets whether the caller, on the support desk, is shown to members as there to answer.
+    /// </summary>
+    /// <remarks>
+    /// For the product's support staff: a caller who may answer across teams or the queue of cases with no team; anybody
+    /// else is refused. Setting it counts as acting in support. Kept in-process and stored nowhere, so it is not audited,
+    /// and it is forgotten when the application restarts. Members see the outcome through <see cref="ISupportPresence"/>.
+    /// </remarks>
+    Task SetMyStaffStatusAsync(SupportStaffStatus status, CancellationToken cancellationToken = default);
+
+    /// <summary>The caller's status on the support desk, or <c>null</c> when they have set none since the application started.</summary>
+    /// <remarks>Authorized as <see cref="SetMyStaffStatusAsync"/> is.</remarks>
+    Task<SupportStaffStatus?> GetMyStaffStatusAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Says the caller is at work on support right now, so their <see cref="SupportStaffStatus.Online"/> keeps counting.
+    /// </summary>
+    /// <remarks>
+    /// Authorized as <see cref="SetMyStaffStatusAsync"/> is. Answering a case and writing as support count as well, without
+    /// calling this. Online counts as away once the caller has done nothing in support for the host's idle time, ten
+    /// minutes by default, and counts again with the next thing they do.
+    /// </remarks>
+    Task ReportStaffActivityAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// How many of the caller's own cases hold entries they have not read. What a per-user indicator shows.
