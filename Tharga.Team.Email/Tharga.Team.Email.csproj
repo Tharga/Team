@@ -49,14 +49,9 @@
       Parses mail HTML for its plain-text rendering, for where a reply's quoted history begins, and for the images
       an HTML body names. Referenced here rather than taken through the sanitizer's dependency, because the
       transport uses it on its own account and has to keep doing so if it is lifted out.
-
-      HELD at 1.8.5 (2026-10-25, Tharga/Team#390). 1.8.6 makes IHtmlSelectElement.SelectedIndex settable, and bUnit
-      2.12.5 (latest) wraps that interface without the setter, so every bUnit test that finds an element throws
-      TypeLoadException: 314 of the Blazor tests here, and the tests of any consumer using bUnit with this package.
-      Lift together with a bUnit release built against 1.8.6 or later. 1.8.6 has no security fixes.
     -->
-    <PackageReference Include="AngleSharp" Version="1.8.5" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageReference Include="AngleSharp" Version="1.8.6" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     <!-- Mail to users protects its unsubscribe links with Data Protection and answers them on an ASP.NET route.
          Private, so it does not flow to a consumer taking this package for the transport alone. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" PrivateAssets="all" />
