@@ -116,7 +116,9 @@ Two rules follow from the sequence above, and both are easy to get wrong:
 - **Reads on `TeamManagementService` are enforced in the method bodies**, not by the `[RequireScope]`
   attributes on the interface. Those attributes are enforced by `ScopeProxy<T>`, which only applies when a
   service is registered through `AddTeamService` / `AddSystemService` — and the team facets are not. Adding a
-  read there and relying on the attribute gets you no enforcement.
+  read there and relying on the attribute gets you no enforcement — and a failing build. In this repo every
+  interface carrying the attribute must be registered behind the proxy or listed as checking access itself,
+  and every attributed method on a listed interface is called by a caller holding nothing and must refuse.
 
 The full rules, including the three service categories and what each is marked by, are in the
 [implementation guide](implementation-guide.md).

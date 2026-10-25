@@ -43,12 +43,15 @@ Branch `feature/scope-registration-check`, from `master` at `1fb6f14` (4.4.0).
   - The `userKey` sharp edge on the invitation response becomes a separate GitHub issue. Draft it for the
     user to review; it is not part of this PR.
   - Full suite green (Blazor 2296, Service 1474, the rest unchanged); warnings 14.
-- [~] 7. Docs:
+- [x] 7. Docs:
   - `RequireScopeAttribute` remarks.
   - `docs/articles/architecture.md`.
   - The implementation guide's note on plain `AddScoped`, if it needs a pointer.
-- [ ] 8. Full suite and the warning baseline (14).
-- [ ] 9. Notes: mark Plan 01 §3b done (option 1, with a pointer to this feature), and update the backlog's
+  - Remarks added to `RequireScopeAttribute`, and the guard is described in `architecture.md` ("Where
+    authorization actually happens"). The implementation guide already says the attribute alone enforces
+    nothing; the guard is internal to this repo, so consumers get no pointer.
+- [x] 8. Full suite and the warning baseline (14). Green and 14 (2026-10-25).
+- [~] 9. Notes: mark Plan 01 §3b done (option 1, with a pointer to this feature), and update the backlog's
       *Authorization guards* line so only §6b remains.
 
 ## Inventory
