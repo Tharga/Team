@@ -1,4 +1,4 @@
-using Bunit;
+﻿using Bunit;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Radzen;
@@ -66,9 +66,45 @@ public class UserNameDialogRenderTests : BunitContext
     }
 
     [Fact]
-    public void ATypedRename_IsSavedAtOnce_AndStaysHere()
+    public void TheDirectoryPart_IsFramedAndTitledEntra()
     {
         var view = Render();
+
+        Assert.Contains("Entra", view.Find("[data-directory] legend").TextContent);
+        Assert.NotNull(view.Find("[data-directory] [data-directory-name]"));
+    }
+
+    /// <summary>A directory that holds no real name has nothing to give, so the likely intent is to give it ours.</summary>
+    [Fact]
+    public void NoNameInTheDirectory_WritesOursThereByDefault()
+    {
+        var view = Render(currentName: "Ann Larsson", directoryName: "unknown");
+
+        Assert.True(view.FindComponent<RadzenCheckBox<bool>>().Instance.Value);
+        Assert.Empty(view.FindAll("button[data-use-directory-name]"));
+    }
+
+    [Fact]
+    public void ARealNameInTheDirectory_IsNotOverwrittenByDefault()
+    {
+        var view = Render(currentName: "Ann", directoryName: "Annie");
+
+        Assert.False(view.FindComponent<RadzenCheckBox<bool>>().Instance.Value);
+    }
+
+    /// <summary>Nothing to write without a real name here, so the box is not ticked for one.</summary>
+    [Fact]
+    public void NoNameHereEither_TicksNothing()
+    {
+        var view = Render(currentName: null, directoryName: "unknown");
+
+        Assert.False(view.FindComponent<RadzenCheckBox<bool>>().Instance.Value);
+    }
+
+    [Fact]
+    public void ATypedRename_IsSavedAtOnce_AndStaysHere()
+    {
+        var view = Render(directoryName: "Annie");
 
         view.Find("input[data-name]").Change("Ann Larsson");
         view.Find("button[data-save]").Click();

@@ -28,6 +28,8 @@
   - `UserNameDialogText` reuses the old keys `team.usersList.renameHelp` / `namePlaceholder`, so existing translations still apply. Seven unused keys left `UsersListViewText`.
   - The sample turns `WriteNameToDirectory` on.
   - Full suite green: Service 1532, Blazor 2331, Email 985, Support 814, MongoDB 468, Mcp 121, Entra 58, Support.Anthropic 12, Images 11. Warnings at the baseline (14).
+- [x] 7e. From user testing (2026-10-25): the directory's part of the dialog sits in a frame titled "Entra", and when Entra holds no real name the box starts ticked (still confirmed). "Use this name" was already hidden for `unknown`.
+  - Decision: the word "Entra" is one text, `UserNameDialogText.Directory`, used for the title and as `{0}` in every sentence naming the directory, so a host with another directory changes it in one place.
 - [~] 8. User tests in the sample app; then close-out (re-check NuGet, archive plan, remove `plan/`, PR).
   - The sample has the Entra client secret on this machine, so Verify shows, and it turns `o.Blazor.WriteNameToDirectory` on, so the dialog offers writing to Entra.
 

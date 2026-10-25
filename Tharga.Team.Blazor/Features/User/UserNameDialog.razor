@@ -7,7 +7,8 @@
 @*
     An administrator renames a user. When the directory is in use, the dialog reads the name it holds, so the
     name can be taken from there or, when the host allows it, written there. Both of those are confirmed first.
-    Closes with a UserNameDialogResult once something was saved, and with null otherwise.
+    Closes with a UserNameDialogResult once something was saved, and with null otherwise. When the directory holds
+    no real name, writing ours there is ticked from the start; it is still confirmed.
 *@
 <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
     @if (_pending == null)
@@ -20,41 +21,45 @@
 
             @if (ReadDirectory)
             {
-                @if (_reading)
-                {
-                    <RadzenText TextStyle="TextStyle.Caption" data-directory-reading>@_text[UserNameDialogText.ReadingDirectory]</RadzenText>
-                }
-                else if (_directoryError != null)
-                {
-                    <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall" AllowClose="false" data-directory-error>
-                        @_text.Format(UserNameDialogText.DirectoryReadFailed, _directoryError)
-                    </RadzenAlert>
-                }
-                else if (!DirectoryFound)
-                {
-                    <RadzenText TextStyle="TextStyle.Caption" data-directory-missing>@_text[UserNameDialogText.NotInDirectory]</RadzenText>
-                }
-                else
-                {
-                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="0.5rem">
-                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-directory-name>
-                            @_text.Format(UserNameDialogText.InDirectory, Shown(DirectoryName))
-                        </RadzenText>
-                        @if (CanUseDirectoryName)
+                <RadzenFieldset Text="@Directory" data-directory>
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem">
+                        @if (_reading)
                         {
-                            <RadzenButton Text="@_text[UserNameDialogText.UseThisName]" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
-                                          Disabled="@_busy" Click="@UseDirectoryName" data-use-directory-name />
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-directory-reading>@_text.Format(UserNameDialogText.ReadingDirectory, Directory)</RadzenText>
+                        }
+                        else if (_directoryError != null)
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall" AllowClose="false" data-directory-error>
+                                @_text.Format(UserNameDialogText.DirectoryReadFailed, Directory, _directoryError)
+                            </RadzenAlert>
+                        }
+                        else if (!DirectoryFound)
+                        {
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-directory-missing>@_text.Format(UserNameDialogText.NotInDirectory, Directory)</RadzenText>
+                        }
+                        else
+                        {
+                            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="0.5rem">
+                                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-directory-name>
+                                    @_text.Format(UserNameDialogText.InDirectory, Shown(DirectoryName))
+                                </RadzenText>
+                                @if (CanUseDirectoryName)
+                                {
+                                    <RadzenButton Text="@_text[UserNameDialogText.UseThisName]" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                  Disabled="@_busy" Click="@UseDirectoryName" data-use-directory-name />
+                                }
+                            </RadzenStack>
+
+                            @if (CanWriteToDirectory)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                                    <RadzenCheckBox TValue="bool" @bind-Value="@_writeToDirectory" Name="WriteToDirectory" Disabled="@(_busy || !HasNameToWrite)" data-write-to-directory />
+                                    <RadzenLabel Component="WriteToDirectory" Text="@_text.Format(UserNameDialogText.AlsoWriteToDirectory, Directory)" />
+                                </RadzenStack>
+                            }
                         }
                     </RadzenStack>
-
-                    @if (CanWriteToDirectory)
-                    {
-                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                            <RadzenCheckBox TValue="bool" @bind-Value="@_writeToDirectory" Name="WriteToDirectory" Disabled="@(_busy || !HasNameToWrite)" data-write-to-directory />
-                            <RadzenLabel Component="WriteToDirectory" Text="@_text[UserNameDialogText.AlsoWriteToDirectory]" />
-                        </RadzenStack>
-                    }
-                }
+                </RadzenFieldset>
             }
 
             <span class="validation-message" data-error>@_error</span>
@@ -72,17 +77,18 @@
             @if (_pending.RenamesHere)
             {
                 <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-change-here>
-                    @_text.Format(_pending.TakeFromDirectory ? UserNameDialogText.NameHereFromDirectory : UserNameDialogText.NameHere,
-                        Shown(_pending.Current), Shown(_pending.NewName))
+                    @(_pending.TakeFromDirectory
+                        ? _text.Format(UserNameDialogText.NameHereFromDirectory, Shown(_pending.Current), Shown(_pending.NewName), Directory)
+                        : _text.Format(UserNameDialogText.NameHere, Shown(_pending.Current), Shown(_pending.NewName)))
                 </RadzenText>
             }
             @if (_pending.WriteToDirectory)
             {
                 <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-change-directory>
-                    @_text.Format(UserNameDialogText.NameInDirectory, Shown(_pending.DirectoryName), Shown(_pending.NewName))
+                    @_text.Format(UserNameDialogText.NameInDirectory, Directory, Shown(_pending.DirectoryName), Shown(_pending.NewName))
                 </RadzenText>
                 <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall" AllowClose="false">
-                    @_text[UserNameDialogText.DirectoryWriteWarning]
+                    @_text.Format(UserNameDialogText.DirectoryWriteWarning, Directory)
                 </RadzenAlert>
             }
             <span class="validation-message" data-error>@_error</span>
@@ -118,6 +124,8 @@
     private string _error;
     private UserNameChange _pending;
 
+    private string Directory => _text[UserNameDialogText.Directory];
+
     private bool DirectoryFound => _verification?.Status is DirectoryUserStatus.Found or DirectoryUserStatus.Disabled;
     private string DirectoryName => DirectoryFound ? _verification.DirectoryName : null;
 
@@ -138,6 +146,9 @@
         try
         {
             _verification = await UserManagementService.VerifyUserAsync(UserKey);
+
+            // A directory with no real name has nothing to offer here, so the likely intent is to give it ours.
+            _writeToDirectory = CanWriteToDirectory && DirectoryNames.IsPlaceholder(DirectoryName) && HasNameToWrite;
         }
         catch (Exception e)
         {
