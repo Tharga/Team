@@ -110,6 +110,24 @@ public class SupportAssistantConnectionViewTests : BunitContext
         Assert.Equal(SupportAssistantConnectionViewText.ApiKeyPlaceholder.Default, view.Find("[data-key-hint]").TextContent.Trim());
     }
 
+    [Fact]
+    public void ThePlatformsModel_IsNamed_WhenItsClientSaysWhatItIs()
+    {
+        var view = Render(choices: AllChoices with { PlatformModel = "ollama, llama3" });
+
+        var platform = view.FindComponents<RadzenRadioButtonListItem<SupportAiConnectionKind>>().First(x => x.Instance.Value == SupportAiConnectionKind.Platform);
+        Assert.Equal("The platform's model (ollama, llama3)", platform.Instance.Text);
+    }
+
+    [Fact]
+    public void ThePlatformsModel_IsNotNamed_WhenItsClientSaysNothing()
+    {
+        var view = Render();
+
+        var platform = view.FindComponents<RadzenRadioButtonListItem<SupportAiConnectionKind>>().First(x => x.Instance.Value == SupportAiConnectionKind.Platform);
+        Assert.Equal(SupportAssistantConnectionViewText.KindPlatform.Default, platform.Instance.Text);
+    }
+
     /// <summary>With both providers offered, each starts from its own address, not the other's.</summary>
     [Fact]
     public async Task ChoosingAnthropic_StartsFromAnthropicsAddress()

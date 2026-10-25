@@ -15,6 +15,9 @@ public static class SupportAssistantConnectionViewText
     /// <summary>The platform's model, chosen by the team or by default.</summary>
     public static readonly TextKey KindPlatform = new("team.support.assistant.connection.kind.platform", "The platform's model");
 
+    /// <summary>The platform's model, named as its client reports it: <c>{0}</c> is the provider and the model, such as "ollama, llama3".</summary>
+    public static readonly TextKey KindPlatformNamed = new("team.support.assistant.connection.kind.platformNamed", "The platform's model ({0})");
+
     /// <summary>The team's own Neurolito account.</summary>
     public static readonly TextKey KindNeurolito = new("team.support.assistant.connection.kind.neurolito", "Neurolito, with the team's own key");
 
@@ -66,7 +69,7 @@ public static class SupportAssistantConnectionViewText
     /// <summary>Every key the component renders, for building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, Explanation, ChangedBy, KindPlatform, KindNeurolito, KindAnthropic, KindOff, Address, ApiKey, ApiKeyPlaceholder,
+        Title, Explanation, ChangedBy, KindPlatform, KindPlatformNamed, KindNeurolito, KindAnthropic, KindOff, Address, ApiKey, ApiKeyPlaceholder,
         ApiKeyStored, LoadModels, Model, Test, TestReply, Save, Saved, Failed, SelectTeam, NotPermitted
     ];
 

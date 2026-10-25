@@ -10,6 +10,8 @@
 - [x] 4. Full build at the warning baseline (14). Full suite green: Service 1532, Blazor 2338, Email 985, Support 816, MongoDB 468, Mcp 121, Entra 58, Support.Anthropic 15, Images 11.
 - [x] 5. Docs: `support-cases.md` (the choice, the registration, the switch and the rename), the Support.Anthropic README and package description, the Support README (its "Planned" line was stale: usage per answer shipped in 4.4), the root README row, and the registration's XML docs. The sample uses the new name and its menu text names Anthropic.
   - Found on the way: the scripted edits of this session and #392 had given 17 files a byte-order mark they never had. Removed in its own `chore:` commit.
+- [x] 5b. From the user (2026-10-25): the page names the platform's model. `SupportAiConnectionChoices.PlatformModel`, from the `ChatClientMetadata` the registered client reports (`DescribePlatformModel`: provider and model, through a function-invocation wrapper); the Platform choice reads "The platform's model (ollama, llama3)". The sample's scripted client reports "Sample, scripted replies". Configuring the platform's model in the UI was not wanted.
+  - Also from the user: the desk status should gain Automatic, with Online staying online while idle. Filed as #393, not this branch.
 - [~] 6. Try it in the sample: Anthropic offered on the AI assistant page; with a real Anthropic key, load models, test, save.
 
 ## Last session

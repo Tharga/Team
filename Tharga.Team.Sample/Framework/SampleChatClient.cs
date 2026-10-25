@@ -165,7 +165,9 @@ internal sealed class SampleChatClient : IChatClient
 
     private static readonly TimeSpan WordDelay = TimeSpan.FromMilliseconds(60);
 
-    public object GetService(Type serviceType, object serviceKey = null) => null;
+    /// <summary>Says what it is, the way a real client does, so the AI assistant page can name the platform's model.</summary>
+    public object GetService(Type serviceType, object serviceKey = null)
+        => serviceType == typeof(ChatClientMetadata) ? new ChatClientMetadata("Sample", null, "scripted replies") : null;
 
     public void Dispose()
     {

@@ -60,6 +60,44 @@ public class SupportAiConnectionServiceTests
         Assert.Equal(AnthropicAddress, stored.BaseAddress);
     }
 
+    /// <summary>The page says which model "the platform's model" is, as far as its client tells.</summary>
+    [Fact]
+    public async Task TheChoices_NameThePlatformsModel()
+    {
+        var (service, _, _, _) = Build(platformModelName: "ollama, llama3");
+
+        Assert.Equal("ollama, llama3", (await service.GetChoicesAsync(TeamA)).PlatformModel);
+    }
+
+    [Theory]
+    [InlineData("ollama", "llama3", "ollama, llama3")]
+    [InlineData(null, "llama3", "llama3")]
+    [InlineData("ollama", null, "ollama")]
+    [InlineData(null, null, null)]
+    public void ThePlatformsModel_IsDescribedFromWhatItsClientReports(string provider, string model, string expected)
+    {
+        var client = new DescribedChatClient(new ChatClientMetadata(provider, null, model));
+
+        Assert.Equal(expected, SupportAiConnectionService.DescribePlatformModel(client));
+    }
+
+    /// <summary>A client that reports nothing about itself, or no client at all, is simply not named.</summary>
+    [Fact]
+    public void AClientThatSaysNothing_IsNotDescribed()
+    {
+        Assert.Null(SupportAiConnectionService.DescribePlatformModel(new DescribedChatClient(null)));
+        Assert.Null(SupportAiConnectionService.DescribePlatformModel(null));
+    }
+
+    /// <summary>The usual registration wraps the client for function calls; the description comes through the wrapper.</summary>
+    [Fact]
+    public void AWrappedClient_IsDescribedByTheOneInside()
+    {
+        var client = new DescribedChatClient(new ChatClientMetadata("ollama", null, "llama3")).AsBuilder().UseFunctionInvocation().Build();
+
+        Assert.Equal("ollama, llama3", SupportAiConnectionService.DescribePlatformModel(client));
+    }
+
     [Fact]
     public async Task WithoutAPlatformModel_ItIsNotOffered()
     {
@@ -342,7 +380,8 @@ public class SupportAiConnectionServiceTests
         bool platformModel = true,
         bool withFactory = true,
         FakeFactory factory = null,
-        InMemoryConnectionStore store = null)
+        InMemoryConnectionStore store = null,
+        string platformModelName = null)
     {
         var claims = new List<Claim>
         {
@@ -359,7 +398,7 @@ public class SupportAiConnectionServiceTests
 
         var service = new AuditingSupportAiConnectionServiceDecorator(
             new AuthorizationSupportAiConnectionServiceDecorator(
-                new SupportAiConnectionService(store, new EphemeralDataProtectionProvider(), authorizer, TimeProvider.System, platformModel, withFactory ? factory : null),
+                new SupportAiConnectionService(store, new EphemeralDataProtectionProvider(), authorizer, TimeProvider.System, platformModel, withFactory ? factory : null, platformModelName),
                 authorizer),
             new CompositeAuditLogger([sink], Options.Create(new AuditOptions())),
             new AuditEntryFactory(null));
@@ -382,6 +421,14 @@ public class SupportAiConnectionServiceTests
 
         public Task<bool> DeleteForTeamAsync(string teamKey, CancellationToken cancellationToken = default)
             => Task.FromResult(_byTeam.Remove(teamKey));
+    }
+
+    private sealed class DescribedChatClient(ChatClientMetadata metadata) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public object GetService(Type serviceType, object serviceKey = null) => serviceType == typeof(ChatClientMetadata) ? metadata : null;
+        public void Dispose() { }
     }
 
     internal sealed class FakeFactory : ISupportChatClientFactory

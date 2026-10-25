@@ -27,7 +27,8 @@ internal sealed class SupportAiConnectionService(
     TeamAuthorizer authorizer,
     TimeProvider timeProvider,
     bool platformModelAvailable,
-    ISupportChatClientFactory factory = null) : ISupportAiConnectionService
+    ISupportChatClientFactory factory = null,
+    string platformModelName = null) : ISupportAiConnectionService
 {
     internal const string ProtectionPurpose = "Tharga.Team.Support.AiConnection.ApiKey.v1";
     internal const string TestPrompt = "Reply with one short sentence saying that you can answer.";
@@ -48,7 +49,24 @@ internal sealed class SupportAiConnectionService(
             SupportAiConnectionKind.Off
         ];
 
-        return Task.FromResult(new SupportAiConnectionChoices { Kinds = kinds, ProviderDefaults = [.. providers] });
+        return Task.FromResult(new SupportAiConnectionChoices
+        {
+            Kinds = kinds,
+            ProviderDefaults = [.. providers],
+            PlatformModel = platformModelAvailable ? platformModelName : null
+        });
+    }
+
+    /// <summary>
+    /// What the platform's model is, from the <see cref="ChatClientMetadata"/> its client reports: the provider and the
+    /// model, such as "ollama, llama3". Null when the client says neither, or there is none.
+    /// </summary>
+    /// <remarks>A client wrapped for function calls passes the question on to the one inside, so the usual registration is described.</remarks>
+    internal static string DescribePlatformModel(IChatClient client)
+    {
+        var metadata = client?.GetService<ChatClientMetadata>();
+        string[] parts = [.. new[] { metadata?.ProviderName, metadata?.DefaultModelId }.Where(x => !string.IsNullOrWhiteSpace(x))];
+        return parts.Length == 0 ? null : string.Join(", ", parts);
     }
 
     public async Task<SupportAiConnection> GetConnectionAsync(string teamKey, CancellationToken cancellationToken = default)

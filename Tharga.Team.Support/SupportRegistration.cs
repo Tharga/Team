@@ -77,7 +77,8 @@ public static class SupportRegistration
                     sp.GetRequiredService<TeamAuthorizer>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetService<IChatClient>() != null,
-                    sp.GetService<ISupportChatClientFactory>()),
+                    sp.GetService<ISupportChatClientFactory>(),
+                    SupportAiConnectionService.DescribePlatformModel(sp.GetService<IChatClient>())),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
