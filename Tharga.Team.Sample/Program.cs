@@ -219,8 +219,6 @@ builder.Services.AddThargaMcp(mcp =>
 // unauthorized, so the guard rejected them and took the site down. See the notes in TeamAccessInterceptor.
 builder.AddMongoDB();
 
-builder.Services.AddScoped<AppUserAdminService>();
-
 // Demo: per-team features. billing:manage and case:read are hidden for a team unless its name contains
 // "Billing" / "Case" — rename a team to switch them on. Registered after AddThargaTeam, so it replaces the
 // default all-visible provider.
