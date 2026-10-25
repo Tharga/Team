@@ -3,23 +3,18 @@ using Tharga.Team.Blazor.Features.User;
 namespace Tharga.Team.Blazor.Tests;
 
 /// <summary>
-/// What a verified row on the Users page offers when its name differs from the directory's: a badge, taking
-/// the directory name (never a placeholder), and writing this application's name (only with a real name and
-/// a directory link).
+/// When a verified row on the Users page shows that its name differs from the directory's. What can be done about
+/// it is the rename dialog's business, tested in <see cref="UserNameChangeTests"/> and <see cref="UserNameDialogRenderTests"/>.
 /// </summary>
 public class UserRowDirectoryNameTests
 {
-    private static UserViewModel Row(string storedName, string directoryName, DirectoryUserStatus? status = DirectoryUserStatus.Found, string directoryId = "oid-1")
-        => new() { Key = "u-1", StoredName = storedName, DirectoryStatus = status, DirectoryName = directoryName, DirectoryId = directoryId };
+    private static UserViewModel Row(string storedName, string directoryName, DirectoryUserStatus? status = DirectoryUserStatus.Found)
+        => new() { Key = "u-1", StoredName = storedName, DirectoryStatus = status, DirectoryName = directoryName, DirectoryId = "oid-1" };
 
     [Fact]
     public void Unverified_ShowsNothing()
     {
-        var row = Row("Daniel", null, status: null);
-
-        Assert.False(row.NameDiffersFromDirectory);
-        Assert.False(row.CanUseDirectoryName);
-        Assert.False(row.CanWriteNameToDirectory);
+        Assert.False(Row("Daniel", null, status: null).NameDiffersFromDirectory);
     }
 
     [Fact]
@@ -37,39 +32,22 @@ public class UserRowDirectoryNameTests
     }
 
     [Fact]
-    public void BothRealAndDifferent_OffersBothDirections()
+    public void BothRealAndDifferent_Shows()
     {
-        var row = Row("Daniel Bohlin", "Daniel");
-
-        Assert.True(row.NameDiffersFromDirectory);
-        Assert.True(row.CanUseDirectoryName);
-        Assert.True(row.CanWriteNameToDirectory);
+        Assert.True(Row("Daniel Bohlin", "Daniel").NameDiffersFromDirectory);
     }
 
     /// <summary>The case this exists for: Entra holds "unknown", this application holds the real name.</summary>
     [Fact]
-    public void DirectoryPlaceholder_OffersOnlyWriting()
+    public void DirectoryPlaceholder_Shows()
     {
-        var row = Row("Daniel Bohlin", "unknown");
-
-        Assert.True(row.NameDiffersFromDirectory);
-        Assert.False(row.CanUseDirectoryName);
-        Assert.True(row.CanWriteNameToDirectory);
+        Assert.True(Row("Daniel Bohlin", "unknown").NameDiffersFromDirectory);
     }
 
     [Fact]
-    public void NoLocalName_OffersOnlyTaking()
+    public void NoLocalName_Shows()
     {
-        var row = Row(null, "Daniel Bohlin");
-
-        Assert.True(row.CanUseDirectoryName);
-        Assert.False(row.CanWriteNameToDirectory);
-    }
-
-    [Fact]
-    public void Unlinked_CannotWrite()
-    {
-        Assert.False(Row("Daniel Bohlin", "unknown", directoryId: null).CanWriteNameToDirectory);
+        Assert.True(Row(null, "Daniel Bohlin").NameDiffersFromDirectory);
     }
 
     /// <summary>A user disabled in the directory still has a name there worth reconciling.</summary>

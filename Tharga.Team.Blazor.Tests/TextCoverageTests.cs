@@ -52,6 +52,7 @@ public class TextCoverageTests
         "Features/User/DirectoryOnlyUsersView.razor",
         "Features/User/UserIconDialog.razor",
         "Features/User/UserEmailDialog.razor",
+        "Features/User/UserNameDialog.razor",
         "Features/User/UserMailLogView.razor",
         "Features/Support/SupportAssistantConnectionView.razor",
         "Features/Support/SupportPanel.razor",

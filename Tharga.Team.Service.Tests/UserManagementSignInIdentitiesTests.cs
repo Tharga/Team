@@ -105,7 +105,7 @@ public class UserManagementSignInIdentitiesTests
         public IAsyncEnumerable<UserVerificationResult> VerifyAllAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<UserDeleteResult> DeleteUserAsync(string userKey, bool deleteFromDirectory = false, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task SetUserDisabledAsync(string userKey, bool disabled, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, bool writeToDirectory, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<ITeam>> GetOwnedTeamsAsync(string userKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public IAsyncEnumerable<DirectoryUser> GetDirectoryOnlyUsersAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }

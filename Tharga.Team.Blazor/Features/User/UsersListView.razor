@@ -82,8 +82,10 @@ else if (_loaded)
                         <span>@context.Name</span>
                         @if (_showDirectory && context.NameDiffersFromDirectory)
                         {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[UsersListViewText.BadgeNameDiffers]"
-                                         title="@NameDiffersTooltip(context)" />
+                            <span role="button" tabindex="0" style="cursor: pointer;" title="@NameDiffersTooltip(context)"
+                                  @onclick="@(() => RenameUserAsync(context))" data-name-differs>
+                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[UsersListViewText.BadgeNameDiffers]" />
+                            </span>
                         }
                     </RadzenStack>
                 </Template>
@@ -176,14 +178,6 @@ else if (_loaded)
                                 }
                                 <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionRename]" Value="@RenameAction" Icon="edit" />
                                 <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionChangeEmail]" Value="@ChangeEmailAction" Icon="alternate_email" />
-                                @if (_showDirectory && context.CanUseDirectoryName)
-                                {
-                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionUseDirectoryName]" Value="@UseDirectoryNameAction" Icon="download" />
-                                }
-                                @if (_showDirectory && _writeNameToDirectory && context.CanWriteNameToDirectory)
-                                {
-                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionWriteNameToDirectory]" Value="@WriteNameToDirectoryAction" Icon="upload" />
-                                }
                                 @if (_showAdminUpload)
                                 {
                                     <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionSetIcon]" Value="@SetIconAction" Icon="image" />
@@ -327,8 +321,6 @@ else
     private const string AuditAction = "audit";
     private const string DisableAction = "disable";
     private const string EnableAction = "enable";
-    private const string UseDirectoryNameAction = "use-directory-name";
-    private const string WriteNameToDirectoryAction = "write-name-to-directory";
 
     private string _currentUserKey;
     private bool _directoryIdStored;
@@ -634,12 +626,6 @@ else
             case AuditAction:
                 await OpenAuditLogAsync(user);
                 break;
-            case UseDirectoryNameAction:
-                await UseDirectoryNameAsync(user);
-                break;
-            case WriteNameToDirectoryAction:
-                await WriteNameToDirectoryAsync(user);
-                break;
             default:
                 await ActionInvoked.InvokeAsync(new UserRowAction(item.Value, user));
                 break;
@@ -665,45 +651,29 @@ else
     /// </summary>
     private async Task RenameUserAsync(UserViewModel user)
     {
-        var editedName = user.StoredName;
-
-        var confirmed = await DialogService.OpenAsync(_text.Format(UsersListViewText.RenameTitle, user.EMail ?? user.Name), ds =>
-            @<RadzenStack Gap="1rem">
-                <RadzenText TextStyle="TextStyle.Body2">
-                    @_text[UsersListViewText.RenameHelp]
-                </RadzenText>
-                <RadzenTextBox Value="@editedName" ValueChanged="@(v => editedName = v)" Placeholder="@_text[UsersListViewText.NamePlaceholder]" Style="width: 100%;" />
-                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" Gap="0.5rem">
-                    <RadzenButton Text="@_text[UsersListViewText.Save]" ButtonStyle="ButtonStyle.Primary" Click="@(_ => ds.Close(true))" />
-                    <RadzenButton Text="@_text[UsersListViewText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="@(_ => ds.Close(false))" />
-                </RadzenStack>
-            </RadzenStack>,
-            new DialogOptions { Width = "480px" });
-
-        if (confirmed is not true) return;
-
-        var trimmed = string.IsNullOrWhiteSpace(editedName) ? null : editedName.Trim();
-        if (trimmed == user.StoredName) return;
-
-        try
-        {
-            // Through the management service, not IUserService: this is the administrative rename, the
-            // only path that may also write the name back to the directory.
-            var result = await UserManagementService.SetUserNameAsync(user.Key, trimmed);
-            await LoadDataAsync();
-
-            // The local write succeeded — a directory failure is reported, never presented as a failed
-            // rename, because the name in this application really did change.
-            if (result?.DirectoryError != null)
+        var dialogResult = await DialogService.OpenAsync<UserNameDialog>(_text.Format(UsersListViewText.RenameTitle, user.EMail ?? user.Name),
+            new Dictionary<string, object>
             {
-                NotificationService.Notify(NotificationSeverity.Warning, _text[UsersListViewText.RenamedLocallyTitle],
-                    result.DirectoryError);
-            }
-        }
-        catch (Exception ex)
-        {
-            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.RenameFailed], ex.Message);
-        }
+                { nameof(UserNameDialog.UserKey), user.Key },
+                { nameof(UserNameDialog.CurrentName), user.StoredName },
+                { nameof(UserNameDialog.ReadDirectory), _showDirectory },
+                { nameof(UserNameDialog.AllowWriteToDirectory), _writeNameToDirectory }
+            },
+            new DialogOptions { Width = "520px", Resizable = true });
+
+        if (dialogResult is not UserNameDialogResult saved) return;
+
+        // The dialog read the directory, so the row's badge follows what it found rather than an older verification.
+        if (saved.Verification != null) ApplyVerification(user, saved.Verification);
+        await LoadDataAsync();
+
+        if (saved.TakenFromDirectory)
+            NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.NameTakenFromDirectory], saved.Name);
+        else if (saved.DirectoryUpdated)
+            NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.NameWrittenToDirectory], saved.Name);
+        else if (saved.DirectoryError != null)
+            // The rename here stood, so a directory failure is reported, never presented as a failed rename.
+            NotificationService.Notify(NotificationSeverity.Warning, _text[UsersListViewText.RenamedLocallyTitle], saved.DirectoryError);
     }
 
     /// <summary>Administrative edit of a user's <see cref="IUser.EMail"/>, which stays local to this application.</summary>
@@ -793,35 +763,6 @@ else
         => DirectoryNames.IsPlaceholder(user.DirectoryName)
             ? _text[UsersListViewText.NameDiffersPlaceholderTooltip]
             : _text.Format(UsersListViewText.NameDiffersTooltip, user.DirectoryName);
-
-    private async Task UseDirectoryNameAsync(UserViewModel user)
-    {
-        try
-        {
-            var name = await UserManagementService.UseDirectoryNameAsync(user.Key);
-            user.DirectoryName = name;
-            await LoadDataAsync();
-            NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.NameTakenFromDirectory], name);
-        }
-        catch (Exception ex)
-        {
-            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.NameSyncFailed], ex.Message);
-        }
-    }
-
-    private async Task WriteNameToDirectoryAsync(UserViewModel user)
-    {
-        try
-        {
-            await UserManagementService.WriteNameToDirectoryAsync(user.Key);
-            user.DirectoryName = user.StoredName?.Trim();
-            NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.NameWrittenToDirectory], user.DirectoryName);
-        }
-        catch (Exception ex)
-        {
-            NotificationService.Notify(NotificationSeverity.Error, _text[UsersListViewText.NameSyncFailed], ex.Message);
-        }
-    }
 
     /// <remarks>
     /// The self-check is repeated here for the same reason it is repeated in <see cref="DeleteUserAsync"/>:

@@ -1,12 +1,12 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Tharga.Team;
 using Tharga.Team.Service;
 
 namespace Tharga.Team.Service.Tests;
 
 /// <summary>
-/// Writing a corrected display name back to the directory. Opt-in, administrative-only, and never
-/// coupled to the local write — a directory outage must not stop a name being corrected here.
+/// Writing a corrected display name back to the directory. The host allows it, the caller asks for it on each
+/// rename, and it is never coupled to the local write — a directory outage must not stop a name being corrected here.
 /// </summary>
 public class UserNameDirectoryWriteBackTests
 {
@@ -58,13 +58,13 @@ public class UserNameDirectoryWriteBackTests
         return (sut, users, directory);
     }
 
-    /// <summary>Default off: the directory is never touched unless the host asked for it.</summary>
+    /// <summary>Default off: the directory is never touched unless the host allows it and the caller asks for it.</summary>
     [Fact]
-    public async Task OptionOff_WritesLocallyAndNeverCallsTheDirectory()
+    public async Task NotAsked_WritesLocallyAndNeverCallsTheDirectory()
     {
         var (sut, users, directory) = Build(writeNameToDirectory: false);
 
-        var result = await sut.SetUserNameAsync("user-1", "Real Name");
+        var result = await sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: false);
 
         Assert.Equal([("user-1", "Real Name")], users.Writes);
         Assert.Empty(directory.Writes);
@@ -72,16 +72,79 @@ public class UserNameDirectoryWriteBackTests
         Assert.Null(result.DirectoryError);
     }
 
+    /// <summary>The option only allows writing. A rename the caller did not ask to write stays local.</summary>
     [Fact]
-    public async Task OptionOn_WritesBothAndReportsSuccess()
+    public async Task OptionOn_NotAsked_WritesOnlyLocally()
     {
         var (sut, users, directory) = Build(writeNameToDirectory: true);
 
-        var result = await sut.SetUserNameAsync("user-1", "Real Name");
+        var result = await sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: false);
+
+        Assert.Equal([("user-1", "Real Name")], users.Writes);
+        Assert.Empty(directory.Writes);
+        Assert.False(result.DirectoryUpdated);
+    }
+
+    [Fact]
+    public async Task OptionOn_Asked_WritesBothAndReportsSuccess()
+    {
+        var (sut, users, directory) = Build(writeNameToDirectory: true);
+
+        var result = await sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: true);
 
         Assert.Equal([("user-1", "Real Name")], users.Writes);
         Assert.Equal([("oid-1", "Real Name")], directory.Writes);
         Assert.True(result.DirectoryUpdated);
+    }
+
+    /// <summary>Asking for a write the host has not allowed is refused before anything changes, here or there.</summary>
+    [Fact]
+    public async Task OptionOff_Asked_IsRefusedBeforeAnyWrite()
+    {
+        var (sut, users, directory) = Build(writeNameToDirectory: false);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: true));
+
+        Assert.Empty(users.Writes);
+        Assert.Empty(directory.Writes);
+    }
+
+    [Fact]
+    public async Task NoDirectory_Asked_IsRefusedBeforeAnyWrite()
+    {
+        var users = new FakeUserService(new FakeUser("user-1", "id-1", "oid-1"));
+        var sut = new UserManagementService(users, teamService: null, directoryService: null, writeNameToDirectory: true);
+
+        await Assert.ThrowsAsync<NotSupportedException>(() => sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: true));
+
+        Assert.Empty(users.Writes);
+    }
+
+    /// <summary>An unlinked user has no directory account to write to, so asking to write there cannot be honoured.</summary>
+    [Fact]
+    public async Task UnlinkedUser_Asked_IsRefusedBeforeAnyWrite()
+    {
+        var (sut, users, directory) = Build(writeNameToDirectory: true, directoryId: null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: true));
+
+        Assert.Empty(users.Writes);
+        Assert.Empty(directory.Writes);
+    }
+
+    /// <summary>Writing a placeholder would replace whatever the directory holds with nothing better.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("unknown")]
+    public async Task PlaceholderName_Asked_IsRefusedBeforeAnyWrite(string name)
+    {
+        var (sut, users, directory) = Build(writeNameToDirectory: true);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.SetUserNameAsync("user-1", name, writeToDirectory: true));
+
+        Assert.Empty(users.Writes);
+        Assert.Empty(directory.Writes);
     }
 
     /// <summary>
@@ -94,28 +157,11 @@ public class UserNameDirectoryWriteBackTests
         var (sut, users, directory) = Build(writeNameToDirectory: true);
         directory.ThrowOnWrite = new InvalidOperationException("Graph is unavailable");
 
-        var result = await sut.SetUserNameAsync("user-1", "Real Name");
+        var result = await sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: true);
 
         Assert.Equal([("user-1", "Real Name")], users.Writes);
         Assert.False(result.DirectoryUpdated);
         Assert.Contains("Graph is unavailable", result.DirectoryError);
-    }
-
-    /// <summary>
-    /// An unlinked user has no directory account to write to. That is the ordinary case, not a failure —
-    /// reporting it as an error would make every such rename look broken.
-    /// </summary>
-    [Fact]
-    public async Task UnlinkedUser_IsNotAnError()
-    {
-        var (sut, users, directory) = Build(writeNameToDirectory: true, directoryId: null);
-
-        var result = await sut.SetUserNameAsync("user-1", "Real Name");
-
-        Assert.Single(users.Writes);
-        Assert.Empty(directory.Writes);
-        Assert.False(result.DirectoryUpdated);
-        Assert.Null(result.DirectoryError);
     }
 
     /// <summary>A directory implementation that cannot write says so rather than silently accepting.</summary>
@@ -125,7 +171,7 @@ public class UserNameDirectoryWriteBackTests
         var users = new FakeUserService(new FakeUser("user-1", "id-1", "oid-1"));
         var sut = new UserManagementService(users, teamService: null, new ReadOnlyDirectory(), writeNameToDirectory: true);
 
-        var result = await sut.SetUserNameAsync("user-1", "Real Name");
+        var result = await sut.SetUserNameAsync("user-1", "Real Name", writeToDirectory: true);
 
         Assert.Single(users.Writes);
         Assert.Contains("does not implement", result.DirectoryError);

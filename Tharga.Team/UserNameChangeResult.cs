@@ -1,4 +1,4 @@
-namespace Tharga.Team;
+﻿namespace Tharga.Team;
 
 /// <summary>
 /// Result of <see cref="IUserManagementService.SetUserNameAsync"/>. The local write has always completed
@@ -12,7 +12,7 @@ namespace Tharga.Team;
 /// </param>
 /// <remarks>
 /// <see cref="DirectoryUpdated"/> false with no <see cref="DirectoryError"/> is the ordinary case: the
-/// write was never attempted, because <c>o.Blazor.WriteNameToDirectory</c> is off or the user is not
-/// linked to a directory account. That is not a failure and should not be reported as one.
+/// caller did not ask for the name to be written to the directory. That is not a failure and should not be
+/// reported as one. A write that was asked for and cannot be honoured is refused before the rename instead.
 /// </remarks>
 public sealed record UserNameChangeResult(bool DirectoryUpdated = false, string DirectoryError = null);

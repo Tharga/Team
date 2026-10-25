@@ -153,8 +153,8 @@ public record ThargaBlazorOptions : BlazorOptions
     public bool ThrowOnIncompleteTeamService { get; set; }
 
     /// <summary>
-    /// Write a display name back to the external directory when an administrator renames a user.
-    /// Default <c>false</c>.
+    /// Allow an administrator's rename to write the display name to the external directory as well. Default
+    /// <c>false</c>.
     /// </summary>
     /// <remarks>
     /// Which side owns display names is a per-host decision. A host federating from a corporate directory
@@ -162,6 +162,11 @@ public record ThargaBlazorOptions : BlazorOptions
     /// application that collects no attributes at sign-up is the opposite case — it holds the real name
     /// while the directory holds a placeholder, and the good name cannot reach anyone administering the
     /// tenant.
+    /// <para>
+    /// This allows the write; it does not make one. Each rename says whether it writes
+    /// (<see cref="IUserManagementService.SetUserNameAsync"/>'s <c>writeToDirectory</c>), and the rename dialog on the
+    /// Users page offers it as a box, unticked, confirmed before anything is written.
+    /// </para>
     /// <para>
     /// Applies to the <b>administrative</b> rename only. Self-service renaming stays local whatever this
     /// is set to: a user editing their own display name here should not silently rewrite the

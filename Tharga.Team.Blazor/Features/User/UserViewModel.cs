@@ -1,4 +1,4 @@
-namespace Tharga.Team.Blazor.Features.User;
+﻿namespace Tharga.Team.Blazor.Features.User;
 
 /// <summary>
 /// View model for a user row in the users list view.
@@ -49,13 +49,6 @@ public record UserViewModel
     public bool NameDiffersFromDirectory
         => DirectoryStatus is DirectoryUserStatus.Found or DirectoryUserStatus.Disabled
            && DirectoryNames.Differ(StoredName, DirectoryName);
-
-    /// <summary>The directory's name can be taken here — never a placeholder.</summary>
-    public bool CanUseDirectoryName => NameDiffersFromDirectory && !DirectoryNames.IsPlaceholder(DirectoryName);
-
-    /// <summary>This application's name can be written to the directory — linked, with a real name to write.</summary>
-    public bool CanWriteNameToDirectory
-        => NameDiffersFromDirectory && !DirectoryNames.IsPlaceholder(StoredName) && !string.IsNullOrEmpty(DirectoryId);
 
     /// <summary>
     /// When this user was disabled <i>in this application</i>, or null. Distinct from

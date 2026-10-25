@@ -162,18 +162,18 @@ public class AuthorizationUserManagementServiceDecoratorTests
     }
 
     [Fact]
-    public async Task WriteNameToDirectory_WithScope_Delegates()
+    public async Task SetUserName_WithScope_DelegatesTheDirectoryChoice()
     {
         var (sut, inner) = Build(WithScopes(SystemUserScopes.Manage));
-        await sut.WriteNameToDirectoryAsync("u-1");
-        await inner.Received(1).WriteNameToDirectoryAsync("u-1", Arg.Any<CancellationToken>());
+        await sut.SetUserNameAsync("u-1", "Ann", writeToDirectory: true);
+        await inner.Received(1).SetUserNameAsync("u-1", "Ann", true, Arg.Any<CancellationToken>());
     }
 
     [Fact]
-    public async Task WriteNameToDirectory_WithoutScope_Throws()
+    public async Task SetUserName_WithoutScope_Throws()
     {
         var (sut, inner) = Build(Anonymous());
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.WriteNameToDirectoryAsync("u-1"));
-        await inner.DidNotReceiveWithAnyArgs().WriteNameToDirectoryAsync(default, default);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.SetUserNameAsync("u-1", "Ann", writeToDirectory: false));
+        await inner.DidNotReceiveWithAnyArgs().SetUserNameAsync(default, default, default, default);
     }
 }

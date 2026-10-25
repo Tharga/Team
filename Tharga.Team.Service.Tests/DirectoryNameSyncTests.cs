@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Tharga.Team;
 using Tharga.Team.Service;
 
@@ -106,60 +106,16 @@ public class DirectoryNameSyncTests
         Assert.Equal([("u-1", "oid-9")], users.Relinks);
     }
 
-    [Fact]
-    public async Task WriteNameToDirectory_WritesTheLocalName()
-    {
-        var (sut, users, directory) = Build(new FakeUser("u-1", " Daniel Bohlin ", "oid-1"));
-
-        await sut.WriteNameToDirectoryAsync("u-1");
-
-        Assert.Equal([("oid-1", "Daniel Bohlin")], directory.NameWrites);
-        Assert.Empty(users.NameWrites);
-    }
-
-    /// <summary>The option is the host's statement that this application may write names to the directory.</summary>
-    [Fact]
-    public async Task WriteNameToDirectory_IsRefusedWhenTheOptionIsOff()
-    {
-        var (sut, _, directory) = Build(new FakeUser("u-1", "Daniel", "oid-1"), writeNameToDirectory: false);
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.WriteNameToDirectoryAsync("u-1"));
-        Assert.Empty(directory.NameWrites);
-    }
-
-    [Fact]
-    public async Task WriteNameToDirectory_IsRefusedForAnUnlinkedUser()
-    {
-        var (sut, _, directory) = Build(new FakeUser("u-1", "Daniel", null));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.WriteNameToDirectoryAsync("u-1"));
-        Assert.Empty(directory.NameWrites);
-    }
-
-    /// <summary>Pushing a placeholder would replace whatever the directory holds with nothing better.</summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("unknown")]
-    public async Task WriteNameToDirectory_IsRefusedWithoutARealLocalName(string localName)
-    {
-        var (sut, _, directory) = Build(new FakeUser("u-1", localName, "oid-1"));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.WriteNameToDirectoryAsync("u-1"));
-        Assert.Empty(directory.NameWrites);
-    }
-
     /// <summary>A host's own implementation written before these operations existed still compiles, and says what it lacks.</summary>
     [Fact]
     public async Task HostImplementation_WithoutNameSync_SaysWhatItDoesNotImplement()
     {
         IUserManagementService sut = new HostUserManagementWithoutNameSync();
 
-        var pull = await Assert.ThrowsAsync<NotSupportedException>(() => sut.UseDirectoryNameAsync("u-1"));
-        var push = await Assert.ThrowsAsync<NotSupportedException>(() => sut.WriteNameToDirectoryAsync("u-1"));
+        var e = await Assert.ThrowsAsync<NotSupportedException>(() => sut.UseDirectoryNameAsync("u-1"));
 
-        Assert.Contains(nameof(IUserManagementService.UseDirectoryNameAsync), pull.Message);
-        Assert.Contains(nameof(IUserManagementService.WriteNameToDirectoryAsync), push.Message);
-        Assert.Contains(nameof(HostUserManagementWithoutNameSync), push.Message);
+        Assert.Contains(nameof(IUserManagementService.UseDirectoryNameAsync), e.Message);
+        Assert.Contains(nameof(HostUserManagementWithoutNameSync), e.Message);
     }
 
     private sealed class HostUserManagementWithoutNameSync : IUserManagementService
@@ -168,7 +124,7 @@ public class DirectoryNameSyncTests
         public IAsyncEnumerable<UserVerificationResult> VerifyAllAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<UserDeleteResult> DeleteUserAsync(string userKey, bool deleteFromDirectory = false, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task SetUserDisabledAsync(string userKey, bool disabled, CancellationToken cancellationToken = default) => throw new NotImplementedException();
-        public Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+        public Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, bool writeToDirectory, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public Task<IReadOnlyList<ITeam>> GetOwnedTeamsAsync(string userKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
         public IAsyncEnumerable<DirectoryUser> GetDirectoryOnlyUsersAsync(CancellationToken cancellationToken = default) => throw new NotImplementedException();
     }

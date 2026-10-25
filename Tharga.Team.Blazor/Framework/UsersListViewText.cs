@@ -1,4 +1,4 @@
-namespace Tharga.Team.Blazor.Framework;
+﻿namespace Tharga.Team.Blazor.Framework;
 
 /// <summary>Localizable strings rendered by <c>UsersListView</c> — the Users tab of <c>UsersView</c>.</summary>
 /// <remarks>
@@ -35,8 +35,6 @@ public static class UsersListViewText
     public static readonly TextKey ActionEnable = new("team.usersList.actionEnable", "Enable");
     public static readonly TextKey ActionDisable = new("team.usersList.actionDisable", "Disable");
     public static readonly TextKey ActionDelete = new("team.usersList.actionDelete", "Delete");
-    public static readonly TextKey ActionUseDirectoryName = new("team.usersList.actionUseDirectoryName", "Use name from directory");
-    public static readonly TextKey ActionWriteNameToDirectory = new("team.usersList.actionWriteNameToDirectory", "Write name to directory");
 
     /// <summary>Badge on a verified row whose name differs from the directory's display name.</summary>
     public static readonly TextKey BadgeNameDiffers = new("team.usersList.badgeNameDiffers", "Name differs");
@@ -51,7 +49,6 @@ public static class UsersListViewText
 
     public static readonly TextKey NameTakenFromDirectory = new("team.usersList.nameTakenFromDirectory", "Name taken from the directory");
     public static readonly TextKey NameWrittenToDirectory = new("team.usersList.nameWrittenToDirectory", "Name written to the directory");
-    public static readonly TextKey NameSyncFailed = new("team.usersList.nameSyncFailed", "Could not update the name");
 
     /// <summary>Labels on the caller's own row, where the action is disabled.</summary>
     /// <remarks>
@@ -80,11 +77,7 @@ public static class UsersListViewText
     public static readonly TextKey ChangeEmailTitle = new("team.usersList.changeEmailTitle", "Change email — {0}");
     public static readonly TextKey AuditLogTitle = new("team.usersList.auditLogTitle", "Audit log — {0}");
 
-    public static readonly TextKey RenameHelp = new("team.usersList.renameHelp",
-        "This sets the user's name everywhere. Leave it empty to fall back to a name resolved from their email.");
-    public static readonly TextKey NamePlaceholder = new("team.usersList.namePlaceholder", "Name");
 
-    public static readonly TextKey Save = new("team.usersList.save", "Save");
     public static readonly TextKey Cancel = new("team.usersList.cancel", "Cancel");
 
     /// <summary>Notification detail after a disable/enable. <c>{0}</c> identifies the user.</summary>
@@ -95,7 +88,6 @@ public static class UsersListViewText
 
     public static readonly TextKey RenamedLocallyTitle = new("team.usersList.renamedLocallyTitle",
         "Renamed here, not in the directory");
-    public static readonly TextKey RenameFailed = new("team.usersList.renameFailed", "Rename failed");
     public static readonly TextKey VerificationFailed = new("team.usersList.verificationFailed", "Verification failed");
 
     public static readonly TextKey CannotDisableSelfTitle = new("team.usersList.cannotDisableSelfTitle",
@@ -188,14 +180,13 @@ public static class UsersListViewText
         ActionVerify, ActionRename, ActionChangeEmail, ActionSetIcon, ActionAuditLog, ActionEnable, ActionDisable, ActionDelete,
         ActionDisableSelf, ActionDeleteSelf, UserKey, CopyUserKey, Identity, CopyIdentity, DirectoryId,
         CopyDirectoryId, TeamMemberships, ColumnTeam, ShowThisTeam, ColumnRole, ColumnState, IconTitle,
-        RenameTitle, ChangeEmailTitle, AuditLogTitle, RenameHelp, NamePlaceholder, Save, Cancel, UserDisabledDetail,
-        UserEnabledDetail, RenamedLocallyTitle, RenameFailed, VerificationFailed,
+        RenameTitle, ChangeEmailTitle, AuditLogTitle, Cancel, UserDisabledDetail,
+        UserEnabledDetail, RenamedLocallyTitle, VerificationFailed,
         CannotDisableSelfTitle, CannotDisableSelfDetail, ConfirmDisable, ConfirmDisableTitle, UserDisabled,
         UserEnabled, CouldNotDisable, CouldNotEnable, DisabledTooltip, DisabledByTooltip,
         CannotDeleteSelfTitle, CannotDeleteSelfDetail, DeleteUserTitle, DeletedLocallyTitle,
         DirectoryDeleteIncomplete, UserDeleted, DeleteFailed, RemovedFromOneTeam, RemovedFromManyTeams,
-        RemovedFromOneTeamAndDirectory, RemovedFromManyTeamsAndDirectory, PagingSummary, ActionUseDirectoryName,
-        ActionWriteNameToDirectory, BadgeNameDiffers, NameDiffersTooltip, NameDiffersPlaceholderTooltip,
-        NameTakenFromDirectory, NameWrittenToDirectory, NameSyncFailed
+        RemovedFromOneTeamAndDirectory, RemovedFromManyTeamsAndDirectory, PagingSummary, BadgeNameDiffers, NameDiffersTooltip, NameDiffersPlaceholderTooltip,
+        NameTakenFromDirectory, NameWrittenToDirectory
     ];
 }

@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using Tharga.Team;
 
 namespace Tharga.Team.Service;
@@ -19,10 +19,10 @@ public sealed class AuthorizationUserManagementServiceDecorator : IUserManagemen
         _authorizer = authorizer;
     }
 
-    public async Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default)
+    public async Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, bool writeToDirectory, CancellationToken cancellationToken = default)
     {
         await RequireUsersManageAsync(nameof(SetUserNameAsync));
-        return await _inner.SetUserNameAsync(userKey, name, cancellationToken);
+        return await _inner.SetUserNameAsync(userKey, name, writeToDirectory, cancellationToken);
     }
 
     public async Task<UserEmailChangeResult> SetUserEmailAsync(string userKey, string email, CancellationToken cancellationToken = default)
@@ -35,12 +35,6 @@ public sealed class AuthorizationUserManagementServiceDecorator : IUserManagemen
     {
         await RequireUsersManageAsync(nameof(UseDirectoryNameAsync));
         return await _inner.UseDirectoryNameAsync(userKey, cancellationToken);
-    }
-
-    public async Task WriteNameToDirectoryAsync(string userKey, CancellationToken cancellationToken = default)
-    {
-        await RequireUsersManageAsync(nameof(WriteNameToDirectoryAsync));
-        await _inner.WriteNameToDirectoryAsync(userKey, cancellationToken);
     }
 
     public async Task<IReadOnlyList<ITeam>> GetOwnedTeamsAsync(string userKey, CancellationToken cancellationToken = default)

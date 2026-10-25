@@ -1,4 +1,4 @@
-# Feature: Directory name sync on the Users page
+﻿# Feature: Directory name sync on the Users page
 
 ## Goal
 When the Users page (`~/developer/user`, `UsersListView`) verifies users against the external directory
@@ -15,21 +15,23 @@ keeps the placeholder — or the reverse, when the name was corrected in the Ent
 - `DirectoryVerificationResult` carries the directory's display name (`DirectoryName`).
 - The Entra adapter fills it from the `displayName` it already selects.
 - A placeholder rule: a directory name that is empty or reads `unknown` (any case) is not a real name.
-- Two new operations on `IUserManagementService`, both `[RequireScope(SystemUserScopes.Manage)]`:
-  - `UseDirectoryNameAsync(userKey)` — re-reads the directory and sets the local name from it. Refused
-    when the directory name is a placeholder.
-  - `WriteNameToDirectoryAsync(userKey)` — writes the local name to the directory.
-  Both resolve the directory name server side; the client never supplies it.
-- Authorization and auditing decorators cover both operations.
-- `UsersListView`: after Verify / Verify all, a row whose name differs shows a "Name differs" badge with
-  the directory name in its tooltip, and the row's actions offer "Use name from directory" (hidden when
-  the directory name is a placeholder) and "Write name to directory".
+- `IUserManagementService.UseDirectoryNameAsync(userKey)` — re-reads the directory and sets the local name from
+  it. Refused when the directory name is a placeholder. The directory name is resolved server side.
+- **Breaking:** `IUserManagementService.SetUserNameAsync(userKey, name, bool writeToDirectory)`. The caller says on
+  every rename whether to write to the directory; `o.Blazor.WriteNameToDirectory` only allows it. A write that
+  cannot be honoured (option off, no directory, not linked, placeholder name) is refused before anything changes.
+- Authorization and auditing decorators cover both operations; the rename's audit records `directory.updated`.
+- `UsersListView`: after Verify / Verify all, a "Name differs" badge beside the name, with the directory name in
+  its tooltip. Rename, or a click on the badge, opens `UserNameDialog`: the name, the directory's name read
+  afresh with "Use this name", and "Also update the name in the directory" (shown when the option is on and the
+  user was found, unticked). Saving confirms first when the directory is involved.
 
 ## Acceptance criteria
 - Verify all marks every linked user whose local name differs from the directory name.
-- Pulling sets the local name and clears the mark; it is refused for a placeholder directory name.
-- Pushing writes the directory name and clears the mark.
-- A user without the `user:manage` scope cannot call either operation (decorator test).
+- Taking the directory's name sets the local name and clears the mark; it is refused for a placeholder.
+- Writing to the directory happens only when asked in that rename, after a confirmation, and clears the mark.
+- A rename that stays local is saved without a confirmation, as before.
+- A user without the `users:manage` scope cannot call either operation (decorator test).
 - Both operations are audited.
 - Full test suite passes.
 

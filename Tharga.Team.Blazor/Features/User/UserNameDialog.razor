@@ -1,0 +1,225 @@
+﻿@using Tharga.Team
+@using Tharga.Team.Blazor.Framework
+@inject IUserManagementService UserManagementService
+@inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
+
+@*
+    An administrator renames a user. When the directory is in use, the dialog reads the name it holds, so the
+    name can be taken from there or, when the host allows it, written there. Both of those are confirmed first.
+    Closes with a UserNameDialogResult once something was saved, and with null otherwise.
+*@
+<RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Style="height: 100%;">
+    @if (_pending == null)
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+            <RadzenText TextStyle="TextStyle.Body2">@_text[UserNameDialogText.Help]</RadzenText>
+
+            <RadzenTextBox @bind-Value="@_name" @bind-Value:after="@OnNameChanged" Placeholder="@_text[UserNameDialogText.Name]"
+                           Disabled="@_busy" Style="width: 100%;" data-name />
+
+            @if (ReadDirectory)
+            {
+                @if (_reading)
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" data-directory-reading>@_text[UserNameDialogText.ReadingDirectory]</RadzenText>
+                }
+                else if (_directoryError != null)
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall" AllowClose="false" data-directory-error>
+                        @_text.Format(UserNameDialogText.DirectoryReadFailed, _directoryError)
+                    </RadzenAlert>
+                }
+                else if (!DirectoryFound)
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" data-directory-missing>@_text[UserNameDialogText.NotInDirectory]</RadzenText>
+                }
+                else
+                {
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween" Gap="0.5rem">
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-directory-name>
+                            @_text.Format(UserNameDialogText.InDirectory, Shown(DirectoryName))
+                        </RadzenText>
+                        @if (CanUseDirectoryName)
+                        {
+                            <RadzenButton Text="@_text[UserNameDialogText.UseThisName]" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                          Disabled="@_busy" Click="@UseDirectoryName" data-use-directory-name />
+                        }
+                    </RadzenStack>
+
+                    @if (CanWriteToDirectory)
+                    {
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                            <RadzenCheckBox TValue="bool" @bind-Value="@_writeToDirectory" Name="WriteToDirectory" Disabled="@(_busy || !HasNameToWrite)" data-write-to-directory />
+                            <RadzenLabel Component="WriteToDirectory" Text="@_text[UserNameDialogText.AlsoWriteToDirectory]" />
+                        </RadzenStack>
+                    }
+                }
+            }
+
+            <span class="validation-message" data-error>@_error</span>
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+            <RadzenButton Text="@_text[UserNameDialogText.Save]" ButtonStyle="ButtonStyle.Primary" Disabled="@(_busy || _reading)" Click="@SaveAsync" data-save />
+            <CancelButton Click="@CloseAsync" />
+        </RadzenStack>
+    }
+    else
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-confirm>
+            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[UserNameDialogText.ConfirmHeading]</RadzenText>
+            @if (_pending.RenamesHere)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-change-here>
+                    @_text.Format(_pending.TakeFromDirectory ? UserNameDialogText.NameHereFromDirectory : UserNameDialogText.NameHere,
+                        Shown(_pending.Current), Shown(_pending.NewName))
+                </RadzenText>
+            }
+            @if (_pending.WriteToDirectory)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-change-directory>
+                    @_text.Format(UserNameDialogText.NameInDirectory, Shown(_pending.DirectoryName), Shown(_pending.NewName))
+                </RadzenText>
+                <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall" AllowClose="false">
+                    @_text[UserNameDialogText.DirectoryWriteWarning]
+                </RadzenAlert>
+            }
+            <span class="validation-message" data-error>@_error</span>
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End">
+            <RadzenButton Text="@_text[UserNameDialogText.Ok]" ButtonStyle="ButtonStyle.Primary" Disabled="@_busy" Click="@(() => ApplyAsync(_pending))" data-ok />
+            <CancelButton Click="@BackToEditAsync" />
+        </RadzenStack>
+    }
+</RadzenStack>
+
+@code {
+    /// <summary>The user being renamed.</summary>
+    [Parameter] public string UserKey { get; set; }
+
+    /// <summary>The name stored for the user now, exactly as persisted (<see cref="UserViewModel.StoredName"/>).</summary>
+    [Parameter] public string CurrentName { get; set; }
+
+    /// <summary>Whether to read the name the directory holds. On when directory features are shown on the page.</summary>
+    [Parameter] public bool ReadDirectory { get; set; }
+
+    /// <summary>Whether the host allows writing names to the directory (<c>o.Blazor.WriteNameToDirectory</c>).</summary>
+    [Parameter] public bool AllowWriteToDirectory { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private string _name;
+    private bool _writeToDirectory;
+    private DirectoryVerificationResult _verification;
+    private string _directoryError;
+    private bool _reading;
+    private bool _busy;
+    private string _error;
+    private UserNameChange _pending;
+
+    private bool DirectoryFound => _verification?.Status is DirectoryUserStatus.Found or DirectoryUserStatus.Disabled;
+    private string DirectoryName => DirectoryFound ? _verification.DirectoryName : null;
+
+    private bool CanUseDirectoryName
+        => !DirectoryNames.IsPlaceholder(DirectoryName) && !string.Equals(_name?.Trim(), DirectoryName.Trim(), StringComparison.Ordinal);
+
+    private bool CanWriteToDirectory => AllowWriteToDirectory && DirectoryFound && !string.IsNullOrEmpty(_verification.DirectoryId);
+
+    private bool HasNameToWrite => !DirectoryNames.IsPlaceholder(_name) && DirectoryNames.Differ(_name, DirectoryName);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(UserNameDialogText.All);
+        _name = CurrentName;
+        if (!ReadDirectory) return;
+
+        _reading = true;
+        try
+        {
+            _verification = await UserManagementService.VerifyUserAsync(UserKey);
+        }
+        catch (Exception e)
+        {
+            _directoryError = e.Message;
+        }
+        finally
+        {
+            _reading = false;
+        }
+    }
+
+    private string Shown(string name) => string.IsNullOrWhiteSpace(name) ? _text[UserNameDialogText.NoName] : name.Trim();
+
+    private void OnNameChanged()
+    {
+        if (!HasNameToWrite) _writeToDirectory = false;
+    }
+
+    private void UseDirectoryName()
+    {
+        _name = DirectoryName.Trim();
+        OnNameChanged();
+    }
+
+    private Task CloseAsync()
+    {
+        DialogService.Close(null);
+        return Task.CompletedTask;
+    }
+
+    private Task BackToEditAsync()
+    {
+        _pending = null;
+        _error = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task SaveAsync()
+    {
+        var change = UserNameChange.From(CurrentName, _name, DirectoryName, CanWriteToDirectory && _writeToDirectory);
+        if (change.IsNothing)
+        {
+            DialogService.Close(null);
+            return;
+        }
+
+        if (change.NeedsConfirmation)
+        {
+            _pending = change;
+            return;
+        }
+
+        await ApplyAsync(change);
+    }
+
+    private async Task ApplyAsync(UserNameChange change)
+    {
+        _busy = true;
+        _error = null;
+
+        try
+        {
+            if (change.TakeFromDirectory)
+            {
+                var taken = await UserManagementService.UseDirectoryNameAsync(UserKey);
+                DialogService.Close(new UserNameDialogResult(taken, Verified(taken), TakenFromDirectory: true));
+                return;
+            }
+
+            var result = await UserManagementService.SetUserNameAsync(UserKey, change.NewName, change.WriteToDirectory);
+            var directoryName = result.DirectoryUpdated ? change.NewName : DirectoryName;
+            DialogService.Close(new UserNameDialogResult(change.NewName, Verified(directoryName), DirectoryUpdated: result.DirectoryUpdated, DirectoryError: result.DirectoryError));
+        }
+        catch (Exception e)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private DirectoryVerificationResult Verified(string directoryName) => _verification == null ? null : _verification with { DirectoryName = directoryName };
+}
