@@ -31,8 +31,11 @@ public interface IApiKeyRepository : IRepository
     /// <summary>Sets the "last used" timestamp for the key via a targeted field update (no full-document replace).</summary>
     Task SetLastUsedAsync(string key, DateTime lastUsedAtUtc);
 
-    /// <summary>Returns API key entities matching the given prefix.</summary>
+    /// <summary>Returns API key entities matching the given prefix, or those stored without one when <paramref name="prefix"/> is <c>null</c>.</summary>
     IAsyncEnumerable<ApiKeyEntity> GetByPrefixAsync(string prefix);
+
+    /// <summary>Sets the lookup prefix for the key via a targeted field update (no full-document replace).</summary>
+    Task SetPrefixAsync(string key, string prefix);
 
     /// <summary>Deletes the API key entity with the specified key.</summary>
     Task DeleteAsync(string key);

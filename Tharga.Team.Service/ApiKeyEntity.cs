@@ -43,7 +43,11 @@ public record ApiKeyEntity : EntityBase, IApiKey
     /// <summary>Hashed value of the API key used for verification.</summary>
     public required string ApiKeyHash { get; init; }
 
-    /// <summary>First 8 characters of the raw API key for indexed prefix lookup. Avoids full table scan.</summary>
+    /// <summary>
+    /// Indexed lookup value, so authenticating a key verifies one candidate. The first 16 bytes of the key's
+    /// SHA-256 as hex. An older key holds the first 8 characters of the raw key, a prefix every key of its team
+    /// shares, until its first use replaces them.
+    /// </summary>
     [BsonIgnoreIfNull]
     public string ApiKeyPrefix { get; init; }
 

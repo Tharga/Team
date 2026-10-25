@@ -78,6 +78,7 @@ public static class ApiKeyRegistration
         foreach (var descriptor in services.Where(d => d.ServiceType == typeof(IApiKeyAdministrationService)).ToList())
             services.Remove(descriptor);
 
+        services.AddMemoryCache();
         services.AddScoped(implementationType);
         services.AddScoped(typeof(IApiKeyAdministrationService), sp =>
         {

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Service.Audit;
@@ -44,6 +45,15 @@ public class ApiKeyAuditWiringTests
         var resolved = services.BuildServiceProvider().GetRequiredService<IApiKeyAdministrationService>();
 
         Assert.IsType<ApiKeyAdministrationService>(resolved);
+    }
+
+    [Fact]
+    public void AuditedRegistration_AddsTheVerificationCache()
+    {
+        var services = BaseServices();
+        services.AddAuditedApiKeyAdministrationService(typeof(ApiKeyAdministrationService));
+
+        Assert.NotNull(services.BuildServiceProvider().GetService<IMemoryCache>());
     }
 
     [Fact]

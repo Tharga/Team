@@ -38,6 +38,19 @@ public class ApiKeyOptions
     public TimeSpan LastUsedThrottle { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
+    /// How long a successful key verification is remembered, sliding from the key's last use, so a repeat
+    /// request skips the PBKDF2 work. Set to <see cref="TimeSpan.Zero"/> to verify every request. Default:
+    /// 10 minutes.
+    /// </summary>
+    /// <remarks>
+    /// What is remembered is only that a presented key matches a stored hash. The key itself is still read
+    /// from the store on every request, so disabling, deleting, changing scopes or expiry takes effect at
+    /// once, and a refreshed key no longer matches. Needs an <c>IMemoryCache</c>, which the default
+    /// registration adds.
+    /// </remarks>
+    public TimeSpan VerificationCacheDuration { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>
     /// What happens to a member's private (owner-scoped, "Personal") keys in a team when they stop being a
     /// member of it: removed, leaving, or deleted as a user. A deleted user's personal system keys follow the
     /// same setting. Default <see cref="PrivateKeyOwnerRemovedAction.Delete"/>.
