@@ -74,8 +74,9 @@ holds a placeholder such as `"unknown"`, so the good name exists and cannot reac
 tenant. A host federating from a corporate directory wants the opposite, which is why this is opt-in.
 
 Verification returns the user's `displayName` too, so the Users page can flag a name that differs from the
-directory. The rename dialog shows the directory's name, can take it here, or, with the option on, write the
-entered name there, and confirms either before it happens. A `displayName` of `unknown` is treated as no name
+directory. The rename dialog shows the directory's name in a frame titled Entra, can take it here, or, with the
+option on, write the entered name there (ticked from the start when Entra holds no real name), and confirms either
+before it happens. A `displayName` of `unknown` is treated as no name
 and is never taken into the application.
 
 ## Reading sign-in identities

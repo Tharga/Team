@@ -430,9 +430,10 @@ var result = await userManagementService.SetUserNameAsync(userKey, "Real Name", 
 | Directory write succeeded | `DirectoryUpdated: true` |
 | Directory write failed | `DirectoryError` set. **The local write is not rolled back** |
 
-On the Users page the choice is a box in the rename dialog, **Also update the name in the directory**, shown
-only when the option is on and the user was found in the directory, unticked by default, and confirmed before
-anything is written.
+On the Users page the choice is a box in the rename dialog, **Also update the name in Entra**, shown only when
+the option is on and the user was found in the directory, and confirmed before anything is written. It starts
+ticked when the directory holds no real name (`unknown` or nothing) and there is one here to give it, and
+unticked otherwise.
 
 **Self-service renaming is never pushed**: a user editing their own display name here should not silently
 rewrite the organization's directory.
@@ -542,15 +543,15 @@ finding, not a lookup miss.
 Verification also returns the directory's display name (`DirectoryVerificationResult.DirectoryName`). When
 a found user's name here differs from it, a **Name differs** badge appears beside the name — its tooltip
 gives the directory's name. Clicking it, or **Rename** in the row's menu, opens the rename dialog, which
-reads the directory's name afresh and offers both directions:
+reads the directory's name afresh and shows it in a frame titled **Entra**, offering both directions:
 
 | In the dialog | Does | Offered when |
 |---|---|---|
 | **Use this name** | Fills in the directory's name, to be taken here | The directory holds a real name that differs from the one entered |
-| **Also update the name in the directory** | Writes the entered name to the directory | `o.Blazor.WriteNameToDirectory` is on and the user was found in the directory |
+| **Also update the name in Entra** | Writes the entered name to the directory | `o.Blazor.WriteNameToDirectory` is on and the user was found in the directory. Ticked from the start when the directory holds no real name |
 
 **Saving asks first whenever the directory is involved**: taking its name here, or writing a name to it. The
-confirmation names the change ("Name in the directory: unknown → Ann Larsson") before anything is saved. A
+confirmation names the change ("Name in Entra: unknown → Ann Larsson") before anything is saved. A
 rename that stays here is saved at once, as before.
 
 The same operations are on `IUserManagementService`, both requiring `users:manage` and both audited:
@@ -568,8 +569,9 @@ collects no display name, so a directory holding that (in any case) or nothing i
 `UseDirectoryNameAsync` refuses it, the dialog does not offer it, and a row whose two names are both
 placeholders is not flagged. `DirectoryNames.IsPlaceholder` and `DirectoryNames.Differ` hold the rule.
 
-The dialog's texts say "the directory", like the rest of the page; a host that wants them to say "Entra"
-supplies its own wording through `IThargaTextProvider` (keys in `UserNameDialogText`).
+The dialog calls the directory **Entra**, the one directory the toolkit ships an adapter for. That word is a
+single text, `UserNameDialogText.Directory`, used for the frame's title and in every sentence that names the
+directory, so a host with another directory renames it in one place through `IThargaTextProvider`.
 
 ## Directory-only users
 
