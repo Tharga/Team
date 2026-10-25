@@ -315,10 +315,10 @@ builder.Services.AddThargaSupportCases(o =>
 });
 
 // Each team chooses what the assistant answers it with, on the "AI assistant" page: the platform's model (the
-// scripted client above), Neurolito with the team's own key, or off. A team that never chose keeps the platform's.
-// The key is stored encrypted with Data Protection, so the key ring lives in MongoDB where every instance reads it.
+// scripted client above), Neurolito or Anthropic with the team's own key, or off. A team that never chose keeps the
+// platform's. The key is stored encrypted with Data Protection, so the key ring lives in MongoDB where every instance reads it.
 builder.Services.AddThargaSupportAiConnections();
-builder.Services.AddThargaSupportAnthropic();
+builder.Services.AddThargaSupportAiProviders();
 builder.Services.AddDataProtection()
     .SetApplicationName("Tharga.Team.Sample")
     .PersistKeysToThargaMongo();

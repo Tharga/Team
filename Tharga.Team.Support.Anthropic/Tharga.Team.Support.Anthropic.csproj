@@ -5,7 +5,7 @@
     <Authors>Daniel Bohlin</Authors>
     <Company>Thargelion AB</Company>
     <Product>Tharga Team Support Anthropic</Product>
-    <Description>Lets each team's support assistant answer through its own Neurolito key, over the Anthropic Messages API — the one package that takes the Anthropic SDK.</Description>
+    <Description>Lets each team's support assistant answer through its own Neurolito or Anthropic key, over the Anthropic Messages API — the one package that takes the Anthropic SDK.</Description>
     <PackageIconUrl>https://thargelion.net/assets/component-team.png</PackageIconUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>

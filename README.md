@@ -15,7 +15,7 @@ A suite of NuGet packages for building multi-tenant Blazor applications with tea
 | [Tharga.Team.Images](https://www.nuget.org/packages/Tharga.Team.Images) | Automatic squaring and downscaling of uploaded team/user icons (SkiaSharp) | No |
 | [Tharga.Team.Email](https://www.nuget.org/packages/Tharga.Team.Email) | E-mail — IMAP reading, SMTP sending and MIME (MailKit), team mailboxes, and mail to users: categories, unsubscribe links, a persisted queue, staff messages and automatic notices | No |
 | [Tharga.Team.Support](https://www.nuget.org/packages/Tharga.Team.Support) | Support module — Slack notifications for audited events, and support cases on the site, by mail and in Slack | No |
-| [Tharga.Team.Support.Anthropic](https://www.nuget.org/packages/Tharga.Team.Support.Anthropic) | Lets a team connect the support assistant to its own Neurolito key, over the Anthropic Messages API (Anthropic SDK) | No |
+| [Tharga.Team.Support.Anthropic](https://www.nuget.org/packages/Tharga.Team.Support.Anthropic) | Lets a team connect the support assistant to its own Neurolito or Anthropic key, over the Anthropic Messages API (Anthropic SDK) | No |
 | [Tharga.Team.Mcp](https://www.nuget.org/packages/Tharga.Team.Mcp) | MCP (Model Context Protocol) bridge — auth, scopes, audit for MCP tools. Renamed from `Tharga.Platform.Mcp`, which is deprecated and frozen at 3.5.x | No |
 
 ## Dependency graph

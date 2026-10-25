@@ -1,4 +1,4 @@
-﻿namespace Tharga.Team.Service.Audit;
+namespace Tharga.Team.Service.Audit;
 
 /// <summary>
 /// Metadata keys the toolkit writes onto <see cref="AuditEntry.Metadata"/>.

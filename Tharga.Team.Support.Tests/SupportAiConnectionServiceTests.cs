@@ -19,6 +19,7 @@ public class SupportAiConnectionServiceTests
     private const string GoodKey = "nl-team-key-0123456789";
     private const string Model = "claude-qwen3-coder:30b";
     private const string NeurolitoAddress = "https://neurolito.com";
+    private const string AnthropicAddress = "https://api.anthropic.com";
 
     private static SupportAiProviderRequest Neurolito(string apiKey = GoodKey, string model = Model, string baseAddress = null)
         => new() { Kind = SupportAiConnectionKind.Neurolito, ApiKey = apiKey, Model = model, BaseAddress = baseAddress };
@@ -32,6 +33,69 @@ public class SupportAiConnectionServiceTests
 
         Assert.Equal([SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Off], choices.Kinds);
         Assert.Equal(NeurolitoAddress, Assert.Single(choices.ProviderDefaults).BaseAddress);
+    }
+
+    /// <summary>Every provider the installed factory offers is a choice, in its order, between the platform's model and off.</summary>
+    [Fact]
+    public async Task EveryProviderOffered_IsAChoice()
+    {
+        var (service, _, _, _) = Build(factory: new FakeFactory { Providers = BothProviders });
+
+        var choices = await service.GetChoicesAsync(TeamA);
+
+        Assert.Equal([SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Anthropic, SupportAiConnectionKind.Off], choices.Kinds);
+        Assert.Equal([NeurolitoAddress, AnthropicAddress], choices.ProviderDefaults.Select(x => x.BaseAddress));
+    }
+
+    [Fact]
+    public async Task ConnectingAnthropic_SavesIt_AtItsAddress()
+    {
+        var (service, store, _, _) = Build(factory: new FakeFactory { Providers = BothProviders });
+
+        var result = await service.ConnectAsync(TeamA, new SupportAiProviderRequest { Kind = SupportAiConnectionKind.Anthropic, ApiKey = GoodKey, Model = Model });
+
+        Assert.True(result.Succeeded, result.Problem);
+        var stored = await store.GetAsync(TeamA);
+        Assert.Equal(SupportAiConnectionKind.Anthropic, stored.Kind);
+        Assert.Equal(AnthropicAddress, stored.BaseAddress);
+    }
+
+    /// <summary>The page says which model "the platform's model" is, as far as its client tells.</summary>
+    [Fact]
+    public async Task TheChoices_NameThePlatformsModel()
+    {
+        var (service, _, _, _) = Build(platformModelName: "ollama, llama3");
+
+        Assert.Equal("ollama, llama3", (await service.GetChoicesAsync(TeamA)).PlatformModel);
+    }
+
+    [Theory]
+    [InlineData("ollama", "llama3", "ollama, llama3")]
+    [InlineData(null, "llama3", "llama3")]
+    [InlineData("ollama", null, "ollama")]
+    [InlineData(null, null, null)]
+    public void ThePlatformsModel_IsDescribedFromWhatItsClientReports(string provider, string model, string expected)
+    {
+        var client = new DescribedChatClient(new ChatClientMetadata(provider, null, model));
+
+        Assert.Equal(expected, SupportAiConnectionService.DescribePlatformModel(client));
+    }
+
+    /// <summary>A client that reports nothing about itself, or no client at all, is simply not named.</summary>
+    [Fact]
+    public void AClientThatSaysNothing_IsNotDescribed()
+    {
+        Assert.Null(SupportAiConnectionService.DescribePlatformModel(new DescribedChatClient(null)));
+        Assert.Null(SupportAiConnectionService.DescribePlatformModel(null));
+    }
+
+    /// <summary>The usual registration wraps the client for function calls; the description comes through the wrapper.</summary>
+    [Fact]
+    public void AWrappedClient_IsDescribedByTheOneInside()
+    {
+        var client = new DescribedChatClient(new ChatClientMetadata("ollama", null, "llama3")).AsBuilder().UseFunctionInvocation().Build();
+
+        Assert.Equal("ollama, llama3", SupportAiConnectionService.DescribePlatformModel(client));
     }
 
     [Fact]
@@ -308,12 +372,16 @@ public class SupportAiConnectionServiceTests
         Assert.Equal(0, await new SupportAiConnectionPurgeParticipant(store).PurgeTeamDataAsync(TeamA));
     }
 
+    private static readonly SupportAiProviderDefault[] BothProviders =
+        [new(SupportAiConnectionKind.Neurolito, NeurolitoAddress), new(SupportAiConnectionKind.Anthropic, AnthropicAddress)];
+
     private static (ISupportAiConnectionService Service, InMemoryConnectionStore Store, FakeFactory Factory, CollectingAuditLogger Sink) Build(
         bool withScope = true,
         bool platformModel = true,
         bool withFactory = true,
         FakeFactory factory = null,
-        InMemoryConnectionStore store = null)
+        InMemoryConnectionStore store = null,
+        string platformModelName = null)
     {
         var claims = new List<Claim>
         {
@@ -330,7 +398,7 @@ public class SupportAiConnectionServiceTests
 
         var service = new AuditingSupportAiConnectionServiceDecorator(
             new AuthorizationSupportAiConnectionServiceDecorator(
-                new SupportAiConnectionService(store, new EphemeralDataProtectionProvider(), authorizer, TimeProvider.System, platformModel, withFactory ? factory : null),
+                new SupportAiConnectionService(store, new EphemeralDataProtectionProvider(), authorizer, TimeProvider.System, platformModel, withFactory ? factory : null, platformModelName),
                 authorizer),
             new CompositeAuditLogger([sink], Options.Create(new AuditOptions())),
             new AuditEntryFactory(null));
@@ -355,6 +423,14 @@ public class SupportAiConnectionServiceTests
             => Task.FromResult(_byTeam.Remove(teamKey));
     }
 
+    private sealed class DescribedChatClient(ChatClientMetadata metadata) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public object GetService(Type serviceType, object serviceKey = null) => serviceType == typeof(ChatClientMetadata) ? metadata : null;
+        public void Dispose() { }
+    }
+
     internal sealed class FakeFactory : ISupportChatClientFactory
     {
         public const string Refused = "The key was refused.";
@@ -365,7 +441,7 @@ public class SupportAiConnectionServiceTests
         public bool ChatFails { get; init; }
         public List<SupportAiEndpoint> Seen { get; } = [];
 
-        public IReadOnlyList<SupportAiProviderDefault> Providers { get; } = [new(SupportAiConnectionKind.Neurolito, NeurolitoAddress)];
+        public IReadOnlyList<SupportAiProviderDefault> Providers { get; init; } = [new(SupportAiConnectionKind.Neurolito, NeurolitoAddress)];
 
         public IChatClient Create(SupportAiEndpoint endpoint)
         {

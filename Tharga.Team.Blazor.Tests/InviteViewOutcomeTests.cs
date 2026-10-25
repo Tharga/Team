@@ -1,4 +1,4 @@
-﻿using Blazored.LocalStorage;
+using Blazored.LocalStorage;
 using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.AspNetCore.Components;

@@ -1,4 +1,4 @@
-﻿using System.Runtime.CompilerServices;
+using System.Runtime.CompilerServices;
 using Tharga.Team;
 
 namespace Tharga.Team.Service;

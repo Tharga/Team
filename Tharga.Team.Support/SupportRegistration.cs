@@ -39,8 +39,8 @@ public static class SupportRegistration
     /// Call it with <see cref="AddThargaSupportCases"/>, before or after.
     /// <list type="bullet">
     /// <item>The store comes from <c>AddThargaTeamRepository</c> in <c>Tharga.Team.MongoDB</c>.</item>
-    /// <item>Providers come from an <see cref="ISupportChatClientFactory"/>, such as <c>AddThargaSupportAnthropic</c>
-    /// for Neurolito. Without one, a team chooses between the platform's model and off.</item>
+    /// <item>Providers come from an <see cref="ISupportChatClientFactory"/>, such as <c>AddThargaSupportAiProviders</c>
+    /// for Neurolito and Anthropic. Without one, a team chooses between the platform's model and off.</item>
     /// <item>Keys are encrypted with Data Protection. On more than one instance, or where the file system does not
     /// survive a restart, persist the key ring where every instance reads it, such as
     /// <c>AddDataProtection().PersistKeysToThargaMongo()</c>, or stored keys become unreadable.</item>
@@ -77,7 +77,8 @@ public static class SupportRegistration
                     sp.GetRequiredService<TeamAuthorizer>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetService<IChatClient>() != null,
-                    sp.GetService<ISupportChatClientFactory>()),
+                    sp.GetService<ISupportChatClientFactory>(),
+                    SupportAiConnectionService.DescribePlatformModel(sp.GetService<IChatClient>())),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));

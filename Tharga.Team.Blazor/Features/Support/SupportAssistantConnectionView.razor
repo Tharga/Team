@@ -42,7 +42,7 @@
                 <Items>
                     @foreach (var kind in _choices.Kinds)
                     {
-                        <RadzenRadioButtonListItem Text="@_text[SupportAssistantConnectionViewText.For(kind)]" Value="@kind" />
+                        <RadzenRadioButtonListItem Text="@KindLabel(kind)" Value="@kind" />
                     }
                 </Items>
             </RadzenRadioButtonList>
@@ -273,6 +273,11 @@
     }
 
     private static bool IsProvider(SupportAiConnectionKind kind) => kind is SupportAiConnectionKind.Neurolito or SupportAiConnectionKind.Anthropic;
+
+    private string KindLabel(SupportAiConnectionKind kind)
+        => kind == SupportAiConnectionKind.Platform && _choices.PlatformModel != null
+            ? _text.Format(SupportAssistantConnectionViewText.KindPlatformNamed, _choices.PlatformModel)
+            : _text[SupportAssistantConnectionViewText.For(kind)];
 
     private static string Trimmed(string address) => address?.Trim().TrimEnd('/');
 }

@@ -37,6 +37,12 @@ public sealed record SupportAiConnectionChoices
 
     /// <summary>The address each provider kind starts from, so a form can prefill it.</summary>
     public SupportAiProviderDefault[] ProviderDefaults { get; init; } = [];
+
+    /// <summary>
+    /// What the platform's model is, as its client reports it: the provider and the model, such as "ollama, llama3". Null
+    /// when the client does not say, or there is no platform model.
+    /// </summary>
+    public string PlatformModel { get; init; }
 }
 
 /// <summary>The address a provider kind starts from.</summary>

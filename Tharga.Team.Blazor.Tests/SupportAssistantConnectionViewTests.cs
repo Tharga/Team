@@ -111,6 +111,40 @@ public class SupportAssistantConnectionViewTests : BunitContext
     }
 
     [Fact]
+    public void ThePlatformsModel_IsNamed_WhenItsClientSaysWhatItIs()
+    {
+        var view = Render(choices: AllChoices with { PlatformModel = "ollama, llama3" });
+
+        var platform = view.FindComponents<RadzenRadioButtonListItem<SupportAiConnectionKind>>().First(x => x.Instance.Value == SupportAiConnectionKind.Platform);
+        Assert.Equal("The platform's model (ollama, llama3)", platform.Instance.Text);
+    }
+
+    [Fact]
+    public void ThePlatformsModel_IsNotNamed_WhenItsClientSaysNothing()
+    {
+        var view = Render();
+
+        var platform = view.FindComponents<RadzenRadioButtonListItem<SupportAiConnectionKind>>().First(x => x.Instance.Value == SupportAiConnectionKind.Platform);
+        Assert.Equal(SupportAssistantConnectionViewText.KindPlatform.Default, platform.Instance.Text);
+    }
+
+    /// <summary>With both providers offered, each starts from its own address, not the other's.</summary>
+    [Fact]
+    public async Task ChoosingAnthropic_StartsFromAnthropicsAddress()
+    {
+        const string anthropicAddress = "https://api.anthropic.com";
+        var view = Render(choices: new SupportAiConnectionChoices
+        {
+            Kinds = [SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Anthropic, SupportAiConnectionKind.Off],
+            ProviderDefaults = [new SupportAiProviderDefault(SupportAiConnectionKind.Neurolito, Address), new SupportAiProviderDefault(SupportAiConnectionKind.Anthropic, anthropicAddress)]
+        });
+
+        await ChooseAsync(view, SupportAiConnectionKind.Anthropic);
+
+        Assert.Equal(anthropicAddress, view.Find("input[data-address]").GetAttribute("value"));
+    }
+
+    [Fact]
     public async Task LoadingModels_SendsTheTypedKey_AndOffersWhatCameBack()
     {
         SupportAiProviderRequest sent = null;

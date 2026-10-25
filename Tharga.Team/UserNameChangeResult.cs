@@ -1,4 +1,4 @@
-﻿namespace Tharga.Team;
+namespace Tharga.Team;
 
 /// <summary>
 /// Result of <see cref="IUserManagementService.SetUserNameAsync"/>. The local write has always completed

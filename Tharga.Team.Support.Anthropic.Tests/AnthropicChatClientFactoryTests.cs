@@ -7,8 +7,9 @@ using Tharga.Team.Support.Cases;
 namespace Tharga.Team.Support.Anthropic.Tests;
 
 /// <summary>
-/// Reaching a provider over the Anthropic Messages API, against a fake server shaped like Neurolito: where requests go,
-/// how the key is sent (as a bearer token, which Neurolito accepts), what a model list becomes, and how a failure is said.
+/// Reaching a provider over the Anthropic Messages API, against fake servers shaped like Neurolito and Anthropic: which
+/// providers are offered and where, how the key is sent (as a bearer token, as the SDK sends it to both), what a model
+/// list becomes, and how a failure is said.
 /// </summary>
 public class AnthropicChatClientFactoryTests
 {
@@ -26,21 +27,60 @@ public class AnthropicChatClientFactoryTests
 
     private readonly FakeServer _server = new();
 
+    /// <summary>Anthropic's catalog: id, display name, type and <c>created_at</c>.</summary>
+    private const string AnthropicModels = """
+        {"data":[{"type":"model","id":"claude-sonnet-4-5","display_name":"Claude Sonnet 4.5","created_at":"2025-09-29T00:00:00Z"},{"type":"model","id":"claude-haiku-4-5","display_name":"Claude Haiku 4.5","created_at":"2025-10-15T00:00:00Z"}],"has_more":false,"first_id":"claude-sonnet-4-5","last_id":"claude-haiku-4-5"}
+        """;
+
+    private const string AnthropicAddress = "https://api.anthropic.example";
+
     private static SupportAiEndpoint Endpoint(string model = "claude-qwen3-coder:30b") => new(SupportAiConnectionKind.Neurolito, Address, Key, model);
 
     [Fact]
-    public void Neurolito_IsTheProviderOffered_AtItsAddress()
+    public void NeurolitoAndAnthropic_AreOffered_AtTheirAddresses()
     {
-        var provider = Assert.Single(Factory().Providers);
+        var providers = Factory().Providers;
 
-        Assert.Equal(SupportAiConnectionKind.Neurolito, provider.Kind);
-        Assert.Equal("https://neurolito.com", provider.BaseAddress);
+        Assert.Equal([SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Anthropic], providers.Select(x => x.Kind));
+        Assert.Equal("https://neurolito.com", providers[0].BaseAddress);
+        Assert.Equal("https://api.anthropic.com", providers[1].BaseAddress);
     }
 
     [Fact]
-    public void TheStartingAddress_IsTheHostsToChange()
+    public void TheStartingAddresses_AreTheHostsToChange()
     {
-        Assert.Equal("http://localhost:5224", Assert.Single(Factory(o => o.NeurolitoBaseAddress = "http://localhost:5224").Providers).BaseAddress);
+        var providers = Factory(o =>
+        {
+            o.NeurolitoBaseAddress = "http://localhost:5224";
+            o.AnthropicBaseAddress = "https://anthropic.proxy.example";
+        }).Providers;
+
+        Assert.Equal(["http://localhost:5224", "https://anthropic.proxy.example"], providers.Select(x => x.BaseAddress));
+    }
+
+    /// <summary>A host that wants its teams on Neurolito only says so.</summary>
+    [Fact]
+    public void Anthropic_CanBeLeftOut()
+    {
+        var provider = Assert.Single(Factory(o => o.OfferAnthropic = false).Providers);
+
+        Assert.Equal(SupportAiConnectionKind.Neurolito, provider.Kind);
+    }
+
+    [Fact]
+    public async Task AnthropicsModels_AreListedFromItsAddress_WithTheKeyAsABearerToken()
+    {
+        _server.Respond(HttpStatusCode.OK, AnthropicModels);
+
+        var list = await Factory().ListModelsAsync(new SupportAiEndpoint(SupportAiConnectionKind.Anthropic, AnthropicAddress, Key, null));
+
+        Assert.Null(list.Problem);
+        Assert.Equal(["claude-sonnet-4-5", "claude-haiku-4-5"], list.Models.Select(x => x.Id));
+        Assert.Equal("Claude Sonnet 4.5", list.Models[0].DisplayName);
+
+        var request = Assert.Single(_server.Requests);
+        Assert.Equal($"{AnthropicAddress}/v1/models", request.Uri.GetLeftPart(UriPartial.Path));
+        Assert.Equal($"Bearer {Key}", request.Headers["authorization"]);
     }
 
     [Fact]
@@ -123,11 +163,27 @@ public class AnthropicChatClientFactoryTests
     public void Registering_GivesTheFactory()
     {
         var services = new ServiceCollection();
-        services.AddThargaSupportAnthropic();
+        services.AddThargaSupportAiProviders(o => o.OfferAnthropic = false);
 
         using var provider = services.BuildServiceProvider();
 
-        Assert.IsType<AnthropicChatClientFactory>(provider.GetRequiredService<ISupportChatClientFactory>());
+        var factory = Assert.IsType<AnthropicChatClientFactory>(provider.GetRequiredService<ISupportChatClientFactory>());
+        Assert.Single(factory.Providers);
+    }
+
+    /// <summary>The name it had before, kept so no host breaks on the rename.</summary>
+    [Fact]
+    public void TheOldName_StillGivesTheFactory()
+    {
+        var services = new ServiceCollection();
+#pragma warning disable CS0618
+        services.AddThargaSupportAnthropic(o => o.OfferAnthropic = false);
+#pragma warning restore CS0618
+
+        using var provider = services.BuildServiceProvider();
+
+        var factory = Assert.IsType<AnthropicChatClientFactory>(provider.GetRequiredService<ISupportChatClientFactory>());
+        Assert.Single(factory.Providers);
     }
 
     private AnthropicChatClientFactory Factory(Action<AnthropicSupportOptions> configure = null)
