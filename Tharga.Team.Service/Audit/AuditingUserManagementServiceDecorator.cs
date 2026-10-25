@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Microsoft.AspNetCore.Http;
 using Tharga.Team;
@@ -130,16 +130,17 @@ public class AuditingUserManagementServiceDecorator : IUserManagementService
     /// The directory outcome is recorded rather than just the local write: a rename that succeeded here
     /// and failed there is the case someone will later need to explain, and it is invisible otherwise.
     /// </remarks>
-    public async Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default)
+    public async Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, bool writeToDirectory, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
         try
         {
-            var result = await _inner.SetUserNameAsync(userKey, name, cancellationToken);
+            var result = await _inner.SetUserNameAsync(userKey, name, writeToDirectory, cancellationToken);
             sw.Stop();
             Log("set-user-name", nameof(SetUserNameAsync), sw.ElapsedMilliseconds, true, metadata: Meta(
                 (AuditMetadataKeys.UserKey, userKey),
                 (AuditMetadataKeys.UserNameNew, name),
+                (AuditMetadataKeys.DirectoryUpdated, (result?.DirectoryUpdated ?? false).ToString()),
                 (AuditMetadataKeys.DirectoryError, result?.DirectoryError)));
             return result;
         }
@@ -174,6 +175,27 @@ public class AuditingUserManagementServiceDecorator : IUserManagementService
         {
             sw.Stop();
             Log("set-user-email", nameof(SetUserEmailAsync), sw.ElapsedMilliseconds, false, ex.Message,
+                metadata: Meta((AuditMetadataKeys.UserKey, userKey)));
+            throw;
+        }
+    }
+
+    public async Task<string> UseDirectoryNameAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var name = await _inner.UseDirectoryNameAsync(userKey, cancellationToken);
+            sw.Stop();
+            Log("use-directory-name", nameof(UseDirectoryNameAsync), sw.ElapsedMilliseconds, true, metadata: Meta(
+                (AuditMetadataKeys.UserKey, userKey),
+                (AuditMetadataKeys.UserNameNew, name)));
+            return name;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("use-directory-name", nameof(UseDirectoryNameAsync), sw.ElapsedMilliseconds, false, ex.Message,
                 metadata: Meta((AuditMetadataKeys.UserKey, userKey)));
             throw;
         }

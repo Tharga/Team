@@ -54,21 +54,34 @@ public interface IUserManagementService
     Task SetUserDisabledAsync(string userKey, bool disabled, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Set a user's display name, and — when <c>o.Blazor.WriteNameToDirectory</c> is enabled and the user
-    /// is linked to a directory account — write it back to the external directory too.
+    /// Set a user's display name, and, when <paramref name="writeToDirectory"/> is true, write it to the
+    /// external directory too.
     /// </summary>
+    /// <param name="userKey">The user to rename.</param>
+    /// <param name="name">The new name. Null or empty clears the local name, and cannot be written to the directory.</param>
+    /// <param name="writeToDirectory">
+    /// Whether to write the name to the directory as well. The caller decides on every rename;
+    /// <c>o.Blazor.WriteNameToDirectory</c> only allows it.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the directory write.</param>
     /// <remarks>
-    /// The local write always happens; a failure there throws. The directory write is best-effort and its
-    /// outcome is reported on the result rather than rolled back into the local one: they fail
-    /// independently, and coupling them would let a directory outage block renaming a user here.
+    /// A write to the directory that cannot be honoured is refused before anything changes: the host has not
+    /// allowed it, no directory is registered, the user is not linked to a directory account, or the name is a
+    /// placeholder (<see cref="DirectoryNames.IsPlaceholder"/>). Once the local write has happened, the directory
+    /// write is best-effort and its outcome is reported on the result rather than rolled back into the local one:
+    /// they fail independently, and coupling them would let a directory outage block renaming a user here.
     /// <para>
     /// Administrative rename only. The self-service path (<c>IUserService.SetUserNameAsync</c>) stays
     /// local deliberately — a user editing their own display name in this application should not silently
     /// rewrite the organization's directory.
     /// </para>
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The user was not found, or <paramref name="writeToDirectory"/> is true and the write cannot be honoured.
+    /// </exception>
+    /// <exception cref="NotSupportedException"><paramref name="writeToDirectory"/> is true and no directory is registered.</exception>
     [RequireScope(SystemUserScopes.Manage)]
-    Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default);
+    Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, bool writeToDirectory, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Set a user's email address. It stays local: a directory-backed user's address is usually owned by the
@@ -90,6 +103,23 @@ public interface IUserManagementService
     [RequireScope(SystemUserScopes.Manage)]
     Task<UserEmailChangeResult> SetUserEmailAsync(string userKey, string email, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SetUserEmailAsync)}.");
+
+    /// <summary>
+    /// Replace the user's local name with the display name the directory holds for them, and return it.
+    /// </summary>
+    /// <remarks>
+    /// The directory is read here rather than the name being passed in, so the operation can only ever take
+    /// what the directory actually says. Refused when the directory name is a placeholder
+    /// (<see cref="DirectoryNames.IsPlaceholder"/>): taking "unknown" would overwrite a real name with none.
+    /// Local only — the name came from the directory, so nothing is written back.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// The user is not found in the directory, or the directory holds only a placeholder name.
+    /// </exception>
+    /// <exception cref="NotSupportedException">The host's user management service does not implement it.</exception>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task<string> UseDirectoryNameAsync(string userKey, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(UseDirectoryNameAsync)}.");
 
     /// <summary>
     /// The teams this user owns — the teams that deleting them would leave with no owner.

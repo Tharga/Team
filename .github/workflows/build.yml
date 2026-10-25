@@ -37,7 +37,7 @@ env:
   # implementer must add them); OutboundMail, InboundMail and MailFetchResult gained positional parameters
   # (recompile); support mail from a verified sender in one team now opens in that team, and its files are
   # stored; with AddThargaUserMail, invitations are sent as mail to users from its address.
-  MAJOR_MINOR: '4.4'
+  MAJOR_MINOR: '4.5'
 
 permissions:
   contents: write

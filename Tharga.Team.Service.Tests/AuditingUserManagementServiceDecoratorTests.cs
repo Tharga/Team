@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Http;
+﻿using Microsoft.AspNetCore.Http;
 using Tharga.Team;
 using Tharga.Team.Service.Audit;
 
@@ -151,5 +151,63 @@ public class AuditingUserManagementServiceDecoratorTests
         _ = await _sut.GetDirectoryOnlyUsersAsync().ToListAsync();
 
         Assert.Empty(_backend.Entries);
+    }
+
+    [Fact]
+    public async Task UseDirectoryName_LogsTheNameTaken()
+    {
+        _inner.UseDirectoryNameAsync("u-1", Arg.Any<CancellationToken>()).Returns("Daniel Bohlin");
+
+        await _sut.UseDirectoryNameAsync("u-1");
+
+        var entry = Assert.Single(_backend.Entries);
+        Assert.Equal("use-directory-name", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal("u-1", entry.Metadata[AuditMetadataKeys.UserKey]);
+        Assert.Equal("Daniel Bohlin", entry.Metadata[AuditMetadataKeys.UserNameNew]);
+    }
+
+    [Fact]
+    public async Task SetUserName_LogsTheNewNameAndWhetherTheDirectoryWasUpdated()
+    {
+        _inner.SetUserNameAsync("u-1", "Ann Larsson", true, Arg.Any<CancellationToken>())
+            .Returns(new UserNameChangeResult(DirectoryUpdated: true));
+
+        await _sut.SetUserNameAsync("u-1", "Ann Larsson", writeToDirectory: true);
+
+        var entry = Assert.Single(_backend.Entries);
+        Assert.Equal("set-user-name", entry.Action);
+        Assert.True(entry.Success);
+        Assert.Equal("Ann Larsson", entry.Metadata[AuditMetadataKeys.UserNameNew]);
+        Assert.Equal(bool.TrueString, entry.Metadata[AuditMetadataKeys.DirectoryUpdated]);
+        Assert.False(entry.Metadata.ContainsKey(AuditMetadataKeys.DirectoryError));
+    }
+
+    /// <summary>The rename here stood; the directory write is what failed, and that is what someone will need to explain.</summary>
+    [Fact]
+    public async Task SetUserName_DirectoryError_IsRecordedOnASuccess()
+    {
+        _inner.SetUserNameAsync("u-1", "Ann Larsson", true, Arg.Any<CancellationToken>())
+            .Returns(new UserNameChangeResult(DirectoryError: "Graph is unavailable"));
+
+        await _sut.SetUserNameAsync("u-1", "Ann Larsson", writeToDirectory: true);
+
+        var entry = Assert.Single(_backend.Entries);
+        Assert.True(entry.Success);
+        Assert.Equal(bool.FalseString, entry.Metadata[AuditMetadataKeys.DirectoryUpdated]);
+        Assert.Equal("Graph is unavailable", entry.Metadata[AuditMetadataKeys.DirectoryError]);
+    }
+
+    [Fact]
+    public async Task SetUserName_Refused_LogsFailureAndRethrows()
+    {
+        _inner.SetUserNameAsync("u-1", "Ann Larsson", true, Arg.Any<CancellationToken>())
+            .Returns<Task<UserNameChangeResult>>(_ => throw new InvalidOperationException("Writing names to the directory is not enabled."));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.SetUserNameAsync("u-1", "Ann Larsson", writeToDirectory: true));
+
+        var entry = Assert.Single(_backend.Entries);
+        Assert.False(entry.Success);
+        Assert.Equal("set-user-name", entry.Action);
     }
 }

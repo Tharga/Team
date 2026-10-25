@@ -65,6 +65,7 @@ public class EntraUserDirectoryServiceTests
 
         Assert.Equal(DirectoryUserStatus.Found, result.Status);
         Assert.Equal("oid-1", result.DirectoryId);
+        Assert.Equal("A", result.DirectoryName);
         var request = Assert.Single(handler.Requests);
         Assert.StartsWith($"{BaseAddress}users/oid-1?$select=", request.Uri);
         Assert.Equal("Bearer token-123", request.Authorization);
@@ -105,6 +106,7 @@ public class EntraUserDirectoryServiceTests
 
         Assert.Equal(DirectoryUserStatus.Found, result.Status);
         Assert.Equal("oid-9", result.DirectoryId);
+        Assert.Equal("A", result.DirectoryName);
         var request = Assert.Single(handler.Requests);
         Assert.Contains("$filter=", request.Uri);
         Assert.Contains("userPrincipalName", request.Uri);

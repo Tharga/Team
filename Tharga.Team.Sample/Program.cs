@@ -65,6 +65,8 @@ builder.AddThargaTeam(o =>
     // a literal "profile" and 404s — the defect these options were added for. Leaving both unset keeps the
     // built-in routes, so an ordinary host needs neither.
     o.Blazor.ProfilePath = "/account";
+    // The rename dialog offers to update the name in Entra too. Needs User.ReadWrite.All, which directory delete already uses.
+    o.Blazor.WriteNameToDirectory = true;
     // o.Blazor.TeamPath   = "/team";   // unset: the sample does mount TeamComponent at the default route.
 
     // Demo: revalidate team claims every 20 seconds so a member removal, access downgrade, or consent
@@ -218,8 +220,6 @@ builder.Services.AddThargaMcp(mcp =>
 // self-service operation passes through its decorator without one either. Both are legitimately
 // unauthorized, so the guard rejected them and took the site down. See the notes in TeamAccessInterceptor.
 builder.AddMongoDB();
-
-builder.Services.AddScoped<AppUserAdminService>();
 
 // Demo: per-team features. billing:manage and case:read are hidden for a team unless its name contains
 // "Billing" / "Case" — rename a team to switch them on. Registered after AddThargaTeam, so it replaces the

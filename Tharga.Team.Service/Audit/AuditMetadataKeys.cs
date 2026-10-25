@@ -1,4 +1,4 @@
-namespace Tharga.Team.Service.Audit;
+﻿namespace Tharga.Team.Service.Audit;
 
 /// <summary>
 /// Metadata keys the toolkit writes onto <see cref="AuditEntry.Metadata"/>.
@@ -115,6 +115,9 @@ public static class AuditMetadataKeys
 
     /// <summary>Whether a user delete also deleted the directory user.</summary>
     public const string DirectoryDeleted = "directory.deleted";
+
+    /// <summary>Whether a rename also wrote the name to the directory.</summary>
+    public const string DirectoryUpdated = "directory.updated";
 
     /// <summary>Why a requested directory operation did not complete.</summary>
     public const string DirectoryError = "directory.error";

@@ -69,29 +69,42 @@ public class UserManagementService : IUserManagementService
             .ToArray();
     }
 
-    public async Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, CancellationToken cancellationToken = default)
+    public async Task<UserNameChangeResult> SetUserNameAsync(string userKey, string name, bool writeToDirectory, CancellationToken cancellationToken = default)
     {
         var user = await RequireUserAsync(userKey);
+        var directory = writeToDirectory ? RequireDirectoryWrite(user, name) : null;
 
         // Local first and unconditionally: this application is the system of record for the name, so a
         // directory that cannot be reached must not stop it being corrected here.
         await _userService.SetUserNameAsync(user.Key, name);
 
-        if (!_writeNameToDirectory || _directoryService == null) return new UserNameChangeResult();
-
-        // Not an error: an unlinked user has no directory account to write to. Reporting it as a failure
-        // would make the ordinary case look broken.
-        if (string.IsNullOrEmpty(user.DirectoryId)) return new UserNameChangeResult();
+        if (directory == null) return new UserNameChangeResult();
 
         try
         {
-            await _directoryService.SetUserNameAsync(user.DirectoryId, name, cancellationToken);
+            await directory.SetUserNameAsync(user.DirectoryId, name.Trim(), cancellationToken);
             return new UserNameChangeResult(DirectoryUpdated: true);
         }
         catch (Exception ex)
         {
             return new UserNameChangeResult(DirectoryError: ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The directory to write <paramref name="name"/> to, checked before anything changes, so a write that
+    /// cannot be honoured refuses the whole rename rather than leaving it half done.
+    /// </summary>
+    private IUserDirectoryService RequireDirectoryWrite(IUser user, string name)
+    {
+        var directory = RequireDirectoryService();
+        if (!_writeNameToDirectory)
+            throw new InvalidOperationException("Writing names to the directory is not enabled. Set o.Blazor.WriteNameToDirectory to allow it.");
+        if (string.IsNullOrEmpty(user.DirectoryId))
+            throw new InvalidOperationException($"User '{user.Key}' is not linked to a directory account. Verify the user first.");
+        if (DirectoryNames.IsPlaceholder(name))
+            throw new InvalidOperationException($"User '{user.Key}' would have no real name to write to the directory.");
+        return directory;
     }
 
     public async Task<UserEmailChangeResult> SetUserEmailAsync(string userKey, string email, CancellationToken cancellationToken = default)
@@ -114,6 +127,24 @@ public class UserManagementService : IUserManagementService
             throw new ArgumentException("The email address is not a single, plain address.", nameof(email));
 
         return trimmed;
+    }
+
+    public async Task<string> UseDirectoryNameAsync(string userKey, CancellationToken cancellationToken = default)
+    {
+        var directory = RequireDirectoryService();
+        var user = await RequireUserAsync(userKey);
+
+        var result = await directory.VerifyUserAsync(user, cancellationToken);
+        await RelinkAsync(user, result);
+
+        if (result.Status is not (DirectoryUserStatus.Found or DirectoryUserStatus.Disabled))
+            throw new InvalidOperationException($"User '{userKey}' was not found in the directory.");
+        if (DirectoryNames.IsPlaceholder(result.DirectoryName))
+            throw new InvalidOperationException($"The directory holds no real name for user '{userKey}'.");
+
+        var name = result.DirectoryName.Trim();
+        await _userService.SetUserNameAsync(user.Key, name);
+        return name;
     }
 
     public async Task<DirectoryVerificationResult> VerifyUserAsync(string userKey, CancellationToken cancellationToken = default)

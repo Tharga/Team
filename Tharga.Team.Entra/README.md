@@ -1,4 +1,4 @@
-# Tharga.Team.Entra
+﻿# Tharga.Team.Entra
 
 Microsoft Entra ID user-directory provider for Tharga Team. Implements `IUserDirectoryService` over
 Microsoft Graph so the platform can:
@@ -60,8 +60,10 @@ directory features quietly absent — gives no clue where to look, so it warns o
 `IUserDirectoryService.SetUserNameAsync` writes `displayName` via Graph `PATCH /users/{id}`. It needs no
 permission beyond the `User.ReadWrite.All` that deletion already requires.
 
-**Off by default.** Set `o.Blazor.WriteNameToDirectory = true` to have an **administrative** rename push
-the name to the directory as well. Self-service renaming is never pushed, whatever the option says.
+**Off by default.** Set `o.Blazor.WriteNameToDirectory = true` to allow an **administrative** rename to
+write the name to the directory as well; each rename then says whether it does
+(`SetUserNameAsync(userKey, name, writeToDirectory: true)`, or the box in the rename dialog). Self-service
+renaming is never pushed.
 
 The local write always happens first and is never rolled back — a directory failure is reported on
 `UserNameChangeResult.DirectoryError`. Coupling them would let a Graph outage block renaming a user in
@@ -70,6 +72,12 @@ the application.
 The driver: an application that collects no attributes at sign-up holds the real name while the directory
 holds a placeholder such as `"unknown"`, so the good name exists and cannot reach anyone administering the
 tenant. A host federating from a corporate directory wants the opposite, which is why this is opt-in.
+
+Verification returns the user's `displayName` too, so the Users page can flag a name that differs from the
+directory. The rename dialog shows the directory's name in a frame titled Entra, can take it here, or, with the
+option on, write the entered name there (ticked from the start when Entra holds no real name), and confirms either
+before it happens. A `displayName` of `unknown` is treated as no name
+and is never taken into the application.
 
 ## Reading sign-in identities
 
