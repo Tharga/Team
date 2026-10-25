@@ -24,7 +24,8 @@
 
 ## Decisions
 - "Write name to directory" only when `o.Blazor.WriteNameToDirectory` is on — the service refuses otherwise, the UI hides it. Pull is always available.
-- Differences are shown as a row badge (tooltip = directory name) with the two actions in the row's menu, not a review dialog.
+- Differences are shown as a badge beside the name (tooltip = directory name) with the two actions in the row's menu, not a review dialog.
+  - Moved there from the actions column on 2026-10-25, during user testing: the actions column is a fixed 200px and its cells do not wrap, so after Verify the directory badge plus this one pushed the split button out of sight. The actions column now wraps too, so no combination of badges can hide the button.
 
 ## Last session
 2026-10-13: steps 1-6 done and committed. Docs done. Next: user tests on the pushed branch.

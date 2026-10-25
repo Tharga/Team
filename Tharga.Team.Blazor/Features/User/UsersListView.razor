@@ -76,7 +76,18 @@ else if (_loaded)
                     <UserAvatar EMail="@context.EMail" IconReference="@context.Icon" Name="@context.Name" UserKey="@context.Key" Size="32px" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnName]" Property="Name" />
+            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnName]" Property="Name">
+                <Template>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                        <span>@context.Name</span>
+                        @if (_showDirectory && context.NameDiffersFromDirectory)
+                        {
+                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[UsersListViewText.BadgeNameDiffers]"
+                                         title="@NameDiffersTooltip(context)" />
+                        }
+                    </RadzenStack>
+                </Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnEmail]" Property="EMail" />
             <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnTeams]" Property="@nameof(UserViewModel.TeamCount)" Filterable="false" />
             <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnLastSeen]" Property="@nameof(UserViewModel.LastSeen)" Filterable="false">
@@ -141,7 +152,7 @@ else if (_loaded)
                         var canDeleteUser = UserAdminGate.CanDeleteUser(context.Key, _currentUserKey);
                         var canDisableUser = UserAdminGate.CanDisableUser(context.Key, _currentUserKey);
                     }
-                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem">
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="1rem" Wrap="FlexWrap.Wrap">
                         @* Two badges, never one. This is "blocked from this application"; the directory
                            badge beside it is "blocked from the organization". They are independent and can
                            disagree, and an operator who reads one as the other draws the wrong conclusion
@@ -155,11 +166,6 @@ else if (_loaded)
                         {
                             <RadzenBadge BadgeStyle="@(Enum.Parse<BadgeStyle>(DirectoryStatusBadge.Style(context.DirectoryStatus.Value)))"
                                          Variant="Variant.Flat" Text="@DirectoryStatusBadge.Text(context.DirectoryStatus.Value)" />
-                        }
-                        @if (_showDirectory && context.NameDiffersFromDirectory)
-                        {
-                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[UsersListViewText.BadgeNameDiffers]"
-                                         title="@NameDiffersTooltip(context)" />
                         }
                         <RadzenSplitButton Text="@_text[UsersListViewText.ActionView]" Icon="visibility" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                                            Click="@(item => OnUserActionAsync(item, context))">

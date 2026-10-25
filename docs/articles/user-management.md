@@ -531,8 +531,8 @@ finding, not a lookup miss.
 ### Names that differ from the directory
 
 Verification also returns the directory's display name (`DirectoryVerificationResult.DirectoryName`). When
-a found user's name here differs from it, the row shows a **Name differs** badge — its tooltip gives the
-directory's name — and the row's menu offers to reconcile it:
+a found user's name here differs from it, a **Name differs** badge appears beside the name — its tooltip
+gives the directory's name — and the row's menu offers to reconcile it:
 
 | Action | Does | Offered when |
 |---|---|---|
