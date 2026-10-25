@@ -25,7 +25,7 @@ public class TeamClaimRevalidatorTests
     public TeamClaimRevalidatorTests()
     {
         _options.Setup(o => o.Value).Returns(new ThargaBlazorOptions());
-        _userService.Setup(u => u.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>()))
+        _userService.Setup(u => u.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>(), false))
             .ReturnsAsync(Mock.Of<IUser>(u => u.Key == UserKey));
         _teamService.Setup(t => t.GetConsentedTeamsAsync(It.IsAny<string[]>()))
             .Returns(AsyncEnumerable.Empty<ITeam>());
@@ -64,6 +64,18 @@ public class TeamClaimRevalidatorTests
         claims.AddRange(teamScopes.Select(s => new Claim(TeamClaimTypes.Scope, s)));
         claims.AddRange(extra);
         return new ClaimsPrincipal(new ClaimsIdentity(claims, "TestAuth"));
+    }
+
+    /// <summary>The refresh runs every interval on an idle tab too, which is not the user doing anything, so it records no activity.</summary>
+    [Fact]
+    public async Task TheRefresh_DoesNotCountAsTheUserBeingActive()
+    {
+        MemberIs(AccessLevel.Administrator, "team:read");
+
+        await CreateSut().TryRefreshAsync(FrozenMember(AccessLevel.Administrator, ["team:read"]));
+
+        _userService.Verify(u => u.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>(), false), Times.Once);
+        _userService.Verify(u => u.GetCurrentUserAsync(It.IsAny<ClaimsPrincipal>()), Times.Never);
     }
 
     [Fact]

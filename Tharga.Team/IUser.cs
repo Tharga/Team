@@ -23,8 +23,9 @@ public interface IUser
     /// <summary>
     /// When the user last made an authenticated request. Defaults to null. Stamped by the user service
     /// at most once per configured interval (see LastSeenStampInterval), so the value is approximate
-    /// within that interval. Distinct from the per-team-member <see cref="ITeamMember.LastSeen"/>, which tracks
-    /// activity in that one team.
+    /// within that interval. Claim revalidation on an open but idle tab does not count: it resolves the user
+    /// with <c>recordActivity: false</c>. Distinct from the per-team-member <see cref="ITeamMember.LastSeen"/>,
+    /// which tracks activity in that one team.
     /// </summary>
     public DateTime? LastSeen => null;
 

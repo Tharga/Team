@@ -51,6 +51,8 @@ public sealed class CacheInvalidatingUserServiceDecorator : IUserService
 
     public Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal = null) => _inner.GetCurrentUserAsync(claimsPrincipal);
 
+    public Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal, bool recordActivity) => _inner.GetCurrentUserAsync(claimsPrincipal, recordActivity);
+
     public IAsyncEnumerable<IUser> GetAsync() => _inner.GetAsync();
 
     public Task<IReadOnlyList<IUser>> GetTeamMemberUsersAsync() => _inner.GetTeamMemberUsersAsync();

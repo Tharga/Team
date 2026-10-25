@@ -142,7 +142,9 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
     protected abstract Task<IUser> GetUserAsync(ClaimsPrincipal claimsPrincipal);
     protected abstract IAsyncEnumerable<IUser> GetAllAsync();
 
-    public async Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal)
+    public Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal) => GetCurrentUserAsync(claimsPrincipal, recordActivity: true);
+
+    public async Task<IUser> GetCurrentUserAsync(ClaimsPrincipal claimsPrincipal, bool recordActivity)
     {
         claimsPrincipal = await GetClaims(claimsPrincipal);
         if (claimsPrincipal == null) return null;
@@ -158,19 +160,19 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
             await _cache.SetUserAsync(identity, user);
         }
 
-        await TouchUserAsync(user, claimsPrincipal);
+        await TouchUserAsync(user, claimsPrincipal, recordActivity);
 
         return user;
     }
 
-    private async Task TouchUserAsync(IUser user, ClaimsPrincipal claimsPrincipal)
+    private async Task TouchUserAsync(IUser user, ClaimsPrincipal claimsPrincipal, bool recordActivity)
     {
         if (user == null || string.IsNullOrEmpty(user.Key)) return;
 
         // Activity tracking must never break the resolve path (it runs inside the auth pipeline).
         try
         {
-            await StampLastSeenAsync(user.Key);
+            if (recordActivity) await StampLastSeenAsync(user.Key);
             await BackfillDirectoryIdAsync(user, claimsPrincipal);
         }
         catch (Exception ex)

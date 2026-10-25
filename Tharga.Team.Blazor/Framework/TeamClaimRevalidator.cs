@@ -50,7 +50,7 @@ internal sealed class TeamClaimRevalidator
             if (string.IsNullOrEmpty(teamKey))
                 return null;
 
-            var freshMembership = await _membershipClaimsBuilder.BuildAsync(principal, teamKey);
+            var freshMembership = await _membershipClaimsBuilder.BuildAsync(principal, teamKey, recordActivity: false);
 
             // System scopes are not team-derived; they are kept regardless and excluded from the comparison.
             // Computed from the caller's app roles only (excluding the team roles enrichment added), mirroring

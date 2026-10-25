@@ -71,6 +71,10 @@ internal sealed class TeamRevalidatingAuthenticationStateProvider : Revalidating
     /// The principal is passed explicitly: this runs on a background loop with no <c>HttpContext</c>, so
     /// the ambient-caller overload would resolve nobody.
     /// </para>
+    /// <para>
+    /// It records no activity: the loop runs for an idle tab too, which is not the user doing anything, so it must not
+    /// move their <see cref="IUser.LastSeen"/>.
+    /// </para>
     /// </remarks>
     internal static async Task<bool> IsDisabledAsync(IServiceProvider services, System.Security.Claims.ClaimsPrincipal principal)
     {
@@ -79,7 +83,7 @@ internal sealed class TeamRevalidatingAuthenticationStateProvider : Revalidating
             var userService = services.GetService<IUserService>();
             if (userService == null) return false;
 
-            var user = await userService.GetCurrentUserAsync(principal);
+            var user = await userService.GetCurrentUserAsync(principal, recordActivity: false);
             return user?.DisabledAt != null;
         }
         catch
