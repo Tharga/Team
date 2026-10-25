@@ -52,7 +52,25 @@
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <!--
+      Microsoft.Identity.Web.TokenCache 4.16.1 depends on System.Security.Cryptography.Xml 10.0.10, which has three
+      high-severity advisories fixed in 10.0.13 (GHSA-7hqp-7c5m-4vq6, GHSA-c399-9853-6jmj, GHSA-r955-8q5j-3h83).
+      A web host takes the assembly from the ASP.NET Core shared framework, but a consumer on the plain SDK, such as
+      a test project, restores the package and gets NU1903 three times (Tharga/Team#380). Drop this pin once
+      Microsoft.Identity.Web depends on a patched version, and KeepCryptographyXmlPin below with it.
+    -->
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.13" />
   </ItemGroup>
+  <!--
+    The shared framework ships this assembly, so the SDK prunes the package, and pack then leaves the pin out of the
+    package's dependencies: the consumer the pin is for would never see it. The SDK adds what it prunes in
+    AddPrunePackageReferences, so this one is taken out right after.
+  -->
+  <Target Name="KeepCryptographyXmlPin" AfterTargets="AddPrunePackageReferences">
+    <ItemGroup>
+      <PrunePackageReference Remove="System.Security.Cryptography.Xml" />
+    </ItemGroup>
+  </Target>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team\Tharga.Team.csproj" />
     <ProjectReference Include="..\Tharga.Team.Service\Tharga.Team.Service.csproj" />
