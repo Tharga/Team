@@ -3,6 +3,11 @@ namespace Tharga.Team;
 /// <summary>
 /// Declares the scope required to call this method.
 /// </summary>
+/// <remarks>
+/// <b>The attribute enforces nothing by itself.</b> <c>ScopeProxy</c> reads it, and only on an interface
+/// registered through <c>AddTeamService</c> or <c>AddSystemService</c>. On a service registered any other way it
+/// is documentation, and the check has to be written by hand.
+/// </remarks>
 [AttributeUsage(AttributeTargets.Method)]
 public class RequireScopeAttribute : Attribute
 {

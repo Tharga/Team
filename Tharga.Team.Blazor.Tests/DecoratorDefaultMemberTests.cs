@@ -1,13 +1,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Tharga.Team.Blazor.Framework;
-using Tharga.Team.Entra;
-using Tharga.Team.Images;
-using Tharga.Team.Mcp;
-using Tharga.Team.MongoDB;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
-using Tharga.Team.Support;
 using Tharga.Team.Support.Cases;
 
 namespace Tharga.Team.Blazor.Tests;
@@ -28,17 +22,7 @@ namespace Tharga.Team.Blazor.Tests;
 /// </remarks>
 public class DecoratorDefaultMemberTests
 {
-    private static readonly Assembly[] ToolkitAssemblies =
-    [
-        typeof(ITeamService).Assembly,
-        typeof(AuthorizationTeamServiceDecorator).Assembly,
-        typeof(ThargaBlazorOptions).Assembly,
-        typeof(TeamServiceRepositoryBase<,>).Assembly,
-        typeof(SupportRegistration).Assembly,
-        typeof(McpTeamOptions).Assembly,
-        typeof(EntraDirectoryRegistration).Assembly,
-        typeof(ImageProcessingRegistration).Assembly
-    ];
+    private static readonly Assembly[] ToolkitAssemblies = ShippedAssemblies.All();
 
     /// <summary>A class that implements an interface and takes that same interface on its constructor.</summary>
     internal static IEnumerable<(Type Decorator, Type Contract)> Decorations(IEnumerable<Type> types)
@@ -104,8 +88,8 @@ public class DecoratorDefaultMemberTests
     }
 
     /// <summary>
-    /// The support pair, named for the same reason: the assembly is on the list above, but "is it actually
-    /// scanned" is the question a reader has, and reading the list does not answer it.
+    /// The support pair, named for the same reason: the package ships, so it is searched, but "is it actually
+    /// scanned" is the question a reader has, and the list of shipped packages does not answer it.
     /// </summary>
     /// <remarks>
     /// <c>ISupportCaseService</c> has no default members today, so both pass with nothing to forward. That
