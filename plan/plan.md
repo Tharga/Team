@@ -30,6 +30,7 @@
   - Full suite green: Service 1532, Blazor 2331, Email 985, Support 814, MongoDB 468, Mcp 121, Entra 58, Support.Anthropic 12, Images 11. Warnings at the baseline (14).
 - [x] 7e. From user testing (2026-10-25): the directory's part of the dialog sits in a frame titled "Entra", and when Entra holds no real name the box starts ticked (still confirmed). "Use this name" was already hidden for `unknown`.
   - Decision: the word "Entra" is one text, `UserNameDialogText.Directory`, used for the title and as `{0}` in every sentence naming the directory, so a host with another directory changes it in one place.
+- [x] 7f. From user testing (2026-10-25): the write box sits below the Entra frame, and shows only when there is a name to write, so it disappears after "Use this name". The name field updates as it is typed (`Immediate`), so the box follows without leaving the field.
 - [~] 8. User tests in the sample app; then close-out (re-check NuGet, archive plan, remove `plan/`, PR).
   - The sample has the Entra client secret on this machine, so Verify shows, and it turns `o.Blazor.WriteNameToDirectory` on, so the dialog offers writing to Entra.
 

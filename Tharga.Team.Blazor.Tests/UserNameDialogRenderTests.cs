@@ -74,6 +74,16 @@ public class UserNameDialogRenderTests : BunitContext
         Assert.NotNull(view.Find("[data-directory] [data-directory-name]"));
     }
 
+    /// <summary>The frame shows what Entra holds; the box is a choice about this rename, so it sits below it.</summary>
+    [Fact]
+    public void TheWriteBox_SitsOutsideTheEntraFrame()
+    {
+        var view = Render();
+
+        Assert.NotEmpty(view.FindAll("[data-write-to-directory]"));
+        Assert.Empty(view.FindAll("[data-directory] [data-write-to-directory]"));
+    }
+
     /// <summary>A directory that holds no real name has nothing to give, so the likely intent is to give it ours.</summary>
     [Fact]
     public void NoNameInTheDirectory_WritesOursThereByDefault()
@@ -92,13 +102,27 @@ public class UserNameDialogRenderTests : BunitContext
         Assert.False(view.FindComponent<RadzenCheckBox<bool>>().Instance.Value);
     }
 
-    /// <summary>Nothing to write without a real name here, so the box is not ticked for one.</summary>
+    /// <summary>Nothing to write without a real name here, so there is no box to tick.</summary>
     [Fact]
-    public void NoNameHereEither_TicksNothing()
+    public void NoNameHereEither_OffersNoWrite()
     {
         var view = Render(currentName: null, directoryName: "unknown");
 
-        Assert.False(view.FindComponent<RadzenCheckBox<bool>>().Instance.Value);
+        Assert.Empty(view.FindAll("[data-write-to-directory]"));
+    }
+
+    /// <summary>After "Use this name" the two names agree, so writing to Entra would change nothing.</summary>
+    [Fact]
+    public void UsingEntrasName_HidesTheWriteBox_UntilTheNameDiffersAgain()
+    {
+        var view = Render(currentName: "Ann", directoryName: "Ann Larsson");
+        Assert.NotEmpty(view.FindAll("[data-write-to-directory]"));
+
+        view.Find("button[data-use-directory-name]").Click();
+        Assert.Empty(view.FindAll("[data-write-to-directory]"));
+
+        view.Find("input[data-name]").Input("Ann B. Larsson");
+        Assert.NotEmpty(view.FindAll("[data-write-to-directory]"));
     }
 
     [Fact]
@@ -106,7 +130,7 @@ public class UserNameDialogRenderTests : BunitContext
     {
         var view = Render(directoryName: "Annie");
 
-        view.Find("input[data-name]").Change("Ann Larsson");
+        view.Find("input[data-name]").Input("Ann Larsson");
         view.Find("button[data-save]").Click();
 
         Assert.Empty(view.FindAll("[data-confirm]"));
@@ -118,7 +142,7 @@ public class UserNameDialogRenderTests : BunitContext
     {
         var view = Render();
 
-        view.Find("input[data-name]").Change("Ann Larsson");
+        view.Find("input[data-name]").Input("Ann Larsson");
         await TickWriteToDirectoryAsync(view);
         view.Find("button[data-save]").Click();
 
@@ -153,7 +177,7 @@ public class UserNameDialogRenderTests : BunitContext
     {
         var view = Render();
 
-        view.Find("input[data-name]").Change("Ann Larsson");
+        view.Find("input[data-name]").Input("Ann Larsson");
         await TickWriteToDirectoryAsync(view);
         view.Find("button[data-save]").Click();
         view.FindAll("button").Last().Click();
