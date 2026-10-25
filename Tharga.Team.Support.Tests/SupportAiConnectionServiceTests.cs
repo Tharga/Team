@@ -1,4 +1,4 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
@@ -19,6 +19,7 @@ public class SupportAiConnectionServiceTests
     private const string GoodKey = "nl-team-key-0123456789";
     private const string Model = "claude-qwen3-coder:30b";
     private const string NeurolitoAddress = "https://neurolito.com";
+    private const string AnthropicAddress = "https://api.anthropic.com";
 
     private static SupportAiProviderRequest Neurolito(string apiKey = GoodKey, string model = Model, string baseAddress = null)
         => new() { Kind = SupportAiConnectionKind.Neurolito, ApiKey = apiKey, Model = model, BaseAddress = baseAddress };
@@ -32,6 +33,31 @@ public class SupportAiConnectionServiceTests
 
         Assert.Equal([SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Off], choices.Kinds);
         Assert.Equal(NeurolitoAddress, Assert.Single(choices.ProviderDefaults).BaseAddress);
+    }
+
+    /// <summary>Every provider the installed factory offers is a choice, in its order, between the platform's model and off.</summary>
+    [Fact]
+    public async Task EveryProviderOffered_IsAChoice()
+    {
+        var (service, _, _, _) = Build(factory: new FakeFactory { Providers = BothProviders });
+
+        var choices = await service.GetChoicesAsync(TeamA);
+
+        Assert.Equal([SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Anthropic, SupportAiConnectionKind.Off], choices.Kinds);
+        Assert.Equal([NeurolitoAddress, AnthropicAddress], choices.ProviderDefaults.Select(x => x.BaseAddress));
+    }
+
+    [Fact]
+    public async Task ConnectingAnthropic_SavesIt_AtItsAddress()
+    {
+        var (service, store, _, _) = Build(factory: new FakeFactory { Providers = BothProviders });
+
+        var result = await service.ConnectAsync(TeamA, new SupportAiProviderRequest { Kind = SupportAiConnectionKind.Anthropic, ApiKey = GoodKey, Model = Model });
+
+        Assert.True(result.Succeeded, result.Problem);
+        var stored = await store.GetAsync(TeamA);
+        Assert.Equal(SupportAiConnectionKind.Anthropic, stored.Kind);
+        Assert.Equal(AnthropicAddress, stored.BaseAddress);
     }
 
     [Fact]
@@ -308,6 +334,9 @@ public class SupportAiConnectionServiceTests
         Assert.Equal(0, await new SupportAiConnectionPurgeParticipant(store).PurgeTeamDataAsync(TeamA));
     }
 
+    private static readonly SupportAiProviderDefault[] BothProviders =
+        [new(SupportAiConnectionKind.Neurolito, NeurolitoAddress), new(SupportAiConnectionKind.Anthropic, AnthropicAddress)];
+
     private static (ISupportAiConnectionService Service, InMemoryConnectionStore Store, FakeFactory Factory, CollectingAuditLogger Sink) Build(
         bool withScope = true,
         bool platformModel = true,
@@ -365,7 +394,7 @@ public class SupportAiConnectionServiceTests
         public bool ChatFails { get; init; }
         public List<SupportAiEndpoint> Seen { get; } = [];
 
-        public IReadOnlyList<SupportAiProviderDefault> Providers { get; } = [new(SupportAiConnectionKind.Neurolito, NeurolitoAddress)];
+        public IReadOnlyList<SupportAiProviderDefault> Providers { get; init; } = [new(SupportAiConnectionKind.Neurolito, NeurolitoAddress)];
 
         public IChatClient Create(SupportAiEndpoint endpoint)
         {

@@ -110,6 +110,22 @@ public class SupportAssistantConnectionViewTests : BunitContext
         Assert.Equal(SupportAssistantConnectionViewText.ApiKeyPlaceholder.Default, view.Find("[data-key-hint]").TextContent.Trim());
     }
 
+    /// <summary>With both providers offered, each starts from its own address, not the other's.</summary>
+    [Fact]
+    public async Task ChoosingAnthropic_StartsFromAnthropicsAddress()
+    {
+        const string anthropicAddress = "https://api.anthropic.com";
+        var view = Render(choices: new SupportAiConnectionChoices
+        {
+            Kinds = [SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Anthropic, SupportAiConnectionKind.Off],
+            ProviderDefaults = [new SupportAiProviderDefault(SupportAiConnectionKind.Neurolito, Address), new SupportAiProviderDefault(SupportAiConnectionKind.Anthropic, anthropicAddress)]
+        });
+
+        await ChooseAsync(view, SupportAiConnectionKind.Anthropic);
+
+        Assert.Equal(anthropicAddress, view.Find("input[data-address]").GetAttribute("value"));
+    }
+
     [Fact]
     public async Task LoadingModels_SendsTheTypedKey_AndOffersWhatCameBack()
     {

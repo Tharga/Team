@@ -11,8 +11,9 @@ namespace Tharga.Team.Support.Anthropic;
 /// <c>POST /v1/messages</c> to answer.
 /// </summary>
 /// <remarks>
-/// <b>Neurolito speaks this protocol</b>, so one client serves it, with Neurolito's address and the team's Neurolito
-/// key. The SDK sends the key as a bearer token, which Neurolito accepts as it accepts its own <c>X-API-KEY</c>.
+/// <b>Neurolito and Anthropic both speak this protocol</b>, so one client serves both: only the address and the team's
+/// key differ. The SDK sends the key as a bearer token, as Anthropic's API takes it and Neurolito accepts it beside its
+/// own <c>X-API-KEY</c>.
 /// <para>
 /// <b>HTTP connections come from <see cref="IHttpClientFactory"/></b>, so the clients a team's connection creates share
 /// pooled connections rather than each opening their own.
@@ -36,7 +37,11 @@ internal sealed class AnthropicChatClientFactory(IHttpClientFactory httpClients,
     internal const string NotAProvider = "The address did not answer like an AI provider.";
     internal const string NoModels = "The provider offers no models for this key.";
 
-    public IReadOnlyList<SupportAiProviderDefault> Providers => [new(SupportAiConnectionKind.Neurolito, options.NeurolitoBaseAddress)];
+    public IReadOnlyList<SupportAiProviderDefault> Providers =>
+    [
+        new(SupportAiConnectionKind.Neurolito, options.NeurolitoBaseAddress),
+        .. options.OfferAnthropic ? [new SupportAiProviderDefault(SupportAiConnectionKind.Anthropic, options.AnthropicBaseAddress)] : Array.Empty<SupportAiProviderDefault>()
+    ];
 
     public IChatClient Create(SupportAiEndpoint endpoint)
         => Client(endpoint, retries: null)
