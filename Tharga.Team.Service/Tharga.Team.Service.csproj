@@ -43,7 +43,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
-    <PackageReference Include="Tharga.MongoDB" Version="2.18.3" />
+    <PackageReference Include="Tharga.MongoDB" Version="2.19.0" />
     <!--
       The one HTML sanitizer: formatted text is kept and shown only as its allow-listed output, on every way in
       and at every render. A maintained library rather than hand-rolled parsing, because a sanitizer is only as
