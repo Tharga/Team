@@ -8,7 +8,21 @@ Team management infrastructure: Tharga.Team, Tharga.Team.Service, Tharga.Team.Mo
 
 ## Issue tracker
 
-None — a NuGet library; GitHub issues on Tharga/Team are the backlog and incoming requests, plans are file-based (`plan/` on the feature branch). Decided 2026-10-15.
+| | |
+|---|---|
+| System of record | github |
+| Role | - |
+| q4n team | - |
+| q4n server | - |
+| q4n key | - |
+| GitHub | `Tharga/Team` (public) |
+| Jira | - |
+| Backlog file | history only: `$DOC_ROOT/Tharga/Toolkit/Team.md` |
+| Routes | - |
+
+New work, findings and in-code TODOs are filed as GitHub issues on this repository. The backlog file is history. Where other projects file requests for this repository is listed in shared instructions → *Feature Requests* → *Where each project takes requests*.
+
+A NuGet library: GitHub issues have been the backlog and incoming requests since 2026-10-15, and the remaining backlog rows moved to issues on 2026-10-26. Plans are file-based (`plan/` on the feature branch).
 
 ## Workflow Overrides
 
@@ -68,5 +82,5 @@ for WebAssembly or a desktop client. Until then, incremental wins.
 - **Shared instructions**: `$DOC_ROOT/Tharga/shared-instructions.md`
 - **Target architecture**: `$DOC_ROOT/Tharga/plans/Toolkit/Platform/architecture-v4.md` — read before designing new surface; see Design Direction above
 - **Plan directory**: `$DOC_ROOT/Tharga/plans/Toolkit/Platform`
-- **Backlog**: `$DOC_ROOT/Tharga/Toolkit/Team.md` (renamed from `Platform.md` 2026-07-28)
+- **Backlog** (history only; open work is GitHub issues): `$DOC_ROOT/Tharga/Toolkit/Team.md`
 - **Incoming requests**: `$DOC_ROOT/Tharga/Requests.md` — check sections "Tharga.Team" and "Tharga.Team — MCP" on startup (renamed from "Tharga.Platform" 2026-07-28; individual entries below those headings still say Platform in their prose, which is historical and correct for when they were written).
