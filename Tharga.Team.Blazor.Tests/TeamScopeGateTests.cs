@@ -49,6 +49,18 @@ public class TeamScopeGateTests
         Assert.False(TeamScopeGate.HasTeamScope(Principal(null, ApiKeyScopes.Manage), ApiKeyScopes.Manage, "team-a"));
     }
 
+    /// <summary>A scope on an identity issued for another team does not count for the caller's team.</summary>
+    [Fact]
+    public void HasTeamScope_FromAnIdentityForAnotherTeam_IsFalse()
+    {
+        var principal = new ClaimsPrincipal([
+            new ClaimsIdentity([new Claim(TeamClaimTypes.TeamKey, "team-a")], "Test"),
+            new ClaimsIdentity([new Claim(TeamClaimTypes.TeamKey, "team-b"), new Claim(TeamClaimTypes.Scope, ApiKeyScopes.Manage)], "Other")
+        ]);
+
+        Assert.False(TeamScopeGate.HasTeamScope(principal, ApiKeyScopes.Manage, "team-a"));
+    }
+
     [Fact]
     public void HasTeamScope_ForNoTeam_IsFalse()
     {

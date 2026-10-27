@@ -16,10 +16,16 @@ namespace Tharga.Team.Service;
 internal static class TeamScopePolicy
 {
     /// <summary>
-    /// Whether the caller holds <paramref name="scope"/> <b>for</b> <paramref name="teamKey"/>: the scope
-    /// claim is present and the caller's <c>TeamKey</c> claim is that same team. In-team scopes are issued
-    /// for the selected team only, so this is what confines them to it.
+    /// Whether the caller holds <paramref name="scope"/> <b>for</b> <paramref name="teamKey"/>: the caller's
+    /// <c>TeamKey</c> claim is that team, and the scope claim sits on an identity issued for that same team.
+    /// In-team scopes are issued for the selected team only, so this is what confines them to it.
     /// </summary>
+    /// <remarks>
+    /// <b>The scope is read from the identity that carries the team, not from anywhere on the principal.</b> A
+    /// principal can hold more than one identity, and a scope claim on one of them says nothing about the team
+    /// named on another. Reading the team from one place and the scope from all of them would let a scope
+    /// issued for one team count towards a different one.
+    /// </remarks>
     public static bool HasTeamScope(ClaimsPrincipal principal, string scope, string teamKey)
     {
         if (principal == null || string.IsNullOrEmpty(teamKey)) return false;
@@ -27,7 +33,7 @@ internal static class TeamScopePolicy
         var callerTeam = principal.FindFirst(TeamClaimTypes.TeamKey)?.Value;
         if (string.IsNullOrEmpty(callerTeam) || callerTeam != teamKey) return false;
 
-        return HasScopeClaim(principal, scope);
+        return IdentitiesFor(principal, teamKey).Any(identity => identity.HasClaim(TeamClaimTypes.Scope, scope));
     }
 
     /// <summary>
@@ -41,12 +47,17 @@ internal static class TeamScopePolicy
     /// its own level. The provenance is on the principal: <see cref="TeamClaimTypes.MemberKey"/> is issued only from
     /// a membership, and a team API key carries <see cref="TeamClaimTypes.ApiKeyId"/> without
     /// <see cref="TeamClaimTypes.IsSystemKey"/>. A system key acting through a team's consent has neither.
+    /// <para>
+    /// The member key is read from the identity issued for <paramref name="teamKey"/>, like the scope: a membership
+    /// of one team is not a membership of another.
+    /// </para>
     /// </remarks>
     public static bool HasDirectTeamScope(ClaimsPrincipal principal, string scope, string teamKey)
     {
         if (!HasTeamScope(principal, scope, teamKey)) return false;
 
-        var isMember = !string.IsNullOrEmpty(principal.FindFirst(TeamClaimTypes.MemberKey)?.Value);
+        var isMember = IdentitiesFor(principal, teamKey)
+            .Any(identity => !string.IsNullOrEmpty(identity.FindFirst(TeamClaimTypes.MemberKey)?.Value));
         var isTeamKey = principal.HasClaim(c => c.Type == TeamClaimTypes.ApiKeyId)
                         && !principal.HasClaim(c => c.Type == TeamClaimTypes.IsSystemKey);
 
@@ -66,8 +77,9 @@ internal static class TeamScopePolicy
     public static bool HasSystemScope(ClaimsPrincipal principal, string scope)
         => principal != null && HasClaim(principal, TeamClaimTypes.SystemScope, scope);
 
-    private static bool HasScopeClaim(ClaimsPrincipal principal, string scope)
-        => HasClaim(principal, TeamClaimTypes.Scope, scope);
+    /// <summary>The identities on <paramref name="principal"/> that were issued for <paramref name="teamKey"/>.</summary>
+    private static IEnumerable<ClaimsIdentity> IdentitiesFor(ClaimsPrincipal principal, string teamKey)
+        => principal.Identities.Where(identity => identity.HasClaim(TeamClaimTypes.TeamKey, teamKey));
 
     private static bool HasClaim(ClaimsPrincipal principal, string claimType, string scope)
         => principal.Claims.Any(c => c.Type == claimType && c.Value == scope);

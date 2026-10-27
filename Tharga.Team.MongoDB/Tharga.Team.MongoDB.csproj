@@ -35,7 +35,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.14" />
-    <PackageReference Include="Tharga.MongoDB" Version="2.19.0" />
+    <PackageReference Include="Tharga.MongoDB" Version="2.19.2" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Tharga.Team.MongoDB.Tests" />
