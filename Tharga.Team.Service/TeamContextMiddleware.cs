@@ -19,6 +19,12 @@ namespace Tharga.Team.Service;
 /// rather than left to a later check. The request has already said two incompatible things, and the
 /// earliest honest answer is the best one.
 /// </para>
+/// <para>
+/// <b>Naming a team replaces the team claims; it never adds a second team.</b> A signed-in person already carries
+/// claims for the team they selected, and naming a different one is re-selection. The claims for the selected
+/// team are removed before the named team's are added, so the principal describes one team, as it does on MCP.
+/// Naming the team the caller is already anchored to changes nothing.
+/// </para>
 /// </remarks>
 public sealed class TeamContextMiddleware(RequestDelegate next, IOptions<TeamContextOptions> options)
 {
@@ -45,18 +51,58 @@ public sealed class TeamContextMiddleware(RequestDelegate next, IOptions<TeamCon
 
             // Only when the resolver granted scopes. A team-bound caller already carries its own, and
             // re-adding them would be a second, quieter place that decides what a team key may do.
-            if (resolved.Scopes != null && !string.IsNullOrEmpty(resolved.TeamKey))
+            if (resolved.Scopes != null && !string.IsNullOrEmpty(resolved.TeamKey) && !IsAnchoredTo(context.User, resolved.TeamKey))
             {
                 var claims = new List<Claim> { new(TeamClaimTypes.TeamKey, resolved.TeamKey) };
                 claims.AddRange(resolved.Scopes.Select(s => new Claim(TeamClaimTypes.Scope, s)));
                 if (!string.IsNullOrEmpty(resolved.MemberKey)) claims.Add(new Claim(TeamClaimTypes.MemberKey, resolved.MemberKey));
 
-                context.User.AddIdentity(new ClaimsIdentity(claims, "TeamContext"));
+                context.User = Reselect(context.User, new ClaimsIdentity(claims, "TeamContext"));
             }
         }
 
         await next(context);
     }
+
+    /// <summary>
+    /// Whether every team claim on <paramref name="principal"/> already names <paramref name="teamKey"/> — the caller
+    /// named the team it is on, and its own claims for it stand.
+    /// </summary>
+    private static bool IsAnchoredTo(ClaimsPrincipal principal, string teamKey)
+    {
+        var teams = principal.FindAll(TeamClaimTypes.TeamKey).Select(c => c.Value).ToArray();
+        return teams.Length > 0 && teams.All(team => team == teamKey);
+    }
+
+    /// <summary>
+    /// <paramref name="principal"/> with the claims of the team it was on removed, and <paramref name="team"/> added.
+    /// </summary>
+    /// <remarks>
+    /// Each identity is cloned before claims are removed, so a principal shared with anything else is left as it was.
+    /// </remarks>
+    private static ClaimsPrincipal Reselect(ClaimsPrincipal principal, ClaimsIdentity team)
+    {
+        var identities = principal.Identities.Select(identity =>
+        {
+            var copy = identity.Clone();
+            foreach (var claim in copy.Claims.Where(IsTeamClaim).ToArray()) copy.TryRemoveClaim(claim);
+            return copy;
+        }).ToList();
+
+        identities.Add(team);
+        return new ClaimsPrincipal(identities);
+    }
+
+    /// <summary>
+    /// A claim that describes the caller's access to one team: the team key, access level, member key, a team
+    /// scope, or a role synthesised from the membership (<c>TeamMember</c>, <c>Team{AccessLevel}</c>).
+    /// </summary>
+    private static bool IsTeamClaim(Claim claim)
+        => claim.Type is TeamClaimTypes.TeamKey or TeamClaimTypes.AccessLevel or TeamClaimTypes.MemberKey or TeamClaimTypes.Scope
+           || (claim.Type == ClaimTypes.Role && TeamRoles.Contains(claim.Value));
+
+    private static readonly HashSet<string> TeamRoles =
+        new(["TeamMember", .. Enum.GetNames<AccessLevel>().Select(name => "Team" + name)], StringComparer.Ordinal);
 }
 
 /// <summary>Configuration for how a request names the team it acts on.</summary>

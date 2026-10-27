@@ -672,6 +672,13 @@ So every `[RequireScope]` check works unchanged — including in **your own cont
 knowledge that the header exists. MCP resolves the same header through the same code, so a system key
 gets the same answer whichever surface it arrives on.
 
+**Naming a team replaces the caller's team claims; it never adds a second team.** A signed-in person
+already carries the claims of the team they selected, and naming a different team they belong to is
+re-selection: those claims (team key, access level, member key, team scopes and team roles) are removed
+and the named team's are added. Claims that are not about a team — the subject, app roles, system
+scopes — stay. Naming the team the caller is already on changes nothing. A team scope is only ever read
+from the claims issued for that same team.
+
 Configure the name once, on `TeamContextOptions.TeamKeyHeader`. It is deliberately not also an MCP
 option: two places to configure one name is one place for the surfaces to disagree.
 

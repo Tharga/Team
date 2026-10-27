@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Tharga.Team;
+using Tharga.Team.Service;
 
 namespace Tharga.Team.Blazor.Framework;
 
@@ -21,15 +22,12 @@ public static class TeamScopeGate
     /// Whether the caller holds <paramref name="scope"/> <b>for</b> <paramref name="teamKey"/> — the claim
     /// is present and it was issued for that team.
     /// </summary>
+    /// <remarks>
+    /// The service layer's own rule, <c>TeamScopePolicy.HasTeamScope</c>, rather than a copy of it: a gate that
+    /// restates the rule can come to answer differently from the check it is meant to mirror.
+    /// </remarks>
     public static bool HasTeamScope(ClaimsPrincipal principal, string scope, string teamKey)
-    {
-        if (principal == null || string.IsNullOrEmpty(teamKey)) return false;
-
-        var callerTeam = principal.FindFirst(TeamClaimTypes.TeamKey)?.Value;
-        if (string.IsNullOrEmpty(callerTeam) || callerTeam != teamKey) return false;
-
-        return principal.HasClaim(TeamClaimTypes.Scope, scope);
-    }
+        => TeamScopePolicy.HasTeamScope(principal, scope, teamKey);
 
     /// <summary>
     /// Whether the caller holds the system <paramref name="scope"/> — granted by an app role or a system API
