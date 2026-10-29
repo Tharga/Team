@@ -58,6 +58,8 @@ internal sealed class ChatSupportResponder(
                 return SupportAnswer.Declined(NotConfiguredReason);
             }
 
+            // Who serves and with which model, for the usage; a client wrapped for function calls asks the one inside.
+            var metadata = chat.GetService<ChatClientMetadata>();
             var gaps = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken), MissingSkill(gaps)] };
 
@@ -71,11 +73,11 @@ internal sealed class ChatSupportResponder(
                 var response = await chat.GetResponseAsync(history, chatOptions, deadline.Token);
                 body = response.Text?.Trim();
                 calls = [.. response.Messages.SelectMany(x => x.Contents).OfType<FunctionCallContent>().Where(IsServiceCall).Select(CallOf)];
-                usage = UsageOf([response.Usage]);
+                usage = UsageOf([response.Usage], metadata?.ProviderName, response.ModelId ?? metadata?.DefaultModelId);
             }
             else
             {
-                (body, calls, usage) = await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, deadline.Token);
+                (body, calls, usage) = await StreamAsync(chat, history, chatOptions, progress, supportCase.Id, metadata, deadline.Token);
                 body = body.Trim();
             }
 
@@ -125,13 +127,14 @@ internal sealed class ChatSupportResponder(
     /// answer they preview is still kept.
     /// </para>
     /// </remarks>
-    private async Task<(string Body, SupportAssistantCall[] Calls, SupportAssistantUsage Usage)> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, CancellationToken cancellationToken)
+    private async Task<(string Body, SupportAssistantCall[] Calls, SupportAssistantUsage Usage)> StreamAsync(IChatClient chat, List<ChatMessage> history, ChatOptions chatOptions, IProgress<SupportAssistantProgress> progress, string caseId, ChatClientMetadata metadata, CancellationToken cancellationToken)
     {
         var text = new StringBuilder();
         var round = 1;
         List<string> running = [];
         List<SupportAssistantCall> calls = [];
         List<UsageDetails> usage = [];
+        string modelId = null;
         var waiting = false;
         var reporting = true;
 
@@ -156,6 +159,7 @@ internal sealed class ChatSupportResponder(
         {
             // Streamed, each round reports its own, and nothing adds them up.
             usage.AddRange(update.Contents.OfType<UsageContent>().Select(x => x.Details));
+            modelId = update.ModelId ?? modelId;
 
             var asked = update.Contents.OfType<FunctionCallContent>().ToArray();
             if (asked.Length > 0)
@@ -181,11 +185,11 @@ internal sealed class ChatSupportResponder(
             Report();
         }
 
-        return (text.ToString(), [.. calls], UsageOf(usage));
+        return (text.ToString(), [.. calls], UsageOf(usage, metadata?.ProviderName, modelId ?? metadata?.DefaultModelId));
     }
 
     /// <summary>The tokens reported, added up; <c>null</c> when nothing was reported, so no count reads as zero.</summary>
-    internal static SupportAssistantUsage UsageOf(IEnumerable<UsageDetails> reported)
+    internal static SupportAssistantUsage UsageOf(IEnumerable<UsageDetails> reported, string provider = null, string model = null)
     {
         var details = reported.Where(x => x != null).ToArray();
         if (details.Length == 0) return null;
@@ -194,7 +198,10 @@ internal sealed class ChatSupportResponder(
         {
             InputTokens = details.Sum(x => x.InputTokenCount ?? 0),
             OutputTokens = details.Sum(x => x.OutputTokenCount ?? 0),
-            TotalTokens = details.Sum(x => x.TotalTokenCount ?? (x.InputTokenCount ?? 0) + (x.OutputTokenCount ?? 0))
+            TotalTokens = details.Sum(x => x.TotalTokenCount ?? (x.InputTokenCount ?? 0) + (x.OutputTokenCount ?? 0)),
+            CachedInputTokens = details.Sum(x => x.CachedInputTokenCount ?? 0),
+            Provider = provider,
+            Model = model
         };
     }
 

@@ -37,9 +37,9 @@ public class SupportAssistantCallMappingTests
     [Fact]
     public void TheTokens_RoundTrip()
     {
-        var stored = MongoSupportCaseStore.ToEntity(Answer() with { AssistantUsage = new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830 } });
+        var stored = MongoSupportCaseStore.ToEntity(Answer() with { AssistantUsage = new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830, CachedInputTokens = 400, Provider = "openai", Model = "gpt-4.1" } });
 
-        Assert.Equal(new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830 }, MongoSupportCaseStore.ToMessage(stored).AssistantUsage);
+        Assert.Equal(new SupportAssistantUsage { InputTokens = 610, OutputTokens = 220, TotalTokens = 830, CachedInputTokens = 400, Provider = "openai", Model = "gpt-4.1" }, MongoSupportCaseStore.ToMessage(stored).AssistantUsage);
     }
 
     [Fact]
