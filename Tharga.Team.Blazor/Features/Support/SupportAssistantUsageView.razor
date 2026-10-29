@@ -1,0 +1,184 @@
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Blazor
+@using Microsoft.Extensions.DependencyInjection
+@inject ISupportAssistantUsageService Usage
+@inject IServiceProvider ServiceProvider
+
+@* How much the support assistant was used, per team, provider and model, for the people who run or bill the product.
+   Needs the support:usage:read system scope; team names come from the team directory where the reader may read it,
+   and the team key is shown where not. Nothing anybody wrote is shown, because none of it is kept. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[SupportAssistantUsageViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+            <RadzenFormField Text="@_text[SupportAssistantUsageViewText.From]" Variant="Variant.Outlined">
+                <RadzenDatePicker TValue="DateTime" Value="@_from" Change="@((DateTime? value) => SetFromAsync(value))" DateFormat="d" data-from />
+            </RadzenFormField>
+            <RadzenFormField Text="@_text[SupportAssistantUsageViewText.To]" Variant="Variant.Outlined">
+                <RadzenDatePicker TValue="DateTime" Value="@_to" Change="@((DateTime? value) => SetToAsync(value))" DateFormat="d" data-to />
+            </RadzenFormField>
+        </RadzenStack>
+
+        @if (_rows.Length == 0)
+        {
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-usage>@_text[SupportAssistantUsageViewText.NoUsage]</RadzenText>
+        }
+        else
+        {
+            <div style="overflow-x: auto;">
+                <table class="rz-grid-table rz-grid-table-fixed" data-usage>
+                    <thead>
+                        <tr>
+                            <th>@_text[SupportAssistantUsageViewText.Team]</th>
+                            <th>@_text[SupportAssistantUsageViewText.Provider]</th>
+                            <th>@_text[SupportAssistantUsageViewText.Model]</th>
+                            <th style="text-align: end;">@_text[SupportAssistantUsageViewText.Answers]</th>
+                            <th style="text-align: end;">@_text[SupportAssistantUsageViewText.Declines]</th>
+                            <th style="text-align: end;">@_text[SupportAssistantUsageViewText.ToolCalls]</th>
+                            <th style="text-align: end;">@_text[SupportAssistantUsageViewText.InputTokens]</th>
+                            <th style="text-align: end;">@_text[SupportAssistantUsageViewText.CachedTokens]</th>
+                            <th style="text-align: end;">@_text[SupportAssistantUsageViewText.OutputTokens]</th>
+                            <th style="text-align: end;">@_text[SupportAssistantUsageViewText.TotalTokens]</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _rows)
+                        {
+                            <tr data-usage-row>
+                                <td data-team>@TeamName(row.TeamKey)</td>
+                                <td data-provider>@(row.Provider ?? _text[SupportAssistantUsageViewText.Unknown])</td>
+                                <td data-model>@(row.Model ?? _text[SupportAssistantUsageViewText.Unknown])</td>
+                                @Counts(row)
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr data-usage-total style="font-weight: 600;">
+                            <td colspan="3">@_text[SupportAssistantUsageViewText.Total]</td>
+                            @Counts(_total)
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>One team's usage only; every team when not set.</summary>
+    [Parameter] public string TeamKey { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _permitted = true;
+    private DateTime _from;
+    private DateTime _to;
+    private SupportAssistantUsageTotal[] _rows = [];
+    private SupportAssistantUsageTotal _total;
+    private Dictionary<string, string> _teamNames;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportAssistantUsageViewText.All);
+
+        var today = DateTime.UtcNow.Date;
+        _from = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        _to = today;
+
+        await LoadAsync();
+        _ready = true;
+    }
+
+    private Task SetFromAsync(DateTime? value)
+    {
+        if (value == null) return Task.CompletedTask;
+        _from = DateTime.SpecifyKind(value.Value.Date, DateTimeKind.Utc);
+        return LoadAsync();
+    }
+
+    private Task SetToAsync(DateTime? value)
+    {
+        if (value == null) return Task.CompletedTask;
+        _to = DateTime.SpecifyKind(value.Value.Date, DateTimeKind.Utc);
+        return LoadAsync();
+    }
+
+    /// <remarks>The period is whole days, the last one included: the service's end is the start of the day after.</remarks>
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _rows = [.. (await Usage.GetUsageAsync(_from, _to.AddDays(1), TeamKey))
+                .OrderBy(x => x.TeamKey, StringComparer.Ordinal)
+                .ThenByDescending(x => x.TotalTokens)];
+            _total = TotalOf(_rows);
+            _permitted = true;
+            _teamNames ??= await TeamNamesAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _rows = [];
+            _permitted = false;
+        }
+    }
+
+    /// <summary>Every team's name by key, where the reader may read the directory; none where not, so keys are shown.</summary>
+    private async Task<Dictionary<string, string>> TeamNamesAsync()
+    {
+        var directory = ServiceProvider.GetService<ITeamDirectoryService>();
+        if (directory == null) return [];
+
+        try
+        {
+            var names = new Dictionary<string, string>(StringComparer.Ordinal);
+            await foreach (var team in directory.GetTeamsAsync())
+            {
+                if (team?.Key != null && !string.IsNullOrWhiteSpace(team.Name)) names[team.Key] = team.Name;
+            }
+
+            return names;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    private string TeamName(string teamKey) => teamKey != null && _teamNames?.GetValueOrDefault(teamKey) is { } name ? name : teamKey;
+
+    internal static SupportAssistantUsageTotal TotalOf(IReadOnlyCollection<SupportAssistantUsageTotal> rows) => new()
+    {
+        TeamKey = string.Empty,
+        Answers = rows.Sum(x => x.Answers),
+        Declines = rows.Sum(x => x.Declines),
+        ToolCalls = rows.Sum(x => x.ToolCalls),
+        InputTokens = rows.Sum(x => x.InputTokens),
+        CachedInputTokens = rows.Sum(x => x.CachedInputTokens),
+        OutputTokens = rows.Sum(x => x.OutputTokens),
+        TotalTokens = rows.Sum(x => x.TotalTokens)
+    };
+
+    private static RenderFragment Counts(SupportAssistantUsageTotal row) => __builder =>
+    {
+        <td style="text-align: end;" data-answers>@row.Answers.ToString("N0")</td>
+        <td style="text-align: end;" data-declines>@row.Declines.ToString("N0")</td>
+        <td style="text-align: end;" data-tool-calls>@row.ToolCalls.ToString("N0")</td>
+        <td style="text-align: end;" data-input-tokens>@row.InputTokens.ToString("N0")</td>
+        <td style="text-align: end;" data-cached-tokens>@row.CachedInputTokens.ToString("N0")</td>
+        <td style="text-align: end;" data-output-tokens>@row.OutputTokens.ToString("N0")</td>
+        <td style="text-align: end;" data-total-tokens>@row.TotalTokens.ToString("N0")</td>
+    };
+}

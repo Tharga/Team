@@ -22,9 +22,11 @@
       and `TeamKey`. Totals by a server-side `$match`/`$group` on the collection, as the mail statistics are; tests
       render the pipeline. `MongoSupportAssistantUsageStore` registered with `TryAddScoped`, and
       `SupportAssistantUsageStoreSink` with `TryAddEnumerable`, handing each record to whichever store is registered.
-- [~] 7. `SupportAssistantUsageView`: tests first (rows and total for the period; nothing without the scope), then
-      the view and text keys.
-- [ ] 8. Sample: a staff page with the view, the scope on a system role; check in a browser.
+- [x] 7. `SupportAssistantUsageView`: From / To date pickers (this month to today by default, whole days, the last
+      included), a table row per team, provider and model (unnamed ones as "Unknown") with a total row; team names from
+      `ITeamDirectoryService` where the reader may read it, keys otherwise; "not permitted" without the scope.
+      `SupportAssistantUsageViewText`. Added to the guard's list of services from optional packages.
+- [~] 8. Sample: a staff page with the view, the scope on a system role; check in a browser.
 - [ ] 9. Docs.
 - [ ] 10. Full test suite, push the branch for the user to test.
 
