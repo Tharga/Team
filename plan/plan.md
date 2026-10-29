@@ -8,10 +8,11 @@
       provider and default model from the client's `ChatClientMetadata`, the model from the response's (or last
       update's) `ModelId`, and the cached tokens from `UsageDetails.CachedInputTokenCount`. The per-message MongoDB
       entity and its mapping carry the three too.
-- [~] 4. Recording: tests first (an answer and a decline each give one record with everything but text; a host
-      responder's usage is recorded; none gives none; a throwing sink is logged and the answer still appended), then
-      the record, the sink interface and `RunAssistantAsync`.
-- [ ] 5. Read side: tests first (totals per team, provider and model; one team or all; refused without the scope),
+- [x] 4. `SupportAssistantUsageRecord` and `ISupportAssistantUsageSink` in `Tharga.Team`. `SupportCaseService` takes every
+      sink (and a logger), times the responder call, and after it returns tells every sink, answered or declined,
+      when the answer has usage. The asker is the authorizer's subject; tool calls are the answer's service calls.
+      A throwing sink is logged and the rest are still told. Four tests, one checking no written text is in the record.
+- [~] 5. Read side: tests first (totals per team, provider and model; one team or all; refused without the scope),
       then the store interface, the service, its authorization, the scope and registration.
 - [ ] 6. MongoDB store: tests first (write, total, purge), then the collection, index and registration.
 - [ ] 7. `SupportAssistantUsageView`: tests first (rows and total for the period; nothing without the scope), then
