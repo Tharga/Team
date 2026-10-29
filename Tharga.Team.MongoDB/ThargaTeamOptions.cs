@@ -47,6 +47,12 @@ public record ThargaTeamOptions
     public string SupportAiConnectionCollectionName { get; set; } = "SupportAiConnection";
 
     /// <summary>
+    /// Collection holding the support assistant's usage, one document per time it was asked. Default
+    /// <c>SupportAssistantUsage</c>.
+    /// </summary>
+    public string SupportAssistantUsageCollectionName { get; set; } = "SupportAssistantUsage";
+
+    /// <summary>
     /// Collection holding the Data Protection key ring, when <c>PersistKeysToThargaMongo</c> keeps it here. Default
     /// <c>DataProtectionKey</c>.
     /// </summary>

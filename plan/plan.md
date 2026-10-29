@@ -17,8 +17,12 @@
       `SystemSupportScopes.UsageRead` (`support:usage:read`), registered with a description. The service reads the
       store (empty without one) behind a decorator requiring the system scope. Purge participant when a store is
       registered, a no-op one otherwise. The existing guard counting `support:` system scopes went from 4 to 5.
-- [~] 6. MongoDB store: tests first (write, total, purge), then the collection, index and registration.
-- [ ] 7. `SupportAssistantUsageView`: tests first (rows and total for the period; nothing without the scope), then
+- [x] 6. MongoDB: `SupportAssistantUsageRecordEntity` (the per-message `SupportAssistantUsageEntity` already had the
+      name) in `SupportAssistantUsage` (`ThargaTeamOptions.SupportAssistantUsageCollectionName`), indexes `At_TeamKey`
+      and `TeamKey`. Totals by a server-side `$match`/`$group` on the collection, as the mail statistics are; tests
+      render the pipeline. `MongoSupportAssistantUsageStore` registered with `TryAddScoped`, and
+      `SupportAssistantUsageStoreSink` with `TryAddEnumerable`, handing each record to whichever store is registered.
+- [~] 7. `SupportAssistantUsageView`: tests first (rows and total for the period; nothing without the scope), then
       the view and text keys.
 - [ ] 8. Sample: a staff page with the view, the scope on a system role; check in a browser.
 - [ ] 9. Docs.

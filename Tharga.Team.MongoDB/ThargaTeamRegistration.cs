@@ -145,6 +145,13 @@ public static class ThargaTeamRegistration
             services.AddTransient<ISupportAiConnectionCollection, SupportAiConnectionCollection>();
             services.TrackMongoCollection(typeof(ISupportAiConnectionCollection), typeof(SupportAiConnectionCollection));
             services.TryAddScoped<ISupportAiConnectionStore, MongoSupportAiConnectionStore>();
+
+            // The assistant's usage, one document per time it was asked. TryAdd so a host keeping its own wins; the
+            // sink hands every record to whichever store is registered, the host's included.
+            services.AddTransient<ISupportAssistantUsageCollection, SupportAssistantUsageCollection>();
+            services.TrackMongoCollection(typeof(ISupportAssistantUsageCollection), typeof(SupportAssistantUsageCollection));
+            services.TryAddScoped<ISupportAssistantUsageStore, MongoSupportAssistantUsageStore>();
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportAssistantUsageSink, SupportAssistantUsageStoreSink>());
             services.AddTransient<IInboundMailCollection, InboundMailCollection>();
             services.TrackMongoCollection(typeof(IInboundMailCollection), typeof(InboundMailCollection));
             services.TryAddScoped<ITeamMailStore, MongoTeamMailStore>();
