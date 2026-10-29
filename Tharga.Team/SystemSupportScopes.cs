@@ -68,4 +68,13 @@ public static class SystemSupportScopes
     /// </para>
     /// </remarks>
     public const string AllManage = "support:all:manage";
+
+    /// <summary>
+    /// Read how much the support assistant was used, per team, provider and model.
+    /// </summary>
+    /// <remarks>
+    /// For whoever runs or bills the product. It reads no conversation, but it says how much every team used and,
+    /// record by record, who asked, so it is a grant of its own rather than part of <see cref="AllRead"/>.
+    /// </remarks>
+    public const string UsageRead = "support:usage:read";
 }

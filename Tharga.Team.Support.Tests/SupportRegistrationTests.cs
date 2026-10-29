@@ -420,6 +420,7 @@ public class SupportScopeCatalogueTests
     [InlineData(SystemSupportScopes.Manage)]
     [InlineData(SystemSupportScopes.AllRead)]
     [InlineData(SystemSupportScopes.AllManage)]
+    [InlineData(SystemSupportScopes.UsageRead)]
     public void EverySystemSupportScope_IsRegistered_WithADescription(string scope)
     {
         var definition = SystemScopes().All.SingleOrDefault(x => x.Name == scope);
@@ -438,7 +439,8 @@ public class SupportScopeCatalogueTests
     {
         var names = SystemScopes().All.Select(x => x.Name).ToList();
 
-        Assert.Equal(4, names.Count(x => x.StartsWith("support:", StringComparison.Ordinal)));
+        // The two pairs, and the usage read.
+        Assert.Equal(5, names.Count(x => x.StartsWith("support:", StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -459,6 +461,7 @@ public class SupportScopeCatalogueTests
     [InlineData(SystemSupportScopes.Manage, "support", "unassigned:manage")]
     [InlineData(SystemSupportScopes.AllRead, "support", "all:read")]
     [InlineData(SystemSupportScopes.AllManage, "support", "all:manage")]
+    [InlineData(SystemSupportScopes.UsageRead, "support", "usage:read")]
     public void EverySupportScope_AuditsUnderTheSupportFeature(string scope, string expectedFeature, string expectedAction)
     {
         var (feature, action) = AuditEntry.ParseScope(scope);
@@ -609,6 +612,6 @@ public class SupportTeamScopeLevelTests
 
         var system = services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>().All;
 
-        Assert.Equal(4, system.Count(x => x.Name.StartsWith("support:", StringComparison.Ordinal)));
+        Assert.Equal(5, system.Count(x => x.Name.StartsWith("support:", StringComparison.Ordinal)));
     }
 }

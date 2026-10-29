@@ -1,4 +1,5 @@
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using Tharga.Team.Email;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Html;
@@ -30,9 +31,12 @@ internal sealed class SupportCaseService(
     ISupportAttachmentStore attachmentStore = null,
     SupportAttachmentLimits attachmentLimits = null,
     ISupportTypingNotifier typingNotifier = null,
-    SupportDeskPresence deskPresence = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportDeskPresence deskPresence = null,
+    IEnumerable<ISupportAssistantUsageSink> usageSinks = null,
+    ILogger<SupportCaseService> logger = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
+    private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
 
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -140,8 +144,11 @@ internal sealed class SupportCaseService(
         var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
 
         // A test double does not run the streaming default and answers nothing; it is then asked as it always was.
+        var started = timeProvider.GetTimestamp();
         var answer = progress == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, progress, cancellationToken);
         answer ??= await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
+        await RecordUsageAsync(supportCase, answer, timeProvider.GetElapsedTime(started), cancellationToken);
+
         // Kept whether or not it answered: a decline because it could not do what was asked is the more telling one.
         var gaps = Bounded(answer?.Gaps);
         if (gaps.Length > 0) await store.AddAssistantGapsAsync(teamKey, caseId, gaps, cancellationToken);
@@ -168,6 +175,45 @@ internal sealed class SupportCaseService(
         Notify(teamKey, caseId, SupportCaseChange.Replied);
 
         return true;
+    }
+
+    /// <summary>
+    /// Tells every usage sink what answering took, answered or declined, when the responder reported usage. Here rather
+    /// than in the responder, so a host's own responder is recorded by returning its usage.
+    /// </summary>
+    private async Task RecordUsageAsync(SupportCase supportCase, SupportAnswer answer, TimeSpan duration, CancellationToken cancellationToken)
+    {
+        var usage = answer?.Usage;
+        if (usage == null || _usageSinks.Length == 0) return;
+
+        var record = new SupportAssistantUsageRecord
+        {
+            TeamKey = supportCase.TeamKey,
+            CaseId = supportCase.Id,
+            AskedBy = await authorizer.GetSubjectAsync(),
+            Provider = usage.Provider,
+            Model = usage.Model,
+            InputTokens = usage.InputTokens,
+            CachedInputTokens = usage.CachedInputTokens,
+            OutputTokens = usage.OutputTokens,
+            TotalTokens = usage.TotalTokens,
+            ToolCalls = answer.Calls?.Length ?? 0,
+            Answered = answer.Answered,
+            Duration = duration,
+            At = timeProvider.GetUtcNow().UtcDateTime
+        };
+
+        foreach (var sink in _usageSinks)
+        {
+            try
+            {
+                await sink.RecordAsync(record, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                logger?.LogWarning(ex, "A support assistant usage sink failed for case {CaseId}. The answer stands; only its usage record was lost there.", supportCase.Id);
+            }
+        }
     }
 
     /// <remarks>

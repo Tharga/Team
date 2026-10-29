@@ -179,8 +179,9 @@ builder.AddThargaTeam(o =>
         // support:all:manage and support:unassigned:read/manage let a Developer staff the support desk at
         // /support-desk: every team's cases and the ones with no team, answered in place. That is the back-office
         // half of trying support out -- write as a member in the side panel, answer here in another window.
+        // support:usage:read shows the assistant's usage per team on the same page.
         roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send, SystemContactScopes.Send,
-            SystemSupportScopes.AllManage, SystemSupportScopes.Read, SystemSupportScopes.Manage);
+            SystemSupportScopes.AllManage, SystemSupportScopes.Read, SystemSupportScopes.Manage, SystemSupportScopes.UsageRead);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at

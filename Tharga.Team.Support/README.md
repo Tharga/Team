@@ -212,7 +212,9 @@ every team, or one per team through `ISupportChatClientResolver`, with the assis
 that has one. With `AddThargaSupportAiConnections()` each team chooses in `<SupportAssistantConnectionView />`:
 the platform's model, its own Neurolito or Anthropic key through `Tharga.Team.Support.Anthropic`, its own OpenAI key
 or Ollama or llama.cpp server through `Tharga.Team.Support.OpenAI`, or off, and the tokens each answer used are kept
-and shown under it. `MapThargaSupportAiConnection()` offers the same choice as REST endpoints. Planned: Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
+and shown under it. `MapThargaSupportAiConnection()` offers the same choice as REST endpoints. Every time the
+assistant is asked, a usage record (no text) goes to each `ISupportAssistantUsageSink`, and
+`ISupportAssistantUsageService` totals it per team, provider and model for staff holding `support:usage:read`. Planned: Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
 package rather than part of `Tharga.Team.Service`.
 
 ## Links

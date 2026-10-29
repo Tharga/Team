@@ -82,6 +82,37 @@ public class SupportAssistantStreamingTests
         Assert.Equal(new SupportAssistantUsage { InputTokens = 200, OutputTokens = 20, TotalTokens = 220 }, answer.Usage);
     }
 
+    /// <summary>What a bill needs beyond the counts: who served it, which model, and how much of the input was cached.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TheProvider_TheModel_AndTheCachedTokens_AreKept(bool streamed)
+    {
+        var responder = Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" },
+            new UsageDetails { InputTokenCount = 100, CachedInputTokenCount = 60, OutputTokenCount = 10, TotalTokenCount = 110 },
+            new ChatClientMetadata("ollama", null, "llama3"), "llama3:8b");
+
+        var answer = streamed ? await responder.AnswerAsync(Case(), Transcript(), new Reports()) : await responder.AnswerAsync(Case(), Transcript());
+
+        Assert.Equal(120, answer.Usage.CachedInputTokens);
+        Assert.Equal("ollama", answer.Usage.Provider);
+        Assert.Equal("llama3:8b", answer.Usage.Model);
+    }
+
+    /// <summary>A provider that does not say which model answered is taken to have answered with the one it is set up for.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AModelTheResponseDoesNotName_IsTheClientsDefault(bool streamed)
+    {
+        var responder = Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" },
+            new UsageDetails { InputTokenCount = 100, OutputTokenCount = 10 }, new ChatClientMetadata("ollama", null, "llama3"));
+
+        var answer = streamed ? await responder.AnswerAsync(Case(), Transcript(), new Reports()) : await responder.AnswerAsync(Case(), Transcript());
+
+        Assert.Equal("llama3", answer.Usage.Model);
+    }
+
     [Fact]
     public async Task AProviderThatReportsNoTokens_LeavesNoUsage()
     {
@@ -282,9 +313,9 @@ public class SupportAssistantStreamingTests
         Assert.Equal(["raise", "assistant-answer"], world.Audit.Entries.Select(x => x.Action));
     }
 
-    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments, UsageDetails usage = null)
+    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments, UsageDetails usage = null, ChatClientMetadata metadata = null, string modelId = null)
     {
-        var chat = new CallingChatClient(tool, arguments, usage).AsBuilder().UseFunctionInvocation().Build();
+        var chat = new CallingChatClient(tool, arguments, usage, metadata, modelId).AsBuilder().UseFunctionInvocation().Build();
 
         return new ChatSupportResponder(new RegisteredChatClientResolver(chat), new SearchTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
     }
@@ -411,17 +442,17 @@ public class SupportAssistantStreamingTests
     }
 
     /// <summary>Calls one tool with the arguments given until it has the result, then answers; in one piece or streamed, reporting <paramref name="usage"/> for each round.</summary>
-    private sealed class CallingChatClient(string tool, Dictionary<string, object> arguments, UsageDetails usage = null) : IChatClient
+    private sealed class CallingChatClient(string tool, Dictionary<string, object> arguments, UsageDetails usage = null, ChatClientMetadata metadata = null, string modelId = null) : IChatClient
     {
         public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default)
-            => Task.FromResult(new ChatResponse(Next(messages)) { Usage = usage == null ? null : new UsageDetails { InputTokenCount = usage.InputTokenCount, OutputTokenCount = usage.OutputTokenCount, TotalTokenCount = usage.TotalTokenCount } });
+            => Task.FromResult(new ChatResponse(Next(messages)) { ModelId = modelId, Usage = usage == null ? null : new UsageDetails { InputTokenCount = usage.InputTokenCount, CachedInputTokenCount = usage.CachedInputTokenCount, OutputTokenCount = usage.OutputTokenCount, TotalTokenCount = usage.TotalTokenCount } });
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
             await Task.Yield();
             var next = Next(messages);
-            yield return new ChatResponseUpdate(next.Role, next.Contents);
-            if (usage != null) yield return new ChatResponseUpdate(ChatRole.Assistant, [new UsageContent(usage)]);
+            yield return new ChatResponseUpdate(next.Role, next.Contents) { ModelId = modelId };
+            if (usage != null) yield return new ChatResponseUpdate(ChatRole.Assistant, [new UsageContent(usage)]) { ModelId = modelId };
         }
 
         private ChatMessage Next(IEnumerable<ChatMessage> messages)
@@ -429,7 +460,7 @@ public class SupportAssistantStreamingTests
                 ? new ChatMessage(ChatRole.Assistant, "Found it.")
                 : new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("call-1", tool, arguments)]);
 
-        public object GetService(Type serviceType, object serviceKey = null) => null;
+        public object GetService(Type serviceType, object serviceKey = null) => serviceType == typeof(ChatClientMetadata) ? metadata : null;
 
         public void Dispose()
         {

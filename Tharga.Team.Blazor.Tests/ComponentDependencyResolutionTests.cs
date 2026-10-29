@@ -54,7 +54,9 @@ public class ComponentDependencyResolutionTests
         "IUserNoticePreferenceService",
         "IUserNoticeTeamService",
         // Registered by AddThargaSupportAiConnections in Tharga.Team.Support; only a host letting teams choose their AI places the view.
-        "ISupportAiConnectionService"
+        "ISupportAiConnectionService",
+        // Registered by AddThargaSupportCases in Tharga.Team.Support; only a host whose staff read the assistant's usage places the view.
+        "ISupportAssistantUsageService"
     ];
 
     /// <summary>Services the host supplies by construction — its own storage types and member type.</summary>
