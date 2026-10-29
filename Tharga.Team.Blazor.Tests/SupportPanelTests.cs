@@ -342,6 +342,27 @@ public class SupportPanelTests : BunitContext
         view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
     }
 
+    /// <summary>An answer written on another instance reaches this one only when the host relays it (Tharga/Team#420); then the open conversation and the unread count are read again.</summary>
+    [Fact]
+    public void AChangeRelayedFromAnotherInstance_RedrawsTheOpenConversation_AndTheUnreadCount()
+    {
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, messages: Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+        view.Find("[data-tab='support']").Click();
+        Send(view, Question);
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-message]")));
+
+        _cases.Setup(x => x.GetMessagesAsync(TeamKey, raised.Id, null, It.IsAny<int>(), default))
+            .ReturnsAsync(new SupportMessagePage { Items = [Message(1, Question, SupportMessageKind.User), Message(2, "From support.", SupportMessageKind.User, author: "staff")] });
+        _cases.Setup(x => x.GetMyUnreadCountAsync(TeamKey, default)).ReturnsAsync(3);
+        _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object,
+            new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = raised.Id, Change = SupportCaseChange.Replied, FromChannel = false, FromRemote = true });
+
+        view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
+        Assert.Equal("3", view.Find("[data-unread]").TextContent.Trim());
+    }
+
     [Fact]
     public void TheAssistantsAnswer_ShowsAsItIsWritten_ThenAsKept()
     {

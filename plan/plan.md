@@ -18,9 +18,12 @@
       It opens `_support`, the channel the panel already defaults to. Drawer and button sit at
       `calc(--rz-dialog-mask-zindex - 1)`: over the page and header, under any dialog. Rules added by `install()`
       are now a multi-line template literal; the hide rule's line is unchanged character for character.
-- [~] 5. #420 — tests first (`FromRemote` reaches subscribers; a remote change for the open case refreshes the panel),
+- [x] 5. #420 — tests first (`FromRemote` reaches subscribers; a remote change for the open case refreshes the panel),
       then `FromRemote` and the XML docs on the notifier.
-- [ ] 6. Check it in a browser: the sample app at 320 and 280 pixels with Swedish labels, and at a phone width with
+      Only the six Blazor views subscribe to `CaseUpdated`, and each just reads again, so a relayed change repeats no
+      side effect. `TwoInstancesRelayingEachOthersChanges_DoNotEcho` shows the relay a host writes. The panel needed
+      no change; its new test pins that a remote change redraws the conversation and the unread count.
+- [~] 6. Check it in a browser: the sample app at 320 and 280 pixels with Swedish labels, and at a phone width with
       `Drawer`, open and collapsed.
 - [ ] 7. Docs: `docs/articles/support-cases.md` (the panel section, the notifier section, the unread-count note), and
       `README.md` / `Tharga.Team.Blazor/README.md` if they cover any of it.
