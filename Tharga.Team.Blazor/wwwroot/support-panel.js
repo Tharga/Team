@@ -1,14 +1,21 @@
 // The support panel's width, its conversation's scroll position, and its one rule outside its own markup.
 
-// Hidden on narrow screens, where the host's support page is used instead. This cannot be scoped CSS: the rule
-// targets the sidebar element Radzen renders, which carries none of the component's scope attribute. Added once,
-// here, so a host links nothing. The .rz-sidebar in the selector outranks Radzen's own `.rz-layout .rz-sidebar`.
+// Hidden on narrow screens, where the host's support page is used instead, unless the panel is a drawer: then it lies
+// over the page, and collapsed it is a floating button in the corner. This cannot be scoped CSS: the rules target the
+// sidebar element Radzen renders, which carries none of the component's scope attribute. Added once, here, so a host
+// links nothing. The .rz-sidebar in the selector outranks Radzen's own `.rz-layout .rz-sidebar`. The hide rule keeps
+// the selector it has always had, so a host overriding it from its own stylesheet still wins; the drawer rule is one
+// class more. Below the dialog mask, so a dialog opened from the panel is still on top.
 export function install() {
     if (document.getElementById('support-panel-rules')) return;
 
     const style = document.createElement('style');
     style.id = 'support-panel-rules';
-    style.textContent = '@media (max-width: 768px) { .rz-layout .rz-sidebar.support-panel-sidebar { display: none; } }';
+    style.textContent = `@media (max-width: 768px) {
+    .rz-layout .rz-sidebar.support-panel-sidebar { display: none; }
+    .rz-layout .rz-sidebar.support-panel-sidebar.support-panel-sidebar--drawer { display: block; position: fixed; top: 0; right: 0; bottom: 0; left: auto; max-width: 85vw; z-index: calc(var(--rz-dialog-mask-zindex, 1000) - 1); box-shadow: var(--rz-shadow-4); }
+    .rz-layout .rz-sidebar.support-panel-sidebar.support-panel-sidebar--drawer.support-panel-sidebar--rail { top: auto; right: 1rem; bottom: 1rem; width: auto !important; border: none; background: transparent; box-shadow: none; overflow: visible; }
+}`;
     document.head.appendChild(style);
 }
 

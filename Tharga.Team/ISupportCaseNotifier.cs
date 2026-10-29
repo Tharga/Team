@@ -24,12 +24,18 @@ namespace Tharga.Team;
 /// filtering here would need a caller and a singleton has none. A handler that acts on the notification must
 /// read the case back through <see cref="Support.Cases.ISupportCaseService"/>, where the checks are.
 /// </para>
+/// <para>
+/// <b>It reaches this instance only.</b> On several instances a host relays over its own backplane: it publishes
+/// each notification whose <see cref="SupportCaseUpdatedEventArgs.FromRemote"/> is false, and calls
+/// <see cref="Notify"/> with <c>FromRemote</c> set for what arrives from the other instances. Every view listening
+/// here then shows changes made anywhere.
+/// </para>
 /// </remarks>
 public interface ISupportCaseNotifier
 {
     /// <summary>Raised after a case is created, replied to or closed.</summary>
     event EventHandler<SupportCaseUpdatedEventArgs> CaseUpdated;
 
-    /// <summary>Announces a change. Called by the toolkit; a host subscribes rather than raises.</summary>
+    /// <summary>Announces a change. Called by the toolkit, and by a host relaying a change made on another instance with <see cref="SupportCaseUpdatedEventArgs.FromRemote"/> set.</summary>
     void Notify(SupportCaseUpdatedEventArgs args);
 }

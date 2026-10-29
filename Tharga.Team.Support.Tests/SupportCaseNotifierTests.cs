@@ -74,6 +74,46 @@ public class SupportCaseNotifierTests
         Assert.Equal(1, calls);
     }
 
+    /// <summary>
+    /// The relay a host with several instances builds (Tharga/Team#420): each instance publishes its own changes, and
+    /// passes on what arrives from the others marked as remote, which it does not publish again. Without the mark two
+    /// instances hand one change back and forth for ever.
+    /// </summary>
+    [Fact]
+    public void TwoInstancesRelayingEachOthersChanges_DoNotEcho()
+    {
+        var a = new SupportCaseNotifier();
+        var b = new SupportCaseNotifier();
+        var published = 0;
+        SupportCaseUpdatedEventArgs seenOnB = null;
+
+        void Relay(SupportCaseNotifier to, SupportCaseUpdatedEventArgs e)
+        {
+            if (e.FromRemote) return;
+
+            published++;
+            to.Notify(new SupportCaseUpdatedEventArgs { TeamKey = e.TeamKey, CaseId = e.CaseId, Change = e.Change, FromChannel = e.FromChannel, FromRemote = true });
+        }
+
+        a.CaseUpdated += (_, e) => Relay(b, e);
+        b.CaseUpdated += (_, e) => Relay(a, e);
+        b.CaseUpdated += (_, e) => seenOnB = e;
+
+        a.Notify(Args(SupportCaseChange.Replied, fromChannel: true));
+
+        Assert.Equal(1, published);
+        Assert.True(seenOnB.FromRemote);
+        Assert.True(seenOnB.FromChannel);
+        Assert.Equal(SupportCaseChange.Replied, seenOnB.Change);
+    }
+
+    /// <summary>What the toolkit raises itself is never remote, so a host's relay publishes it.</summary>
+    [Fact]
+    public void ANotification_IsNotRemote_UnlessARelaySaysSo()
+    {
+        Assert.False(Args(SupportCaseChange.Raised, false).FromRemote);
+    }
+
     private static SupportCaseUpdatedEventArgs Args(SupportCaseChange change, bool fromChannel) => new()
     {
         TeamKey = "acme",

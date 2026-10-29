@@ -25,4 +25,14 @@ public sealed class SupportCaseUpdatedEventArgs : EventArgs
     /// arrived from Slack is the thing worth lighting a chip for.
     /// </remarks>
     public required bool FromChannel { get; init; }
+
+    /// <summary>
+    /// True when the change was made on another instance and a host relayed it to this one.
+    /// </summary>
+    /// <remarks>
+    /// Set by a host's own relay, never by the toolkit. A relay publishes the notifications where this is false and
+    /// passes on what arrives from other instances with it set, so a change is not handed back and forth between
+    /// instances. Listeners need not look at it: a relayed change is read again like any other.
+    /// </remarks>
+    public bool FromRemote { get; init; }
 }

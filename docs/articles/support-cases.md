@@ -346,10 +346,18 @@ members:
   Going back to the assistant after that starts a new conversation beside it. When the assistant does not answer,
   the panel says so.
 - **Its width and open state are remembered in the browser**, under `StorageKey`. It opens at `DefaultWidth` (320)
-  until dragged, never narrower than 280 pixels. On a screen 768 pixels wide or less it is hidden, and your support
-  page (`SupportPagePath`, `/support` by default) is where to ask.
+  until dragged, never narrower than 280 pixels.
+- **On a screen 768 pixels wide or less, `NarrowScreen` decides.** `SupportPanelNarrowScreen.Hide`, the default, hides
+  it, and your support page (`SupportPagePath`, `/support` by default) is where to ask. `Drawer` keeps it: collapsed,
+  it is a floating button in the corner carrying the unread count; open, it lies over the page at full height, under
+  any dialog, at most 85% of the screen wide. On a wider screen both are the sidebar above.
 - **An answer is marked read only while the panel is open and the page is looked at**, and the panel redraws when the
-  member changes team or a reply arrives from Slack or mail.
+  member changes team, a reply arrives from Slack or mail, or a host relays a change made on another instance
+  ([Knowing when something changed](#knowing-when-something-changed)).
+
+```razor
+<SupportPanel NarrowScreen="SupportPanelNarrowScreen.Drawer" />
+```
 
 **Who may be asked.** The assistant shows when the team is ready for one (`GetAssistantReadinessAsync`), so a team that
 turned the assistant off, or has no model, gets only support. `Offered` narrows what shows, as on `SupportCasesView`.
@@ -456,8 +464,7 @@ member writing to the assistant tells nobody.
 - **`ISupportTypingNotifier`** raises the reports, a singleton like `ISupportCaseNotifier` with the same rules:
   marshal with `InvokeAsync`, and unsubscribe. It is separate because a report changes nothing, and every listener to
   a case change reads the case again. `SupportCaseTypingEventArgs` says who and where, never what is being written.
-- **It is in-process**, as case changes are: across several instances, only circuits on the writer's instance see
-  the dots. Slack and mail do not report writing, so a reply typed there arrives without dots first.
+- **It is in-process**: across several instances, only circuits on the writer's instance see the dots. Slack and mail do not report writing, so a reply typed there arrives without dots first.
 
 ## Reading history
 
@@ -678,9 +685,31 @@ Three things this will not forgive:
 `FromChannel` distinguishes a reply somebody typed here from one that arrived from Slack. The second is
 usually the one worth notifying about; the first, the user is already looking at.
 
-> **In-process only.** On more than one instance the notification is raised on whichever instance handled the
-> change — a Slack reply wakes the one whose endpoint Slack reached, not necessarily the one holding the
-> user's circuit. Fanning that out needs a backplane, which is not built.
+**It reaches this instance only, unless you relay it.** On more than one instance the notification is raised on
+whichever instance handled the change — a Slack reply wakes the one whose endpoint Slack reached, not necessarily
+the one holding the user's circuit. To reach every instance, relay over your own backplane (Redis, Service Bus, …):
+publish each notification whose `FromRemote` is false, and hand what arrives from the other instances to `Notify`
+with `FromRemote` set. A relayed change is never published again, so nothing bounces between instances, and every
+view listening — the panel and the case views among them — shows changes made anywhere.
+
+```csharp
+// Outgoing: what happened on this instance.
+notifier.CaseUpdated += (_, e) =>
+{
+    if (e.FromRemote) return;
+    backplane.Publish(new RelayedCaseChange(e.TeamKey, e.CaseId, e.Change, e.FromChannel));
+};
+
+// Incoming: what happened on another instance.
+backplane.Received += m => notifier.Notify(new SupportCaseUpdatedEventArgs
+{
+    TeamKey = m.TeamKey, CaseId = m.CaseId, Change = m.Change, FromChannel = m.FromChannel, FromRemote = true
+});
+```
+
+A backplane that also delivers an instance's own messages back to it makes its views read the case twice; skip
+your own messages if it does. The relay carries what the notification carries and nothing more — never the
+message text.
 
 ### Whether a message got there
 
@@ -1496,10 +1525,11 @@ if (TeamScopeGate.HasTeamScope(principal, SupportScopes.Read, teamKey))
 }
 ```
 
-> **A chip does not update itself across instances.** `ISupportCaseNotifier` is in-process, so on a
+> **A chip does not update itself across instances on its own.** `ISupportCaseNotifier` is in-process, so on a
 > multi-instance deployment a Slack reply raises the notification on whichever instance handled it — not
-> necessarily the one holding the viewer's circuit. Re-reading the count on navigation always works;
-> live-updating everywhere needs a backplane, which is not built.
+> necessarily the one holding the viewer's circuit. Re-reading the count on navigation always works; to
+> live-update everywhere, relay the notifier between instances
+> ([Knowing when something changed](#knowing-when-something-changed)).
 
 ### Escalating from your own worker
 
