@@ -36,7 +36,8 @@
       view, purge, a host's own store). `Tharga.Team.MongoDB/README.md` lists the store and collection;
       `Tharga.Team.Support/README.md` and `Tharga.Team.Blazor/README.md` mention the records and the view. The root
       README describes the assistant only in outline and needed nothing.
-- [~] 10. Full test suite, push the branch for the user to test.
+- [~] 10. Full suite green (6465 passed; a second count of `support:` system scopes went from 4 to 5). Push the
+      branch for the user to test (ask first).
 
 ## Notes
 
@@ -44,5 +45,6 @@
 
 ## Last session
 
-2026-10-29: #427 (#421, #422) merged. Branch created from `master`, nothing outdated, plan written. Next: the user
-confirms the plan.
+2026-10-29: Steps 1-9 done and committed, full suite green. Next: the user approves the push and tests (ask the
+assistant a question in the sample's panel, then see the row on `/support-desk`). Then close-out: `dotnet outdated`,
+PR body as release notes with "Closes #378", archive `plan/feature.md`, `git rm -r plan`, final commit, PR.

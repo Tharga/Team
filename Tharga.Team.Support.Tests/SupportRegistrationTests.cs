@@ -612,6 +612,6 @@ public class SupportTeamScopeLevelTests
 
         var system = services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>().All;
 
-        Assert.Equal(4, system.Count(x => x.Name.StartsWith("support:", StringComparison.Ordinal)));
+        Assert.Equal(5, system.Count(x => x.Name.StartsWith("support:", StringComparison.Ordinal)));
     }
 }
