@@ -21,9 +21,14 @@
 - [x] 6. View: a provider is any kind but Platform and Off, so the form shows for the new kinds. New text keys
       `KindOpenAI`, `KindOllama`, `KindLlamaCpp`, and `ApiKeyOptional` ("Only if the server asks for one") under the
       key field of a kind that needs none. A self-hosted kind starts with an empty address.
-- [~] 7. #422 endpoints: tests first (each route calls its method with the credential's team; 403 without the scope;
-      400 without a team; 422 on a failed connect; no key in any response), then `MapThargaSupportAiConnection`.
-- [ ] 8. Sample: register the new package and map the endpoints; check in a browser and over HTTP.
+- [x] 7. `MapThargaSupportAiConnection(path)` (`SupportAiConnectionEndpointRegistration`, default
+      `/api/support/assistant/connection`), returning the route group, behind `ThargaApiPolicyName`. Team from the
+      `TeamKey` claim (400 without one), 403 from the service's own refusal, 422 with why for a failed model list, test
+      or connect, 204 for platform and off, 400 for a body that is not a request (without the parser's text, which can
+      quote the key). Kinds by name in JSON. 16 tests through a test server and the real service with its
+      authorization. Gotcha noted in the code: a handler taking only `HttpContext` binds as a request delegate and
+      drops its result.
+- [~] 8. Sample: register the new package and map the endpoints; check in a browser and over HTTP.
 - [ ] 9. Docs: `docs/articles/support-cases.md`, the new package's README, the root README, `Tharga.Team.Support`'s
       README if it lists the registrations.
 - [ ] 10. Full test suite, push the branch for the user to test.
