@@ -40,7 +40,7 @@ public static class SupportRegistration
     /// <list type="bullet">
     /// <item>The store comes from <c>AddThargaTeamRepository</c> in <c>Tharga.Team.MongoDB</c>.</item>
     /// <item>Providers come from every registered <see cref="ISupportChatClientFactory"/>, such as
-    /// <c>AddThargaSupportAiProviders</c> for Neurolito and Anthropic and <c>AddThargaSupportOpenAiProviders</c> for
+    /// <c>AddThargaSupportAiProviders</c> for Neurolito and Anthropic and <c>AddThargaSupportOpenAIProviders</c> for
     /// OpenAI, Ollama and llama.cpp. A kind two factories offer is reached through the last registered. Without one, a
     /// team chooses between the platform's model and off.</item>
     /// <item>Keys are encrypted with Data Protection. On more than one instance, or where the file system does not

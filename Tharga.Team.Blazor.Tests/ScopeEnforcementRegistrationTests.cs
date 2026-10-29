@@ -122,6 +122,7 @@ public class ScopeEnforcementRegistrationTests
 
         Assert.Contains("Tharga.Team", names);
         Assert.Contains("Tharga.Team.Support.Anthropic", names);
+        Assert.Contains("Tharga.Team.Support.OpenAI", names);
         Assert.DoesNotContain("Tharga.Team.Sample", names);
         Assert.DoesNotContain(names, n => n.EndsWith(".Tests", StringComparison.Ordinal));
         Assert.Equal(names.Length, ShippedAssemblies.All().Length);

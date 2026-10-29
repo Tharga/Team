@@ -13,9 +13,12 @@
       `LlamaCpp` here, as the tests needed a self-hosted kind. With no key given and none stored for the same kind
       and address, a keyless kind is reached with none, and connecting stores none; the resolver answers a keyless
       connection with no key. An empty address says "Enter the address." before the https check.
-- [~] 5. The three kinds and `Tharga.Team.Support.OpenAI`: tests first against a fake server (models listed, each
-      problem in words without the key, chat answered), then the enum members, the package and its registration.
-- [ ] 6. `SupportAssistantConnectionView`: tests first (labels for the new kinds, the optional key, providers beyond
+- [x] 5. `Tharga.Team.Support.OpenAI`: `OpenAIChatClientFactory` on `Microsoft.Extensions.AI.OpenAI` 10.11.0 and `OpenAI`
+      2.14.0, `OpenAISupportOptions`, `AddThargaSupportOpenAIProviders` (registered like the Anthropic one, so the
+      two sit side by side). No key sends no `Authorization` header (a pipeline policy takes out the SDK's stand-in).
+      The model list has no display names, so the id is shown. 16 tests against a fake server. Added to the solution,
+      the pack step in `build.yml`, and `Tharga.Team.Blazor.Tests` (its guard searches every shipped package).
+- [~] 6. `SupportAssistantConnectionView`: tests first (labels for the new kinds, the optional key, providers beyond
       the fixed pair), then the view and the text keys.
 - [ ] 7. #422 endpoints: tests first (each route calls its method with the credential's team; 403 without the scope;
       400 without a team; 422 on a failed connect; no key in any response), then `MapThargaSupportAiConnection`.

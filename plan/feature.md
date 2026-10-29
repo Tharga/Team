@@ -20,7 +20,7 @@ host can offer every step of choosing that connection over its REST API without 
 - **A new package, `Tharga.Team.Support.OpenAI`**, beside `Tharga.Team.Support.Anthropic`: one
   `ISupportChatClientFactory` for the OpenAI-compatible API (`GET {address}/models`, `POST {address}/chat/completions`),
   on `Microsoft.Extensions.AI.OpenAI` (same version line as the `Microsoft.Extensions.AI` the toolkit uses) and the
-  `OpenAI` SDK. Registration `AddThargaSupportOpenAiProviders(o => …)`, with `OfferOpenAI`, `OfferOllama`,
+  `OpenAI` SDK. Registration `AddThargaSupportOpenAIProviders(o => …)`, with `OfferOpenAI`, `OfferOllama`,
   `OfferLlamaCpp` (all default `true`), the addresses each starts from, and `MaxOutputTokens`.
   - **The address includes the API's version path**, as each provider documents it: `https://api.openai.com/v1`,
     and for self-hosted servers whatever the organisation gives (Ollama's `…:11434/v1`, llama.cpp's `…:8080/v1`).
