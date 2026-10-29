@@ -23,11 +23,18 @@
       Only the six Blazor views subscribe to `CaseUpdated`, and each just reads again, so a relayed change repeats no
       side effect. `TwoInstancesRelayingEachOthersChanges_DoNotEcho` shows the relay a host writes. The panel needed
       no change; its new test pins that a remote change redraws the conversation and the unread count.
-- [~] 6. Check it in a browser: the sample app at 320 and 280 pixels with Swedish labels, and at a phone width with
-      `Drawer`, open and collapsed.
-- [ ] 7. Docs: `docs/articles/support-cases.md` (the panel section, the notifier section, the unread-count note), and
-      `README.md` / `Tharga.Team.Blazor/README.md` if they cover any of it.
-- [ ] 8. Full test suite, push the branch for the user to test.
+- [x] 6. Checked in the sample (signed in, own team). Expanded at 320 and 280 px, English and with the tab labels
+      swapped to "Assistent" / "Support": the header wraps, the actions move to a second row on the right, and the
+      close button stays inside. Drawer, with the sample switched to `Drawer` for the check only (reverted): Chrome
+      would not resize the maximized window, so the sample ran in a 400 px iframe. Open, it was fixed over the page at full height and
+      320 wide with the close button inside. Collapsed, the rail was hidden, a floating assistant button sat bottom
+      right and the sidebar was transparent around it. The button opened it again. At 1440 px the drawer class
+      changes nothing.
+- [x] 7. Docs: `support-cases.md` panel section gained a `NarrowScreen` bullet and example, and its redraw line names
+      relayed changes. The notifier's "in-process only, not built" callout became the relay with `FromRemote` and
+      an example. The unread-chip note points to it, and the typing note no longer says case changes are
+      in-process. `Tharga.Team.Blazor/README.md` mentions the drawer. The root README never mentioned narrow screens.
+- [~] 8. Full suite green (6383 passed). Push the branch for the user to test.
 
 ## Notes
 
