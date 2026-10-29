@@ -18,9 +18,10 @@
       two sit side by side). No key sends no `Authorization` header (a pipeline policy takes out the SDK's stand-in).
       The model list has no display names, so the id is shown. 16 tests against a fake server. Added to the solution,
       the pack step in `build.yml`, and `Tharga.Team.Blazor.Tests` (its guard searches every shipped package).
-- [~] 6. `SupportAssistantConnectionView`: tests first (labels for the new kinds, the optional key, providers beyond
-      the fixed pair), then the view and the text keys.
-- [ ] 7. #422 endpoints: tests first (each route calls its method with the credential's team; 403 without the scope;
+- [x] 6. View: a provider is any kind but Platform and Off, so the form shows for the new kinds. New text keys
+      `KindOpenAI`, `KindOllama`, `KindLlamaCpp`, and `ApiKeyOptional` ("Only if the server asks for one") under the
+      key field of a kind that needs none. A self-hosted kind starts with an empty address.
+- [~] 7. #422 endpoints: tests first (each route calls its method with the credential's team; 403 without the scope;
       400 without a team; 422 on a failed connect; no key in any response), then `MapThargaSupportAiConnection`.
 - [ ] 8. Sample: register the new package and map the endpoints; check in a browser and over HTTP.
 - [ ] 9. Docs: `docs/articles/support-cases.md`, the new package's README, the root README, `Tharga.Team.Support`'s

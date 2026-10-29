@@ -128,6 +128,52 @@ public class SupportAssistantConnectionViewTests : BunitContext
         Assert.Equal(SupportAssistantConnectionViewText.KindPlatform.Default, platform.Instance.Text);
     }
 
+    private static readonly SupportAiConnectionChoices OpenAICompatible = new()
+    {
+        Kinds = [SupportAiConnectionKind.OpenAI, SupportAiConnectionKind.Ollama, SupportAiConnectionKind.LlamaCpp, SupportAiConnectionKind.Off],
+        ProviderDefaults =
+        [
+            new SupportAiProviderDefault(SupportAiConnectionKind.OpenAI, "https://api.openai.com/v1"),
+            new SupportAiProviderDefault(SupportAiConnectionKind.Ollama, null) { RequiresApiKey = false },
+            new SupportAiProviderDefault(SupportAiConnectionKind.LlamaCpp, null) { RequiresApiKey = false }
+        ]
+    };
+
+    [Fact]
+    public void OpenAIOllamaAndLlamaCpp_AreNamed()
+    {
+        var view = Render(choices: OpenAICompatible);
+
+        var labels = view.FindComponents<RadzenRadioButtonListItem<SupportAiConnectionKind>>().ToDictionary(x => x.Instance.Value, x => x.Instance.Text);
+        Assert.Equal(SupportAssistantConnectionViewText.KindOpenAI.Default, labels[SupportAiConnectionKind.OpenAI]);
+        Assert.Equal(SupportAssistantConnectionViewText.KindOllama.Default, labels[SupportAiConnectionKind.Ollama]);
+        Assert.Equal(SupportAssistantConnectionViewText.KindLlamaCpp.Default, labels[SupportAiConnectionKind.LlamaCpp]);
+    }
+
+    /// <summary>OpenAI is a provider like any other: address, key, models.</summary>
+    [Fact]
+    public void ChoosingOpenAI_ShowsTheProvidersForm()
+    {
+        var view = Render(choices: OpenAICompatible);
+
+        Assert.Equal(nameof(SupportAiConnectionKind.OpenAI), view.Find("[data-provider]").GetAttribute("data-provider"));
+        Assert.Equal("https://api.openai.com/v1", view.Find("input[data-address]").GetAttribute("value"));
+        Assert.Equal(SupportAssistantConnectionViewText.ApiKeyPlaceholder.Default, view.Find("[data-key-hint]").TextContent.Trim());
+    }
+
+    /// <summary>A server of the team's own starts from no address, and says the key is only needed if the server asks.</summary>
+    [Fact]
+    public async Task ChoosingOllama_StartsFromNoAddress_WithTheKeyOptional()
+    {
+        var view = Render(choices: OpenAICompatible);
+
+        await ChooseAsync(view, SupportAiConnectionKind.Ollama);
+
+        Assert.Equal(nameof(SupportAiConnectionKind.Ollama), view.Find("[data-provider]").GetAttribute("data-provider"));
+        Assert.True(string.IsNullOrEmpty(view.Find("input[data-address]").GetAttribute("value")));
+        Assert.Equal(SupportAssistantConnectionViewText.ApiKeyOptional.Default, view.Find("[data-key-hint]").TextContent.Trim());
+    }
+
     /// <summary>With both providers offered, each starts from its own address, not the other's.</summary>
     [Fact]
     public async Task ChoosingAnthropic_StartsFromAnthropicsAddress()

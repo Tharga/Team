@@ -60,7 +60,7 @@
                         </ChildContent>
                         <Helper>
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-key-hint>
-                                @(KeepsStoredKey ? _text[SupportAssistantConnectionViewText.ApiKeyStored] : _text[SupportAssistantConnectionViewText.ApiKeyPlaceholder])
+                                @(KeepsStoredKey ? _text[SupportAssistantConnectionViewText.ApiKeyStored] : _text[RequiresApiKey ? SupportAssistantConnectionViewText.ApiKeyPlaceholder : SupportAssistantConnectionViewText.ApiKeyOptional])
                             </RadzenText>
                         </Helper>
                     </RadzenFormField>
@@ -137,6 +137,9 @@
                                    && string.Equals(Trimmed(_address), Trimmed(_connection.BaseAddress), StringComparison.OrdinalIgnoreCase);
 
     private string ShownKey => _apiKey ?? (KeepsStoredKey ? StoredKeyMask : null);
+
+    /// <summary>Whether the chosen provider needs a key; a server of the team's own may not.</summary>
+    private bool RequiresApiKey => _choices.ProviderDefaults.FirstOrDefault(x => x.Kind == _kind)?.RequiresApiKey ?? true;
 
     /// <remarks>What is left once the mask is taken out is the new key; nothing left keeps the stored one.</remarks>
     private void KeyTyped(string value)
@@ -272,7 +275,7 @@
         }
     }
 
-    private static bool IsProvider(SupportAiConnectionKind kind) => kind is SupportAiConnectionKind.Neurolito or SupportAiConnectionKind.Anthropic;
+    private static bool IsProvider(SupportAiConnectionKind kind) => kind is not (SupportAiConnectionKind.Platform or SupportAiConnectionKind.Off);
 
     private string KindLabel(SupportAiConnectionKind kind)
         => kind == SupportAiConnectionKind.Platform && _choices.PlatformModel != null
