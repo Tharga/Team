@@ -284,6 +284,15 @@ public static class SupportRegistration
         // shipped; this is the wiring that was missing, because the purge site could not reach the store.
         services.AddTransient<ITeamPurgeParticipant, SupportCasePurgeParticipant>();
 
+        // The assistant's usage: read by staff holding the system scope, and purged with the team. Both need the store,
+        // which the repository package registers; without one there is no usage, and nothing to purge.
+        services.TryAddScoped<ISupportAssistantUsageService>(sp => new AuthorizationSupportAssistantUsageServiceDecorator(
+            new SupportAssistantUsageService(sp.GetService<ISupportAssistantUsageStore>()),
+            sp.GetRequiredService<TeamAuthorizer>()));
+        services.AddTransient<ITeamPurgeParticipant>(sp => sp.GetService<ISupportAssistantUsageStore>() is { } usageStore
+            ? new SupportAssistantUsagePurgeParticipant(usageStore)
+            : NoUsageToPurge.Instance);
+
         // The level is the host's to choose, because whether a team administrator should read their members'
         // conversations is a product decision rather than a library one. The default is what every host had
         // before the option existed.
@@ -306,6 +315,8 @@ public static class SupportRegistration
                 "Read and list support cases in any team, without belonging to it -- for the people who run support, who are members of none of the customers' teams. This reaches every conversation every customer has had.");
             scopes.Register(SystemSupportScopes.AllManage,
                 "Reply to, close, reopen and hand over a support case in any team, without belonging to it. Satisfies a read as well. Does not grant assignment, which decides which tenant an unassigned case joins and stays with the unassigned queue.");
+            scopes.Register(SystemSupportScopes.UsageRead,
+                "Read how much the support assistant was used, per team, provider and model -- for whoever runs or bills the product. Reads no conversation, but says how much every team used.");
         });
 
         // The assistant, and only when the host has given it something to talk to. An IChatClient is the

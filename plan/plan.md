@@ -12,9 +12,12 @@
       sink (and a logger), times the responder call, and after it returns tells every sink, answered or declined,
       when the answer has usage. The asker is the authorizer's subject; tool calls are the answer's service calls.
       A throwing sink is logged and the rest are still told. Four tests, one checking no written text is in the record.
-- [~] 5. Read side: tests first (totals per team, provider and model; one team or all; refused without the scope),
-      then the store interface, the service, its authorization, the scope and registration.
-- [ ] 6. MongoDB store: tests first (write, total, purge), then the collection, index and registration.
+- [x] 5. `ISupportAssistantUsageStore : ISupportAssistantUsageSink` (`GetTotalsAsync(from, to, teamKey)`,
+      `DeleteForTeamAsync`), `ISupportAssistantUsageService` and `SupportAssistantUsageTotal` in `Tharga.Team`;
+      `SystemSupportScopes.UsageRead` (`support:usage:read`), registered with a description. The service reads the
+      store (empty without one) behind a decorator requiring the system scope. Purge participant when a store is
+      registered, a no-op one otherwise. The existing guard counting `support:` system scopes went from 4 to 5.
+- [~] 6. MongoDB store: tests first (write, total, purge), then the collection, index and registration.
 - [ ] 7. `SupportAssistantUsageView`: tests first (rows and total for the period; nothing without the scope), then
       the view and text keys.
 - [ ] 8. Sample: a staff page with the view, the scope on a system role; check in a browser.
