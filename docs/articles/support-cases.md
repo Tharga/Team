@@ -1210,12 +1210,16 @@ Rather than writing a resolver, let each team choose in a component. A team admi
   none is shown without a name.
 - **Neurolito, with the team's own key**, with the model picked from what Neurolito offers that key.
 - **Anthropic, with the team's own API key**, with the model picked from what Anthropic offers that key.
+- **OpenAI, with the team's own API key**, with the model picked from what OpenAI offers that key.
+- **Ollama or llama.cpp, on the team's own server**: the team gives the server's address, and a key only if the
+  server asks for one.
 - **Off**: no assistant for the team, so every case goes to a person.
 
 ```csharp
 builder.Services.AddThargaSupportCases();
 builder.Services.AddThargaSupportAiConnections();   // the choice, its service and its component
 builder.Services.AddThargaSupportAiProviders();     // Neurolito and Anthropic (package Tharga.Team.Support.Anthropic)
+builder.Services.AddThargaSupportOpenAIProviders(); // OpenAI, Ollama and llama.cpp (package Tharga.Team.Support.OpenAI)
 
 builder.Services.AddDataProtection()                // the key is encrypted with Data Protection...
     .SetApplicationName("MySite")
@@ -1226,9 +1230,22 @@ builder.Services.AddDataProtection()                // the key is encrypted with
 <SupportAssistantConnectionView />
 ```
 
-- **Anthropic is offered wherever the providers are registered.** To keep teams on Neurolito, the platform's model or
-  off, set `o.OfferAnthropic = false` in `AddThargaSupportAiProviders`. A team already connected to Anthropic is then
-  treated as having no connection until it chooses again.
+- **Register the provider packages you want, one or both.** Every provider either registers is offered. A factory of
+  your own (`ISupportChatClientFactory`) sits beside them; a kind two factories offer is reached through the last
+  registered. Calling a registration again changes its options and adds nothing.
+- **Each kind can be left out.** `o.OfferAnthropic = false` in `AddThargaSupportAiProviders`, and `o.OfferOpenAI`,
+  `o.OfferOllama` and `o.OfferLlamaCpp` in `AddThargaSupportOpenAIProviders`. A team already connected to a kind
+  that is left out is treated as having no connection until it chooses again.
+- **An OpenAI-compatible address includes the version path**, as each provider documents it:
+  `https://api.openai.com/v1`, an Ollama server's `…/v1`, a llama.cpp server's `…/v1`. The models are listed from
+  `{address}/models`; OpenAI lists every model the key may use, including some that do not chat, so **Test** before
+  saving.
+- **A server of the team's own starts from no address**, because the site's own machine is not the team's server. Set
+  `o.OllamaBaseAddress` or `o.LlamaCppBaseAddress` where every team shares one server you run. Without a key, no
+  `Authorization` header is sent.
+- **An address is https, or http on the same machine as the site**, and never carries credentials. A team's server
+  elsewhere on the network needs https in front of it, such as a reverse proxy; plain http to other hosts is refused
+  so nobody who may change the connection can make the site call internal addresses.
 - **`AddThargaSupportAiProviders` was called `AddThargaSupportAnthropic` until 4.5.** The old name still works and is
   marked obsolete.
 
@@ -1238,12 +1255,46 @@ builder.Services.AddDataProtection()                // the key is encrypted with
 - **The key goes in and never comes out.** It is encrypted under a Data Protection purpose of its own, never
   returned by the service, never logged, and never audited by value; the component clears it once saved. An
   empty key field keeps the stored key, but only for the same provider and address, so a stored key is never
-  sent somewhere new.
+  sent somewhere new. For a server that needs no key, moving it to a new address with the field empty sends none.
 - **A provider is saved only once it answers.** Saving lists the provider's models for the key and refuses a
   model the key may not use. **Load models** and **Test** do the same without saving; a refused key, a wrong
   address or an unreachable server is said in words.
 - **Changes are audited** under `assistant` (`connect`, `test`, `use-platform`, `turn-off`), with the kind, model
   and host, and purging a team removes its connection.
+
+**Over REST.** Where everything in your UI is also in your API, map the same service as endpoints instead of writing
+a controller over it:
+
+```csharp
+// The endpoints use the toolkit's API policy, which comes with its controllers: on in AddThargaTeam unless
+// o.Controllers is null, or AddThargaControllers() without it.
+app.MapThargaSupportAiConnection();   // under /api/support/assistant/connection by default
+```
+
+| Method | Route | Does |
+|---|---|---|
+| GET | `{path}` | The connection, without the key |
+| GET | `{path}/choices` | What the team may choose, with the address each provider starts from and whether it needs a key |
+| POST | `{path}/models` | The models a provider offers, for the key in the body or the stored one |
+| POST | `{path}/test` | Asks the model one short question; saves nothing |
+| PUT | `{path}` | Connects to a provider. The key is accepted here and never returned |
+| PUT | `{path}/platform` | Uses the platform's model |
+| PUT | `{path}/off` | Turns the assistant off for the team |
+
+The body of `models`, `test` and the connecting `PUT` is a provider request:
+
+```json
+{ "kind": "Ollama", "baseAddress": "https://ollama.example.com/v1", "apiKey": null, "model": "llama3.2:latest" }
+```
+
+- **The team comes from the credential, never the request**, as on the audit API: a team API key's own team, or the
+  team a system key names in `X-Team-Key`. A caller bound to no team gets 400.
+- **The service's checks are the endpoints' checks.** `assistant:manage` on the team is required (403 without it),
+  and every change is audited as it is from the component.
+- **Listing models, testing and connecting answer 200 when they worked and 422 when they did not**, with why in the
+  body. Platform and off answer 204. No answer carries the key, not even a provider's error that echoed it.
+- Kinds are written by name (`"OpenAI"`) and read by name or number. The method returns the route group, so you can
+  add conventions such as an OpenAPI tag.
 
 **Persist the key ring.** Data Protection's default keeps its keys on the local file system. On more than one
 instance, or in a container whose file system does not survive a restart, a key stored by one instance cannot

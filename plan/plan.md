@@ -35,9 +35,13 @@
       Over HTTP with the sign-in cookie, the endpoints and `/api/audit` both answered 401: the sample's API does
       not take the cookie, despite `o.Controllers.AuthenticationSchemes.Add(Cookie)`. Outside this feature; reported
       to the user. The endpoints' behaviour with a caller is covered by the test-server tests.
-- [~] 9. Docs: `docs/articles/support-cases.md`, the new package's README, the root README, `Tharga.Team.Support`'s
-      README if it lists the registrations.
-- [ ] 10. Full test suite, push the branch for the user to test.
+- [x] 9. Docs: `support-cases.md` "Each team chooses its connection" lists the new kinds, both registrations, several
+      factories, leaving kinds out, the `/v1` address, no starting address for a team's own server, the http rule,
+      and a new "Over REST" part (routes, body, team from the credential, status codes). Root README: package
+      table, dependency graph, one paragraph on letting each team choose. `Tharga.Team.Support/README.md` names
+      both packages and the endpoints. The new package's README was written in step 5. `Tharga.Team.Blazor/README.md`
+      already says "the team's own provider", which stays true.
+- [~] 10. Full test suite, push the branch for the user to test.
 
 ## Notes
 
