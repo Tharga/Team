@@ -40,4 +40,11 @@
         <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">How the assistant is doing</RadzenText>
         <SupportAssistantFeedbackView />
     </RadzenCard>
+
+    @* How much the assistant was used, per team, provider and model: what a host lending its own AI account to teams
+       would bill from. Needs support:usage:read, which the Developer role holds here. *@
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">What the assistant used</RadzenText>
+        <SupportAssistantUsageView />
+    </RadzenCard>
 </RadzenStack>

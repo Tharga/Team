@@ -26,8 +26,12 @@
       included), a table row per team, provider and model (unnamed ones as "Unknown") with a total row; team names from
       `ITeamDirectoryService` where the reader may read it, keys otherwise; "not permitted" without the scope.
       `SupportAssistantUsageViewText`. Added to the guard's list of services from optional packages.
-- [~] 8. Sample: a staff page with the view, the scope on a system role; check in a browser.
-- [ ] 9. Docs.
+- [x] 8. Sample: `SystemSupportScopes.UsageRead` on the Developer role, and the view on `/support-desk` ("What the
+      assistant used"). In the browser the card rendered with this month's period and "The assistant was not used in
+      this period", nothing being recorded before this change. The sample's scripted client reports tokens and names
+      itself, so asking the assistant in the panel gives a row; left for the user's testing, which also exercises
+      the server-side totals on a real MongoDB.
+- [~] 9. Docs.
 - [ ] 10. Full test suite, push the branch for the user to test.
 
 ## Notes
