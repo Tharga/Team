@@ -3,11 +3,15 @@ using System.Text.RegularExpressions;
 namespace Tharga.Team.Blazor.Tests;
 
 /// <summary>
-/// What the panel's layout rests on, pinned in its stylesheet. bUnit renders markup, not layout, so a header that
-/// pushes its buttons out of the panel passes every render test (Tharga/Team#418).
+/// What the panel's layout rests on, pinned in its stylesheet and in the rules its script adds. bUnit renders markup,
+/// not layout, so a header that pushes its buttons out of the panel (Tharga/Team#418), or a drawer that the hide rule
+/// still hides (#419), passes every render test.
 /// </summary>
 public class SupportPanelStyleTests
 {
+    private const string HideRule = ".rz-layout .rz-sidebar.support-panel-sidebar { display: none; }";
+    private const string DrawerRule = ".rz-layout .rz-sidebar.support-panel-sidebar.support-panel-sidebar--drawer { display: block;";
+
     private static readonly Regex Comment = new(@"/\*.*?\*/", RegexOptions.Singleline);
 
     [Fact]
@@ -21,6 +25,22 @@ public class SupportPanelStyleTests
     {
         Assert.Contains("margin-inline-start: auto", Rule(".support-panel__actions"));
     }
+
+    /// <summary>A host that overrode the hide rule from its own stylesheet keeps working, because its override was written against this selector.</summary>
+    [Fact]
+    public void TheHideRule_KeepsItsSelector()
+    {
+        Assert.Contains(HideRule, Script());
+    }
+
+    /// <summary>The hide rule's selector and one class more, so a drawer is shown without <c>!important</c>.</summary>
+    [Fact]
+    public void TheDrawerRule_OutranksTheHideRule()
+    {
+        Assert.Contains(DrawerRule, Script());
+    }
+
+    private static string Script() => File.ReadAllText(ComponentPath("wwwroot/support-panel.js"));
 
     /// <summary>Every declaration a selector gets outside a media query, from each rule that lists it.</summary>
     private static string Rule(string selector)

@@ -11,10 +11,14 @@
       `SupportPanelStyleTests` reads the top-level rules of `SupportPanel.razor.css` (media queries skipped, so a
       wrap only on narrow screens would not pass). Header got `flex-wrap: wrap`; `.support-panel__actions` its own
       rule with `margin-inline-start: auto`. Visual check is step 6.
-- [~] 4. #419 — tests first (default renders no drawer class and no floating button; `Drawer` adds the class, renders
+- [x] 4. #419 — tests first (default renders no drawer class and no floating button; `Drawer` adds the class, renders
       the floating button with the unread count, and the button opens the panel; the injected hide rule keeps its
       selector), then `SupportPanelNarrowScreen`, the parameter, the markup and the CSS.
-- [ ] 5. #420 — tests first (`FromRemote` reaches subscribers; a remote change for the open case refreshes the panel),
+      The floating button reuses the rail's labels (Assistant / Support, whichever it opens), so no new text keys.
+      It opens `_support`, the channel the panel already defaults to. Drawer and button sit at
+      `calc(--rz-dialog-mask-zindex - 1)`: over the page and header, under any dialog. Rules added by `install()`
+      are now a multi-line template literal; the hide rule's line is unchanged character for character.
+- [~] 5. #420 — tests first (`FromRemote` reaches subscribers; a remote change for the open case refreshes the panel),
       then `FromRemote` and the XML docs on the notifier.
 - [ ] 6. Check it in a browser: the sample app at 320 and 280 pixels with Swedish labels, and at a phone width with
       `Drawer`, open and collapsed.

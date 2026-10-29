@@ -54,7 +54,8 @@ public class SupportPanelTests : BunitContext
         ISupportPanelAvailability availability = null,
         bool open = false,
         int? width = null,
-        bool withTeam = true)
+        bool withTeam = true,
+        SupportPanelNarrowScreen narrowScreen = SupportPanelNarrowScreen.Hide)
     {
         var team = new Mock<ITeam>();
         team.SetupGet(x => x.Key).Returns(TeamKey);
@@ -77,7 +78,7 @@ public class SupportPanelTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
-        return Render<SupportPanel>(p => p.Add(x => x.Offered, offered));
+        return Render<SupportPanel>(p => p.Add(x => x.Offered, offered).Add(x => x.NarrowScreen, narrowScreen));
     }
 
     private void Raises(SupportCase raised, bool answered = true, params SupportMessage[] messages)
@@ -185,6 +186,57 @@ public class SupportPanelTests : BunitContext
 
         Assert.Contains("width: 512px", view.Find(".support-panel-sidebar").GetAttribute("style"));
         _storage.Verify(x => x.SetItemAsync("Tharga.Team.Support.Panel.Width", 512, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>A host that sets nothing gets the panel hidden on a narrow screen, as before (Tharga/Team#419).</summary>
+    [Fact]
+    public void ByDefault_ThereIsNoDrawer()
+    {
+        var view = Render();
+
+        Assert.DoesNotContain("support-panel-sidebar--drawer", view.Find(".support-panel-sidebar").GetAttribute("class"));
+        Assert.Empty(view.FindAll("[data-open='panel']"));
+    }
+
+    [Fact]
+    public void AsADrawer_TheSidebarIsMarked_CollapsedAndOpen()
+    {
+        var view = Render(narrowScreen: SupportPanelNarrowScreen.Drawer);
+        Assert.Contains("support-panel-sidebar--drawer", view.Find(".support-panel-sidebar").GetAttribute("class"));
+
+        view.Find("[data-open='panel']").Click();
+
+        Assert.Equal("open", view.Find("[data-support-panel]").GetAttribute("data-support-panel"));
+        Assert.Contains("support-panel-sidebar--drawer", view.Find(".support-panel-sidebar").GetAttribute("class"));
+    }
+
+    /// <summary>Collapsed on a narrow screen there is one button instead of the rail, so it carries what the rail would.</summary>
+    [Fact]
+    public void AsADrawer_TheFloatingButton_CarriesTheUnreadCount()
+    {
+        var view = Render(narrowScreen: SupportPanelNarrowScreen.Drawer);
+
+        Assert.Equal("2", view.Find("[data-open='panel'] [data-unread]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void AsADrawer_TheFloatingButton_OpensTheAssistantWhenBothAreOffered()
+    {
+        var view = Render(narrowScreen: SupportPanelNarrowScreen.Drawer);
+
+        view.Find("[data-open='panel']").Click();
+
+        Assert.Equal("true", view.Find("[data-tab='assistant']").GetAttribute("aria-selected"));
+    }
+
+    [Fact]
+    public void AsADrawer_TheFloatingButton_OpensSupportWhenOnlySupportIsOffered()
+    {
+        var view = Render(offered: [SupportAssistance.None], narrowScreen: SupportPanelNarrowScreen.Drawer);
+
+        view.Find("[data-open='panel']").Click();
+
+        Assert.Equal("true", view.Find("[data-tab='support']").GetAttribute("aria-selected"));
     }
 
     [Fact]

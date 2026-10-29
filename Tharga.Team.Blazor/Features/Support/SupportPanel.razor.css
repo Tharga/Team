@@ -96,6 +96,41 @@
     line-height: 1rem;
 }
 
+/* Instead of the rail on a narrow screen, when the panel is a drawer there; never shown otherwise. */
+.support-panel__fab {
+    position: relative;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 3.5rem;
+    height: 3.5rem;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background-color: var(--rz-primary);
+    color: var(--rz-on-primary, #fff);
+    box-shadow: var(--rz-shadow-4);
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .support-panel--drawer .support-panel__rail,
+    .support-panel--drawer .support-panel__resize {
+        display: none;
+    }
+
+    .support-panel--drawer .support-panel__fab {
+        display: inline-flex;
+    }
+
+    /* Collapsed, only the button shows: no surface around it, and nothing clips its badge. */
+    .support-panel--drawer[data-support-panel="rail"] {
+        height: auto;
+        overflow: visible;
+        background-color: transparent;
+    }
+}
+
 .support-panel__presence {
     flex: 0 0 auto;
     padding: 0.375rem 0.75rem;

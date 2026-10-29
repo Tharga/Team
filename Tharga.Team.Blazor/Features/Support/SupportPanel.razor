@@ -19,10 +19,9 @@
 
 @if (_teamKey != null && (_assistantOffered || _supportOffered))
 {
-    <RadzenSidebar Position="SidebarPosition.Right" Responsive="false"
-                   class="@($"support-panel-sidebar {(_expanded ? "support-panel-sidebar--open" : "support-panel-sidebar--rail")}")"
+    <RadzenSidebar Position="SidebarPosition.Right" Responsive="false" class="@SidebarClass"
                    Style="@($"width: {(_expanded ? $"{_width}px" : RailWidth)};")">
-        <div class="support-panel" data-support-panel="@(_expanded ? "open" : "rail")">
+        <div class="@(Drawer ? "support-panel support-panel--drawer" : "support-panel")" data-support-panel="@(_expanded ? "open" : "rail")">
             @if (_expanded)
             {
                 <div class="support-panel__resize" @ref="_resizeHandle" role="separator" aria-orientation="vertical"
@@ -187,6 +186,20 @@
                     }
                     @AllConversationsButton
                 </div>
+
+                @* Instead of the rail on a narrow screen, where the panel opens over the page. *@
+                @if (Drawer)
+                {
+                    <button type="button" class="support-panel__fab" title="@_text[_support ? SupportPanelText.Support : SupportPanelText.Assistant]"
+                            aria-label="@_text[_support ? SupportPanelText.Support : SupportPanelText.Assistant]" aria-expanded="false"
+                            @onclick="@(() => OpenWithAsync(_support))" data-open="panel">
+                        <RadzenIcon Icon="@(_support ? "support_agent" : "smart_toy")" />
+                        @if (_unread > 0)
+                        {
+                            <span class="support-panel__badge" data-unread>@_unread</span>
+                        }
+                    </button>
+                }
             }
         </div>
     </RadzenSidebar>
@@ -211,6 +224,9 @@
 
     /// <summary>How long a message to a person waits for an answer before the member is told we will get back to them. Defaults to 60 seconds; while support is away they are told at once.</summary>
     [Parameter] public TimeSpan NoAnswerAfter { get; set; } = SupportNoAnswerWatch.DefaultAfter;
+
+    /// <summary>What the panel does on a screen 768 pixels wide or less: hidden, which leaves asking to the support page, or a drawer over the page. Defaults to <see cref="SupportPanelNarrowScreen.Hide"/>.</summary>
+    [Parameter] public SupportPanelNarrowScreen NarrowScreen { get; set; } = SupportPanelNarrowScreen.Hide;
 
     private sealed record PanelMessage(bool FromMe, string Text, int Sequence = 0, bool ByAssistant = false, SupportAnswerRating Rating = SupportAnswerRating.None, SupportAssistantCall[] Calls = null,
         SupportAssistantUsage Usage = null);
@@ -249,6 +265,10 @@
     private bool _earlierOpen;
     private string _draft;
     private bool _busy;
+
+    private bool Drawer => NarrowScreen == SupportPanelNarrowScreen.Drawer;
+
+    private string SidebarClass => $"support-panel-sidebar {(_expanded ? "support-panel-sidebar--open" : "support-panel-sidebar--rail")}{(Drawer ? " support-panel-sidebar--drawer" : null)}";
 
     private string OpenKey => $"{StorageKey}.Open";
     private string WidthKey => $"{StorageKey}.Width";
