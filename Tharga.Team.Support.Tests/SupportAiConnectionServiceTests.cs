@@ -16,13 +16,79 @@ public class SupportAiConnectionServiceTests
 {
     private const string TeamA = "team-a";
     private const string Admin = "admin-subject";
-    private const string GoodKey = "nl-team-key-0123456789";
-    private const string Model = "claude-qwen3-coder:30b";
+    internal const string GoodKey = "nl-team-key-0123456789";
+    internal const string Model = "claude-qwen3-coder:30b";
     private const string NeurolitoAddress = "https://neurolito.com";
     private const string AnthropicAddress = "https://api.anthropic.com";
 
     private static SupportAiProviderRequest Neurolito(string apiKey = GoodKey, string model = Model, string baseAddress = null)
         => new() { Kind = SupportAiConnectionKind.Neurolito, ApiKey = apiKey, Model = model, BaseAddress = baseAddress };
+
+    private const string OllamaAddress = "https://ollama.example/v1";
+
+    /// <summary>A self-hosted kind: no key needed, and no address to start from, so the team gives one.</summary>
+    internal static FakeFactory SelfHosted() => new()
+    {
+        AcceptsNoKey = true,
+        Providers = [new(SupportAiConnectionKind.Ollama, null) { RequiresApiKey = false }]
+    };
+
+    private static SupportAiProviderRequest Ollama(string apiKey = null, string baseAddress = OllamaAddress, string model = Model)
+        => new() { Kind = SupportAiConnectionKind.Ollama, ApiKey = apiKey, Model = model, BaseAddress = baseAddress };
+
+    [Fact]
+    public async Task AKindThatNeedsNoKey_ConnectsWithoutOne_AndStoresNone()
+    {
+        var (service, store, factory, _) = Build(factory: SelfHosted());
+
+        var result = await service.ConnectAsync(TeamA, Ollama());
+
+        Assert.True(result.Succeeded, result.Problem);
+        Assert.Null(factory.Seen[^1].ApiKey);
+        var stored = await store.GetAsync(TeamA);
+        Assert.Equal(SupportAiConnectionKind.Ollama, stored.Kind);
+        Assert.Equal(OllamaAddress, stored.BaseAddress);
+        Assert.Null(stored.ProtectedApiKey);
+        Assert.False((await service.GetConnectionAsync(TeamA)).HasApiKey);
+    }
+
+    /// <summary>A server that asks for a key gets the one the team gave, and keeps it while nothing else changes.</summary>
+    [Fact]
+    public async Task AKindThatNeedsNoKey_StillTakesOne()
+    {
+        var (service, store, factory, _) = Build(factory: SelfHosted());
+
+        await service.ConnectAsync(TeamA, Ollama(apiKey: GoodKey));
+        var result = await service.ConnectAsync(TeamA, Ollama(model: FakeFactory.OtherModel));
+
+        Assert.True(result.Succeeded, result.Problem);
+        Assert.Equal(GoodKey, factory.Seen[^1].ApiKey);
+        Assert.NotNull((await store.GetAsync(TeamA)).ProtectedApiKey);
+    }
+
+    [Fact]
+    public async Task AKindWithNoAddressToStartFrom_AsksForOne()
+    {
+        var (service, _, factory, _) = Build(factory: SelfHosted());
+
+        var result = await service.ListModelsAsync(TeamA, Ollama(baseAddress: " "));
+
+        Assert.Equal("Enter the address.", result.Problem);
+        Assert.Empty(factory.Seen);
+    }
+
+    /// <summary>Moving a keyless kind to a new address sends no key there, rather than the one stored for the old address.</summary>
+    [Fact]
+    public async Task AStoredKey_IsNotSentToANewAddress_EvenWhereNoneIsNeeded()
+    {
+        var (service, _, factory, _) = Build(factory: SelfHosted());
+        await service.ConnectAsync(TeamA, Ollama(apiKey: GoodKey));
+
+        await service.ListModelsAsync(TeamA, Ollama(baseAddress: "https://elsewhere.example/v1"));
+
+        Assert.Equal("https://elsewhere.example/v1", factory.Seen[^1].BaseAddress);
+        Assert.Null(factory.Seen[^1].ApiKey);
+    }
 
     [Fact]
     public async Task TheChoices_AreThePlatformsModel_TheInstalledProviders_AndOff()
@@ -439,6 +505,9 @@ public class SupportAiConnectionServiceTests
 
         public bool EchoKeyInProblem { get; init; }
         public bool ChatFails { get; init; }
+
+        /// <summary>Answers without a key, as a self-hosted server that asks for none does.</summary>
+        public bool AcceptsNoKey { get; init; }
         public List<SupportAiEndpoint> Seen { get; } = [];
 
         public IReadOnlyList<SupportAiProviderDefault> Providers { get; init; } = [new(SupportAiConnectionKind.Neurolito, NeurolitoAddress)];
@@ -454,7 +523,7 @@ public class SupportAiConnectionServiceTests
             Seen.Add(endpoint);
 
             if (EchoKeyInProblem) return Task.FromResult(new SupportAiModelList { Problem = $"Bad key: {endpoint.ApiKey}" });
-            if (endpoint.ApiKey != GoodKey) return Task.FromResult(new SupportAiModelList { Problem = Refused });
+            if (endpoint.ApiKey != GoodKey && !(AcceptsNoKey && endpoint.ApiKey == null)) return Task.FromResult(new SupportAiModelList { Problem = Refused });
 
             return Task.FromResult(new SupportAiModelList { Models = [new(Model, "Qwen3 Coder 30B"), new(OtherModel, "Llama 3 70B")] });
         }

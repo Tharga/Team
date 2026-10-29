@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Authors>Daniel Bohlin</Authors>
+    <Company>Thargelion AB</Company>
+    <Product>Tharga Team Support OpenAI</Product>
+    <Description>Lets each team's support assistant answer through OpenAI with its own key, or through its own Ollama or llama.cpp server, over the OpenAI-compatible API.</Description>
+    <PackageIconUrl>https://thargelion.net/assets/component-team.png</PackageIconUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <DebugType>portable</DebugType>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <IncludeSource>true</IncludeSource>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!--
+      NU5048: PackageIconUrl is deprecated in favour of an embedded PackageIcon.
+      Suppressed deliberately. Tharga packages reference their icon from
+      https://thargelion.net/assets/ so all package icons are maintained in one
+      place and can be updated without republishing a package.
+    -->
+    <NoWarn>1701;1702;CS1591;NU5048</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
+    <PackageReference Include="OpenAI" Version="2.14.0" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Tharga.Team.Support\Tharga.Team.Support.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tharga.Team.Support.OpenAI.Tests" />
+  </ItemGroup>
+</Project>

@@ -162,6 +162,7 @@ jobs:
           dotnet pack Tharga.Team.Email/Tharga.Team.Email.csproj -c Release --no-build -o ./artifacts -p:Version=${{ steps.buildversion.outputs.version }}
           dotnet pack Tharga.Team.Support/Tharga.Team.Support.csproj -c Release --no-build -o ./artifacts -p:Version=${{ steps.buildversion.outputs.version }}
           dotnet pack Tharga.Team.Support.Anthropic/Tharga.Team.Support.Anthropic.csproj -c Release --no-build -o ./artifacts -p:Version=${{ steps.buildversion.outputs.version }}
+          dotnet pack Tharga.Team.Support.OpenAI/Tharga.Team.Support.OpenAI.csproj -c Release --no-build -o ./artifacts -p:Version=${{ steps.buildversion.outputs.version }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

@@ -17,6 +17,7 @@
     <ProjectReference Include="..\Tharga.Team.Images\Tharga.Team.Images.csproj" />
     <ProjectReference Include="..\Tharga.Team.Support\Tharga.Team.Support.csproj" />
     <ProjectReference Include="..\Tharga.Team.Support.Anthropic\Tharga.Team.Support.Anthropic.csproj" />
+    <ProjectReference Include="..\Tharga.Team.Support.OpenAI\Tharga.Team.Support.OpenAI.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />

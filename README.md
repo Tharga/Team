@@ -16,6 +16,7 @@ A suite of NuGet packages for building multi-tenant Blazor applications with tea
 | [Tharga.Team.Email](https://www.nuget.org/packages/Tharga.Team.Email) | E-mail — IMAP reading, SMTP sending and MIME (MailKit), team mailboxes, and mail to users: categories, unsubscribe links, a persisted queue, staff messages and automatic notices | No |
 | [Tharga.Team.Support](https://www.nuget.org/packages/Tharga.Team.Support) | Support module — Slack notifications for audited events, and support cases on the site, by mail and in Slack | No |
 | [Tharga.Team.Support.Anthropic](https://www.nuget.org/packages/Tharga.Team.Support.Anthropic) | Lets a team connect the support assistant to its own Neurolito or Anthropic key, over the Anthropic Messages API (Anthropic SDK) | No |
+| [Tharga.Team.Support.OpenAI](https://www.nuget.org/packages/Tharga.Team.Support.OpenAI) | Lets a team connect the support assistant to its own OpenAI key, or its own Ollama or llama.cpp server, over the OpenAI-compatible API (OpenAI SDK) | No |
 | [Tharga.Team.Mcp](https://www.nuget.org/packages/Tharga.Team.Mcp) | MCP (Model Context Protocol) bridge — auth, scopes, audit for MCP tools. Renamed from `Tharga.Platform.Mcp`, which is deprecated and frozen at 3.5.x | No |
 
 ## Dependency graph
@@ -37,8 +38,10 @@ Tharga.Team ── plain .NET, no external dependencies
 │   └── + Tharga.Team.Service, MailKit, DnsClient, AngleSharp
 ├── Tharga.Team.Support ── support module, Slack notifications (optional)
 │   └── + Tharga.Team.Service, Tharga.Team.Email
-└── Tharga.Team.Support.Anthropic ── a team's own AI provider for the assistant (optional)
-    └── + Tharga.Team.Support, Anthropic
+├── Tharga.Team.Support.Anthropic ── a team's own AI provider for the assistant (optional)
+│   └── + Tharga.Team.Support, Anthropic
+└── Tharga.Team.Support.OpenAI ── a team's own OpenAI-compatible provider for the assistant (optional)
+    └── + Tharga.Team.Support, OpenAI, Microsoft.Extensions.AI.OpenAI
 ```
 
 ## Quick Start
@@ -419,7 +422,11 @@ builder.Services.AddSingleton<IChatClient>(_ => new OllamaApiClient(uri, "llama3
 
 Register none and there is no assistant: the choice is never offered and a person answers every case, exactly
 as before. To give each team its own model, or none, register an `ISupportChatClientResolver` instead; the
-assistant is then offered only to a team that has one (`GetAssistantReadinessAsync`). The customer picks when
+assistant is then offered only to a team that has one (`GetAssistantReadinessAsync`). Or let each team choose, with
+`AddThargaSupportAiConnections()` and `<SupportAssistantConnectionView />` (or the same over REST with
+`MapThargaSupportAiConnection()`): the platform's model, its own Neurolito, Anthropic or OpenAI key, its own Ollama or
+llama.cpp server, or off, through the optional `Tharga.Team.Support.Anthropic` and `Tharga.Team.Support.OpenAI`
+packages. The customer picks when
 raising a case and can ask for a person at any point, keeping the same transcript. An assistant answer takes the case out of support's queue and a customer reply puts it back, so a
 dissatisfied customer is always back in front of a human.
 

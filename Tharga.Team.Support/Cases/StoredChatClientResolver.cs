@@ -40,13 +40,15 @@ internal sealed class StoredChatClientResolver(
                 return null;
         }
 
-        if (factory == null || factory.Providers.All(x => x.Kind != stored.Kind) || stored.ProtectedApiKey == null) return null;
+        var provider = factory?.Providers.FirstOrDefault(x => x.Kind == stored.Kind);
+        if (provider == null || (stored.ProtectedApiKey == null && provider.RequiresApiKey)) return null;
 
         return cache.GetOrCreate(stored, () =>
         {
             try
             {
-                return factory.Create(new SupportAiEndpoint(stored.Kind, stored.BaseAddress, _protector.Unprotect(stored.ProtectedApiKey), stored.Model));
+                var apiKey = stored.ProtectedApiKey == null ? null : _protector.Unprotect(stored.ProtectedApiKey);
+                return factory.Create(new SupportAiEndpoint(stored.Kind, stored.BaseAddress, apiKey, stored.Model));
             }
             catch (CryptographicException)
             {

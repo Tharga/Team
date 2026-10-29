@@ -45,8 +45,17 @@ public sealed record SupportAiConnectionChoices
     public string PlatformModel { get; init; }
 }
 
-/// <summary>The address a provider kind starts from.</summary>
-public sealed record SupportAiProviderDefault(SupportAiConnectionKind Kind, string BaseAddress);
+/// <summary>The address a provider kind starts from, and whether it needs a key.</summary>
+/// <param name="Kind">The provider.</param>
+/// <param name="BaseAddress">The address it starts from; null when the team has to give one, as for a server of its own.</param>
+public sealed record SupportAiProviderDefault(SupportAiConnectionKind Kind, string BaseAddress)
+{
+    /// <summary>
+    /// Whether the provider needs a key. Default true. A self-hosted server that asks for none sets it false: the key is
+    /// then optional, and is sent only if the team gave one.
+    /// </summary>
+    public bool RequiresApiKey { get; init; } = true;
+}
 
 /// <summary>
 /// A provider connection to check, list the models of, or save.
@@ -57,15 +66,16 @@ public sealed record SupportAiProviderDefault(SupportAiConnectionKind Kind, stri
 /// </remarks>
 public sealed record SupportAiProviderRequest
 {
-    /// <summary>The provider: <see cref="SupportAiConnectionKind.Neurolito"/> or <see cref="SupportAiConnectionKind.Anthropic"/>.</summary>
+    /// <summary>The provider: one of the provider kinds <see cref="SupportAiConnectionChoices.ProviderDefaults"/> lists.</summary>
     public SupportAiConnectionKind Kind { get; init; }
 
-    /// <summary>The provider's address; null for the provider's default.</summary>
+    /// <summary>The provider's address; null for the provider's default, where it has one.</summary>
     public string BaseAddress { get; init; }
 
     /// <summary>
     /// The key; null to use the one the team already stored, which is allowed only while the kind and the address
-    /// are unchanged, so a stored key is never sent somewhere it was not entered for.
+    /// are unchanged, so a stored key is never sent somewhere it was not entered for. For a provider that needs no key
+    /// (<see cref="SupportAiProviderDefault.RequiresApiKey"/>), null with no stored key sends none.
     /// </summary>
     public string ApiKey { get; init; }
 

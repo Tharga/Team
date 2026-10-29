@@ -21,6 +21,7 @@ using Microsoft.Extensions.AI;
 using Tharga.Team.Support;
 using Tharga.Team.Support.Anthropic;
 using Tharga.Team.Support.Cases;
+using Tharga.Team.Support.OpenAI;
 using Tharga.Team.Email;
 using Tharga.Team.Email.Users;
 
@@ -315,10 +316,12 @@ builder.Services.AddThargaSupportCases(o =>
 });
 
 // Each team chooses what the assistant answers it with, on the "AI assistant" page: the platform's model (the
-// scripted client above), Neurolito or Anthropic with the team's own key, or off. A team that never chose keeps the
-// platform's. The key is stored encrypted with Data Protection, so the key ring lives in MongoDB where every instance reads it.
+// scripted client above), Neurolito, Anthropic or OpenAI with the team's own key, an Ollama or llama.cpp server of the
+// team's own, or off. A team that never chose keeps the platform's. The key is stored encrypted with Data Protection,
+// so the key ring lives in MongoDB where every instance reads it.
 builder.Services.AddThargaSupportAiConnections();
 builder.Services.AddThargaSupportAiProviders();
+builder.Services.AddThargaSupportOpenAIProviders();
 builder.Services.AddDataProtection()
     .SetApplicationName("Tharga.Team.Sample")
     .PersistKeysToThargaMongo();
@@ -443,6 +446,10 @@ app.UseThargaMcp();
 // Where Slack posts thread replies. Public and unauthenticated by design -- Slack cannot present a
 // credential, so the request signature is the credential, verified before the body is read.
 app.MapThargaSupportSlack();
+
+// The team's AI connection over REST, as the "AI assistant" page offers it, for an API key with assistant:manage on
+// its team. Behind the same policy as the audit API above.
+app.MapThargaSupportAiConnection();
 
 // Where unsubscribe links lead. Anonymous by design: the token in the link authorizes the one change it names, and
 // GET only asks -- the change is a POST, from the page's button or a mail provider's one-click request.

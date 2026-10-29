@@ -24,6 +24,15 @@ public static class SupportAssistantConnectionViewText
     /// <summary>The team's own Anthropic account.</summary>
     public static readonly TextKey KindAnthropic = new("team.support.assistant.connection.kind.anthropic", "Anthropic, with the team's own key");
 
+    /// <summary>The team's own OpenAI account.</summary>
+    public static readonly TextKey KindOpenAI = new("team.support.assistant.connection.kind.openAI", "OpenAI, with the team's own key");
+
+    /// <summary>An Ollama server of the team's own.</summary>
+    public static readonly TextKey KindOllama = new("team.support.assistant.connection.kind.ollama", "Ollama, on the team's own server");
+
+    /// <summary>A llama.cpp server of the team's own.</summary>
+    public static readonly TextKey KindLlamaCpp = new("team.support.assistant.connection.kind.llamaCpp", "llama.cpp, on the team's own server");
+
     /// <summary>No assistant for the team.</summary>
     public static readonly TextKey KindOff = new("team.support.assistant.connection.kind.off", "Off: no assistant for this team");
 
@@ -35,6 +44,9 @@ public static class SupportAssistantConnectionViewText
 
     /// <summary>Under the key field when no key is stored for this provider and address.</summary>
     public static readonly TextKey ApiKeyPlaceholder = new("team.support.assistant.connection.apiKeyPlaceholder", "Paste the key");
+
+    /// <summary>Under the key field for a server that needs no key, when none is stored for it.</summary>
+    public static readonly TextKey ApiKeyOptional = new("team.support.assistant.connection.apiKeyOptional", "Only if the server asks for one");
 
     /// <summary>Under the key field when a key is stored and would be kept.</summary>
     public static readonly TextKey ApiKeyStored = new("team.support.assistant.connection.apiKeyStored", "A key is stored. Type a new one to replace it.");
@@ -69,8 +81,9 @@ public static class SupportAssistantConnectionViewText
     /// <summary>Every key the component renders, for building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Title, Explanation, ChangedBy, KindPlatform, KindPlatformNamed, KindNeurolito, KindAnthropic, KindOff, Address, ApiKey, ApiKeyPlaceholder,
-        ApiKeyStored, LoadModels, Model, Test, TestReply, Save, Saved, Failed, SelectTeam, NotPermitted
+        Title, Explanation, ChangedBy, KindPlatform, KindPlatformNamed, KindNeurolito, KindAnthropic, KindOpenAI, KindOllama, KindLlamaCpp, KindOff,
+        Address, ApiKey, ApiKeyPlaceholder, ApiKeyOptional, ApiKeyStored, LoadModels, Model, Test, TestReply, Save, Saved, Failed, SelectTeam,
+        NotPermitted
     ];
 
     /// <summary>The name of a connection kind.</summary>
@@ -78,6 +91,9 @@ public static class SupportAssistantConnectionViewText
     {
         SupportAiConnectionKind.Neurolito => KindNeurolito,
         SupportAiConnectionKind.Anthropic => KindAnthropic,
+        SupportAiConnectionKind.OpenAI => KindOpenAI,
+        SupportAiConnectionKind.Ollama => KindOllama,
+        SupportAiConnectionKind.LlamaCpp => KindLlamaCpp,
         SupportAiConnectionKind.Off => KindOff,
         _ => KindPlatform
     };

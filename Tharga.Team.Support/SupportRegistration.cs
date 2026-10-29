@@ -39,8 +39,10 @@ public static class SupportRegistration
     /// Call it with <see cref="AddThargaSupportCases"/>, before or after.
     /// <list type="bullet">
     /// <item>The store comes from <c>AddThargaTeamRepository</c> in <c>Tharga.Team.MongoDB</c>.</item>
-    /// <item>Providers come from an <see cref="ISupportChatClientFactory"/>, such as <c>AddThargaSupportAiProviders</c>
-    /// for Neurolito and Anthropic. Without one, a team chooses between the platform's model and off.</item>
+    /// <item>Providers come from every registered <see cref="ISupportChatClientFactory"/>, such as
+    /// <c>AddThargaSupportAiProviders</c> for Neurolito and Anthropic and <c>AddThargaSupportOpenAIProviders</c> for
+    /// OpenAI, Ollama and llama.cpp. A kind two factories offer is reached through the last registered. Without one, a
+    /// team chooses between the platform's model and off.</item>
     /// <item>Keys are encrypted with Data Protection. On more than one instance, or where the file system does not
     /// survive a restart, persist the key ring where every instance reads it, such as
     /// <c>AddDataProtection().PersistKeysToThargaMongo()</c>, or stored keys become unreadable.</item>
@@ -67,7 +69,7 @@ public static class SupportRegistration
             sp.GetRequiredService<SupportAiClientCache>(),
             sp.GetRequiredService<ILogger<StoredChatClientResolver>>(),
             sp.GetService<IChatClient>(),
-            sp.GetService<ISupportChatClientFactory>()));
+            CompositeSupportChatClientFactory.From(sp)));
 
         services.AddScoped<ISupportAiConnectionService>(sp => new AuditingSupportAiConnectionServiceDecorator(
             new AuthorizationSupportAiConnectionServiceDecorator(
@@ -77,7 +79,7 @@ public static class SupportRegistration
                     sp.GetRequiredService<TeamAuthorizer>(),
                     sp.GetRequiredService<TimeProvider>(),
                     sp.GetService<IChatClient>() != null,
-                    sp.GetService<ISupportChatClientFactory>(),
+                    CompositeSupportChatClientFactory.From(sp),
                     SupportAiConnectionService.DescribePlatformModel(sp.GetService<IChatClient>())),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
