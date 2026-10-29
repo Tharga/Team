@@ -41,7 +41,7 @@
       table, dependency graph, one paragraph on letting each team choose. `Tharga.Team.Support/README.md` names
       both packages and the endpoints. The new package's README was written in step 5. `Tharga.Team.Blazor/README.md`
       already says "the team's own provider", which stays true.
-- [~] 10. Full test suite, push the branch for the user to test.
+- [~] 10. Full suite green (6427 passed). Push the branch for the user to test (ask first).
 
 ## Notes
 
@@ -50,5 +50,7 @@
 
 ## Last session
 
-2026-10-29: #424 (#418–#420) merged as 4.6.2. Branch created from `master`, nothing outdated, plan written. Next: the
-user confirms the plan.
+2026-10-29: Steps 1–9 done and committed (#421 and #422 both implemented, sample and docs updated), full suite green.
+Next: the user approves the push and tests. Then close-out: `dotnet outdated`, PR body as release notes with
+"Closes #421, closes #422", archive `plan/feature.md`, `git rm -r plan`, final commit, PR. Also pending the user's yes:
+filing the MCP follow-up issue, and whether to file the sample's API not taking the sign-in cookie.
