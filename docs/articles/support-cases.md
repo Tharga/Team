@@ -58,6 +58,7 @@ the same reason.
 | Reply to, close, reopen or **assign** a case with no team | `support:unassigned:manage` — a **system** scope |
 | Read or list cases in **any** team, without belonging to it | `support:all:read` — a **system** scope |
 | Reply to, close, reopen or hand over a case in **any** team | `support:all:manage` — a **system** scope |
+| Read how much the assistant was used, per team | `support:usage:read` — a **system** scope |
 
 **Not everything is a scope, deliberately.** Raising a case about your own team is what an ordinary member
 does; gating it would mean every host granting that scope to everybody, and a scope everyone holds checks
@@ -1429,12 +1430,15 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<Suppo
 
 The calls the assistant made for an answer are kept with it, as `SupportMessage.AssistantCalls`: each tool's name and
 what it was asked for, written out short as `text: "export"`. So are the tokens the model reported, every round of the
-tool loop added up, as `SupportMessage.AssistantUsage` (input, output and total). The panel and the support page show
+tool loop added up, as `SupportMessage.AssistantUsage` (input, cached input, output and total, with the provider and
+the model that answered). The panel and the support page show
 them under the answer, folded as **2 service calls · 830 tokens**, opening to a row per call such as
 `search_my_cases(text: "export")` and **Tokens: 610 in, 220 out**.
 
 - **The tokens are the provider's own count**, read from what the tool loop returns in one piece, or added up from each
   round's report when streamed. A provider that reports none leaves the usage empty rather than zero.
+- **The provider and the model** come from the chat client's `ChatClientMetadata` and the response's `ModelId`; a
+  response that names no model is taken to be the client's default model.
 
 - **Asked in one piece or streamed**, they are read from what the tool loop yields, so a host's own tools are listed
   as well as the built-in ones. `report_missing_skill` is not: it notes what the assistant could not do, which is
@@ -1447,6 +1451,37 @@ them under the answer, folded as **2 service calls · 830 tokens**, opening to a
   only whoever reads the case from the support side; or `Nobody`. They are kept either way.
 - **A responder of your own** lists its calls and tokens by returning them on `SupportAnswer.Calls` and
   `SupportAnswer.Usage`.
+
+### What the assistant used, per team
+
+Every time the assistant is asked, one `SupportAssistantUsageRecord` is kept: the team, the case, who asked, the
+provider and model, the input, cached, output and total tokens, the service calls, whether it answered, how long it
+took and when. **Never what anybody wrote**: not the question, not the answer, not a tool's arguments. A host that
+lends its own AI account to teams bills from it.
+
+```csharp
+builder.Services.AddThargaSupportCases();
+builder.Services.AddThargaTeamRepository(...);   // Tharga.Team.MongoDB keeps the records, in SupportAssistantUsage
+```
+
+```razor
+@* For staff holding support:usage:read *@
+<SupportAssistantUsageView />
+```
+
+- **Declines are kept too.** A decline spent the tokens all the same, and is the one a bill would otherwise miss.
+- **Written by the support service, not the responder**, so a responder of your own is recorded by returning
+  `SupportAnswer.Usage`. An answer with no usage writes nothing.
+- **Every `ISupportAssistantUsageSink` is told**, so you can also forward the records to your own billing. The
+  MongoDB store is one sink; a sink that throws is logged and never fails the answer, and the others are still told.
+- **`ISupportAssistantUsageService.GetUsageAsync(from, to, teamKey)`** totals a period per team, provider and model:
+  answers, declines, service calls and tokens. `to` is exclusive. It needs the `support:usage:read` system scope,
+  which nobody holds by default; map it to a system role as you do `support:all:read`.
+- **`SupportAssistantUsageView`** shows the same for a period (this month by default) with a total, team names
+  where the reader may read the team directory, and the team key where not. `TeamKey` narrows it to one team.
+- **A purged team's records go with it**: each names who asked.
+- **Your own store** implements `ISupportAssistantUsageStore` (a sink that can also be totalled) and is registered
+  before the repository; the toolkit's registration then leaves it in place.
 
 ### Settings
 

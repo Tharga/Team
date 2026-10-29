@@ -31,8 +31,12 @@
       this period", nothing being recorded before this change. The sample's scripted client reports tokens and names
       itself, so asking the assistant in the panel gives a row; left for the user's testing, which also exercises
       the server-side totals on a real MongoDB.
-- [~] 9. Docs.
-- [ ] 10. Full test suite, push the branch for the user to test.
+- [x] 9. Docs: `support-cases.md` scope table row for `support:usage:read`, "What an answer took" names the new
+      fields, and a new "What the assistant used, per team" section (records, declines, sinks, the read service, the
+      view, purge, a host's own store). `Tharga.Team.MongoDB/README.md` lists the store and collection;
+      `Tharga.Team.Support/README.md` and `Tharga.Team.Blazor/README.md` mention the records and the view. The root
+      README describes the assistant only in outline and needed nothing.
+- [~] 10. Full test suite, push the branch for the user to test.
 
 ## Notes
 
