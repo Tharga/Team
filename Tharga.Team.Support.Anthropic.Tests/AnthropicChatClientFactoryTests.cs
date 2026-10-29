@@ -171,6 +171,37 @@ public class AnthropicChatClientFactoryTests
         Assert.Single(factory.Providers);
     }
 
+    /// <summary>Calling it again changes the options; it does not add a second factory offering the same kinds.</summary>
+    [Fact]
+    public void RegisteringTwice_KeepsOneFactory_WithTheLastOptions()
+    {
+        var services = new ServiceCollection();
+        services.AddThargaSupportAiProviders();
+        services.AddThargaSupportAiProviders(o => o.OfferAnthropic = false);
+
+        using var provider = services.BuildServiceProvider();
+
+        var factory = Assert.IsType<AnthropicChatClientFactory>(Assert.Single(provider.GetServices<ISupportChatClientFactory>()));
+        Assert.Single(factory.Providers);
+    }
+
+    /// <summary>Another provider package, or the host's own factory, stays beside this one rather than being replaced.</summary>
+    [Fact]
+    public void AnotherFactory_IsKeptBesideIt()
+    {
+        var own = new OwnFactory();
+        var services = new ServiceCollection();
+        services.AddSingleton<ISupportChatClientFactory>(own);
+        services.AddThargaSupportAiProviders();
+
+        using var provider = services.BuildServiceProvider();
+
+        var factories = provider.GetServices<ISupportChatClientFactory>().ToArray();
+        Assert.Equal(2, factories.Length);
+        Assert.Same(own, factories[0]);
+        Assert.IsType<AnthropicChatClientFactory>(factories[1]);
+    }
+
     /// <summary>The name it had before, kept so no host breaks on the rename.</summary>
     [Fact]
     public void TheOldName_StillGivesTheFactory()
@@ -198,6 +229,15 @@ public class AnthropicChatClientFactoryTests
     }
 
     private sealed record SeenRequest(HttpMethod Method, Uri Uri, Dictionary<string, string> Headers, string Body);
+
+    private sealed class OwnFactory : ISupportChatClientFactory
+    {
+        public IReadOnlyList<SupportAiProviderDefault> Providers => [];
+
+        public IChatClient Create(SupportAiEndpoint endpoint) => throw new NotSupportedException();
+
+        public Task<SupportAiModelList> ListModelsAsync(SupportAiEndpoint endpoint, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
 
     private sealed class FakeServer : HttpMessageHandler
     {

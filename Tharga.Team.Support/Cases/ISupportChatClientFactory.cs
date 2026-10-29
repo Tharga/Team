@@ -7,8 +7,13 @@ namespace Tharga.Team.Support.Cases;
 /// </summary>
 /// <remarks>
 /// <b>The one place a provider's protocol is known.</b> <c>Tharga.Team.Support.Anthropic</c> implements it for the
-/// Anthropic Messages API, which Neurolito speaks too, so this package names no vendor and takes no vendor SDK. A
-/// host can implement it for a provider the toolkit does not cover.
+/// Anthropic Messages API, which Neurolito speaks too, and <c>Tharga.Team.Support.OpenAI</c> for the OpenAI-compatible
+/// API, so this package names no vendor and takes no vendor SDK. A host can implement it for a provider the toolkit
+/// does not cover.
+/// <para>
+/// <b>Register as many as you need.</b> Every registered factory is offered; a kind two of them offer is reached
+/// through the last registered.
+/// </para>
 /// </remarks>
 public interface ISupportChatClientFactory
 {

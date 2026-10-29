@@ -17,6 +17,10 @@ public static class AnthropicSupportRegistration
     /// Registers the <see cref="ISupportChatClientFactory"/> whose providers <c>AddThargaSupportAiConnections</c> offers to
     /// teams. Call both; this one alone gives teams nothing to choose with. Set
     /// <see cref="AnthropicSupportOptions.OfferAnthropic"/> to <c>false</c> to offer Neurolito only.
+    /// <para>
+    /// Another provider package, or a factory of the host's own, stays beside this one. Calling it again changes the
+    /// options and adds no second factory.
+    /// </para>
     /// </remarks>
     public static IServiceCollection AddThargaSupportAiProviders(this IServiceCollection services, Action<AnthropicSupportOptions> configure = null)
     {
@@ -24,8 +28,9 @@ public static class AnthropicSupportRegistration
         configure?.Invoke(options);
 
         services.AddHttpClient(AnthropicChatClientFactory.HttpClientName);
-        services.RemoveAll<ISupportChatClientFactory>();
-        services.AddSingleton<ISupportChatClientFactory>(sp => new AnthropicChatClientFactory(sp.GetRequiredService<IHttpClientFactory>(), options));
+        services.RemoveAll<AnthropicChatClientFactory>();
+        services.AddSingleton(sp => new AnthropicChatClientFactory(sp.GetRequiredService<IHttpClientFactory>(), options));
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<ISupportChatClientFactory, AnthropicChatClientFactory>(sp => sp.GetRequiredService<AnthropicChatClientFactory>()));
 
         return services;
     }

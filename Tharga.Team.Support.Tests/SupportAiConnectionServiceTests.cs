@@ -16,8 +16,8 @@ public class SupportAiConnectionServiceTests
 {
     private const string TeamA = "team-a";
     private const string Admin = "admin-subject";
-    private const string GoodKey = "nl-team-key-0123456789";
-    private const string Model = "claude-qwen3-coder:30b";
+    internal const string GoodKey = "nl-team-key-0123456789";
+    internal const string Model = "claude-qwen3-coder:30b";
     private const string NeurolitoAddress = "https://neurolito.com";
     private const string AnthropicAddress = "https://api.anthropic.com";
 
