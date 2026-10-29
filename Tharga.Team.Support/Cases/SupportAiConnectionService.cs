@@ -107,7 +107,7 @@ internal sealed class SupportAiConnectionService(
         if (!models.Models.Any(x => string.Equals(x.Id, endpoint.Model, StringComparison.Ordinal)))
             return SupportAiConnectionResult.Failure($"The provider does not offer '{endpoint.Model}' for this key.");
 
-        await SaveAsync(teamKey, endpoint.Kind, endpoint.BaseAddress, endpoint.Model, _protector.Protect(endpoint.ApiKey), cancellationToken);
+        await SaveAsync(teamKey, endpoint.Kind, endpoint.BaseAddress, endpoint.Model, endpoint.ApiKey == null ? null : _protector.Protect(endpoint.ApiKey), cancellationToken);
 
         return SupportAiConnectionResult.Success();
     }
@@ -158,6 +158,7 @@ internal sealed class SupportAiConnectionService(
         if (provider == null) return (null, $"{request.Kind} is not offered here.");
 
         var baseAddress = Normalize(string.IsNullOrWhiteSpace(request.BaseAddress) ? provider.BaseAddress : request.BaseAddress);
+        if (string.IsNullOrEmpty(baseAddress)) return (null, "Enter the address.");
         if (!IsAllowedAddress(baseAddress)) return (null, "The address must be https, or http on this machine.");
 
         var model = request.Model?.Trim();
@@ -166,9 +167,11 @@ internal sealed class SupportAiConnectionService(
         var apiKey = request.ApiKey?.Trim();
         if (string.IsNullOrEmpty(apiKey))
         {
+            apiKey = null;
+
             var stored = await store.GetAsync(teamKey, cancellationToken);
             if (stored?.ProtectedApiKey == null || stored.Kind != request.Kind || !string.Equals(Normalize(stored.BaseAddress), baseAddress, StringComparison.OrdinalIgnoreCase))
-                return (null, "Enter the key.");
+                return provider.RequiresApiKey ? (null, "Enter the key.") : (new SupportAiEndpoint(request.Kind, baseAddress, null, model), null);
 
             try
             {

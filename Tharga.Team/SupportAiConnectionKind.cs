@@ -19,5 +19,14 @@ public enum SupportAiConnectionKind
     Neurolito,
 
     /// <summary>The team's own Anthropic API key.</summary>
-    Anthropic
+    Anthropic,
+
+    /// <summary>The team's own OpenAI API key.</summary>
+    OpenAI,
+
+    /// <summary>An Ollama server at an address the team gives, with a key only if the server asks for one.</summary>
+    Ollama,
+
+    /// <summary>A llama.cpp server at an address the team gives, with a key only if the server asks for one.</summary>
+    LlamaCpp
 }

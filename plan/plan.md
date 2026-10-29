@@ -5,13 +5,15 @@
 - [x] 1. NuGet update: `dotnet outdated` reports nothing outdated (checked 2026-10-29, right after #424 merged).
 - [x] 2. Confirmed 2026-10-29: ships as a **patch** (4.6.3), so `MAJOR_MINOR` stays `4.6`. MCP tools become their
       own issue (draft the text, show it before filing). The address rule stays: https, or http on this machine.
-- [~] 3. Several factories: tests first (two factories offering different kinds are both offered and each reaches its
-      own kind; the last registered wins a kind both offer; registering a package twice adds one factory), then the
-      service, the resolver and the Anthropic registration.
-- [ ] 4. Keyless kinds: tests first (a kind with `RequiresApiKey = false` connects, tests and lists without a key and
-      stores none; it refuses an empty address; a stored key is not sent after the kind or address changes), then
-      `RequiresApiKey` and the service.
-- [ ] 5. The three kinds and `Tharga.Team.Support.OpenAI`: tests first against a fake server (models listed, each
+- [x] 3. Several factories. `CompositeSupportChatClientFactory` (internal) wraps every registered factory; the service
+      and the resolver take it, so neither changed. A kind is reached through the last registered factory offering
+      it, and offered once. `AddThargaSupportAiProviders` now registers its concrete factory and forwards to it with
+      `TryAddEnumerable`, so a second call changes the options and adds nothing, and a host's own factory stays.
+- [x] 4. Keyless kinds. `SupportAiProviderDefault.RequiresApiKey` (default true). The enum got `OpenAI`, `Ollama` and
+      `LlamaCpp` here, as the tests needed a self-hosted kind. With no key given and none stored for the same kind
+      and address, a keyless kind is reached with none, and connecting stores none; the resolver answers a keyless
+      connection with no key. An empty address says "Enter the address." before the https check.
+- [~] 5. The three kinds and `Tharga.Team.Support.OpenAI`: tests first against a fake server (models listed, each
       problem in words without the key, chat answered), then the enum members, the package and its registration.
 - [ ] 6. `SupportAssistantConnectionView`: tests first (labels for the new kinds, the optional key, providers beyond
       the fixed pair), then the view and the text keys.

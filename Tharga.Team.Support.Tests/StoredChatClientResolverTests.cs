@@ -65,6 +65,21 @@ public class StoredChatClientResolverTests
         Assert.Equal(Model, endpoint.Model);
     }
 
+    /// <summary>A self-hosted server that asks for no key is reached without one.</summary>
+    [Fact]
+    public async Task AKindThatNeedsNoKey_IsReachedWithoutOne()
+    {
+        var factory = SupportAiConnectionServiceTests.SelfHosted();
+        var connected = await Service(factory).ConnectAsync(TeamA, new SupportAiProviderRequest { Kind = SupportAiConnectionKind.Ollama, BaseAddress = "https://ollama.example/v1", Model = Model });
+        Assert.True(connected.Succeeded, connected.Problem);
+
+        var client = await Resolver(factory: factory).GetAsync(TeamA);
+
+        Assert.NotNull(client);
+        Assert.Null(factory.Seen[^1].ApiKey);
+        Assert.Equal("https://ollama.example/v1", factory.Seen[^1].BaseAddress);
+    }
+
     [Fact]
     public async Task TheClient_IsReused_UntilTheConnectionChanges()
     {
@@ -111,13 +126,13 @@ public class StoredChatClientResolverTests
         Assert.Equal(SupportAssistantReadiness.NotConfigured, await responder.GetReadinessAsync(TeamA));
     }
 
-    private StoredChatClientResolver Resolver(bool withPlatform = true, bool withFactory = true, SupportAiClientCache cache = null)
-        => new(_store, _keyRing, cache ?? new SupportAiClientCache(), NullLogger<StoredChatClientResolver>.Instance, withPlatform ? _platform : null, withFactory ? _factory : null);
+    private StoredChatClientResolver Resolver(bool withPlatform = true, bool withFactory = true, SupportAiClientCache cache = null, ISupportChatClientFactory factory = null)
+        => new(_store, _keyRing, cache ?? new SupportAiClientCache(), NullLogger<StoredChatClientResolver>.Instance, withPlatform ? _platform : null, withFactory ? factory ?? _factory : null);
 
-    private SupportAiConnectionService Service()
+    private SupportAiConnectionService Service(ISupportChatClientFactory factory = null)
     {
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "admin"), new Claim(TeamClaimTypes.TeamKey, TeamA)], "test"));
-        return new SupportAiConnectionService(_store, _keyRing, new TeamAuthorizer(new FixedPrincipalAccessor(principal)), TimeProvider.System, true, _factory);
+        return new SupportAiConnectionService(_store, _keyRing, new TeamAuthorizer(new FixedPrincipalAccessor(principal)), TimeProvider.System, true, factory ?? _factory);
     }
 
     private async Task ConnectAsync()
