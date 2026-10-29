@@ -28,8 +28,14 @@
       quote the key). Kinds by name in JSON. 16 tests through a test server and the real service with its
       authorization. Gotcha noted in the code: a handler taking only `HttpContext` binds as a request delegate and
       drops its result.
-- [~] 8. Sample: register the new package and map the endpoints; check in a browser and over HTTP.
-- [ ] 9. Docs: `docs/articles/support-cases.md`, the new package's README, the root README, `Tharga.Team.Support`'s
+- [x] 8. Sample registers `AddThargaSupportOpenAIProviders` beside `AddThargaSupportAiProviders` and maps
+      `MapThargaSupportAiConnection`. In the browser, `/assistant` offered all five providers with their labels.
+      Ollama: empty address, hint "Only if the server asks for one", Load models said "Enter the address.". OpenAI:
+      `https://api.openai.com/v1`, "Paste the key", "Enter the key.". Screenshots timed out, so checked through the DOM.
+      Over HTTP with the sign-in cookie, the endpoints and `/api/audit` both answered 401: the sample's API does
+      not take the cookie, despite `o.Controllers.AuthenticationSchemes.Add(Cookie)`. Outside this feature; reported
+      to the user. The endpoints' behaviour with a caller is covered by the test-server tests.
+- [~] 9. Docs: `docs/articles/support-cases.md`, the new package's README, the root README, `Tharga.Team.Support`'s
       README if it lists the registrations.
 - [ ] 10. Full test suite, push the branch for the user to test.
 
