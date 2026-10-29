@@ -15,6 +15,7 @@
 .support-panel__header {
     flex: 0 0 auto;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
@@ -28,6 +29,11 @@
     display: flex;
     align-items: center;
     gap: 0.25rem;
+}
+
+/* Kept to the right when the header wraps, so the close button never leaves the panel however long the tab names. */
+.support-panel__actions {
+    margin-inline-start: auto;
 }
 
 .support-panel__rail {
