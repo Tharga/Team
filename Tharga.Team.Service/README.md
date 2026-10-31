@@ -294,7 +294,7 @@ builder.Services.AddThargaAuditLogging(o =>
 | `StorageMode` | `Logger` | `[Flags]`: `Logger`, `MongoDB`, or both. Set `MongoDB` to populate `AuditLogView`. |
 | `CallerFilter` / `EventFilter` | `Api\|Web` / `All` | `[Flags]` — which caller sources / event types to record. |
 | `ExcludedActions` / `ExcludedEndpoints` | empty | Skip noisy actions (e.g. `"read"`) or endpoints. |
-| `RetentionDays` | `90` | `int?` → MongoDB TTL index (`Timestamp_TTL`). **`null` or `<= 0` = keep forever** (no TTL index). Changing/removing the TTL on an existing collection may need a manual index drop. |
+| `RetentionDays` | `90` | `int?` → MongoDB TTL index (`Timestamp_TTL`). **`null` or `<= 0` = keep forever** (no TTL index). Unset keeps 90. On startup the index of an existing collection is changed, dropped or created to match (logged at Information). |
 | `BatchSize` / `FlushIntervalSeconds` | `100` / `5` | Background MongoDB writer tuning. |
 
 ### Auditing background work
