@@ -15,10 +15,10 @@ internal class AuditRepositoryCollection : DiskRepositoryCollectionBase<AuditEnt
         Microsoft.Extensions.Options.IOptions<AuditOptions> options = null)
         : base(mongoDbServiceFactory, logger)
     {
-        _retentionDays = options?.Value?.RetentionDays ?? 90;
+        _retentionDays = AuditRetention.ResolveDays(options);
     }
 
-    public override string CollectionName => "AuditLog";
+    public override string CollectionName => AuditRetentionIndex.CollectionName;
 
     public override IEnumerable<CreateIndexModel<AuditEntryEntity>> Indices
     {
@@ -32,7 +32,7 @@ internal class AuditRepositoryCollection : DiskRepositoryCollectionBase<AuditEnt
             if (expireAfter.HasValue)
             {
                 indices.Add(new(Builders<AuditEntryEntity>.IndexKeys.Ascending(x => x.Timestamp),
-                    new CreateIndexOptions { Name = "Timestamp_TTL", ExpireAfter = expireAfter.Value }));
+                    new CreateIndexOptions { Name = AuditRetentionIndex.Name, ExpireAfter = expireAfter.Value }));
             }
 
             // Compound index for default sort (descending time) with team filter

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Tharga.Team.Service.Audit;
 
 namespace Tharga.Team.Service.Tests;
@@ -41,5 +43,51 @@ public class AuditRetentionTests
     public void AuditOptions_DefaultRetention_Is90()
     {
         Assert.Equal(90, new AuditOptions().RetentionDays);
+    }
+
+    [Fact]
+    public void ResolveDays_NoOptionsRegistered_IsTheDefault()
+    {
+        Assert.Equal(90, AuditRetention.ResolveDays(null));
+    }
+
+    [Fact]
+    public void ResolveDays_RetentionNotConfigured_IsTheDefault()
+    {
+        Assert.Equal(90, AuditRetention.ResolveDays(Options.Create(new AuditOptions())));
+    }
+
+    [Fact]
+    public void ResolveDays_ExplicitlyNull_StaysNull_SoEntriesAreKeptForever()
+    {
+        Assert.Null(AuditRetention.ResolveDays(Options.Create(new AuditOptions { RetentionDays = null })));
+    }
+
+    [Fact]
+    public void ResolveDays_AConfiguredValue_IsKept()
+    {
+        Assert.Equal(427, AuditRetention.ResolveDays(Options.Create(new AuditOptions { RetentionDays = 427 })));
+    }
+
+    [Fact]
+    public void ExplicitNull_ConfiguredThroughRegistration_ReachesTheOptionsAsNull()
+    {
+        var services = new ServiceCollection();
+        services.AddThargaAuditLogging(o => o.RetentionDays = null);
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Null(AuditRetention.ResolveDays(provider.GetRequiredService<IOptions<AuditOptions>>()));
+    }
+
+    [Fact]
+    public void RetentionNotConfigured_ThroughRegistration_ReachesTheOptionsAs90()
+    {
+        var services = new ServiceCollection();
+        services.AddThargaAuditLogging();
+
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Equal(90, AuditRetention.ResolveDays(provider.GetRequiredService<IOptions<AuditOptions>>()));
     }
 }
