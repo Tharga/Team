@@ -177,6 +177,65 @@ The mail goes through the [mail to users](user-mail.md) queue, so its sending ad
 outbound policy and history apply. When the notice's category is optional, the mail carries its unsubscribe
 link.
 
+## A notice about state, at most once per interval
+
+Some things you have to tell users are a **state** rather than an event: "these channels expire within two weeks or
+have stopped working". Pushed through occurrences they mail as often as occurrences arrive, and what a held-back
+occurrence said would be stale by the time a mail could go out. Two settings on the notice fix that, and work apart or
+together:
+
+```csharp
+o.Add(new UserNoticeType
+{
+    Key = "channel.attention",
+    Name = "Channels that need attention",
+    Category = "work",
+    Audience = UserNoticeAudience.WithScope("channels:manage"),
+    Subject = "Channels need attention",          // used for the list when there is no Composer
+
+    MinimumInterval = TimeSpan.FromDays(7),         // at most one mail per user per week
+    Composer = async (composition, services, ct) =>
+    {
+        var channels = services.GetRequiredService<IChannelHealth>();
+        var problems = await channels.NeedingAttentionAsync(composition.TeamKeys, composition.LastMail.Subjects, ct);
+        if (problems.Count == 0) return null;         // nothing to tell: no mail, and nothing waits
+
+        return new UserNoticeComposed
+        {
+            Subject = $"{problems.Count} channels need attention",
+            BodyHtml = Render(problems),               // HTML you encode
+            CoveredSubjects = [.. problems.Select(x => x.ChannelId)]
+        };
+    }
+});
+```
+
+An occurrence then means *this user may have something to hear about*, not *this is what to tell them*: raise one
+whenever a channel's state changes (`SubjectId` = the channel), and the mail is written from the state when it goes out.
+
+- **`MinimumInterval`**: at most one mail of this notice **per user**, so a person in two teams gets one mail
+  covering both. Occurrences that arrive while the interval holds wait and go out together when it is over. Without a
+  `Composer` that mail is the notice's own list of what waited.
+- **`Composer`**: called, in a scope of your services and like `Audience.Resolver`, once per user's mail when it is
+  due. It is given the user, the **teams concerned**, the occurrences waiting (oldest first, at most
+  `MaxItemsPerMail`) and **what the last mail of this notice to this user covered and when, per subject**
+  (`LastMail.LastMailedAt`, `LastMail.Subjects`). It returns the subject, the HTML body and the subjects the mail
+  covers, or **null to send nothing**.
+- **Null sends nothing and starts no interval.** The waiting occurrences are dropped (recorded as skipped, with the
+  reason); an occurrence that arrives afterwards is composed at once.
+- **What a mail covered is remembered per subject.** A subject a later mail did not cover keeps the time it was last
+  mentioned, so "still broken four weeks after it was last mentioned" is a question the composer can ask. A reminder
+  with no event behind it is an occurrence you raise yourself with a fresh `Discriminator`. The covered subjects are
+  also recorded on the notice items beside the id of the mail, so "which user was told about which subject, and
+  when" can be answered. The newest 1 000 subjects per user and notice are kept.
+- **A composer that throws loses nothing.** The occurrences keep waiting and it is tried again in 15 minutes.
+- **At once only.** A notice with either setting cannot allow the daily summary: registering one that does is
+  refused. The category, a user's choice, a team's default and the audience work as for any notice, and the mail goes
+  through the same queue and is logged as any notice mail is.
+- **The interval is checked when the occurrence is distributed and again when the mail is due**, so two instances
+  cannot send two.
+- **The body is HTML you write**: encode whatever you insert. The subject is made one line.
+
 ## Choices and team defaults
 
 **A user's choice is global**, not per team: one person has one inbox, and the team shows in the mail. Until they
@@ -278,6 +337,14 @@ an occurrence raised again is recognised.
   that day's summary.
 - **A changed delivery applies to later notices**; what already waits keeps its course.
 - **The daily summary does not name the team** a notice came from.
+
+## If you implement `IUserNoticeOutbox` yourself
+
+The outbox is internal and unchecked (`EditorBrowsable.Never`), and `Tharga.Team.MongoDB` registers one. If you keep
+notices elsewhere with your own, it gained two members, `GetCoverageAsync` and `RecordCoverageAsync`, and
+`CompleteItemsAsync` a `coveredSubjects` parameter before its cancellation token, so it no longer compiles until you add
+them. That is deliberate: an outbox that quietly ignored them would send a notice with an interval as often as it did
+without one. The MongoDB adapter keeps the coverage on the user's stream document, so nothing new is created.
 
 ## Moving to 4.2
 

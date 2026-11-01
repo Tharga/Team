@@ -139,7 +139,7 @@ internal sealed class MongoUserNoticeOutbox(IUserNoticeCollection notices, IUser
         return (await streams.UpdateOneAsync(HeldStream(userKey, stream, claimant), update, OneOption<UserNoticeStreamEntity>.FirstOrDefault))?.Before != null;
     }
 
-    public async Task CompleteItemsAsync(string[] itemIds, UserNoticeItemStatus status, string mailId, string reason, DateTime at, CancellationToken cancellationToken = default)
+    public async Task CompleteItemsAsync(string[] itemIds, UserNoticeItemStatus status, string mailId, string reason, DateTime at, string[] coveredSubjects = null, CancellationToken cancellationToken = default)
     {
         var objectIds = ObjectIds(itemIds);
         if (objectIds.Length == 0) return;
@@ -147,9 +147,42 @@ internal sealed class MongoUserNoticeOutbox(IUserNoticeCollection notices, IUser
         var update = Builders<UserNoticeItemEntity>.Update.Set(x => x.Status, status).Set(x => x.CompletedAt, at);
         update = mailId == null ? update : update.Set(x => x.MailId, mailId);
         update = reason == null ? update : update.Set(x => x.Reason, reason);
+        update = coveredSubjects == null ? update : update.Set(x => x.CoveredSubjects, coveredSubjects);
 
         await items.UpdateManyAsync(ItemFilter.In(x => x.Id, objectIds) & ItemFilter.Eq(x => x.Status, UserNoticeItemStatus.Waiting), update);
     }
+
+    public async Task<UserNoticeCoverage> GetCoverageAsync(string userKey, string stream, CancellationToken cancellationToken = default)
+    {
+        var current = await streams.GetOneAsync(OfStream(userKey, stream), OneOption<UserNoticeStreamEntity>.FirstOrDefault, cancellationToken);
+
+        return current?.LastMailedAt == null
+            ? UserNoticeCoverage.None
+            : new UserNoticeCoverage { LastMailedAt = current.LastMailedAt, Subjects = ToSubjects(current.Covered) };
+    }
+
+    /// <remarks>
+    /// Read and written back rather than set atomically, which is safe because it is written while the claimant holds the
+    /// stream. The newest <see cref="MaxCoveredSubjects"/> subjects are kept, so a notice about thousands of things cannot make
+    /// the stream's document grow without end.
+    /// </remarks>
+    public async Task RecordCoverageAsync(string userKey, string stream, DateTime mailedAt, string[] subjectIds, CancellationToken cancellationToken = default)
+    {
+        var current = await streams.GetOneAsync(OfStream(userKey, stream), OneOption<UserNoticeStreamEntity>.FirstOrDefault, cancellationToken);
+        var merged = ToSubjects(current?.Covered).ToDictionary(x => x.Key, x => x.Value, StringComparer.Ordinal);
+        foreach (var subject in subjectIds ?? []) merged[subject] = mailedAt;
+
+        UserNoticeCoveredEntity[] covered = [.. merged.OrderByDescending(x => x.Value).Take(MaxCoveredSubjects).Select(x => new UserNoticeCoveredEntity { SubjectId = x.Key, At = x.Value })];
+        var update = Builders<UserNoticeStreamEntity>.Update.Set(x => x.LastMailedAt, mailedAt).Set(x => x.Covered, covered);
+
+        await streams.UpdateOneAsync(OfStream(userKey, stream), update, OneOption<UserNoticeStreamEntity>.FirstOrDefault);
+    }
+
+    /// <summary>The most subjects a stream remembers having covered.</summary>
+    internal const int MaxCoveredSubjects = 1000;
+
+    private static Dictionary<string, DateTime> ToSubjects(UserNoticeCoveredEntity[] covered)
+        => (covered ?? []).GroupBy(x => x.SubjectId, StringComparer.Ordinal).ToDictionary(x => x.Key, x => x.Max(y => y.At), StringComparer.Ordinal);
 
     public async Task<bool> ReleaseStreamAsync(string userKey, string stream, string claimant, DateTime nextDueWhenWaiting, CancellationToken cancellationToken = default)
     {
@@ -313,6 +346,7 @@ internal sealed class MongoUserNoticeOutbox(IUserNoticeCollection notices, IUser
         Status = entity.Status,
         MailId = entity.MailId,
         CompletedAt = entity.CompletedAt,
-        Reason = entity.Reason
+        Reason = entity.Reason,
+        CoveredSubjects = entity.CoveredSubjects ?? []
     };
 }

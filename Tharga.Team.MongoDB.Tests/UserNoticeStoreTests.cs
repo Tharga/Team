@@ -286,11 +286,106 @@ public class UserNoticeStoreTests
         UpdateDefinition<UserNoticeItemEntity> update = null;
         await _items.UpdateManyAsync(Arg.Do<FilterDefinition<UserNoticeItemEntity>>(x => filter = x), Arg.Do<UpdateDefinition<UserNoticeItemEntity>>(x => update = x), Arg.Any<IClientSessionHandle>());
 
-        await Outbox.CompleteItemsAsync([ObjectId.GenerateNewId().ToString(), "not-an-id"], UserNoticeItemStatus.Mailed, "mail-1", null, Now, TestContext.Current.CancellationToken);
+        await Outbox.CompleteItemsAsync([ObjectId.GenerateNewId().ToString(), "not-an-id"], UserNoticeItemStatus.Mailed, "mail-1", null, Now, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Contains("\"Status\" : \"Waiting\"", Render(filter));
         Assert.Contains("\"Status\" : \"Mailed\"", Render(update));
         Assert.Contains("\"MailId\" : \"mail-1\"", Render(update));
+        Assert.DoesNotContain("CoveredSubjects", Render(update));
+    }
+
+    [Fact]
+    public async Task TheSubjectsAMailCovered_AreStoredOnTheItemsItCompleted()
+    {
+        UpdateDefinition<UserNoticeItemEntity> update = null;
+        await _items.UpdateManyAsync(Arg.Any<FilterDefinition<UserNoticeItemEntity>>(), Arg.Do<UpdateDefinition<UserNoticeItemEntity>>(x => update = x), Arg.Any<IClientSessionHandle>());
+
+        await Outbox.CompleteItemsAsync([ObjectId.GenerateNewId().ToString()], UserNoticeItemStatus.Mailed, "mail-1", null, Now, ["channel-1", "channel-2"], TestContext.Current.CancellationToken);
+
+        Assert.Contains("\"CoveredSubjects\" : [\"channel-1\", \"channel-2\"]", Render(update));
+    }
+
+    [Fact]
+    public void CoveredSubjects_AreReadBackOnAnItem_AndAreEmptyOnOneThatHasNone()
+    {
+        var entity = MongoUserNoticeOutbox.ToItemEntity(new UserNoticeItem
+        {
+            NoticeId = "n", OccurrenceKey = "k", UserKey = "u-1", TeamKey = "acme", NoticeKey = "channel.expiring", Category = "work", Stream = "notice:channel.expiring",
+            Delivery = UserNoticeDelivery.AtOnce, SubjectId = "channel-1", RaisedAt = Now
+        });
+
+        Assert.Empty(MongoUserNoticeOutbox.ToItem(entity).CoveredSubjects);
+        Assert.Equal(["channel-1"], MongoUserNoticeOutbox.ToItem(entity with { CoveredSubjects = ["channel-1"] }).CoveredSubjects);
+    }
+
+    [Fact]
+    public async Task AStreamThatNeverSentAnIntervalMail_HasNoCoverage()
+    {
+        _streams.GetOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserNoticeStreamEntity { UserKey = "u-1", Stream = "notice:channel.expiring", DueAt = Now });
+
+        var coverage = await Outbox.GetCoverageAsync("u-1", "notice:channel.expiring", TestContext.Current.CancellationToken);
+
+        Assert.Null(coverage.LastMailedAt);
+        Assert.Empty(coverage.Subjects);
+    }
+
+    [Fact]
+    public async Task CoverageIsReadFromTheStreamsDocument()
+    {
+        _streams.GetOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserNoticeStreamEntity
+            {
+                UserKey = "u-1", Stream = "notice:channel.expiring", DueAt = Now, LastMailedAt = Now.AddDays(-1),
+                Covered = [new UserNoticeCoveredEntity { SubjectId = "channel-1", At = Now.AddDays(-30) }, new UserNoticeCoveredEntity { SubjectId = "channel-2", At = Now.AddDays(-1) }]
+            });
+
+        var coverage = await Outbox.GetCoverageAsync("u-1", "notice:channel.expiring", TestContext.Current.CancellationToken);
+
+        Assert.Equal(Now.AddDays(-1), coverage.LastMailedAt);
+        Assert.Equal(Now.AddDays(-30), coverage.Subjects["channel-1"]);
+        Assert.Equal(Now.AddDays(-1), coverage.Subjects["channel-2"]);
+    }
+
+    [Fact]
+    public async Task RecordingCoverage_SetsTheTimeAndMergesTheSubjects_KeepingEarlierOnesTheirTime()
+    {
+        _streams.GetOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserNoticeStreamEntity
+            {
+                UserKey = "u-1", Stream = "notice:channel.expiring", DueAt = Now, LastMailedAt = Now.AddDays(-7),
+                Covered = [new UserNoticeCoveredEntity { SubjectId = "channel-1", At = Now.AddDays(-28) }, new UserNoticeCoveredEntity { SubjectId = "channel-2", At = Now.AddDays(-7) }]
+            });
+        UpdateDefinition<UserNoticeStreamEntity> update = null;
+        _streams.UpdateOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Do<UpdateDefinition<UserNoticeStreamEntity>>(x => update = x), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<IClientSessionHandle>())
+            .Returns(Changed(new UserNoticeStreamEntity { UserKey = "u-1", Stream = "notice:channel.expiring" }));
+
+        await Outbox.RecordCoverageAsync("u-1", "notice:channel.expiring", Now, ["channel-2", "channel-3"], TestContext.Current.CancellationToken);
+
+        var rendered = Render(update);
+        Assert.Contains("LastMailedAt", rendered);
+        Assert.Contains("channel-1", rendered);
+        Assert.Contains("channel-2", rendered);
+        Assert.Contains("channel-3", rendered);
+        Assert.DoesNotContain("ClaimedBy", rendered);
+        Assert.DoesNotContain("DueAt", rendered);
+    }
+
+    [Fact]
+    public async Task OnlyTheNewestSubjects_AreRemembered()
+    {
+        var old = Enumerable.Range(0, MongoUserNoticeOutbox.MaxCoveredSubjects).Select(x => new UserNoticeCoveredEntity { SubjectId = $"old-{x}", At = Now.AddDays(-100) }).ToArray();
+        _streams.GetOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(new UserNoticeStreamEntity { UserKey = "u-1", Stream = "notice:channel.expiring", DueAt = Now, LastMailedAt = Now.AddDays(-100), Covered = old });
+        UpdateDefinition<UserNoticeStreamEntity> update = null;
+        _streams.UpdateOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Do<UpdateDefinition<UserNoticeStreamEntity>>(x => update = x), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<IClientSessionHandle>())
+            .Returns(Changed(new UserNoticeStreamEntity { UserKey = "u-1", Stream = "notice:channel.expiring" }));
+
+        await Outbox.RecordCoverageAsync("u-1", "notice:channel.expiring", Now, ["new-1"], TestContext.Current.CancellationToken);
+
+        var rendered = Render(update);
+        Assert.Contains("new-1", rendered);
+        Assert.Equal(MongoUserNoticeOutbox.MaxCoveredSubjects, rendered.Split("SubjectId").Length - 1);
     }
 
     [Fact]

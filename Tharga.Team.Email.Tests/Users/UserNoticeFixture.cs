@@ -304,15 +304,38 @@ internal sealed class InMemoryUserNoticeOutbox : IUserNoticeOutbox
         }
     }
 
-    public Task CompleteItemsAsync(string[] itemIds, UserNoticeItemStatus status, string mailId, string reason, DateTime at, CancellationToken cancellationToken = default)
+    public Task CompleteItemsAsync(string[] itemIds, UserNoticeItemStatus status, string mailId, string reason, DateTime at, string[] coveredSubjects = null, CancellationToken cancellationToken = default)
     {
         lock (_gate)
         {
             for (var i = 0; i < _items.Count; i++)
             {
                 if (itemIds.Contains(_items[i].Id) && _items[i].Status == UserNoticeItemStatus.Waiting)
-                    _items[i] = _items[i] with { Status = status, MailId = mailId ?? _items[i].MailId, Reason = reason ?? _items[i].Reason, CompletedAt = at };
+                    _items[i] = _items[i] with { Status = status, MailId = mailId ?? _items[i].MailId, Reason = reason ?? _items[i].Reason, CompletedAt = at, CoveredSubjects = coveredSubjects ?? [] };
             }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    public Task<UserNoticeCoverage> GetCoverageAsync(string userKey, string stream, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            return Task.FromResult(_streams.TryGetValue((userKey, stream), out var s) && s.LastMailedAt != null
+                ? new UserNoticeCoverage { LastMailedAt = s.LastMailedAt, Subjects = new Dictionary<string, DateTime>(s.Covered) }
+                : UserNoticeCoverage.None);
+        }
+    }
+
+    public Task RecordCoverageAsync(string userKey, string stream, DateTime mailedAt, string[] subjectIds, CancellationToken cancellationToken = default)
+    {
+        lock (_gate)
+        {
+            if (!_streams.TryGetValue((userKey, stream), out var s)) return Task.CompletedTask;
+
+            s.LastMailedAt = mailedAt;
+            foreach (var subject in subjectIds ?? []) s.Covered[subject] = mailedAt;
 
             return Task.CompletedTask;
         }
@@ -384,6 +407,8 @@ internal sealed class InMemoryUserNoticeOutbox : IUserNoticeOutbox
         public DateTime? ClaimedUntil { get; set; }
         public string MailKey { get; set; }
         public string[] MailItemIds { get; set; }
+        public DateTime? LastMailedAt { get; set; }
+        public Dictionary<string, DateTime> Covered { get; } = [];
     }
 }
 

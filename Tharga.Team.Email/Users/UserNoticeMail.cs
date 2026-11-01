@@ -36,6 +36,11 @@ internal sealed class UserNoticeMail(UserNoticeRegistry notices, UserMailText te
         return teams.Length == 1 ? teams[0] : null;
     }
 
+    /// <summary>The mail to <paramref name="userKey"/> carrying what the notice's composer wrote from the host's state, in the notice's category.</summary>
+    /// <remarks>The subject is made one line and falls back to the category when empty; the body is the host's HTML and is not touched.</remarks>
+    public static UserMail ComposeFrom(string userKey, UserNoticeItem[] items, UserNoticeComposed composed)
+        => Mail(userKey, items[0].Category, UserMailQueue.OneLine(composed.Subject ?? string.Empty), composed.BodyHtml ?? string.Empty) with { TeamKey = TeamOf(items) };
+
     private async Task<UserMail> ComposeContentAsync(string userKey, string stream, UserNoticeItem[] items)
     {
         var category = items[0].Category;
