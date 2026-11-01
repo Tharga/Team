@@ -1,0 +1,132 @@
+@page "/contact"
+@rendermode InteractiveServer
+@attribute [AllowAnonymous]
+@using Microsoft.AspNetCore.Authorization
+@using Tharga.Team.Support.Cases
+@inject IExternalSupportCaseService ExternalSupport
+
+<PageTitle>Contact us</PageTitle>
+
+@* A public contact form: anybody can use it, signed in or not, and it opens a case in the unassigned queue
+   (Support desk > Without a team) exactly as a mail from an unknown sender does. The toolkit's part is the one call in
+   SendAsync. Everything above it -- the honeypot, and the throttle below -- is the host's, because only the host knows who
+   is calling; the support-cases article has the table of whose job is what. *@
+
+<RadzenStack Orientation="Orientation.Vertical" Gap="1rem" Style="max-width: 36rem;">
+    <RadzenText TextStyle="TextStyle.H5" class="rz-m-0">Contact us</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">
+        Write to us without signing in. Your message reaches our support queue, and we answer by mail to the address you give.
+    </RadzenText>
+
+    @if (_sent)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Success" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false" data-sent>
+            Thank you. Your message has arrived, and we will answer by mail.
+        </RadzenAlert>
+        <div><RadzenButton Text="Write another" ButtonStyle="ButtonStyle.Light" Click="Reset" /></div>
+    }
+    else
+    {
+        @if (_error != null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false" data-error>@_error</RadzenAlert>
+        }
+
+        <RadzenRow Gap="0.75rem">
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenFormField Text="First name" Style="width: 100%;"><RadzenTextBox @bind-Value="_firstName" MaxLength="100" data-first-name /></RadzenFormField>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenFormField Text="Last name" Style="width: 100%;"><RadzenTextBox @bind-Value="_lastName" MaxLength="100" data-last-name /></RadzenFormField>
+            </RadzenColumn>
+        </RadzenRow>
+        <RadzenFormField Text="Email" Style="width: 100%;"><RadzenTextBox @bind-Value="_email" MaxLength="@SupportCaseLimits.MaxExternalEmailLength" data-email /></RadzenFormField>
+        <RadzenFormField Text="Phone (optional)" Style="width: 100%;"><RadzenTextBox @bind-Value="_phone" MaxLength="@SupportCaseLimits.MaxExternalPhoneLength" data-phone /></RadzenFormField>
+        <RadzenFormField Text="Organisation (optional)" Style="width: 100%;"><RadzenTextBox @bind-Value="_organisation" MaxLength="@SupportCaseLimits.MaxExternalNameLength" data-organisation /></RadzenFormField>
+        <RadzenFormField Text="Message" Style="width: 100%;"><RadzenTextArea @bind-Value="_message" Rows="6" MaxLength="@SupportCaseLimits.MaxMessageLength" data-message /></RadzenFormField>
+
+        @* A honeypot: a field no person sees, so only a script that fills every input fills it. Filled, the form
+           answers as if it worked and writes nothing, which tells the script nothing to adapt to. *@
+        <div style="position: absolute; left: -10000px;" aria-hidden="true">
+            <label>Website <input type="text" tabindex="-1" autocomplete="off" @bind="_website" data-website /></label>
+        </div>
+
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+            <RadzenCheckBox @bind-Value="_consent" Name="consent" data-consent />
+            <RadzenLabel Text="I agree that you store what I write here to answer me." Component="consent" />
+        </RadzenStack>
+
+        <div><RadzenButton Text="Send" Icon="send" Click="SendAsync" Disabled="_busy" data-send /></div>
+    }
+</RadzenStack>
+
+@code {
+    private static readonly TimeSpan MinimumBetweenMessages = TimeSpan.FromSeconds(10);
+
+    // Per circuit, which is enough for a sample. A real site limits per caller at the endpoint: ASP.NET Core's rate
+    // limiter, a captcha, or both.
+    private DateTime _lastSentAt = DateTime.MinValue;
+
+    private string _firstName;
+    private string _lastName;
+    private string _email;
+    private string _phone;
+    private string _organisation;
+    private string _message;
+    private string _website;
+    private bool _consent;
+    private bool _busy;
+    private bool _sent;
+    private string _error;
+
+    private async Task SendAsync()
+    {
+        _error = null;
+
+        if (!string.IsNullOrEmpty(_website))
+        {
+            _sent = true;
+            return;
+        }
+
+        if (DateTime.UtcNow - _lastSentAt < MinimumBetweenMessages)
+        {
+            _error = "Please wait a moment before sending another message.";
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await ExternalSupport.RaiseExternalCaseAsync(new ExternalSupportContact
+            {
+                Name = $"{_firstName} {_lastName}".Trim(),
+                Email = _email,
+                Phone = _phone,
+                Organisation = _organisation,
+                ConsentGivenAt = _consent ? DateTime.UtcNow : null,
+                Fields = new Dictionary<string, string> { ["Form"] = "sample contact page" }
+            }, subject: null, _message);
+
+            _lastSentAt = DateTime.UtcNow;
+            _sent = true;
+        }
+        catch (ArgumentException ex)
+        {
+            // The toolkit's refusals are written for the person typing: a missing address, a message too long.
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _firstName = _lastName = _email = _phone = _organisation = _message = _website = null;
+        _consent = false;
+        _error = null;
+        _sent = false;
+    }
+}

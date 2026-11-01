@@ -1088,7 +1088,8 @@ user-only; nothing in it is loosened for this. Registering `AddThargaSupportCase
   can be mailed back.
 - **Who wrote is kept on the case.** `SupportCase.ExternalContact` holds the name, address, phone, organisation, your own
   extra fields and **whether consent was given and when** (`ConsentGivenAt`). The toolkit stores what the form says; what
-  the consent covers is yours to word.
+  the consent covers is yours to word. `SupportUnassignedView` shows it above the conversation, so staff see the phone
+  number and the consent without hunting. The sample site has a working form at `/contact`.
 - **Raised and audited like any case.** The host is notified (`SupportCaseChange.Raised`, from a channel, no team) and
   the audit trail gets a `support:raise` entry with `support.case.source` = `web-form`. The message, the address and the
   name are never recorded in it. A refused call is recorded too, as failed.

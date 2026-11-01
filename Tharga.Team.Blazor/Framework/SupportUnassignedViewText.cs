@@ -92,6 +92,21 @@ public static class SupportUnassignedViewText
     public static readonly TextKey ReasonSharedAddress = new("team.support.unassigned.reason.sharedAddress",
         "More than one user account has the sender's address.");
 
+    /// <summary>Above a case a visitor opened through the host's public contact form: who wrote.</summary>
+    public static readonly TextKey ContactTitle = new("team.support.unassigned.contact.title", "Wrote through the contact form");
+
+    /// <summary>Beside a telephone number on such a case.</summary>
+    public static readonly TextKey ContactPhone = new("team.support.unassigned.contact.phone", "Phone");
+
+    /// <summary>Beside an organisation on such a case.</summary>
+    public static readonly TextKey ContactOrganisation = new("team.support.unassigned.contact.organisation", "Organisation");
+
+    /// <summary>When the visitor gave consent to process their personal data; <c>{0}</c> is when.</summary>
+    public static readonly TextKey ContactConsent = new("team.support.unassigned.contact.consent", "Consent given {0}");
+
+    /// <summary>The visitor gave no consent, or the form never asked.</summary>
+    public static readonly TextKey ContactNoConsent = new("team.support.unassigned.contact.noConsent", "No consent recorded");
+
     /// <summary>The one-click action giving the case a suggested team; <c>{0}</c> is the team's name.</summary>
     public static readonly TextKey AssignToSuggested = new("team.support.unassigned.suggested.assign", "Assign to {0}");
 
@@ -100,6 +115,7 @@ public static class SupportUnassignedViewText
     [
         Title, Explanation, NoCases, NoneMatch, Awaiting, NeedsAnswer, From, AnswerLabel, Close, Reopen, Open, Closed, ClosedForInactivity,
         AssignLabel, AssignAction, AlreadyAssigned, CannotListTeams, NotPermitted,
-        Suggested, ReasonSeveralTeams, ReasonSenderNotVerified, ReasonSharedAddress, AssignToSuggested
+        Suggested, ReasonSeveralTeams, ReasonSenderNotVerified, ReasonSharedAddress, AssignToSuggested,
+        ContactTitle, ContactPhone, ContactOrganisation, ContactConsent, ContactNoConsent
     ];
 }
