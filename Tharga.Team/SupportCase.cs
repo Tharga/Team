@@ -153,4 +153,14 @@ public record SupportCase
 
     /// <summary>Why <see cref="SuggestedTeams"/> are suggestions rather than the case's team; <c>null</c> when there are none.</summary>
     public SupportTeamSuggestionReason? SuggestionReason { get; init; }
+
+    /// <summary>
+    /// Who wrote, when the case was raised through a public form by somebody who was not signed in; <c>null</c> for every
+    /// other case.
+    /// </summary>
+    /// <remarks>
+    /// What the visitor typed, unverified, kept so staff see the phone number, the organisation and whether consent was
+    /// given. A case raised before this existed reads <c>null</c>.
+    /// </remarks>
+    public ExternalSupportContact ExternalContact { get; init; }
 }

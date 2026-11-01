@@ -82,6 +82,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             Bindings = [.. (supportCase.Bindings ?? []).Select(ToEntity)],
             SuggestedTeams = supportCase.SuggestedTeams is { Length: > 0 } suggested ? [.. suggested.Select(ToEntity)] : null,
             SuggestionReason = supportCase.SuggestedTeams is { Length: > 0 } ? supportCase.SuggestionReason : null,
+            ExternalContact = supportCase.ExternalContact == null ? null : ToEntity(supportCase.ExternalContact),
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists.
@@ -657,6 +658,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             ? []
             : [.. entity.SuggestedTeams.Select(x => new SupportCaseTeam { Key = x.Key, Name = x.Name })],
         SuggestionReason = entity.SuggestionReason,
+        ExternalContact = entity.ExternalContact == null ? null : ToContact(entity.ExternalContact),
         AssistantGaps = entity.AssistantGaps ?? [],
         AnswersRatedUp = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Up),
         AnswersRatedDown = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Down)
@@ -666,6 +668,26 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     {
         Key = team.Key,
         Name = team.Name
+    };
+
+    private static SupportExternalContactEntity ToEntity(ExternalSupportContact contact) => new()
+    {
+        Name = contact.Name,
+        Email = contact.Email,
+        Phone = contact.Phone,
+        Organisation = contact.Organisation,
+        ConsentGivenAt = contact.ConsentGivenAt,
+        Fields = contact.Fields is { Count: > 0 } fields ? [.. fields.Select(x => new SupportExternalFieldEntity { Name = x.Key, Value = x.Value })] : null
+    };
+
+    private static ExternalSupportContact ToContact(SupportExternalContactEntity entity) => new()
+    {
+        Name = entity.Name,
+        Email = entity.Email,
+        Phone = entity.Phone,
+        Organisation = entity.Organisation,
+        ConsentGivenAt = entity.ConsentGivenAt,
+        Fields = (entity.Fields ?? []).ToDictionary(x => x.Name, x => x.Value)
     };
 
     private static SupportChannelBinding ToBinding(SupportChannelBindingEntity entity) => new()

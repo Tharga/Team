@@ -195,6 +195,9 @@ public class SupportCaseOptions
     /// <summary>How an answer mail speaks for support, from every mailbox: the name earlier support entries are attributed to, the signature, and the time zone of quoted dates.</summary>
     public SupportAnswerOptions Answers { get; } = new();
 
+    /// <summary>How cases opened from a public form behave: whether the visitor is mailed a receipt, and what it says.</summary>
+    public SupportExternalCaseOptions External { get; } = new();
+
     /// <summary>
     /// How the assistant behaves, when the host has registered an <c>IChatClient</c> for it to use.
     /// </summary>

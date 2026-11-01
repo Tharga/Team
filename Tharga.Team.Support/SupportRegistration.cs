@@ -376,6 +376,23 @@ public static class SupportRegistration
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
 
+        // The one entry point that needs no signed-in user: a public contact form opens an unassigned case through it.
+        // It is a separate interface so ISupportCaseService stays user-only, and it is audited like the rest. What it
+        // refuses (malformed or over-long input) it refuses itself; rate limiting and bot defence are the host's.
+        services.AddSingleton(caseOptions.External);
+        services.AddScoped<IExternalSupportCaseService>(sp => new AuditingExternalSupportCaseServiceDecorator(
+            new ExternalSupportCaseService(
+                sp.GetRequiredService<ISupportCaseStore>(),
+                sp.GetRequiredService<SupportMailboxes>(),
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ISupportCaseNotifier>(),
+                sp.GetService<ISupportSenderDirectory>(),
+                sp.GetService<IMailClient>(),
+                sp.GetRequiredService<SupportExternalCaseOptions>(),
+                sp.GetService<ILogger<ExternalSupportCaseService>>()),
+            sp.GetRequiredService<CompositeAuditLogger>(),
+            sp.GetRequiredService<IAuditEntryFactory>()));
+
         return services;
     }
 

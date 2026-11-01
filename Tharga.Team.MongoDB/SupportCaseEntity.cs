@@ -119,6 +119,10 @@ public record SupportCaseEntity : EntityBase
     [BsonRepresentation(BsonType.String)]
     public SupportTeamSuggestionReason? SuggestionReason { get; init; }
 
+    /// <summary>Who wrote, when the case was raised through a public form. Absent for every other case.</summary>
+    [BsonIgnoreIfNull]
+    public SupportExternalContactEntity ExternalContact { get; init; }
+
     /// <summary>What the assistant was asked and could not do. Absent until it first could not.</summary>
     [BsonIgnoreIfNull]
     public string[] AssistantGaps { get; init; }
