@@ -104,6 +104,10 @@ internal static class AuditHelper
             callerSource = ambient.CallerSource;
         }
 
+        // The level is the one held in the team the entry is about, from the identity issued for it: an entry naming a team
+        // the caller is not acting as records no level rather than another team's.
+        var entryTeam = teamKey ?? user?.FindFirst(TeamClaimTypes.TeamKey)?.Value ?? ambient?.TeamKey;
+
         return new AuditEntry
         {
             Timestamp = DateTime.UtcNow,
@@ -125,8 +129,8 @@ internal static class AuditHelper
             // Deliberately no fallback chain: this is the subject or nothing, which is what makes it
             // exact-matchable. CallerIdentity stays the human-readable one.
             CallerUserIdentity = IdentityResolverFor(httpContextAccessor).GetSubject(user),
-            TeamKey = teamKey ?? user?.FindFirst(TeamClaimTypes.TeamKey)?.Value ?? ambient?.TeamKey,
-            AccessLevel = user?.FindFirst(TeamClaimTypes.AccessLevel)?.Value,
+            TeamKey = entryTeam,
+            AccessLevel = TeamScopePolicy.AccessLevelClaimFor(user, entryTeam),
             CallerSource = callerSource,
             Metadata = metadata is { Count: > 0 } ? new Dictionary<string, string>(metadata) : null,
         };

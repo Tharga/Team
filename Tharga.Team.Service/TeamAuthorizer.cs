@@ -133,9 +133,9 @@ public sealed class TeamAuthorizer
         if (!await IsMemberOfAsync(teamKey)) return false;
 
         var principal = await _principalAccessor.GetCurrentAsync();
-        var value = principal?.FindFirst(TeamClaimTypes.AccessLevel)?.Value;
 
-        return Enum.TryParse<AccessLevel>(value, out var accessLevel) && accessLevel == AccessLevel.Owner;
+        // The level in this team, from the identity issued for it, as for a scope.
+        return TeamScopePolicy.AccessLevelFor(principal, teamKey) == AccessLevel.Owner;
     }
 
     /// <summary>

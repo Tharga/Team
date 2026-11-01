@@ -126,7 +126,7 @@ public class ScopeProxy<T> : DispatchProxy where T : class
                 ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? user?.FindFirst("name")?.Value,
             TeamKey = user?.FindFirst(TeamClaimTypes.TeamKey)?.Value,
-            AccessLevel = user?.FindFirst(TeamClaimTypes.AccessLevel)?.Value,
+            AccessLevel = TeamScopePolicy.AccessLevelClaimFor(user, user?.FindFirst(TeamClaimTypes.TeamKey)?.Value),
             CallerSource = callerSource,
             ScopeChecked = scope,
             ScopeResult = scopeResult,

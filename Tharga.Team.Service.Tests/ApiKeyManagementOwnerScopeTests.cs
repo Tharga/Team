@@ -29,7 +29,8 @@ public class ApiKeyManagementOwnerScopeTests
         var inner = Substitute.For<IApiKeyAdministrationService>();
         inner.GetKeysAsync(Team).Returns(_ => ToAsyncEnumerable(keys));
 
-        var claims = new List<Claim>();
+        // A real principal carries the team beside its level, and the level only counts in that team.
+        var claims = new List<Claim> { new(TeamClaimTypes.TeamKey, Team) };
         if (memberKey != null) claims.Add(new Claim(TeamClaimTypes.MemberKey, memberKey));
         if (accessLevel != null) claims.Add(new Claim(TeamClaimTypes.AccessLevel, accessLevel));
         if (overseer) claims.Add(new Claim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee));

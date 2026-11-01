@@ -27,7 +27,7 @@ public class ApiKeyManagementService : IApiKeyManagementService
     {
         var callerMemberKey = GetCallerMemberKey();
         var canOversee = CanOversee();
-        var privilegedAllowed = allowPrivileged && IsPrivileged();
+        var privilegedAllowed = allowPrivileged && IsPrivileged(teamKey);
 
         await foreach (var key in _inner.GetKeysAsync(teamKey))
         {
@@ -162,10 +162,12 @@ public class ApiKeyManagementService : IApiKeyManagementService
         return user.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee);
     }
 
-    private bool IsPrivileged()
+    /// <summary>Whether the caller is an Owner or Administrator <b>of <paramref name="teamKey"/></b>: the level in that team, not another team's.</summary>
+    private bool IsPrivileged(string teamKey)
     {
-        var value = _httpContextAccessor?.HttpContext?.User?.FindFirst(TeamClaimTypes.AccessLevel)?.Value;
-        return Enum.TryParse<AccessLevel>(value, out var level) && level is AccessLevel.Owner or AccessLevel.Administrator;
+        var level = TeamScopePolicy.AccessLevelFor(_httpContextAccessor?.HttpContext?.User, teamKey);
+
+        return level is AccessLevel.Owner or AccessLevel.Administrator;
     }
 
     private string GetCurrentUserIdentity()

@@ -102,7 +102,7 @@ public class AccessLevelProxy<T> : DispatchProxy where T : class
                 ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? user?.FindFirst("name")?.Value,
             TeamKey = user?.FindFirst(TeamClaimTypes.TeamKey)?.Value,
-            AccessLevel = user?.FindFirst(TeamClaimTypes.AccessLevel)?.Value,
+            AccessLevel = TeamScopePolicy.AccessLevelClaimFor(user, user?.FindFirst(TeamClaimTypes.TeamKey)?.Value),
             CallerSource = callerSource,
             ScopeChecked = $"AccessLevel>={minimumLevel}",
             ScopeResult = success ? AuditScopeResult.Allowed : AuditScopeResult.Denied,
@@ -131,9 +131,9 @@ public class AccessLevelProxy<T> : DispatchProxy where T : class
                 : $"Access denied for the selected team '{selectedTeamKey}'.");
         }
 
-        var accessLevelValue = user?.FindFirst(TeamClaimTypes.AccessLevel)?.Value;
-        if (accessLevelValue == null || !Enum.TryParse<AccessLevel>(accessLevelValue, out var accessLevel))
-            throw new UnauthorizedAccessException("Access level claim not found.");
+        // The level in this team, from the identity issued for it: not whichever identity on the principal comes first.
+        var accessLevel = TeamScopePolicy.AccessLevelFor(user, teamKey)
+                          ?? throw new UnauthorizedAccessException("Access level claim not found.");
 
         if (accessLevel > minimumLevel)
             throw new UnauthorizedAccessException(
