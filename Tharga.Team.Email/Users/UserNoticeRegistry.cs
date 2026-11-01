@@ -66,6 +66,12 @@ internal sealed partial class UserNoticeRegistry
         if (!notice.Allows(notice.DefaultDelivery))
             throw new InvalidOperationException($"The notice '{notice.Key}' defaults to {notice.DefaultDelivery}, which it does not allow.");
 
+        if (notice.MinimumInterval is { } interval && interval <= TimeSpan.Zero)
+            throw new InvalidOperationException($"The notice '{notice.Key}' has a {nameof(UserNoticeType.MinimumInterval)} of {interval}: it must be longer than nothing, or null for no limit.");
+
+        if (notice.IsStateful && notice.Deliveries.Any(x => x != UserNoticeDelivery.AtOnce))
+            throw new InvalidOperationException($"The notice '{notice.Key}' has a {nameof(UserNoticeType.MinimumInterval)} or a {nameof(UserNoticeType.Composer)}, which it can only deliver at once: allow {nameof(UserNoticeDelivery.AtOnce)} alone, not the daily summary.");
+
         if (string.IsNullOrWhiteSpace(notice.Subject))
             throw new InvalidOperationException($"The notice '{notice.Key}' has no subject.");
 

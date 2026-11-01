@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Driver;
 using Tharga.MongoDB;
 using Tharga.MongoDB.Disk;
@@ -32,6 +33,24 @@ public record UserNoticeStreamEntity : EntityBase
 
     /// <summary>The notices that mail carries, while it is queued.</summary>
     public string[] MailItemIds { get; init; }
+
+    /// <summary>When the last mail of a notice held to an interval or composed from state went out, in UTC; absent for any other stream.</summary>
+    [BsonIgnoreIfNull]
+    public DateTime? LastMailedAt { get; init; }
+
+    /// <summary>Each subject such a mail covered and when it last did, newest kept when there are many.</summary>
+    [BsonIgnoreIfNull]
+    public UserNoticeCoveredEntity[] Covered { get; init; }
+}
+
+/// <summary>A subject a mail covered, and when it last did.</summary>
+public record UserNoticeCoveredEntity
+{
+    /// <summary>The subject's id.</summary>
+    public required string SubjectId { get; init; }
+
+    /// <summary>When a mail last covered it, in UTC.</summary>
+    public DateTime At { get; init; }
 }
 
 /// <summary>The collection of users' notice streams.</summary>

@@ -46,8 +46,14 @@ public interface IUserNoticeOutbox
     /// <summary>Records on a claimed stream which notices the mail about to be queued carries, so a claimant taking over sends the same mail; false when the claimant no longer holds it.</summary>
     Task<bool> BeginMailAsync(string userKey, string stream, string claimant, string mailKey, string[] itemIds, CancellationToken cancellationToken = default);
 
-    /// <summary>Records waiting notices as mailed or given up, with the queued mail's id or the reason.</summary>
-    Task CompleteItemsAsync(string[] itemIds, UserNoticeItemStatus status, string mailId, string reason, DateTime at, CancellationToken cancellationToken = default);
+    /// <summary>Records waiting notices as mailed or given up, with the queued mail's id or the reason, and the subjects the mail covered when it was composed from state.</summary>
+    Task CompleteItemsAsync(string[] itemIds, UserNoticeItemStatus status, string mailId, string reason, DateTime at, string[] coveredSubjects = null, CancellationToken cancellationToken = default);
+
+    /// <summary>What the last mail in a user's stream covered and when; <see cref="UserNoticeCoverage.None"/> when there was none.</summary>
+    Task<UserNoticeCoverage> GetCoverageAsync(string userKey, string stream, CancellationToken cancellationToken = default);
+
+    /// <summary>Records that a mail went out at <paramref name="mailedAt"/> covering these subjects, each now last covered then; earlier subjects keep their time.</summary>
+    Task RecordCoverageAsync(string userKey, string stream, DateTime mailedAt, string[] subjectIds, CancellationToken cancellationToken = default);
 
     /// <summary>Releases a claimed stream, due again at <paramref name="nextDueWhenWaiting"/> if any notice still waits in it; false when the claimant no longer holds it.</summary>
     Task<bool> ReleaseStreamAsync(string userKey, string stream, string claimant, DateTime nextDueWhenWaiting, CancellationToken cancellationToken = default);
@@ -169,6 +175,9 @@ public sealed record UserNoticeItem
 
     /// <summary>Why it was given up.</summary>
     public string Reason { get; init; }
+
+    /// <summary>The subjects the mail that carried it covered, when the notice is composed from state; empty otherwise.</summary>
+    public string[] CoveredSubjects { get; init; } = [];
 }
 
 /// <summary>A user's stream as it was when claimed.</summary>

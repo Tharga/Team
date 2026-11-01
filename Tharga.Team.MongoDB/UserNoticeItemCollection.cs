@@ -68,6 +68,10 @@ public record UserNoticeItemEntity : EntityBase
     /// <summary>Why it was given up.</summary>
     [BsonIgnoreIfNull]
     public string Reason { get; init; }
+
+    /// <summary>The subjects the mail that carried it covered, when its notice is composed from state; absent otherwise.</summary>
+    [BsonIgnoreIfNull]
+    public string[] CoveredSubjects { get; init; }
 }
 
 /// <summary>The collection of users' notices.</summary>

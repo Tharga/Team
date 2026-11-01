@@ -89,6 +89,32 @@ public sealed record UserNoticeType
     /// <summary>The names of the values every occurrence supplies, which the templates may use as <c>{name}</c>.</summary>
     public string[] Placeholders { get; init; } = [];
 
+    /// <summary>
+    /// At most one mail of this notice to a user per this interval; null, the default, mails as often as occurrences arrive.
+    /// </summary>
+    /// <remarks>
+    /// <b>Per user, not per team</b>, so a person in two teams gets one mail covering both. Occurrences that arrive while the
+    /// interval holds wait and go together when it is over. A notice with an interval, or a <see cref="Composer"/>, is
+    /// delivered at once only: <see cref="Deliveries"/> may not allow the daily summary.
+    /// </remarks>
+    public TimeSpan? MinimumInterval { get; init; }
+
+    /// <summary>
+    /// Writes the mail from the host's current state when it is due, instead of replaying the occurrences that led there;
+    /// host-side only and never serialized. Return null to send nothing.
+    /// </summary>
+    /// <remarks>
+    /// An occurrence then means "this user may have something to hear about". The callback runs in a scope of the host's
+    /// services, once per user's mail, and is given the user, the teams concerned, the occurrences waiting and what the last
+    /// mail covered. A callback that throws leaves the occurrences waiting, to be tried again later.
+    /// </remarks>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Func<UserNoticeComposition, IServiceProvider, CancellationToken, Task<UserNoticeComposed>> Composer { get; init; }
+
+    /// <summary>Whether the notice is held to an interval or composed from state, and so is delivered at once only.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsStateful => MinimumInterval != null || Composer != null;
+
     /// <summary>Whether a user may choose <paramref name="delivery"/> for this notice.</summary>
     public bool Allows(UserNoticeDelivery delivery) => (Deliveries ?? []).Contains(delivery);
 }

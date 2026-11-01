@@ -28,6 +28,10 @@ internal sealed class UserNoticeDistributor(
 {
     internal const string NotInCatalogueReason = "The notice is no longer in the catalogue.";
     internal const string TurnedOffReason = "The user turned the notice off before it was sent.";
+    internal const string NothingToTellReason = "The notice had nothing to tell the user when it was due.";
+
+    /// <summary>How long a composer that failed is left before it is tried again.</summary>
+    internal static readonly TimeSpan ComposerRetryDelay = TimeSpan.FromMinutes(15);
 
     /// <summary>Distributes due occurrences, then mails due streams, each up to a batch, and returns how many of either were handled.</summary>
     public async Task<int> RunAsync(string claimant, CancellationToken cancellationToken)
@@ -111,6 +115,14 @@ internal sealed class UserNoticeDistributor(
             var stream = delivery == UserNoticeDelivery.Digest ? UserNoticeMail.DigestStream(notice.Category) : UserNoticeMail.AtOnceStream(notice.Key);
             var dueBy = delivery == UserNoticeDelivery.Digest ? schedule.NextDigest(record.RaisedAt) : record.RaisedAt + Max(options.Value.BurstWindow, TimeSpan.Zero);
 
+            // At most one mail per user per interval, across teams: this user's stream of the notice is not due before the
+            // interval since their last mail is over. Checked again when the stream is flushed, which is what is certain.
+            if (notice.MinimumInterval is { } interval && delivery != UserNoticeDelivery.Digest
+                && (await outbox.GetCoverageAsync(userKey, stream, cancellationToken)).LastMailedAt is { } lastMailed)
+            {
+                dueBy = Max(dueBy, lastMailed + interval);
+            }
+
             var item = new UserNoticeItem
             {
                 NoticeId = record.Id,
@@ -179,17 +191,100 @@ internal sealed class UserNoticeDistributor(
         items = [.. (items ?? []).Where(x => x.Status == UserNoticeItemStatus.Waiting)];
 
         var gone = items.Where(x => notices.Find(x.NoticeKey) == null).ToArray();
-        if (gone.Length > 0) await outbox.CompleteItemsAsync([.. gone.Select(x => x.Id)], UserNoticeItemStatus.Failed, null, NotInCatalogueReason, now, cancellationToken);
+        if (gone.Length > 0) await outbox.CompleteItemsAsync([.. gone.Select(x => x.Id)], UserNoticeItemStatus.Failed, null, NotInCatalogueReason, now, null, cancellationToken);
 
         items = [.. items.Except(gone)];
 
         var off = await TurnedOffAsync(claim.UserKey, items, cancellationToken);
-        if (off.Length > 0) await outbox.CompleteItemsAsync([.. off.Select(x => x.Id)], UserNoticeItemStatus.Skipped, null, TurnedOffReason, now, cancellationToken);
+        if (off.Length > 0) await outbox.CompleteItemsAsync([.. off.Select(x => x.Id)], UserNoticeItemStatus.Skipped, null, TurnedOffReason, now, null, cancellationToken);
 
         items = [.. items.Except(off).OrderBy(x => x.RaisedAt)];
-        if (items.Length > 0) await MailAsync(claim, claimant, items, inherited, now, cancellationToken);
 
-        await outbox.ReleaseStreamAsync(claim.UserKey, claim.Stream, claimant, NextDue(claim.Stream, now), cancellationToken);
+        var nextDue = NextDue(claim.Stream, now);
+        if (items.Length > 0)
+        {
+            var notice = notices.Find(items[0].NoticeKey);
+            if (notice.IsStateful && !UserNoticeMail.IsDigest(claim.Stream))
+                nextDue = await FlushStatefulAsync(claim, claimant, notice, items, inherited, now, cancellationToken);
+            else
+                await MailAsync(claim, claimant, items, inherited, now, cancellationToken);
+        }
+
+        await outbox.ReleaseStreamAsync(claim.UserKey, claim.Stream, claimant, nextDue, cancellationToken);
+    }
+
+    /// <summary>
+    /// Flushes a user's stream of a notice held to an interval, composed from state, or both, and returns when the stream is next
+    /// due if anything still waits in it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The interval is decided here, not only when the occurrence was distributed</b>, because two instances, or an
+    /// occurrence distributed before the last mail was recorded, can make a stream due too early. A mail already begun is
+    /// finished whatever the interval says: it was allowed when it began.
+    /// <para>
+    /// <b>Nothing to tell sends nothing and starts no interval</b>, and the waiting occurrences are dropped: they only said
+    /// the user might have something to hear about. <b>A composer that throws drops nothing</b>: the occurrences wait and
+    /// it is tried again later.
+    /// </para>
+    /// </remarks>
+    private async Task<DateTime> FlushStatefulAsync(UserNoticeStreamClaim claim, string claimant, UserNoticeType notice, UserNoticeItem[] items, bool inherited, DateTime now, CancellationToken cancellationToken)
+    {
+        var coverage = await outbox.GetCoverageAsync(claim.UserKey, claim.Stream, cancellationToken);
+
+        if (!inherited && notice.MinimumInterval is { } interval && coverage.LastMailedAt is { } last && now < last + interval) return last + interval;
+
+        UserNoticeComposed composed = null;
+        if (notice.Composer != null)
+        {
+            try
+            {
+                composed = await notice.Composer(Composition(claim.UserKey, notice, items, coverage, now), services, cancellationToken);
+            }
+            catch (Exception e) when (e is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                logger?.LogWarning(e, "The composer of the notice {NoticeKey} failed for user {UserKey}; its occurrences wait and it is tried again.", notice.Key, claim.UserKey);
+
+                return now + ComposerRetryDelay;
+            }
+
+            if (composed == null)
+            {
+                await outbox.CompleteItemsAsync([.. items.Select(x => x.Id)], UserNoticeItemStatus.Skipped, null, NothingToTellReason, now, null, cancellationToken);
+
+                return NextDue(claim.Stream, now);
+            }
+        }
+
+        await MailAsync(claim, claimant, items, inherited, now, cancellationToken, composed, notice);
+
+        return notice.MinimumInterval is { } held ? now + Max(held, Max(options.Value.BurstWindow, TimeSpan.Zero)) : NextDue(claim.Stream, now);
+    }
+
+    private static UserNoticeComposition Composition(string userKey, UserNoticeType notice, UserNoticeItem[] items, UserNoticeCoverage coverage, DateTime now) => new()
+    {
+        NoticeKey = notice.Key,
+        UserKey = userKey,
+        TeamKeys = [.. items.Select(x => x.TeamKey).Distinct(StringComparer.Ordinal)],
+        Waiting = [.. items.Select(x => new UserNoticeWaiting(new UserNoticeOccurrence
+        {
+            NoticeKey = x.NoticeKey,
+            TeamKey = x.TeamKey,
+            SubjectId = x.SubjectId,
+            SubjectText = x.SubjectText,
+            Discriminator = DiscriminatorOf(x),
+            Values = x.Values,
+            LinkPath = x.LinkPath
+        }, x.RaisedAt))],
+        LastMail = coverage,
+        Now = now
+    };
+
+    /// <summary>What tells the occurrence from others about the same subject, read back from its key, or null when it had none.</summary>
+    private static string DiscriminatorOf(UserNoticeItem item)
+    {
+        var prefix = $"{item.NoticeKey}:{item.SubjectId.Length}:{item.SubjectId}:";
+
+        return item.OccurrenceKey.StartsWith(prefix, StringComparison.Ordinal) && item.OccurrenceKey.Length > prefix.Length ? item.OccurrenceKey[prefix.Length..] : null;
     }
 
     /// <summary>The notices the user turned off since they were distributed, by their choice, else their team's default, else the catalogue's.</summary>
@@ -216,7 +311,7 @@ internal sealed class UserNoticeDistributor(
         return [.. off];
     }
 
-    private async Task MailAsync(UserNoticeStreamClaim claim, string claimant, UserNoticeItem[] items, bool inherited, DateTime now, CancellationToken cancellationToken)
+    private async Task MailAsync(UserNoticeStreamClaim claim, string claimant, UserNoticeItem[] items, bool inherited, DateTime now, CancellationToken cancellationToken, UserNoticeComposed composed = null, UserNoticeType stateful = null)
     {
         string[] ids = [.. items.Select(x => x.Id)];
         var mailKey = inherited ? claim.MailKey : UserNoticeMail.MailKey(claim.UserKey, claim.Stream, schedule.LocalDate(now));
@@ -230,11 +325,12 @@ internal sealed class UserNoticeDistributor(
         UserMailQueued queued;
         try
         {
-            queued = await queue.QueueAsync(await mail.ComposeAsync(claim.UserKey, claim.Stream, items) with { DeduplicationKey = mailKey }, cancellationToken);
+            var content = composed == null ? await mail.ComposeAsync(claim.UserKey, claim.Stream, items) : UserNoticeMail.ComposeFrom(claim.UserKey, items, composed);
+            queued = await queue.QueueAsync(content with { DeduplicationKey = mailKey }, cancellationToken);
         }
         catch (ArgumentException e)
         {
-            await outbox.CompleteItemsAsync(ids, UserNoticeItemStatus.Failed, null, e.Message, now, cancellationToken);
+            await outbox.CompleteItemsAsync(ids, UserNoticeItemStatus.Failed, null, e.Message, now, null, cancellationToken);
             return;
         }
 
@@ -244,7 +340,11 @@ internal sealed class UserNoticeDistributor(
             return;
         }
 
-        await outbox.CompleteItemsAsync(ids, UserNoticeItemStatus.Mailed, queued.Id, null, now, cancellationToken);
+        // What the mail covered: what the composer says it did, else the subjects of the occurrences it carried.
+        var covered = stateful == null ? null : composed?.CoveredSubjects ?? [.. items.Select(x => x.SubjectId).Distinct(StringComparer.Ordinal)];
+
+        await outbox.CompleteItemsAsync(ids, UserNoticeItemStatus.Mailed, queued.Id, null, now, covered, cancellationToken);
+        if (stateful != null) await outbox.RecordCoverageAsync(claim.UserKey, claim.Stream, now, covered, cancellationToken);
     }
 
     private DateTime NextDue(string stream, DateTime now)
@@ -267,6 +367,8 @@ internal sealed class UserNoticeDistributor(
     }
 
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
+
+    private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 
     private DateTime Now() => timeProvider.GetUtcNow().UtcDateTime;
 }
