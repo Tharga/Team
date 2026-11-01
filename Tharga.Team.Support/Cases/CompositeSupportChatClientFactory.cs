@@ -33,7 +33,7 @@ internal sealed class CompositeSupportChatClientFactory : ISupportChatClientFact
             .Select(kind => For(kind).Providers.Last(x => x.Kind == kind))
     ];
 
-    public IChatClient Create(SupportAiEndpoint endpoint) => For(endpoint.Kind).Create(endpoint);
+    public IChatClient Create(SupportAiEndpoint endpoint) => new ProviderNamedChatClient(For(endpoint.Kind).Create(endpoint), endpoint.Kind);
 
     public Task<SupportAiModelList> ListModelsAsync(SupportAiEndpoint endpoint, CancellationToken cancellationToken = default)
         => For(endpoint.Kind).ListModelsAsync(endpoint, cancellationToken);
