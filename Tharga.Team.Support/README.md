@@ -188,6 +188,12 @@ A bounce that names no support answer is handed to every registered `IMailBounce
 mail attachments are now stored in your database; and an answer mail no longer names who wrote it, its quotes
 read "On {date}, {name} wrote:" with support's name for support's entries. The full list is in the article.
 
+**A public contact form opens a case with one call.** `IExternalSupportCaseService.RaiseExternalCaseAsync(contact, subject, body)`
+needs no signed-in user: the case opens unassigned, never in a team, bound to the support mailbox with the visitor's
+address, so staff answers are mailed to them. The toolkit bounds every field and refuses a malformed address;
+rate limiting, a honeypot and a captcha are yours, and the article says which is whose. An optional receipt mail is
+off by default (`o.External.SendReceipt`).
+
 **Your own support staff answer across every team.** They belong to none of the customers' teams, so the
 team scopes cannot reach those cases. Two system scopes do — `support:all:read` and `support:all:manage` —
 along with `GetCasesAcrossTeamsAsync()` for the queue to enumerate, `GetAwaitingSupportCountAcrossTeamsAsync()`

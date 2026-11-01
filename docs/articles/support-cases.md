@@ -1054,6 +1054,65 @@ of them should be an address a reply reaches, because a no-reply address loses e
 same configuration section if you want one mailbox. With [mail to users](user-mail.md#invitations) registered,
 invitations go through its outbox and its address instead.
 
+## A public contact form
+
+A contact form on a public page, with no signed-in user, opens a case in the **unassigned queue** through one call,
+exactly as a mail from an unknown sender does:
+
+```csharp
+app.MapPost("/contact", async (ContactForm form, IExternalSupportCaseService support, CancellationToken ct) =>
+{
+    // Your own defences first: a captcha, a honeypot, a rate limit. See "Whose job is what" below.
+    var raised = await support.RaiseExternalCaseAsync(new ExternalSupportContact
+    {
+        Name = $"{form.FirstName} {form.LastName}",
+        Email = form.Email,
+        Phone = form.Phone,
+        Organisation = form.Organisation,
+        ConsentGivenAt = form.Consent ? DateTime.UtcNow : null,
+        Fields = new Dictionary<string, string> { ["Source"] = "pricing page" }
+    }, subject: null, form.Message, ct);
+
+    return Results.Accepted();
+});
+```
+
+`IExternalSupportCaseService` is **its own interface, and the only anonymous one**. `ISupportCaseService` stays
+user-only; nothing in it is loosened for this. Registering `AddThargaSupportCases` registers both.
+
+- **Unassigned, never placed.** The address is unverified, so it only *suggests* teams to staff, as a mailed case does
+  (`SenderNotVerified`); it never places the case in a team and is never the author's identity. Staff assign it.
+- **Answered by mail.** The case is bound to the Email channel with the visitor's address as the correspondent, through
+  the primary support mailbox, so an answer from staff is mailed to them and their reply by mail joins the case, as
+  for any mailed case. With no mailbox that can send, the case is still opened so the message is never lost, but nothing
+  can be mailed back.
+- **Who wrote is kept on the case.** `SupportCase.ExternalContact` holds the name, address, phone, organisation, your own
+  extra fields and **whether consent was given and when** (`ConsentGivenAt`). The toolkit stores what the form says; what
+  the consent covers is yours to word. `SupportUnassignedView` shows it above the conversation, so staff see the phone
+  number and the consent without hunting. The sample site has a working form at `/contact`.
+- **Raised and audited like any case.** The host is notified (`SupportCaseChange.Raised`, from a channel, no team) and
+  the audit trail gets a `support:raise` entry with `support.case.source` = `web-form`. The message, the address and the
+  name are never recorded in it. A refused call is recorded too, as failed.
+- **A receipt, if you want one.** `o.External.SendReceipt = true` mails the visitor a receipt through the same mailbox,
+  quoting their message, with the thread started so their reply reaches the case. `o.External.ReceiptText` sets what it
+  says, for your site's language. **It is off by default**: a form that mails whoever types an address into it can be
+  used to mail other people, so turn it on only behind the defences below. A receipt that cannot be sent is logged and
+  never stops the case being opened.
+
+### Whose job is what
+
+| | The toolkit | The host |
+|---|---|---|
+| Field and message length | **Yes.** Refused with an `ArgumentException`: subject 200, name and organisation 200, address 254, phone 50, message 10,000, at most 20 extra fields (name 50, value 500). `SupportCaseLimits` holds the numbers. | Show the limits in the form |
+| A missing or malformed address | **Yes.** One plain address only: no display name, no list, no line break to slip a header in. | Validate in the browser too, for the visitor's sake |
+| Rate limiting | No | **Yes.** Only the host knows who is calling and how often is too often. ASP.NET Core's rate limiter on the endpoint does it. |
+| Honeypot field, captcha | No | **Yes**, for the same reason |
+| Whether the visitor consented | Stores the answer and the time | Asks, and words what is agreed |
+| Telling the visitor it arrived | An optional receipt mail | Or your own confirmation page |
+
+A support mailbox that accepts mail from anyone turns some of it into cases already; a public form is the same door
+with a form on it. The limits above bound each message, not how many arrive.
+
 ## Attachments
 
 A support message carries files both ways: what a customer's mail brought, and what support or the customer

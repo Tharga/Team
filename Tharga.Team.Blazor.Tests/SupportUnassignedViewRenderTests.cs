@@ -525,6 +525,53 @@ public class SupportUnassignedViewRenderTests : BunitContext
         Assert.Contains(expected, view.Markup);
     }
 
+    /// <summary>A case a visitor opened through the public form shows who wrote, so staff need not hunt for the phone number or the consent.</summary>
+    [Fact]
+    public void ACaseFromAContactForm_ShowsWhoWrote_WithTheConsentAndTheHostsFields()
+    {
+        var contact = new ExternalSupportContact
+        {
+            Name = "Vera Visitor",
+            Email = "vera@visitor.example",
+            Phone = "070-1234567",
+            Organisation = "Visitor AB",
+            ConsentGivenAt = Morning,
+            Fields = new Dictionary<string, string> { ["Product"] = "Export" }
+        };
+        var view = RenderView(out _, items: [Case with { ExternalContact = contact }]);
+
+        Open(view, Case.Id);
+
+        var shown = view.Find("[data-case='case-1'] [data-contact='case-1']");
+        Assert.Contains("Vera Visitor", shown.TextContent);
+        Assert.Contains("vera@visitor.example", shown.TextContent);
+        Assert.Contains("070-1234567", shown.TextContent);
+        Assert.Contains("Visitor AB", shown.TextContent);
+        Assert.Contains("Consent given", shown.TextContent);
+        Assert.Contains("Product", shown.TextContent);
+        Assert.Contains("Export", shown.TextContent);
+    }
+
+    [Fact]
+    public void AContactFormCaseWithoutConsent_SaysNoneWasRecorded()
+    {
+        var view = RenderView(out _, items: [Case with { ExternalContact = new ExternalSupportContact { Email = "vera@visitor.example" } }]);
+
+        Open(view, Case.Id);
+
+        Assert.Contains("No consent recorded", view.Find("[data-contact='case-1']").TextContent);
+    }
+
+    [Fact]
+    public void ACaseNotFromAContactForm_ShowsNoContact()
+    {
+        var view = RenderView(out _, items: [Case]);
+
+        Open(view, Case.Id);
+
+        Assert.Empty(view.FindAll("[data-contact]"));
+    }
+
     /// <summary>
     /// <b>Only a team that still exists can be assigned</b>, for the reason the dropdown lists teams rather than
     /// taking a key: a team deleted since the mail arrived would take the case into nobody's queue.

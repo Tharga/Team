@@ -136,6 +136,37 @@ public class SupportContractSerializationTests
     }
 
     [Fact]
+    public void SupportCase_RoundTrips_WithAnExternalContact()
+    {
+        var supportCase = new SupportCase
+        {
+            Id = "case-1",
+            AuthorIdentity = null,
+            AuthorName = "Vera Visitor",
+            Subject = "Question",
+            Status = SupportCaseStatus.Open,
+            CreatedAt = new DateTime(2026, 11, 1, 12, 0, 0, DateTimeKind.Utc),
+            MessageCount = 1,
+            ExternalContact = new ExternalSupportContact
+            {
+                Name = "Vera Visitor",
+                Email = "visitor@example.com",
+                Phone = "070-1234567",
+                Organisation = "Acme AB",
+                ConsentGivenAt = new DateTime(2026, 11, 1, 11, 59, 0, DateTimeKind.Utc),
+                Fields = new Dictionary<string, string> { ["Product"] = "Export" }
+            }
+        };
+
+        var restored = RoundTrip(supportCase).ExternalContact;
+
+        Assert.Equal("visitor@example.com", restored.Email);
+        Assert.Equal("Acme AB", restored.Organisation);
+        Assert.Equal(supportCase.ExternalContact.ConsentGivenAt, restored.ConsentGivenAt);
+        Assert.Equal("Export", restored.Fields["Product"]);
+    }
+
+    [Fact]
     public void SupportSender_RoundTrips()
     {
         var sender = new SupportSender { Identity = "sub-1", Name = "Anna", Teams = [new SupportCaseTeam { Key = "acme", Name = "Acme" }] };

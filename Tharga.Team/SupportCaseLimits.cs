@@ -28,6 +28,27 @@ public static class SupportCaseLimits
     /// <summary>Longest formatting kept for a message, in characters of sanitized HTML; longer formatting is dropped and the message kept as its plain text.</summary>
     public const int MaxMessageHtmlLength = 10_000;
 
+    /// <summary>Longest subject a public form may send, in characters.</summary>
+    public const int MaxExternalSubjectLength = 200;
+
+    /// <summary>Longest name or organisation a public form may send, in characters.</summary>
+    public const int MaxExternalNameLength = 200;
+
+    /// <summary>Longest email address a public form may send, in characters; the length mail itself allows.</summary>
+    public const int MaxExternalEmailLength = 254;
+
+    /// <summary>Longest telephone number a public form may send, in characters.</summary>
+    public const int MaxExternalPhoneLength = 50;
+
+    /// <summary>Most extra fields a public form may send.</summary>
+    public const int MaxExternalFields = 20;
+
+    /// <summary>Longest extra field name, in characters.</summary>
+    public const int MaxExternalFieldNameLength = 50;
+
+    /// <summary>Longest extra field value, in characters.</summary>
+    public const int MaxExternalFieldValueLength = 500;
+
     /// <summary>
     /// Most entries one case may hold, including system entries.
     /// </summary>

@@ -33,6 +33,12 @@ public static class SupportAuditMetadataKeys
     /// </remarks>
     public const string WithAssistant = "support.case.withAssistant";
 
+    /// <summary>Where a case came from when it was not raised by a signed-in member: <see cref="WebFormSource"/>.</summary>
+    public const string Source = "support.case.source";
+
+    /// <summary>The <see cref="Source"/> of a case opened from a public form through <see cref="IExternalSupportCaseService"/>.</summary>
+    public const string WebFormSource = "web-form";
+
     /// <summary>How an answer was rated: Up, Down, or None when a rating was taken back.</summary>
     public const string Rating = "support.message.rating";
 
