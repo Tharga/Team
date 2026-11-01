@@ -3004,9 +3004,21 @@ builder.Services.AddThargaAuditLogging(o =>
 
 > **Retention / TTL.** `RetentionDays` creates a MongoDB TTL index that auto-deletes entries older than
 > the given age. Set it to **`null`** (or any value `<= 0`) to keep entries **indefinitely** — no TTL
-> index is created. Caveat: MongoDB does not drop an existing TTL index automatically, so changing the
-> retention on a collection that already has a `Timestamp_TTL` index (including switching to "forever")
-> may require dropping that index manually.
+> index is created. Leaving `RetentionDays` unset keeps the default of 90; setting it to `null`
+> explicitly means forever.
+>
+> **A changed value reaches an existing database.** When the host starts with MongoDB audit storage, the
+> `Timestamp_TTL` index on `AuditLog` is made to match the setting: a different expiry is changed in place
+> (`collMod`, no rebuild), "forever" drops the index, and a finite value with no index creates it. Each change
+> is logged at Information level; a start where nothing differs writes nothing. If the reconciliation fails
+> (for example the database is unreachable) a warning is logged and the host keeps starting. A host that
+> turned index assurance off (`AssureIndex = AssureIndexMode.Disabled` in `AddMongoDB`) manages its own
+> indexes, so the toolkit leaves the index alone.
+>
+> **Upgrading from a version before this fix.** Those versions turned an explicit `null` into 90 days, so an
+> application that set `null` to keep its audit log has been deleting entries after 90 days. On the first start
+> of the fixed version the 90-day index is dropped and entries are kept from then on. Entries already deleted
+> are gone.
 
 ### What gets audited
 

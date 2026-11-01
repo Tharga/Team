@@ -50,6 +50,7 @@ public static class AuditServiceCollectionExtensions
             services.AddSingleton<MongoDbAuditLogger>();
             services.AddSingleton<IAuditLogger>(sp => sp.GetRequiredService<MongoDbAuditLogger>());
             services.AddHostedService(sp => sp.GetRequiredService<MongoDbAuditLogger>());
+            services.AddHostedService<AuditRetentionIndexService>();
         }
 
         // Register as concrete type only — NOT as IAuditLogger to avoid circular dependency.

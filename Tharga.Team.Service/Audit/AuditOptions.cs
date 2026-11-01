@@ -44,9 +44,10 @@ public class AuditOptions
 
     /// <summary>
     /// Days to retain audit entries in MongoDB, applied as a TTL index (<c>Timestamp_TTL</c>). Default: 90.
-    /// <c>null</c> (or any value &lt;= 0) means **keep forever** — no TTL index is created. Note: removing
-    /// or changing the TTL on an existing collection may require dropping the old <c>Timestamp_TTL</c>
-    /// index manually, as MongoDB does not drop it automatically.
+    /// <c>null</c> (or any value &lt;= 0) means **keep forever** — no TTL index is created. Leaving the
+    /// property unset keeps the default of 90; only an explicit <c>null</c> means forever. When the host
+    /// starts, the <c>Timestamp_TTL</c> index of an existing collection is changed, dropped or created to match
+    /// the value, unless the host turned index assurance off.
     /// </summary>
     public int? RetentionDays { get; set; } = 90;
 

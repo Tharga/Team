@@ -19,4 +19,12 @@ internal static class AuditRetention
     /// </summary>
     public static TimeSpan? GetExpireAfter(int? retentionDays)
         => retentionDays is > 0 and <= MaxRetentionDays ? TimeSpan.FromDays(retentionDays.Value) : null;
+
+    /// <summary>
+    /// The retention in days the options ask for. A host that registered no options gets the default of
+    /// <see cref="AuditOptions"/>; one that set <see cref="AuditOptions.RetentionDays"/> to <c>null</c> keeps
+    /// <c>null</c>, which means keep forever.
+    /// </summary>
+    public static int? ResolveDays(Microsoft.Extensions.Options.IOptions<AuditOptions> options)
+        => (options?.Value ?? new AuditOptions()).RetentionDays;
 }
