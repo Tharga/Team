@@ -284,6 +284,9 @@ builder.Services.AddThargaSupportCases(o =>
     // Where SupportPage shows one case, so the assistant can link to the cases it mentions.
     o.Assistant.CaseLinkTemplate = "/support/{caseId}";
 
+    // Off unless set, as in Support:AssistantReasoning=Medium: only models that reason take it, and the scripted client above does not.
+    if (Enum.TryParse<ReasoningEffort>(builder.Configuration["Support:AssistantReasoning"], out var reasoning)) o.Assistant.Reasoning = reasoning;
+
     // The support mailbox, on the same terms as Slack: read from configuration, so it stays dormant with
     // nothing checked in and the wiring still resolves in the real application graph. With no host set,
     // no channel and no poller are registered at all.

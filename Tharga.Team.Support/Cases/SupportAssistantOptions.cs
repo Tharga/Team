@@ -1,3 +1,5 @@
+using Microsoft.Extensions.AI;
+
 namespace Tharga.Team.Support.Cases;
 
 /// <summary>
@@ -52,4 +54,19 @@ public class SupportAssistantOptions
     /// a link the assistant writes as a link only when it stays on the site; any other is shown as text.
     /// </remarks>
     public string CaseLinkTemplate { get; set; }
+
+    /// <summary>
+    /// How hard the model is asked to reason before it answers. Null, the default, asks for nothing, and the model
+    /// answers as it would have.
+    /// </summary>
+    /// <remarks>
+    /// <b>A model reasons only when it is asked to.</b> A reasoning model such as Claude, asked for nothing, answers at
+    /// once and sends no reasoning, so the panel never says "Thinking…". Set this and the request carries it, and the
+    /// model's reasoning is sent back so the panel can show it.
+    /// <para>
+    /// <b>It goes to every model the assistant uses</b>, the platform's and the teams' own. A model that does not reason
+    /// can refuse the request, so set it only when the models you offer all take it.
+    /// </para>
+    /// </remarks>
+    public ReasoningEffort? Reasoning { get; set; }
 }

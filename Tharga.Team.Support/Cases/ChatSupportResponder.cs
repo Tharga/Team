@@ -62,6 +62,7 @@ internal sealed class ChatSupportResponder(
             var metadata = chat.GetService<ChatClientMetadata>();
             var gaps = new System.Collections.Concurrent.ConcurrentQueue<string>();
             var chatOptions = new ChatOptions { Tools = [.. await tools.ForCurrentCallerAsync(supportCase.TeamKey, cancellationToken), MissingSkill(gaps)] };
+            if (options.Reasoning is { } effort) chatOptions.Reasoning = new ReasoningOptions { Effort = effort, Output = ReasoningOutput.Full };
 
             string body;
             SupportAssistantCall[] calls;
