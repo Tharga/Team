@@ -55,6 +55,11 @@ cannot drift. A team grant reaches only its own team; `audit:read` is registered
 `AccessLevel.Administrator`, so Viewer- and User-level callers are refused even for their own team.
 Denials are `403` rather than `404`, so they do not reveal whether a team exists.
 
+**The cross-team read is a system grant, and `audit:read` is registered as one for you**, so `AuditLogView`
+without a `TeamKey`, the API without `teamKey` and the MCP audit resource only need a role or a system API key mapped to
+it: `ConfigureSystemRoles = r => r.Map("Developer", AuditScopes.Read)`. Before, a host had to register the system scope
+itself, or the cross-team page said "Access denied"; registering it by hand still works.
+
 ## Which credentials reach the API
 
 `ThargaControllerOptions.AuthenticationSchemes` lists the schemes Tharga's controllers accept, defaulting
