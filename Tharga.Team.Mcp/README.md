@@ -250,6 +250,39 @@ Available resources (listed only when the matching dependency is registered):
 
 Per-team API-key listings now ship under `team://team/apikeys` (see "Team scope" above). Cross-tenant team listings remain deferred — they require a new `ITeamService.GetAllTeamsAsync` method.
 
+## Support AI connection tools (opt-in)
+
+An agent can read and change what the support assistant answers its team with, over MCP, as the REST endpoints
+`MapThargaSupportAiConnection` do. **Off by default**, as the endpoints are only mapped when you map them:
+
+```csharp
+builder.Services.AddThargaSupportAiConnections();   // Tharga.Team.Support: the service the tools use
+builder.Services.AddThargaMcp(mcp => mcp.AddTeam(o => o.ExposeSupportAiConnection = true));
+```
+
+| Tool | What it does |
+|---|---|
+| `support.ai.get_connection` | What the team's assistant answers with: the platform's model, a provider and model, or off. Says whether a key is stored, never returns it. |
+| `support.ai.get_choices` | What the team may choose, where each provider starts from, and what the platform's model is. |
+| `support.ai.list_models` | The models a provider offers for a key. Saves nothing. |
+| `support.ai.test` | Asks the model one short question and returns its reply. Saves nothing. |
+| `support.ai.connect` | Answers the team with a provider, after checking that it lists the chosen model for the key. The key is stored encrypted. |
+| `support.ai.use_platform_model` | Answers the team with the platform's model, and forgets any stored key. |
+| `support.ai.turn_off` | Turns the assistant off for the team, and forgets any stored key. |
+
+`list_models`, `test` and `connect` take `kind` (one of the kinds `get_choices` lists), `baseAddress`, `apiKey` and
+`model`. Leave `apiKey` out to use the key the team stored, allowed only while the kind and address are unchanged.
+
+- **Authorization is the service's.** It requires `assistant:manage` on the team and audits every change, a refusal too.
+  The tools add no check of their own; a caller without the scope is told so in the result rather than getting a
+  transport error. Nothing is offered to a caller with no team, or when the service is not registered.
+- **The team is the caller's own**, from the same claim REST reads. There is no team argument.
+- **The key never comes back.** No result and no error carries it, and an error never quotes what was sent. It does
+  travel through whatever conversation the agent keeps, which is the agent's to protect; for a team that cares, set the
+  key from a form and let the agent only read, test and list.
+- **No new dependency.** The service and its types are in `Tharga.Team`, which this package already uses, so
+  `Tharga.Team.Mcp` takes nothing from `Tharga.Team.Support`.
+
 ## Related packages
 
 | Package | Description |

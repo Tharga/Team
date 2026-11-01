@@ -17,4 +17,16 @@ public sealed class McpTeamOptions
     /// Default false — opt in only if you want diagnostic data surfaced over MCP.
     /// </summary>
     public bool ExposeSystemResources { get; set; }
+
+    /// <summary>
+    /// When true, registers tools over a team's support AI connection (<see cref="SupportAiConnectionToolProvider"/>):
+    /// read it, list models, test, connect, use the platform's model and turn the assistant off. Default false.
+    /// </summary>
+    /// <remarks>
+    /// <b>Opt-in, as the REST endpoints are only mapped when the host maps them.</b> Every tool is checked by the service,
+    /// which requires <c>assistant:manage</c> on the team, but an upgrade should not hand a management surface to agents
+    /// that already hold the scope. Needs the connection service, which <c>AddThargaSupportAiConnections</c> registers;
+    /// without it nothing is offered.
+    /// </remarks>
+    public bool ExposeSupportAiConnection { get; set; }
 }
