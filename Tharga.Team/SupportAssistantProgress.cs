@@ -19,6 +19,13 @@ public sealed record SupportAssistantProgress
     /// <summary>The tools the model asked for that are running now; empty while it thinks or writes.</summary>
     public string[] Tools { get; init; } = [];
 
+    /// <summary>
+    /// True while the model is reasoning and has not yet started writing or asked for tools in this round, so a panel can
+    /// say "Thinking…" instead of "Working…". Set by a responder when an update carries reasoning and no text; cleared on
+    /// the first text or tool call.
+    /// </summary>
+    public bool Thinking { get; init; }
+
     /// <summary>Every service call the model has asked for in this answer so far, in order, the ones running now included.</summary>
     public SupportAssistantCall[] Calls { get; init; } = [];
 }

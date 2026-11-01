@@ -268,6 +268,28 @@ public class SupportTypingTests : BunitContext
         Assert.Equal(expected, SupportAssistantSteps.Describe(text, progress, "Working"));
     }
 
+    /// <summary>Thinking replaces Working while the model reasons, and counts the loops the same way.</summary>
+    [Theory]
+    [InlineData(1, false, "Thinking")]
+    [InlineData(1, true, "Thinking 1")]
+    [InlineData(2, false, "Thinking 1")]
+    [InlineData(2, true, "Thinking 2")]
+    public async Task WhileTheModelThinks_ItSaysThinking(int round, bool toolsRunning, string expected)
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+        var progress = new SupportAssistantProgress { Round = round, Tools = toolsRunning ? ["get_my_cases"] : [], Thinking = true };
+
+        Assert.Equal(expected, SupportAssistantSteps.Describe(text, progress, "Working"));
+    }
+
+    [Fact]
+    public async Task OnceTheModelStopsThinking_ItIsWorkingAgain()
+    {
+        var text = await new DefaultThargaTextProvider().ResolveAsync(SupportTranscriptText.All);
+
+        Assert.Equal("Working", SupportAssistantSteps.Describe(text, new SupportAssistantProgress { Thinking = false }, "Working"));
+    }
+
     [Fact]
     public async Task BeforeAnythingIsReported_ItIsWorking()
     {

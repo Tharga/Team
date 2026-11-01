@@ -137,6 +137,8 @@ internal sealed class ChatSupportResponder(
         string modelId = null;
         var waiting = false;
         var reporting = true;
+        var thinking = false;
+        var wrote = false;
 
         void Report()
         {
@@ -144,7 +146,7 @@ internal sealed class ChatSupportResponder(
 
             try
             {
-                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running], Calls = [.. calls] });
+                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running], Calls = [.. calls], Thinking = thinking });
             }
             catch (Exception ex)
             {
@@ -161,9 +163,16 @@ internal sealed class ChatSupportResponder(
             usage.AddRange(update.Contents.OfType<UsageContent>().Select(x => x.Details));
             modelId = update.ModelId ?? modelId;
 
+            if (!thinking && !wrote && !waiting && update.Contents.OfType<TextReasoningContent>().Any() && string.IsNullOrEmpty(update.Text))
+            {
+                thinking = true;
+                Report();
+            }
+
             var asked = update.Contents.OfType<FunctionCallContent>().ToArray();
             if (asked.Length > 0)
             {
+                thinking = false;
                 waiting = true;
                 var shown = asked.Where(IsServiceCall).ToArray();
                 running.AddRange(shown.Select(x => x.Name));
@@ -176,11 +185,15 @@ internal sealed class ChatSupportResponder(
                 waiting = false;
                 running.Clear();
                 round++;
+                wrote = false;
+                thinking = false;
                 Report();
             }
 
             if (string.IsNullOrEmpty(update.Text)) continue;
 
+            thinking = false;
+            wrote = true;
             text.Append(update.Text);
             Report();
         }

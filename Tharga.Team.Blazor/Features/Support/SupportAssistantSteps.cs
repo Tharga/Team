@@ -13,6 +13,9 @@ internal static class SupportAssistantSteps
     {
         var loops = LoopsOf(progress);
 
+        if (progress is { Thinking: true })
+            return loops > 0 ? text.Format(SupportTranscriptText.ThinkingLoop, loops) : text[SupportTranscriptText.Thinking];
+
         return loops > 0 ? text.Format(SupportTranscriptText.WorkingLoop, loops) : working;
     }
 

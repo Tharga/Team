@@ -57,6 +57,47 @@ public class SupportAssistantStreamingTests
         Assert.Equal(["get_my_cases"], answer.Calls.Select(x => x.Name));
     }
 
+    [Fact]
+    public async Task ReasoningWithoutText_IsReportedAsThinking_UntilTheFirstText()
+    {
+        var chat = new ReasoningChatClient();
+        var seen = new Reports();
+
+        var answer = await Responder(chat).AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Equal("Check the range.", answer.Body);
+        var thinking = seen.Items.Where(x => x.Thinking).ToArray();
+        Assert.NotEmpty(thinking);
+        Assert.All(thinking, x => Assert.Equal("", x.AnswerSoFar));
+        Assert.False(seen.Items[0].Thinking);
+        Assert.All(seen.Items.Where(x => x.AnswerSoFar != ""), x => Assert.False(x.Thinking));
+        Assert.False(seen.Items[^1].Thinking);
+    }
+
+    [Fact]
+    public async Task ReasoningThatEndsInAToolCall_StopsThinking_AndThinksAgainInTheNextRound()
+    {
+        var chat = new ReasoningChatClient(lookup: true).AsBuilder().UseFunctionInvocation().Build();
+        var responder = new ChatSupportResponder(new RegisteredChatClientResolver(chat), new OneTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
+        var seen = new Reports();
+
+        await responder.AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.Contains(seen.Items, x => x.Thinking && x.Round == 1);
+        Assert.Contains(seen.Items, x => x.Thinking && x.Round == 2);
+        Assert.All(seen.Items.Where(x => x.Tools.Length > 0), x => Assert.False(x.Thinking));
+    }
+
+    [Fact]
+    public async Task AModelThatDoesNotReason_NeverReportsThinking()
+    {
+        var seen = new Reports();
+
+        await Responder(new StreamingChatClient("Check ", "the range.")).AnswerAsync(Case(), Transcript(), seen);
+
+        Assert.All(seen.Items, x => Assert.False(x.Thinking));
+    }
+
     /// <summary>Asked in one piece through the real tool loop, the calls are read from the messages it returns.</summary>
     [Fact]
     public async Task InOnePiece_TheServiceCalls_AreKeptWithTheAnswer_WithWhatTheyWereAskedFor()
@@ -405,6 +446,36 @@ public class SupportAssistantStreamingTests
             }
 
             if (BreaksOff) throw new HttpRequestException("The connection was reset.");
+        }
+
+        public object GetService(Type serviceType, object serviceKey = null) => null;
+
+        public void Dispose()
+        {
+        }
+    }
+
+    /// <summary>Reasons before it writes; with <paramref name="lookup"/> it reasons, asks for get_my_cases, then reasons again before answering.</summary>
+    private sealed class ReasoningChatClient(bool lookup = false) : IChatClient
+    {
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, CancellationToken cancellationToken = default)
+            => throw new NotSupportedException();
+
+        public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            await Task.Yield();
+
+            yield return new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent("Let me think")]);
+            yield return new ChatResponseUpdate(ChatRole.Assistant, [new TextReasoningContent(" about it.")]);
+
+            if (lookup && !messages.SelectMany(x => x.Contents).OfType<FunctionResultContent>().Any())
+            {
+                yield return new ChatResponseUpdate(ChatRole.Assistant, [new FunctionCallContent("call-1", "get_my_cases")]);
+                yield break;
+            }
+
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "Check ");
+            yield return new ChatResponseUpdate(ChatRole.Assistant, "the range.");
         }
 
         public object GetService(Type serviceType, object serviceKey = null) => null;

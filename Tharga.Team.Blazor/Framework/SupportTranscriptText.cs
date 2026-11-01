@@ -37,6 +37,12 @@ public static class SupportTranscriptText
     /// <summary>Before the assistant's dots once it has gone round the tool loop: <c>{0}</c> is how many times it has. The dots stand for the "…".</summary>
     public static readonly TextKey WorkingLoop = new("team.support.transcript.workingLoop", "Working {0}");
 
+    /// <summary>Beside the assistant's dots while a reasoning model thinks, before it writes or asks for tools. The dots stand for the "…".</summary>
+    public static readonly TextKey Thinking = new("team.support.transcript.thinking", "Thinking");
+
+    /// <summary>The same once the assistant has gone round the tool loop: <c>{0}</c> is how many times it has.</summary>
+    public static readonly TextKey ThinkingLoop = new("team.support.transcript.thinkingLoop", "Thinking {0}");
+
     /// <summary>Opens the list under an answer of the one service call the assistant made for it.</summary>
     public static readonly TextKey ServiceCall = new("team.support.transcript.serviceCall", "1 service call");
 
@@ -72,7 +78,7 @@ public static class SupportTranscriptText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, WorkingLoop, ServiceCall, ServiceCalls, Tokens, TokensInOut,
+        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, WorkingLoop, Thinking, ThinkingLoop, ServiceCall, ServiceCalls, Tokens, TokensInOut,
         Helpful, NotHelpful, RatedHelpful, RatedNotHelpful, NoAnswerYet, NoAnswerAway
     ];
 }
