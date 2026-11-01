@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
@@ -148,6 +150,57 @@ public class AddThargaTeamTests
 
         Assert.Contains(builder.Services, d => d.ServiceType == typeof(ThargaControllerOptions));
     }
+
+    [Fact]
+    public void ControllersAuthenticationSchemes_AddedByTheHost_ReachTheControllerOptions()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Controllers.AuthenticationSchemes.Add("Cookies"));
+
+        var controllerOptions = GetRegisteredControllerOptions(builder);
+
+        Assert.Contains("Cookies", controllerOptions.AuthenticationSchemes);
+        Assert.Contains(ApiKeyConstants.SchemeName, controllerOptions.AuthenticationSchemes);
+        Assert.Equal(1, controllerOptions.AuthenticationSchemes.Count(x => x == ApiKeyConstants.SchemeName));
+    }
+
+    [Fact]
+    public void ControllersAuthenticationSchemes_Untouched_StayTheApiKeyScheme()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam();
+
+        Assert.Equal([ApiKeyConstants.SchemeName], GetRegisteredControllerOptions(builder).AuthenticationSchemes);
+    }
+
+    [Fact]
+    public void ControllersAuthenticationSchemes_AreUsedByTheApiPolicy()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Controllers.AuthenticationSchemes.Add("Cookies"));
+
+        using var provider = builder.Services.BuildServiceProvider();
+        var policy = provider.GetRequiredService<IOptions<AuthorizationOptions>>().Value.GetPolicy(ApiKeyConstants.ThargaApiPolicyName);
+
+        Assert.NotNull(policy);
+        Assert.Contains("Cookies", policy.AuthenticationSchemes);
+    }
+
+    [Fact]
+    public void ControllersConfigureOpenApi_RunsAgainstTheManagedDocument()
+    {
+        var invoked = 0;
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Controllers.ConfigureOpenApi(_ => invoked++));
+
+        using var provider = builder.Services.BuildServiceProvider();
+        provider.GetRequiredService<IOptionsMonitor<OpenApiOptions>>().Get("v1");
+
+        Assert.Equal(1, invoked);
+    }
+
+    private static ThargaControllerOptions GetRegisteredControllerOptions(WebApplicationBuilder builder)
+        => (ThargaControllerOptions)builder.Services.Single(d => d.ServiceType == typeof(ThargaControllerOptions)).ImplementationInstance;
 
     [Fact]
     public void SkipsControllers_WhenNull()

@@ -107,6 +107,15 @@ public static class ThargaTeamRegistration
             {
                 o.SwaggerTitle = options.Controllers.SwaggerTitle;
                 o.SwaggerRoutePrefix = options.Controllers.SwaggerRoutePrefix;
+
+                foreach (var scheme in options.Controllers.AuthenticationSchemes)
+                {
+                    if (!o.AuthenticationSchemes.Contains(scheme)) o.AuthenticationSchemes.Add(scheme);
+                }
+
+#if NET10_0_OR_GREATER
+                if (options.Controllers.OpenApiConfigure != null) o.ConfigureOpenApi(options.Controllers.OpenApiConfigure);
+#endif
             });
         }
 
