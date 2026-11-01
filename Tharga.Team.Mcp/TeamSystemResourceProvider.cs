@@ -39,6 +39,9 @@ public sealed class TeamSystemResourceProvider : IMcpResourceProvider
     /// Never the administration contract, which is unchecked and listed every system key, personal ones included, to any
     /// Developer.
     /// </param>
+    /// <param name="tenantRoleRegistry">The registered tenant roles, for the roles resource; the resource is not offered without it.</param>
+    /// <param name="auditLogger">The audit logger; the audit resource is not offered without it.</param>
+    /// <param name="auditOversightService">The gated service the audit resource reads through, which decides whether the caller may.</param>
     /// <param name="scopeChecker">
     /// Asked whether the caller may manage system keys before the key resource is advertised. Without one the resource is
     /// not advertised.
