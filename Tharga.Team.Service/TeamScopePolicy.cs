@@ -77,6 +77,39 @@ internal static class TeamScopePolicy
     public static bool HasSystemScope(ClaimsPrincipal principal, string scope)
         => principal != null && HasClaim(principal, TeamClaimTypes.SystemScope, scope);
 
+    /// <summary>
+    /// The access level the caller holds <b>in</b> <paramref name="teamKey"/>, or <c>null</c> when there is none: the
+    /// caller's <c>TeamKey</c> claim is that team, and the level is read from an identity issued for that same team.
+    /// </summary>
+    /// <remarks>
+    /// <b>The same rule as <see cref="HasTeamScope"/>, for the same reason.</b> A level read with <c>FindFirst</c> from
+    /// whatever identity comes first says "an access level" and not "the access level in this team", so a principal that ever
+    /// carried a second team's identity would let that team's level count here. Every reader of the claim goes through this,
+    /// so the authorization checks and the audit entries agree on what the level was.
+    /// <para>
+    /// <b>Fails closed:</b> an absent, empty, unparseable or undefined level, or one that sits on another team's identity, is
+    /// <c>null</c> and satisfies nothing.
+    /// </para>
+    /// </remarks>
+    public static AccessLevel? AccessLevelFor(ClaimsPrincipal principal, string teamKey)
+        => Enum.TryParse<AccessLevel>(AccessLevelClaimFor(principal, teamKey), out var level) && Enum.IsDefined(level) ? level : null;
+
+    /// <summary>
+    /// The raw <c>AccessLevel</c> claim of the identity issued for <paramref name="teamKey"/>, as <see cref="AccessLevelFor"/>
+    /// reads it, for an audit entry that records the value as it was; <c>null</c> when there is none.
+    /// </summary>
+    public static string AccessLevelClaimFor(ClaimsPrincipal principal, string teamKey)
+    {
+        if (principal == null || string.IsNullOrEmpty(teamKey)) return null;
+
+        var callerTeam = principal.FindFirst(TeamClaimTypes.TeamKey)?.Value;
+        if (string.IsNullOrEmpty(callerTeam) || callerTeam != teamKey) return null;
+
+        return IdentitiesFor(principal, teamKey)
+            .Select(identity => identity.FindFirst(TeamClaimTypes.AccessLevel)?.Value)
+            .FirstOrDefault(value => !string.IsNullOrEmpty(value));
+    }
+
     /// <summary>The identities on <paramref name="principal"/> that were issued for <paramref name="teamKey"/>.</summary>
     private static IEnumerable<ClaimsIdentity> IdentitiesFor(ClaimsPrincipal principal, string teamKey)
         => principal.Identities.Where(identity => identity.HasClaim(TeamClaimTypes.TeamKey, teamKey));
