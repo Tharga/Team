@@ -62,7 +62,7 @@ public static class SupportPanelText
     [
         Assistant, Support, WhoToAsk, NewConversation, Earlier, NoEarlier, AllConversations, Close, Resize, AssistantGreeting,
         SupportGreeting, Message, AskAQuestion, WriteToSupport, Send, Working, Failed, SelectTeam, SupportCasesViewText.AssistantDeclined,
-        SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.Helpful,
+        SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.Thinking, SupportTranscriptText.ThinkingLoop, SupportTranscriptText.Helpful,
         SupportTranscriptText.NotHelpful, SupportTranscriptText.NoAnswerYet, SupportTranscriptText.NoAnswerAway
     ];
 }

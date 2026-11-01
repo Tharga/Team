@@ -1414,6 +1414,10 @@ var answered = await cases.RunAssistantAsync(teamKey, caseId, new Progress<Suppo
   for the "…": "Working" (`team.support.panel.working` in the panel, `team.support.cases.assistant.thinking` on the
   support page), then "Working 2" once it has gone round the tool loop twice, counting each time it asks for service
   calls (`team.support.transcript.workingLoop`). A service call part way through the text is said the same way under it.
+- **While a reasoning model thinks**, `SupportAssistantProgress.Thinking` is true and the text reads "Thinking"
+  (`team.support.transcript.thinking`), or "Thinking 2" once it has gone round the loop (`team.support.transcript.thinkingLoop`).
+  `ChatSupportResponder` sets it when an update carries `TextReasoningContent` and no text yet, and clears it on the
+  first text or tool call. A host with its own responder sets the flag the same way.
 - **Each report is the whole state**, the text so far included, not what changed, so a report that is missed costs
   nothing.
 - **What is kept is what is returned.** The answer is appended once, when it is complete, and everybody else reads
