@@ -41,6 +41,46 @@ internal static class ThargaBlazorOptionsForwarder
         }
     }
 
+    /// <summary>
+    /// Copies every internal registration field — the types a host registered through <c>AddTextProvider</c>,
+    /// <c>AddIconSource</c> and the like, and the menu items it added — from <paramref name="from"/> to <paramref name="to"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>These were a hand-written list too</b>, and the same failure followed: <c>_textProvider</c> and <c>_menuItems</c>
+    /// were left off it, so <c>o.Blazor.AddTextProvider</c> and <c>o.Blazor.AddMenuItem</c> were accepted and never took
+    /// effect. A field set on the source is carried over: a type is assigned when the source has one, a list is added to.
+    /// A field of any other kind throws, so teaching this about it is not left to memory.
+    /// </remarks>
+    public static void CopyRegistrations(ThargaBlazorOptions from, ThargaBlazorOptions to)
+    {
+        if (from == null || to == null) return;
+
+        foreach (var field in RegistrationFields())
+        {
+            var value = field.GetValue(from);
+            if (value == null) continue;
+
+            if (value is Type)
+            {
+                field.SetValue(to, value);
+            }
+            else if (value is System.Collections.IEnumerable items && field.GetValue(to) is System.Collections.IList target)
+            {
+                foreach (var item in items) target.Add(item);
+            }
+            else
+            {
+                throw new InvalidOperationException($"{nameof(ThargaBlazorOptions)}.{field.Name} is of a kind {nameof(ThargaBlazorOptionsForwarder)} cannot forward ({field.FieldType.Name}): teach it, so the option is not silently dropped.");
+            }
+        }
+    }
+
+    /// <summary>The internal registration fields <see cref="CopyRegistrations"/> is responsible for. Public so a test can enumerate them.</summary>
+    public static IEnumerable<FieldInfo> RegistrationFields()
+        => typeof(ThargaBlazorOptions)
+            .GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
+            .Where(f => f.Name.StartsWith('_'));
+
     /// <summary>The properties <see cref="Copy"/> is responsible for. Public so a test can enumerate them.</summary>
     public static IEnumerable<PropertyInfo> ForwardableProperties()
         => typeof(ThargaBlazorOptions)

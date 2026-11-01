@@ -142,6 +142,128 @@ public class AddThargaTeamTests
         Assert.Contains(builder.Services, d => d.ServiceType == typeof(IApiKeyRepositoryCollection));
     }
 
+    private sealed class HostTextProvider : IThargaTextProvider
+    {
+        public Task<string> GetAsync(TextKey key) => Task.FromResult(key.Default);
+    }
+
+    /// <summary>The sample's own <c>o.Blazor.AddTextProvider</c> was dropped, and the default provider was registered instead.</summary>
+    [Fact]
+    public void ABlazorTextProvider_SetThroughAddThargaTeam_IsTheOneRegistered()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Blazor.AddTextProvider<HostTextProvider>());
+
+        var registered = builder.Services.Where(d => d.ServiceType == typeof(IThargaTextProvider)).ToArray();
+
+        Assert.Contains(registered, d => d.ImplementationType == typeof(HostTextProvider));
+    }
+
+    [Fact]
+    public void ABlazorMenuItem_AddedThroughAddThargaTeam_ReachesTheLoginMenu()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Blazor.AddMenuItem("help", "myapp.menu.help", "Help", "/help"));
+        var provider = builder.Services.BuildServiceProvider();
+
+        var items = provider.GetRequiredService<IOptions<ThargaBlazorOptions>>().Value._menuItems;
+
+        var item = Assert.Single(items);
+        Assert.Equal("/help", item.Href);
+    }
+
+    [Fact]
+    public void ABlazorIconSource_AddedThroughAddThargaTeam_IsKept()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Blazor.AddIconSource<HostIconSource>());
+        var provider = builder.Services.BuildServiceProvider();
+
+        Assert.Contains(typeof(HostIconSource), provider.GetRequiredService<IOptions<ThargaBlazorOptions>>().Value._iconSourceTypes);
+    }
+
+    private sealed class HostIconSource : IIconSource
+    {
+        public Task<IconImage> ResolveAsync(IconSubject subject, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
+
+    /// <summary>
+    /// <b>The guard the issue asks for.</b> Every non-public registration field of the Blazor options must reach the layer
+    /// that consumes it, so one added later cannot be missed again: each is set on the facade's options and found on the
+    /// copy.
+    /// </summary>
+    [Fact]
+    public void EveryRegistrationFieldOfTheBlazorOptions_IsForwardedToTheLayerThatConsumesIt()
+    {
+        var fields = ThargaBlazorOptionsForwarder.RegistrationFields().ToArray();
+        Assert.NotEmpty(fields);
+
+        foreach (var field in fields)
+        {
+            var from = new ThargaBlazorOptions();
+            var to = new ThargaBlazorOptions();
+
+            if (field.FieldType == typeof(Type))
+            {
+                field.SetValue(from, typeof(HostSentinel));
+
+                ThargaBlazorOptionsForwarder.CopyRegistrations(from, to);
+
+                Assert.True(typeof(HostSentinel) == (Type)field.GetValue(to), $"{field.Name} was not forwarded.");
+            }
+            else if (field.FieldType.IsGenericType && field.FieldType.GetGenericTypeDefinition() == typeof(List<>))
+            {
+                var element = field.FieldType.GetGenericArguments()[0];
+                ((System.Collections.IList)field.GetValue(from)).Add(element == typeof(Type) ? typeof(HostSentinel) : System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(element));
+
+                ThargaBlazorOptionsForwarder.CopyRegistrations(from, to);
+
+                Assert.True(((System.Collections.IList)field.GetValue(to)).Count == 1, $"{field.Name} was not forwarded.");
+            }
+            else
+            {
+                throw new InvalidOperationException($"The field {field.Name} is of a kind this guard does not know ({field.FieldType.Name}); teach the forwarder and the guard about it.");
+            }
+        }
+    }
+
+    private sealed class HostSentinel;
+
+    [Fact]
+    public void TheAuditDefaultMode_SetThroughAddThargaTeam_IsForwarded()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Audit = new AuditOptions { DefaultAuditMode = AuditMode.None });
+        var provider = builder.Services.BuildServiceProvider();
+
+        Assert.Equal(AuditMode.None, provider.GetRequiredService<IOptions<AuditOptions>>().Value.DefaultAuditMode);
+    }
+
+    /// <summary>Every public setting of the audit options, not a list somebody has to extend: each is set to a non-default and must arrive.</summary>
+    [Fact]
+    public void EveryPublicAuditOption_SetThroughAddThargaTeam_IsForwarded()
+    {
+        var set = new AuditOptions
+        {
+            StorageMode = AuditStorageMode.Logger,
+            CallerFilter = AuditCallerFilter.Api,
+            EventFilter = AuditEventFilter.All,
+            ExcludedActions = ["read"],
+            DefaultAuditMode = AuditMode.None,
+            ExcludedEndpoints = ["/health"],
+            RetentionDays = 12,
+            BatchSize = 7,
+            FlushIntervalSeconds = 3
+        };
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.Audit = set);
+        var got = builder.Services.BuildServiceProvider().GetRequiredService<IOptions<AuditOptions>>().Value;
+
+        foreach (var property in typeof(AuditOptions).GetProperties().Where(p => p.CanRead && p.CanWrite))
+            Assert.True(Equals(property.GetValue(set), property.GetValue(got)) || (property.GetValue(set) is Array a && a.Cast<object>().SequenceEqual(((Array)property.GetValue(got)).Cast<object>())),
+                $"The audit option {property.Name} was not forwarded.");
+    }
+
     [Fact]
     public void RegistersControllerServices()
     {
