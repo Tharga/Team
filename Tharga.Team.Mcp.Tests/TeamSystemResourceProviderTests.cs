@@ -8,12 +8,14 @@ namespace Tharga.Team.Mcp.Tests;
 
 public class TeamSystemResourceProviderTests
 {
-    private readonly IApiKeyAdministrationService _apiKeyService = Substitute.For<IApiKeyAdministrationService>();
+    private readonly ISystemApiKeyManagementService _apiKeyService = Substitute.For<ISystemApiKeyManagementService>();
     private readonly ITenantRoleRegistry _roleRegistry = Substitute.For<ITenantRoleRegistry>();
+    private readonly IMcpScopeChecker _scope = Substitute.For<IMcpScopeChecker>();
     private readonly CompositeAuditLogger _auditLogger;
 
     public TeamSystemResourceProviderTests()
     {
+        _scope.Has(ApiKeyScopes.SystemManage).Returns(true);
         _auditLogger = new CompositeAuditLogger(
             Enumerable.Empty<IAuditLogger>(),
             Options.Create(new AuditOptions()));
@@ -50,7 +52,7 @@ public class TeamSystemResourceProviderTests
         // Audit is listed only when the caller could read it, so the service that decides that has to be
         // present. Registering the logger alone used to be enough, which was the defect: it says the
         // feature exists, not that this caller may use it.
-        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, _auditLogger, Readable());
+        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, _auditLogger, Readable(), _scope);
 
         var result = await sut.ListResourcesAsync(MakeContext(isDeveloper: true), TestContext.Current.CancellationToken);
 
@@ -63,12 +65,70 @@ public class TeamSystemResourceProviderTests
     [Fact]
     public async Task ListResourcesAsync_OmitsAuditWhenAuditLoggerNotRegistered()
     {
-        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, auditLogger: null);
+        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, auditLogger: null, scopeChecker: _scope);
 
         var result = await sut.ListResourcesAsync(MakeContext(isDeveloper: true), TestContext.Current.CancellationToken);
 
         Assert.DoesNotContain(result, r => r.Uri == TeamSystemResourceProvider.AuditUri);
         Assert.Equal(2, result.Count);
+    }
+
+    /// <summary>The Developer role is not enough: the resource is advertised only to a caller the key service would let read it.</summary>
+    [Fact]
+    public async Task ListResourcesAsync_OmitsSystemKeys_ForADeveloperWhoMayNotManageSystemKeys()
+    {
+        _scope.Has(ApiKeyScopes.SystemManage).Returns(false);
+        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, _auditLogger, scopeChecker: _scope);
+
+        var result = await sut.ListResourcesAsync(MakeContext(isDeveloper: true), TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(result, r => r.Uri == TeamSystemResourceProvider.SystemKeysUri);
+        Assert.Contains(result, r => r.Uri == TeamSystemResourceProvider.RolesUri);
+    }
+
+    [Fact]
+    public async Task ListResourcesAsync_OmitsSystemKeys_WhenThereIsNoScopeCheckerToAsk()
+    {
+        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, _auditLogger);
+
+        var result = await sut.ListResourcesAsync(MakeContext(isDeveloper: true), TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(result, r => r.Uri == TeamSystemResourceProvider.SystemKeysUri);
+    }
+
+    /// <summary>
+    /// The listing goes through the scope-checked service, so a Developer without <c>apikeys:oversee</c> sees the shared keys
+    /// and their own personal ones, not everybody's, and the service's refusal is never turned into a listing.
+    /// </summary>
+    [Fact]
+    public async Task ReadResourceAsync_SystemKeys_ReadsThroughTheCheckedService_WithTheRulesOfGetSystemKeysAsync()
+    {
+        _apiKeyService.GetSystemKeysAsync(Arg.Any<PrivateKeyScope>()).Returns(ToAsyncEnumerable<IApiKey>());
+        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, _auditLogger);
+
+        await sut.ReadResourceAsync(TeamSystemResourceProvider.SystemKeysUri, MakeContext(isDeveloper: true), TestContext.Current.CancellationToken);
+
+        _apiKeyService.Received(1).GetSystemKeysAsync(PrivateKeyScope.All);
+        _apiKeyService.ReceivedWithAnyArgs(1).GetSystemKeysAsync(default);
+    }
+
+    [Fact]
+    public async Task ReadResourceAsync_SystemKeys_IsRefused_WhenTheServiceRefuses()
+    {
+        _apiKeyService.GetSystemKeysAsync(PrivateKeyScope.All).Returns(Refused());
+        var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, _auditLogger);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            sut.ReadResourceAsync(TeamSystemResourceProvider.SystemKeysUri, MakeContext(isDeveloper: true), TestContext.Current.CancellationToken));
+    }
+
+    private static async IAsyncEnumerable<IApiKey> Refused()
+    {
+        await Task.Yield();
+        throw new UnauthorizedAccessException("Missing required scope 'apikey:system-manage'.");
+#pragma warning disable CS0162
+        yield break;
+#pragma warning restore CS0162
     }
 
     [Fact]
@@ -98,7 +158,7 @@ public class TeamSystemResourceProviderTests
         key.ApiKey.Returns("SHOULD_NOT_BE_EXPOSED");
         key.SystemScopes.Returns(new[] { "mcp:discover" });
         key.CreatedBy.Returns("daniel");
-        _apiKeyService.GetSystemKeysAsync().Returns(ToAsyncEnumerable(key));
+        _apiKeyService.GetSystemKeysAsync(PrivateKeyScope.All).Returns(ToAsyncEnumerable(key));
 
         var sut = new TeamSystemResourceProvider(_apiKeyService, _roleRegistry, _auditLogger);
 

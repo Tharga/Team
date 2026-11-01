@@ -13,7 +13,8 @@ namespace Tharga.Team.Mcp;
 /// </summary>
 public sealed class TeamSystemResourceProvider : IMcpResourceProvider
 {
-    private readonly IApiKeyAdministrationService _apiKeyAdministrationService;
+    private readonly ISystemApiKeyManagementService _systemApiKeyManagementService;
+    private readonly IMcpScopeChecker _scopeChecker;
     private readonly ITenantRoleRegistry _tenantRoleRegistry;
     private readonly CompositeAuditLogger _auditLogger;
 
@@ -33,16 +34,30 @@ public sealed class TeamSystemResourceProvider : IMcpResourceProvider
     /// It is injected instead of the logger so this provider performs no audit check of its own — see
     /// <see cref="ReadAuditAsync"/>.
     /// </remarks>
+    /// <param name="systemApiKeyManagementService">
+    /// The <b>scope-checked</b> system key service, which requires <c>apikey:system-manage</c> and filters personal keys.
+    /// Never the administration contract, which is unchecked and listed every system key, personal ones included, to any
+    /// Developer.
+    /// </param>
+    /// <param name="tenantRoleRegistry">The registered tenant roles, for the roles resource; the resource is not offered without it.</param>
+    /// <param name="auditLogger">The audit logger; the audit resource is not offered without it.</param>
+    /// <param name="auditOversightService">The gated service the audit resource reads through, which decides whether the caller may.</param>
+    /// <param name="scopeChecker">
+    /// Asked whether the caller may manage system keys before the key resource is advertised. Without one the resource is
+    /// not advertised.
+    /// </param>
     public TeamSystemResourceProvider(
-        IApiKeyAdministrationService apiKeyAdministrationService = null,
+        ISystemApiKeyManagementService systemApiKeyManagementService = null,
         ITenantRoleRegistry tenantRoleRegistry = null,
         CompositeAuditLogger auditLogger = null,
-        IAuditOversightService auditOversightService = null)
+        IAuditOversightService auditOversightService = null,
+        IMcpScopeChecker scopeChecker = null)
     {
-        _apiKeyAdministrationService = apiKeyAdministrationService;
+        _systemApiKeyManagementService = systemApiKeyManagementService;
         _tenantRoleRegistry = tenantRoleRegistry;
         _auditLogger = auditLogger;
         _auditOversightService = auditOversightService;
+        _scopeChecker = scopeChecker;
     }
 
     public McpScope Scope => McpScope.System;
@@ -63,7 +78,8 @@ public sealed class TeamSystemResourceProvider : IMcpResourceProvider
         var list = new List<McpResourceDescriptor>();
         var isDeveloper = context.AsTeamContext()?.IsDeveloper == true;
 
-        if (isDeveloper && _apiKeyAdministrationService != null)
+        // The role, and the scope the read is gated on: each entry asks what its read asks.
+        if (isDeveloper && _systemApiKeyManagementService != null && _scopeChecker?.Has(ApiKeyScopes.SystemManage) == true)
         {
             list.Add(new McpResourceDescriptor
             {
@@ -144,13 +160,19 @@ public sealed class TeamSystemResourceProvider : IMcpResourceProvider
         };
     }
 
+    /// <remarks>
+    /// <b>Read through the scope-checked service, with the rules of <c>GetSystemKeysAsync</c>:</b> it requires
+    /// <c>apikey:system-manage</c> and lists the shared keys plus the caller's own personal ones, and everyone's only for an
+    /// <c>apikeys:oversee</c> holder. The Developer role alone no longer reaches personal keys: the unchecked contract this
+    /// read through returned all of them. A refusal propagates as <see cref="UnauthorizedAccessException"/>.
+    /// </remarks>
     private async Task<McpResourceContent> ReadSystemKeysAsync(CancellationToken cancellationToken)
     {
-        if (_apiKeyAdministrationService == null)
-            throw new InvalidOperationException("IApiKeyAdministrationService is not registered.");
+        if (_systemApiKeyManagementService == null)
+            throw new InvalidOperationException("ISystemApiKeyManagementService is not registered.");
 
         var keys = new List<object>();
-        await foreach (var key in _apiKeyAdministrationService.GetSystemKeysAsync().WithCancellation(cancellationToken))
+        await foreach (var key in _systemApiKeyManagementService.GetSystemKeysAsync(PrivateKeyScope.All).WithCancellation(cancellationToken))
         {
             keys.Add(new
             {

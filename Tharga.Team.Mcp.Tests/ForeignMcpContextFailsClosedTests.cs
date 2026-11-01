@@ -30,7 +30,7 @@ public class ForeignMcpContextFailsClosedTests
         public McpScope Scope => McpScope.System;
     }
 
-    private readonly IApiKeyAdministrationService _apiKeyService = Substitute.For<IApiKeyAdministrationService>();
+    private readonly ISystemApiKeyManagementService _apiKeyService = Substitute.For<ISystemApiKeyManagementService>();
     private readonly ITenantRoleRegistry _roleRegistry = Substitute.For<ITenantRoleRegistry>();
     private readonly CompositeAuditLogger _auditLogger =
         new(Enumerable.Empty<IAuditLogger>(), Options.Create(new AuditOptions()));
@@ -69,7 +69,7 @@ public class ForeignMcpContextFailsClosedTests
     {
         var sut = new TeamResourceProvider(
             Substitute.For<ITeamManagementService>(),
-            Substitute.For<IApiKeyAdministrationService>());
+            Substitute.For<IApiKeyManagementService>());
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(
             () => sut.ReadResourceAsync(TeamResourceProvider.TeamUri, new ForeignContext(), CancellationToken.None));
@@ -80,7 +80,7 @@ public class ForeignMcpContextFailsClosedTests
     {
         var sut = new TeamResourceProvider(
             Substitute.For<ITeamManagementService>(),
-            Substitute.For<IApiKeyAdministrationService>());
+            Substitute.For<IApiKeyManagementService>());
 
         var list = await sut.ListResourcesAsync(new ForeignContext(), CancellationToken.None);
 

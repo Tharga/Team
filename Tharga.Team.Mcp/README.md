@@ -103,7 +103,7 @@ Listed when the principal carries a `NameIdentifier` (or equivalent) claim. Read
 |-----|----------|
 | `team://team` | Metadata for the team the call addresses — the one named in `X-Team-Key`, else the `TeamKey` claim: `key`, `name`, `icon`, `consentedRoles`. |
 | `team://team/members` | Members of that team: `key`, `name`, `accessLevel`, `state`, `tenantRoles`, `scopeOverrides`, and an `invited` flag. |
-| `team://team/apikeys` | API keys for that team. Raw key values are redacted (the `apiKey` property is omitted entirely). Listed only when `IApiKeyAdministrationService` is registered. |
+| `team://team/apikeys` | API keys for that team, **with the rules of `IApiKeyManagementService.GetKeysAsync`**: it needs `apikey:manage` on the team, lists the team's shared keys plus the caller's own private ones, and every private key only for an `apikeys:oversee` holder. Raw key values are redacted (the `apiKey` property is omitted entirely). Listed only to a caller who holds `apikey:manage`, and only when `IApiKeyManagementService` is registered; a caller without the scope is refused on read. |
 
 Listed when the principal carries a `TeamKey` claim **or names a team on the call** (below). Read fails with `UnauthorizedAccessException` if neither applies.
 
@@ -244,7 +244,7 @@ Available resources (listed only when the matching dependency is registered):
 
 | URI | Contents |
 |-----|----------|
-| `team://system/apikeys` | System API keys (not bound to a team). Raw key values are redacted. |
+| `team://system/apikeys` | System API keys (not bound to a team), **with the rules of `ISystemApiKeyManagementService.GetSystemKeysAsync`**: the Developer role and the `apikey:system-manage` scope are both needed, and the shared keys plus the caller's own personal ones are listed, everyone's only for an `apikeys:oversee` holder. Raw key values are redacted. |
 | `team://system/roles` | Tenant roles registered via `AddThargaTenantRoles` |
 | `team://system/audit` | Most recent ~100 audit entries from the last 7 days |
 

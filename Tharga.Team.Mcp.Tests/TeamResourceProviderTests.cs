@@ -8,7 +8,8 @@ namespace Tharga.Team.Mcp.Tests;
 public class TeamResourceProviderTests
 {
     private readonly ITeamManagementService _teamService = Substitute.For<ITeamManagementService>();
-    private readonly IApiKeyAdministrationService _apiKeyService = Substitute.For<IApiKeyAdministrationService>();
+    private readonly IApiKeyManagementService _apiKeyService = Substitute.For<IApiKeyManagementService>();
+    private readonly IMcpScopeChecker _scope = Substitute.For<IMcpScopeChecker>();
 
     private TeamMcpContext MakeContext(string teamId)
         => TestMcpContextFactory.Create(teamId: teamId, scope: McpScope.Team);
@@ -30,9 +31,10 @@ public class TeamResourceProviderTests
     }
 
     [Fact]
-    public async Task ListResourcesAsync_WithTeamId_Returns_Three_When_ApiKeyServiceRegistered()
+    public async Task ListResourcesAsync_WithTeamId_Returns_Three_When_ApiKeyServiceRegistered_AndTheCallerMayManageKeys()
     {
-        var sut = new TeamResourceProvider(_teamService, _apiKeyService);
+        _scope.Has(ApiKeyScopes.Manage).Returns(true);
+        var sut = new TeamResourceProvider(_teamService, _apiKeyService, _scope);
 
         var result = await sut.ListResourcesAsync(MakeContext("T-1"), TestContext.Current.CancellationToken);
 
@@ -45,11 +47,36 @@ public class TeamResourceProviderTests
     [Fact]
     public async Task ListResourcesAsync_WithTeamId_OmitsApiKeys_When_ApiKeyServiceNotRegistered()
     {
-        var sut = new TeamResourceProvider(_teamService, apiKeyAdministrationService: null);
+        _scope.Has(ApiKeyScopes.Manage).Returns(true);
+        var sut = new TeamResourceProvider(_teamService, apiKeyManagementService: null, scopeChecker: _scope);
 
         var result = await sut.ListResourcesAsync(MakeContext("T-1"), TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Count);
+        Assert.DoesNotContain(result, r => r.Uri == TeamResourceProvider.ApiKeysUri);
+    }
+
+    /// <summary>Listing asks the question reading asks: a resource the caller would be refused is not advertised.</summary>
+    [Fact]
+    public async Task ListResourcesAsync_OmitsApiKeys_WhenTheCallerMayNotManageKeys()
+    {
+        _scope.Has(ApiKeyScopes.Manage).Returns(false);
+        var sut = new TeamResourceProvider(_teamService, _apiKeyService, _scope);
+
+        var result = await sut.ListResourcesAsync(MakeContext("T-1"), TestContext.Current.CancellationToken);
+
+        Assert.DoesNotContain(result, r => r.Uri == TeamResourceProvider.ApiKeysUri);
+        Assert.Equal(2, result.Count);
+    }
+
+    /// <summary>With no scope checker there is no way to know the caller may, so nothing is advertised: it fails closed.</summary>
+    [Fact]
+    public async Task ListResourcesAsync_OmitsApiKeys_WhenThereIsNoScopeCheckerToAsk()
+    {
+        var sut = new TeamResourceProvider(_teamService, _apiKeyService);
+
+        var result = await sut.ListResourcesAsync(MakeContext("T-1"), TestContext.Current.CancellationToken);
+
         Assert.DoesNotContain(result, r => r.Uri == TeamResourceProvider.ApiKeysUri);
     }
 
@@ -179,7 +206,7 @@ public class TeamResourceProviderTests
         key.AccessLevel.Returns(AccessLevel.Administrator);
         key.Roles.Returns(new[] { "Editor" });
         key.CreatedBy.Returns("alice");
-        _apiKeyService.GetKeysAsync("T-1").Returns(ToAsyncEnumerable(key));
+        _apiKeyService.GetKeysAsync("T-1", PrivateKeyScope.All, false).Returns(ToAsyncEnumerable(key));
 
         var sut = new TeamResourceProvider(_teamService, _apiKeyService);
         var content = await sut.ReadResourceAsync(TeamResourceProvider.ApiKeysUri, MakeContext("T-1"), TestContext.Current.CancellationToken);
@@ -197,9 +224,62 @@ public class TeamResourceProviderTests
     [Fact]
     public async Task ReadResourceAsync_ApiKeysUri_NoApiKeyService_Throws()
     {
-        var sut = new TeamResourceProvider(_teamService, apiKeyAdministrationService: null);
+        var sut = new TeamResourceProvider(_teamService, apiKeyManagementService: null);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             sut.ReadResourceAsync(TeamResourceProvider.ApiKeysUri, MakeContext("T-1"), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// The listing goes through the scope-checked service, which requires <c>apikey:manage</c> and filters private keys, so the
+    /// resource shows what <c>GetKeysAsync</c> shows that caller and nothing the repository could: the caller's own private
+    /// keys, every private key only for an <c>apikeys:oversee</c> holder, and never because the host allowed privilege.
+    /// </summary>
+    [Fact]
+    public async Task ReadResourceAsync_ApiKeysUri_ReadsThroughTheCheckedService_WithTheSameRulesAsGetKeysAsync()
+    {
+        _apiKeyService.GetKeysAsync(Arg.Any<string>(), Arg.Any<PrivateKeyScope>(), Arg.Any<bool>()).Returns(ToAsyncEnumerable<IApiKey>());
+
+        var sut = new TeamResourceProvider(_teamService, _apiKeyService);
+        await sut.ReadResourceAsync(TeamResourceProvider.ApiKeysUri, MakeContext("T-1"), TestContext.Current.CancellationToken);
+
+        _apiKeyService.Received(1).GetKeysAsync("T-1", PrivateKeyScope.All, false);
+        _apiKeyService.ReceivedWithAnyArgs(1).GetKeysAsync(default, default, default);
+    }
+
+    /// <summary>The service refuses a caller without <c>apikey:manage</c>; the resource never turns that into a listing.</summary>
+    [Fact]
+    public async Task ReadResourceAsync_ApiKeysUri_IsRefused_WhenTheServiceRefuses()
+    {
+        _apiKeyService.GetKeysAsync("T-1", PrivateKeyScope.All, false).Returns(Refused());
+
+        var sut = new TeamResourceProvider(_teamService, _apiKeyService);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            sut.ReadResourceAsync(TeamResourceProvider.ApiKeysUri, MakeContext("T-1"), TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Another member's private key is the thing the service holds back, so it must not be in what the resource returns.</summary>
+    [Fact]
+    public async Task ReadResourceAsync_ApiKeysUri_ShowsOnlyWhatTheServiceReturnsTheCaller()
+    {
+        var shared = Substitute.For<IApiKey>();
+        shared.Key.Returns("shared");
+        _apiKeyService.GetKeysAsync("T-1", PrivateKeyScope.All, false).Returns(ToAsyncEnumerable(shared));
+
+        var sut = new TeamResourceProvider(_teamService, _apiKeyService);
+        var content = await sut.ReadResourceAsync(TeamResourceProvider.ApiKeysUri, MakeContext("T-1"), TestContext.Current.CancellationToken);
+
+        using var doc = JsonDocument.Parse(content.Text);
+        Assert.Equal(["shared"], doc.RootElement.GetProperty("items").EnumerateArray().Select(x => x.GetProperty("key").GetString()));
+    }
+
+    private static async IAsyncEnumerable<IApiKey> Refused()
+    {
+        await Task.Yield();
+        throw new UnauthorizedAccessException("Missing required scope 'apikey:manage'.");
+#pragma warning disable CS0162
+        yield break;
+#pragma warning restore CS0162
     }
 }
