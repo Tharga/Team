@@ -22,10 +22,19 @@ namespace Tharga.Team.Mcp.Tests;
 /// </remarks>
 public class InternalServiceInjectionTests
 {
+    /// <summary>
+    /// Unchecked contracts that are not marked <c>EditorBrowsable(Never)</c>, so the attribute scan below cannot find them:
+    /// <see cref="IApiKeyAdministrationService"/> reads and writes keys with no scope check and no private-key filtering.
+    /// The MCP key listing once injected it and showed every member's private keys to anyone who could reach it; the checked
+    /// facet is <see cref="IApiKeyManagementService"/>.
+    /// </summary>
+    private static readonly Type[] UncheckedByDesign = [typeof(IApiKeyAdministrationService)];
+
     private static Type[] InternalServices()
         => typeof(ITeamService).Assembly.GetTypes()
             .Where(t => t.IsInterface && t.IsPublic)
             .Where(t => t.GetCustomAttribute<EditorBrowsableAttribute>()?.State == EditorBrowsableState.Never)
+            .Concat(UncheckedByDesign)
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToArray();
 
@@ -84,8 +93,19 @@ public class InternalServiceInjectionTests
         Assert.Equal([nameof(ITeamService)], Offenders(typeof(TakesTheInternalService)));
     }
 
+    [Fact]
+    public void TheGuard_CatchesTheUncheckedApiKeyService()
+    {
+        Assert.Equal([nameof(IApiKeyAdministrationService)], Offenders(typeof(TakesTheUncheckedKeyService)));
+    }
+
     private sealed class TakesTheInternalService
     {
         public TakesTheInternalService(ITeamService teamService) { }
+    }
+
+    private sealed class TakesTheUncheckedKeyService
+    {
+        public TakesTheUncheckedKeyService(IApiKeyAdministrationService keys) { }
     }
 }
