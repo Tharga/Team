@@ -75,6 +75,12 @@ public static class McpTeamBuilderExtensions
             builder.AddResourceProvider<TeamSystemResourceProvider>();
         }
 
+        // Opt-in tools over a team's support AI connection. Authorization is the service's (assistant:manage).
+        if (options.ExposeSupportAiConnection)
+        {
+            builder.AddToolProvider<SupportAiConnectionToolProvider>();
+        }
+
         return builder;
     }
 }
