@@ -73,17 +73,17 @@ public static class ThargaTeamRegistration
             // discarded — configured, no error, and simply never in effect. See the forwarder.
             ThargaBlazorOptionsForwarder.Copy(options.Blazor, o);
 
-            o._teamService = options.Blazor._teamService;
-            o._userService = options.Blazor._userService;
-            o._memberType = options.Blazor._memberType;
-            o._apiKeyService = options.Blazor._apiKeyService;
-            o._claimsEnricher = options.Blazor._claimsEnricher;
+            // The internal registration fields (the registered service types, the text provider, the menu items, the icon
+            // sources), by reflection for the same reason. A hand-written list here left _textProvider and _menuItems
+            // off, so o.Blazor.AddTextProvider and o.Blazor.AddMenuItem never took effect.
+            ThargaBlazorOptionsForwarder.CopyRegistrations(options.Blazor, o);
 
             // Icon configuration lives on the facade's own options for backwards compatibility, so forward
-            // it into the layer that now registers the chain.
+            // it into the layer that now registers the chain. A store set on the Blazor section is kept unless
+            // the facade names one.
             o.Icon = options.Icon;
             o.IconSettings = options.IconSettings;
-            o._iconStoreType = options._iconStoreType;
+            o._iconStoreType = options._iconStoreType ?? o._iconStoreType;
             o._iconSourceTypes.AddRange(options._iconSourceTypes);
 
             // Email, the same way and for the same reason. Assigned only when the facade's own option is set,
@@ -170,14 +170,9 @@ public static class ThargaTeamRegistration
         {
             builder.Services.AddThargaAuditLogging(o =>
             {
-                o.StorageMode = options.Audit.StorageMode;
-                o.CallerFilter = options.Audit.CallerFilter;
-                o.EventFilter = options.Audit.EventFilter;
-                o.ExcludedActions = options.Audit.ExcludedActions;
-                o.ExcludedEndpoints = options.Audit.ExcludedEndpoints;
-                o.RetentionDays = options.Audit.RetentionDays;
-                o.BatchSize = options.Audit.BatchSize;
-                o.FlushIntervalSeconds = options.Audit.FlushIntervalSeconds;
+                // Every public setting, by reflection, as for the API key options above: a hand-written list left
+                // DefaultAuditMode off, so a host that set it through AddThargaTeam never had it take effect.
+                OptionsForwarder.Copy(options.Audit, o);
             });
         }
 

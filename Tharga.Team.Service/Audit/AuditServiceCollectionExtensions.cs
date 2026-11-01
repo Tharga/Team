@@ -9,23 +9,29 @@ namespace Tharga.Team.Service.Audit;
 public static class AuditServiceCollectionExtensions
 {
     /// <summary>
+    /// Every public setting of <paramref name="from"/> onto <paramref name="to"/>, by reflection rather than a list.
+    /// </summary>
+    /// <remarks>
+    /// <b>A list is how <c>DefaultAuditMode</c> was dropped</b>: it was written against the settings that existed that day,
+    /// <c>DefaultAuditMode</c> was added later, and a host that set it, to make silence the default, had it accepted and
+    /// never in effect. A setting added tomorrow is copied without anyone remembering.
+    /// </remarks>
+    private static void CopySettings(AuditOptions from, AuditOptions to)
+    {
+        foreach (var property in typeof(AuditOptions).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (property.CanRead && property.SetMethod?.IsPublic == true) property.SetValue(to, property.GetValue(from));
+        }
+    }
+
+    /// <summary>
     /// Registers audit logging with the specified options.
     /// </summary>
     public static IServiceCollection AddThargaAuditLogging(this IServiceCollection services, Action<AuditOptions> configure = null)
     {
         var options = new AuditOptions();
         configure?.Invoke(options);
-        services.Configure<AuditOptions>(o =>
-        {
-            o.StorageMode = options.StorageMode;
-            o.CallerFilter = options.CallerFilter;
-            o.EventFilter = options.EventFilter;
-            o.ExcludedActions = options.ExcludedActions;
-            o.ExcludedEndpoints = options.ExcludedEndpoints;
-            o.RetentionDays = options.RetentionDays;
-            o.BatchSize = options.BatchSize;
-            o.FlushIntervalSeconds = options.FlushIntervalSeconds;
-        });
+        services.Configure<AuditOptions>(o => CopySettings(options, o));
 
         // Lets work with no HTTP caller declare who it is. Registered unconditionally and regardless of
         // storage mode: a host that audits at all may have a background job, and the accessor costs
