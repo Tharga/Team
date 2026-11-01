@@ -61,12 +61,42 @@ public class SystemScopeRegistrationTests
     [InlineData(SystemTeamScopes.Manage)]
     [InlineData(SystemTeamScopes.SetOwner)]
     [InlineData(SystemUserScopes.Manage)]
+    [InlineData(AuditScopes.Read)]
     public void AddThargaTeamBlazor_RegistersBuiltInSystemScope(string scopeName)
     {
         var services = Arrange();
 
         var registry = services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>();
         Assert.Single(registry.All, s => s.Name == scopeName);
+    }
+
+    /// <summary>
+    /// Reading the audit log of every team is a system grant, and the cross-team audit page asks for it, so a host only has to
+    /// map a role to it. Before, <c>audit:read</c> was registered as a team scope only, and the page said "Access denied"
+    /// unless the host registered the system scope itself.
+    /// </summary>
+    [Fact]
+    public void TheCrossTeamAuditScope_IsRegisteredAsASystemScope_AndStillAsATeamScope()
+    {
+        var provider = Arrange().BuildServiceProvider();
+
+        Assert.Single(provider.GetRequiredService<ISystemScopeRegistry>().All, s => s.Name == AuditScopes.Read);
+        Assert.Single(provider.GetRequiredService<IScopeRegistry>().All, s => s.Name == AuditScopes.Read);
+    }
+
+    /// <summary>The documented workaround was to register it by hand, as the sample does: that must keep working, in either order.</summary>
+    [Fact]
+    public void AHostThatRegisteredTheAuditScopeItself_StillWiresUp_InEitherOrder()
+    {
+        var hostFirst = new ServiceCollection();
+        hostFirst.AddThargaSystemScopes(scopes => scopes.Register(AuditScopes.Read, "Host's own."));
+        Assert.Null(Record.Exception(() => hostFirst.AddThargaTeamBlazor(o => o.RegisterTeamService<FakeTeamService, FakeUserService>())));
+
+        var libraryFirst = Arrange();
+        Assert.Null(Record.Exception(() => libraryFirst.AddThargaSystemScopes(scopes => scopes.Register(AuditScopes.Read, "Host's own."))));
+
+        Assert.Single(hostFirst.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>().All, s => s.Name == AuditScopes.Read);
+        Assert.Single(libraryFirst.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>().All, s => s.Name == AuditScopes.Read);
     }
 
     [Fact]

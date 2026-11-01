@@ -262,6 +262,10 @@ public static class ThargaBlazorRegistration
                 scopes.Register(SystemUserScopes.Manage, "Administer users (cross-team): verify against the external directory, list directory-only users, and delete users.");
                 scopes.Register(SystemTeamScopes.Manage, "Rename any team and set its icon (cross-team). Does not grant consent or custom-role changes.");
                 scopes.Register(SystemApiKeyScopes.Oversee, "See and manage other members' private API keys in any team, to investigate an incident or retire a departed person's keys.");
+                // The cross-team audit page and the MCP audit resource read every team's log through the oversight
+                // service, which asks for this as a system scope. It was registered as a team scope only, so the page
+                // said "Access denied" until a host registered it here itself; now a host only maps a role to it.
+                scopes.Register(AuditScopes.Read, "Read the audit log of every team (cross-team), not only the selected team's.");
                 // Demo mode. A system grant because the operation drops system scopes and application
                 // roles -- inert for a caller holding none, which is every customer's own team owner. The
                 // run-as half stays a team scope at Administrator (Tharga/Team#223).
