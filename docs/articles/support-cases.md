@@ -1356,6 +1356,11 @@ The body of `models`, `test` and the connecting `PUT` is a provider request:
 - Kinds are written by name (`"OpenAI"`) and read by name or number. The method returns the route group, so you can
   add conventions such as an OpenAPI tag.
 
+**Over MCP.** An agent can do the same through seven tools (`support.ai.get_connection`, `get_choices`, `list_models`,
+`test`, `connect`, `use_platform_model`, `turn_off`), opt in with `mcp.AddTeam(o => o.ExposeSupportAiConnection = true)`.
+They use this same service, so `assistant:manage`, the audit and the key rules above are the tools' too, and the team is
+the caller's own. Unlike REST, kinds are written by name only. The `Tharga.Team.Mcp` README lists the tools.
+
 **Persist the key ring.** Data Protection's default keeps its keys on the local file system. On more than one
 instance, or in a container whose file system does not survive a restart, a key stored by one instance cannot
 be read by another, and the team is asked to enter it again. `PersistKeysToThargaMongo()` keeps the ring in the
