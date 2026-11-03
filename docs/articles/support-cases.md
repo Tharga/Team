@@ -369,7 +369,25 @@ nobody to ask, or no team selected, the panel is not drawn at all.
 
 **`SupportCasesView`** has two tabs — the cases first, then where help is asked for. `Tab` names the one to
 show (`SupportCasesView.CasesTab` or `NewCaseTab`) and `TabChanged` reports a change, so a page can keep its
-address in step and link straight to either. Cases are expandable cards; each conversation loads when its card
+address in step and link straight to either. A host can add tabs of its own after those two through `ExtraTabs`,
+each a `SupportCasesExtraTab` with a `Name` and a `Text`; the name works in `Tab` and `TabChanged` like the built-in
+ones. The host decides whether a tab is there at all, so a reader without the right to it sees none: put the condition
+around the tab inside `ExtraTabs`. The usual use is the back-office queue beside the customer's own cases:
+
+```razor
+<SupportCasesView>
+    <ExtraTabs>
+        @if (_canSeeQueue)
+        {
+            <SupportCasesExtraTab Name="queue" Text="Support queue">
+                <SupportQueueView />
+            </SupportCasesExtraTab>
+        }
+    </ExtraTabs>
+</SupportCasesView>
+```
+
+Cases are expandable cards; each conversation loads when its card
 opens. Every case list shares one filter — status and kind of conversation, open support cases by default —
 remembered in the browser under `StorageKey`, and every list reads every page of the listing rather than the
 first. `SupportCaseFilter` also takes `ShowSearch` — a search over the subject, who wrote, the case id, the team

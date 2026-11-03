@@ -3,6 +3,7 @@
 @using Tharga.Team.Blazor.Features.Team
 @using Tharga.Blazor
 @implements IDisposable
+@implements ISupportCasesTabHost
 @inject ISupportCaseService SupportCases
 @inject ISupportCaseNotifier Notifier
 @inject ITeamStateService TeamState
@@ -22,6 +23,7 @@ else if (_teamKey == null)
 }
 else
 {
+    <CascadingValue Value="@((ISupportCasesTabHost)this)" IsFixed="true">
     <RadzenTabs SelectedIndex="_tab" SelectedIndexChanged="OnTabSelectedAsync" RenderMode="TabRenderMode.Client">
         <Tabs>
             <RadzenTabsItem Text="@_text[SupportCasesViewText.CasesTab]" data-tab="cases">
@@ -109,8 +111,11 @@ else
                     </div>
                 </RadzenStack>
             </RadzenTabsItem>
+
+            @ExtraTabs
         </Tabs>
     </RadzenTabs>
+    </CascadingValue>
 }
 
 @code {
@@ -141,10 +146,21 @@ else
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 
     /// <summary>
-    /// The tab to show by name — <see cref="CasesTab"/> or <see cref="NewCaseTab"/> — so a host can link straight to one.
+    /// The tab to show by name — <see cref="CasesTab"/>, <see cref="NewCaseTab"/> or one the host added through <see cref="ExtraTabs"/> — so a host can link straight to one.
     /// Null or unknown picks for the reader: the cases, or where help is asked for when there are none yet.
     /// </summary>
     [Parameter] public string Tab { get; set; }
+
+    /// <summary>
+    /// Tabs the host adds after the built-in two, each a <see cref="SupportCasesExtraTab"/>.
+    /// </summary>
+    /// <remarks>
+    /// The host decides whether a tab is there at all, so a reader without the right to it simply has no tab: wrap it in the
+    /// condition (<c>@@if</c>) inside this fragment. An extra tab is named like the built-in ones, so <see cref="Tab"/> opens it and
+    /// <see cref="TabChanged"/> reports it. A <see cref="Tab"/> naming a tab that is not there leaves the choice to the view, as for
+    /// any unknown name.
+    /// </remarks>
+    [Parameter] public RenderFragment ExtraTabs { get; set; }
 
     /// <summary>Raised with the tab's name whenever the shown tab changes, so a host can keep its address in step.</summary>
     [Parameter] public EventCallback<string> TabChanged { get; set; }
@@ -172,6 +188,10 @@ else
 
     private const int CasesIndex = 0;
     private const int NewCaseIndex = 1;
+    private const int FirstExtraIndex = 2;
+
+    private readonly List<string> _extra = [];
+    private string _wantedExtra;
 
     private SupportPresenceState _presence = SupportPresenceState.Unknown;
     private SupportAssistance[] _offered = [SupportAssistance.None];
@@ -251,17 +271,53 @@ else
         if (Tab == _appliedTab) return;
 
         _appliedTab = Tab;
+        _wantedExtra = null;
+
         if (IndexOf(Tab) is { } index) _tab = index;
+        else if (!string.IsNullOrWhiteSpace(Tab)) _wantedExtra = Tab;
     }
 
-    private static int? IndexOf(string tab) => tab switch
+    private int? IndexOf(string tab)
     {
-        CasesTab => CasesIndex,
-        NewCaseTab => NewCaseIndex,
-        _ => null
-    };
+        if (tab == CasesTab) return CasesIndex;
+        if (tab == NewCaseTab) return NewCaseIndex;
 
-    private static string NameOf(int index) => index == NewCaseIndex ? NewCaseTab : CasesTab;
+        var extra = tab == null ? -1 : _extra.IndexOf(tab);
+        return extra < 0 ? null : FirstExtraIndex + extra;
+    }
+
+    private string NameOf(int index)
+    {
+        if (index == NewCaseIndex) return NewCaseTab;
+
+        var extra = index - FirstExtraIndex;
+        return extra >= 0 && extra < _extra.Count ? _extra[extra] : CasesTab;
+    }
+
+    /// <remarks>
+    /// The host's tabs register as they are drawn, which is after the first render has begun, so a <see cref="Tab"/> naming one is
+    /// remembered and applied the moment that tab turns up. A name that never turns up changes nothing.
+    /// </remarks>
+    void ISupportCasesTabHost.Add(string name)
+    {
+        if (name is CasesTab or NewCaseTab || _extra.Contains(name))
+            throw new InvalidOperationException($"A {nameof(SupportCasesExtraTab)} named '{name}' clashes with a tab that is already there; give it a name of its own.");
+
+        _extra.Add(name);
+
+        if (name != _wantedExtra) return;
+
+        _tab = FirstExtraIndex + _extra.Count - 1;
+        _wantedExtra = null;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    void ISupportCasesTabHost.Remove(string name)
+    {
+        _extra.Remove(name);
+
+        if (_tab >= FirstExtraIndex + _extra.Count) _tab = CasesIndex;
+    }
 
     private async Task OnTabSelectedAsync(int index)
     {
