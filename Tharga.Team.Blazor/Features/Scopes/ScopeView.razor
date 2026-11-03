@@ -55,7 +55,7 @@
                     <Items>
                         @foreach (var role in _allRoleNames)
                         {
-                            <RadzenSelectBarItem Text="@role" Value="@role" />
+                            <RadzenSelectBarItem Text="@ScopeReference.RoleText(RoleLabel, role)" Value="@role" />
                         }
                     </Items>
                 </RadzenSelectBar>
@@ -119,7 +119,7 @@
                             }
                             @foreach (var role in grant.ByRoles)
                             {
-                                <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Variant="Variant.Flat" Text="@role" class="rz-mr-1 rz-mb-1" />
+                                <RadzenBadge BadgeStyle="BadgeStyle.Secondary" Variant="Variant.Flat" Text="@ScopeReference.RoleText(RoleLabel, role)" class="rz-mr-1 rz-mb-1" />
                             }
                             @if (grant.ByOverride)
                             {
@@ -186,6 +186,17 @@
     /// host composes that list, or to render the page for a team other than the selected one.
     /// </remarks>
     [Parameter] public IReadOnlyList<TenantRoleDefinition> Roles { get; set; }
+
+    /// <summary>
+    /// The text to show for a role, given its identifier, so a host that names roles in its own language elsewhere can do the
+    /// same here.
+    /// </summary>
+    /// <remarks>
+    /// Only what is shown changes: the role bar items and the "Granted by" badges. The identifier stays the value the page matches
+    /// the member's assigned roles on, so what the member holds is still pre-selected. Left null, or returning nothing for a role,
+    /// the identifier is shown.
+    /// </remarks>
+    [Parameter] public Func<string, string> RoleLabel { get; set; }
 
     private static readonly ScopeGrant NotGranted = new(false, false, Array.Empty<string>(), false);
 

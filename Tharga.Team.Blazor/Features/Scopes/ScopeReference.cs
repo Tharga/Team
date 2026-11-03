@@ -150,6 +150,20 @@ public static class ScopeReference
     }
 
     /// <summary>
+    /// What to show for the role <paramref name="name"/>: the host's label for it, or the identifier itself when the host gave
+    /// none, gave an empty one, or supplied no <paramref name="label"/> at all.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only ever for display.</b> The identifier stays the value the page matches a member's assigned roles against, which is
+    /// why a host cannot get this by handing the page roles named by their label.
+    /// </remarks>
+    public static string RoleText(Func<string, string> label, string name)
+    {
+        var text = label?.Invoke(name);
+        return string.IsNullOrWhiteSpace(text) ? name : text;
+    }
+
+    /// <summary>
     /// Returns the system scopes the current principal actually holds: the registered system scopes
     /// (<paramref name="system"/>) whose name appears in the principal's granted <paramref name="userScopes"/>
     /// (its <c>Scope</c> claims). Not a full catalog — only what the user has. Ordered by name.
