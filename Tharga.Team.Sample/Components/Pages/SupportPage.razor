@@ -34,21 +34,23 @@
            rather than a read of the options so one page can ask for a subject while another does not. *@
         @* CaseId comes from the route, so a link in a Slack notification opens the conversation it is
            about rather than the list. That is what Slack:CaseUrl points at. *@
-        <SupportCasesView ShowSubject="false" CaseId="@CaseId" />
+        @* ExtraTabs puts the back-office queue beside the customer's own cases. The tab is there only for a caller
+           holding support:read: the service refuses without it either way, so this gate keeps a member from
+           meeting a refusal they can do nothing about, which is what gating rendering is for. The tab is named,
+           so /support?tab=queue opens it. *@
+        <SupportCasesView ShowSubject="false" CaseId="@CaseId">
+            <ExtraTabs>
+                @if (_canSeeQueue)
+                {
+                    <SupportCasesExtraTab Name="queue" Text="Support queue">
+                        <SupportQueueView />
+                    </SupportCasesExtraTab>
+                }
+            </ExtraTabs>
+        </SupportCasesView>
     </RadzenCard>
 
-    @if (_canSeeQueue)
-    {
-        <RadzenCard>
-            <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">As support</RadzenText>
-
-            @* Rendered only for a caller holding support:read. The service refuses without it either way —
-               this gate keeps a member from meeting a refusal they can do nothing about, which is what
-               gating rendering is for. *@
-            <SupportQueueView />
-        </RadzenCard>
-    }
-    else
+    @if (!_canSeeQueue)
     {
         <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
             The support queue needs <strong>support:read</strong> on the selected team. Grant it on the Scopes

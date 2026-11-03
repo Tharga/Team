@@ -1,0 +1,40 @@
+@namespace Tharga.Team.Blazor.Features.Support
+@implements IDisposable
+
+@* One tab a host adds to SupportCasesView, through its ExtraTabs parameter. It is a RadzenTabsItem that also tells the view its
+   name, so Tab, TabChanged and a ?tab= deep link treat it the same as the built-in two. *@
+<RadzenTabsItem Text="@Text" data-tab="@Name">
+    @ChildContent
+</RadzenTabsItem>
+
+@code {
+    /// <summary>
+    /// What <see cref="SupportCasesView.Tab"/> and <see cref="SupportCasesView.TabChanged"/> call this tab. Must be unique among the
+    /// tabs and must not be <see cref="SupportCasesView.CasesTab"/> or <see cref="SupportCasesView.NewCaseTab"/>.
+    /// </summary>
+    [Parameter, EditorRequired] public string Name { get; set; }
+
+    /// <summary>The tab's title.</summary>
+    [Parameter] public string Text { get; set; }
+
+    /// <summary>What the tab shows.</summary>
+    [Parameter] public RenderFragment ChildContent { get; set; }
+
+    [CascadingParameter] private ISupportCasesTabHost Host { get; set; }
+
+    private string _registered;
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrWhiteSpace(Name)) throw new InvalidOperationException($"{nameof(SupportCasesExtraTab)} needs a {nameof(Name)}.");
+        if (Host == null) throw new InvalidOperationException($"{nameof(SupportCasesExtraTab)} belongs inside the {nameof(SupportCasesView.ExtraTabs)} of a {nameof(SupportCasesView)}.");
+
+        Host.Add(Name);
+        _registered = Name;
+    }
+
+    public void Dispose()
+    {
+        if (_registered != null) Host?.Remove(_registered);
+    }
+}
