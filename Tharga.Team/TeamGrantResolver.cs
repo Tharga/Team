@@ -141,10 +141,26 @@ internal sealed class TeamGrantResolver
         if (member == null || member.SuspendedAt != null) return null;
         if (member.AccessLevel is not { } level) return null;
 
-        var scopes = _tenantRoleService != null
-            ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, level, member.TenantRoles, member.ScopeOverrides)
-            : _scopeRegistry?.GetEffectiveScopes(level, member.TenantRoles, member.ScopeOverrides) ?? [];
+        var scopes = await ResolveScopesAsync(teamKey, level, member.TenantRoles, member.ScopeOverrides);
 
         return new TeamGrant(level, [.. scopes], member.Key, IsMember: true);
+    }
+
+    /// <summary>
+    /// The scopes a holder of <paramref name="level"/>, <paramref name="roles"/> and <paramref name="overrides"/>
+    /// would have in <paramref name="teamKey"/>: the same composition a member's claims are issued from.
+    /// </summary>
+    /// <remarks>
+    /// <b>For asking "what would this grant carry" before it is made</b> (Tharga/Team#409): a granter's ceiling
+    /// compares this with what the granter holds. It lives here so that question is answered by the one
+    /// composition, not by a copy of it.
+    /// </remarks>
+    public async Task<IReadOnlyList<string>> ResolveScopesAsync(string teamKey, AccessLevel? level, IEnumerable<string> roles, IEnumerable<string> overrides)
+    {
+        var scopes = _tenantRoleService != null
+            ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, level, roles, overrides)
+            : _scopeRegistry?.GetEffectiveScopes(level, roles, overrides) ?? [];
+
+        return [.. scopes];
     }
 }

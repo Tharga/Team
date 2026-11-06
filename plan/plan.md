@@ -1,8 +1,8 @@
 # Plan: granting limited to what the granter holds (#409)
 
-Status: **waiting for the open decisions below.** No code yet.
+Status: **decisions approved 2026-11-06 (all five recommendations).** Step 1 in progress.
 
-## Open decisions (need an answer before step 1)
+## Decisions (approved: all recommendations taken)
 
 1. **Administrators and Owners.** Exempt from the subset rule (they hold every registered scope), but a grant-only scope is held by
    no level, so an Administrator does not hold it either. Does an Administrator granting a grant-only scope as an override to a

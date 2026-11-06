@@ -32,7 +32,10 @@ public class ApiKeyManagementOwnerScopeTests
         // A real principal carries the team beside its level, and the level only counts in that team.
         var claims = new List<Claim> { new(TeamClaimTypes.TeamKey, Team) };
         if (memberKey != null) claims.Add(new Claim(TeamClaimTypes.MemberKey, memberKey));
-        if (accessLevel != null) claims.Add(new Claim(TeamClaimTypes.AccessLevel, accessLevel));
+        // These tests are about who owns a key, not about what may be granted, so the caller is an Administrator
+        // unless a test says otherwise: a key with no level is one, and the grant ceiling (Tharga/Team#409) would
+        // otherwise refuse a caller with no level at all.
+        claims.Add(new Claim(TeamClaimTypes.AccessLevel, accessLevel ?? nameof(AccessLevel.Administrator)));
         if (overseer) claims.Add(new Claim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee));
 
         var accessor = Substitute.For<IHttpContextAccessor>();

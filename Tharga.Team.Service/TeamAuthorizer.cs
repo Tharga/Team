@@ -35,6 +35,9 @@ public sealed class TeamAuthorizer
         _identityResolver = identityResolver ?? UserIdentityResolver.Default;
     }
 
+    /// <summary>The caller's principal, for the checks that compare what they hold with what they would grant.</summary>
+    internal async ValueTask<ClaimsPrincipal> GetCallerAsync() => await _principalAccessor.GetCurrentAsync();
+
     /// <summary>True when there is an authenticated caller (any identity).</summary>
     public async ValueTask<bool> IsAuthenticatedAsync()
     {

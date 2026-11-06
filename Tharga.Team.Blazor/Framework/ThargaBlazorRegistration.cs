@@ -531,7 +531,11 @@ public static class ThargaBlazorRegistration
             var purgeCascade = sp.GetService<TeamPurgeCascade>();
             var consentOptions = sp.GetService<IOptions<ConsentOptions>>()?.Value;
             var memberRemovalCascade = sp.GetService<TeamMemberRemovalCascade>();
-            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade, consentOptions, memberRemovalCascade);
+            // Over the inner service, not resolved from the container: the default ITenantRoleService is built on
+            // ITeamService, which this factory is producing. Custom roles are read, never changed, so the
+            // authorization layer has nothing to add.
+            var tenantRoleService = new TenantRoleService(inner, scopeRegistry, tenantRoleRegistry);
+            return new AuthorizationTeamServiceDecorator(inner, authorizer, lifecycle, scopeRegistry, tenantRoleRegistry, dynamicRoleOptions?.ManageScope, purgeCascade, consentOptions, memberRemovalCascade, tenantRoleService);
         });
     }
 
