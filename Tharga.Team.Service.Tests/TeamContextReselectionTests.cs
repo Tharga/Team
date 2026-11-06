@@ -57,7 +57,11 @@ public class TeamContextReselectionTests
         var registry = Substitute.For<IScopeRegistry>();
         registry.GetEffectiveScopes(AccessLevel.Viewer, Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
             .Returns([TeamScopes.Read]);
+        registry.GetEffectiveScopes(AccessLevel.Viewer, Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
+            .Returns([TeamScopes.Read]);
         registry.GetEffectiveScopes(AccessLevel.Administrator, Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
+            .Returns([TeamScopes.Read, TeamScopes.MemberManage]);
+        registry.GetEffectiveScopes(AccessLevel.Administrator, Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
             .Returns([TeamScopes.Read, TeamScopes.MemberManage]);
 
         var context = new DefaultHttpContext { User = principal };

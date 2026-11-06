@@ -30,7 +30,10 @@ public class TenantRoleService : ITenantRoleService
             .ToList();
     }
 
-    public async Task<IReadOnlyList<string>> GetEffectiveScopesAsync(string teamKey, AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
+    public Task<IReadOnlyList<string>> GetEffectiveScopesAsync(string teamKey, AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
+        => GetEffectiveScopesAsync(teamKey, accessLevel, roleNames, scopeOverrides, PrincipalKind.Member);
+
+    public async Task<IReadOnlyList<string>> GetEffectiveScopesAsync(string teamKey, AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides, PrincipalKind kind)
     {
         // An unset level grants nothing; custom roles must not rescue it any more than code roles do.
         if (accessLevel is null) return [];
@@ -41,8 +44,10 @@ public class TenantRoleService : ITenantRoleService
         // twice.
         var overrideList = scopeOverrides?.ToArray();
 
-        var baseScopes = _scopeRegistry?.GetEffectiveScopes(accessLevel, roleNameList, overrideList)
-                         ?? (overrideList?.Distinct().ToArray() ?? (IReadOnlyList<string>)[]);
+        var baseScopes = (kind == PrincipalKind.Member
+                             ? _scopeRegistry?.GetEffectiveScopes(accessLevel, roleNameList, overrideList)
+                             : _scopeRegistry?.GetEffectiveScopes(accessLevel, roleNameList, overrideList, kind))
+                         ??(overrideList?.Distinct().ToArray() ?? (IReadOnlyList<string>)[]);
 
         var customRoles = await _teamService.GetTeamCustomRolesAsync(teamKey);
         var customScopes = customRoles

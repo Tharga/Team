@@ -268,8 +268,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             var (accessLevel, roleNames, scopeOverrides) = ResolveKeyDetails(key);
 
             IEnumerable<string> scopes = _tenantRoleService != null
-                ? await _tenantRoleService.GetEffectiveScopesAsync(key.TeamKey, accessLevel, roleNames, scopeOverrides)
-                : _scopeRegistry?.GetEffectiveScopes(accessLevel, roleNames, scopeOverrides) ?? [];
+                ? await _tenantRoleService.GetEffectiveScopesAsync(key.TeamKey, accessLevel, roleNames, scopeOverrides, PrincipalKind.ApiKey)
+                : _scopeRegistry?.GetEffectiveScopes(accessLevel, roleNames, scopeOverrides, PrincipalKind.ApiKey) ?? [];
 
             if (ownerGrant != null)
             {

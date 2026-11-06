@@ -37,6 +37,21 @@ public class ScopeReferenceTests
         Assert.True(row.GrantOnly);
     }
 
+    /// <summary>The page marks a members-only scope, so a key missing it is not read as a defect (Tharga/Team#412).</summary>
+    [Fact]
+    public void AMembersOnlyScope_IsMarkedOnItsRow_AndStillListsItsLevels()
+    {
+        var (scopes, roles) = BuildRegistries();
+        scopes.Register("case:write", AccessLevel.User, "Write cases.", ScopePrincipals.Members);
+        scopes.Register("case:look", AccessLevel.User, "Look at cases.");
+
+        var rows = ScopeReference.Build(scopes, roles);
+
+        Assert.Equal(ScopePrincipals.Members, Row(rows, "case:write").AppliesTo);
+        Assert.Equal(ScopePrincipals.All, Row(rows, "case:look").AppliesTo);
+        Assert.Contains(AccessLevel.User, Row(rows, "case:write").AccessLevels);
+    }
+
     [Fact]
     public void GrantOnlyScope_IsGrantedByNoAccessLevel()
     {
