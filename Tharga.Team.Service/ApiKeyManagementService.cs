@@ -15,12 +15,16 @@ public class ApiKeyManagementService : IApiKeyManagementService
     private readonly IApiKeyAdministrationService _inner;
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ApiKeyOwnership _ownership;
+    private readonly ITeamPrincipalAccessor _principalAccessor;
+    private readonly GrantCeiling _ceiling;
 
-    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null)
+    public ApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null, IScopeRegistry scopeRegistry = null, ITenantRoleService tenantRoleService = null, ITeamPrincipalAccessor principalAccessor = null)
     {
         _inner = inner;
         _httpContextAccessor = httpContextAccessor;
         _ownership = options?.Value?.TeamKeys ?? ApiKeyOwnership.Both;
+        _principalAccessor = principalAccessor;
+        _ceiling = new GrantCeiling(scopeRegistry, tenantRoleService);
     }
 
     public async IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false)
@@ -52,8 +56,15 @@ public class ApiKeyManagementService : IApiKeyManagementService
         }
     }
 
-    public Task<IApiKey> CreateKeyAsync(string teamKey, string name, AccessLevel accessLevel, string[] roles = null, string[] scopeOverrides = null, DateTime? expiryDate = null, IReadOnlyList<Tag> tags = null, bool ownerScoped = false)
+    public async Task<IApiKey> CreateKeyAsync(string teamKey, string name, AccessLevel accessLevel, string[] roles = null, string[] scopeOverrides = null, DateTime? expiryDate = null, IReadOnlyList<Tag> tags = null, bool ownerScoped = false)
     {
+        // A key is never an Owner: ownership is a person's, moved by transfer, and a credential that carries it
+        // cannot be traced to anyone who could be asked to give it up.
+        if (accessLevel == AccessLevel.Owner)
+            throw new InvalidOperationException("An API key cannot be given the Owner level. Use Administrator, or a narrower level with roles and scope overrides.");
+
+        await _ceiling.EnsureCanGrantAsync(await GetCallerAsync(), teamKey, accessLevel, roles, scopeOverrides, oversightExempts: true);
+
         ownerScoped = ApplyOwnership(_ownership, ownerScoped, "team");
 
         string ownerMemberKey = null;
@@ -64,7 +75,7 @@ public class ApiKeyManagementService : IApiKeyManagementService
                 ?? throw new InvalidOperationException("Cannot create an owner-scoped API key: the caller has no team-member context.");
         }
 
-        return _inner.CreateKeyAsync(teamKey, name, accessLevel, roles, scopeOverrides, expiryDate, tags, GetCurrentUserIdentity(), ownerMemberKey);
+        return await _inner.CreateKeyAsync(teamKey, name, accessLevel, roles, scopeOverrides, expiryDate, tags, GetCurrentUserIdentity(), ownerMemberKey);
     }
 
     public async Task<IApiKey> RefreshKeyAsync(string teamKey, string key)
@@ -93,21 +104,25 @@ public class ApiKeyManagementService : IApiKeyManagementService
 
     public async Task SetScopeOverridesAsync(string teamKey, string key, string[] scopes)
     {
-        await EnsureCanMutateAsync(teamKey, key);
+        var target = await EnsureCanMutateAsync(teamKey, key);
+        await _ceiling.EnsureCanGrantAsync(await GetCallerAsync(), teamKey, LevelOf(target), target?.Roles, scopes, oversightExempts: true);
         await _inner.SetScopeOverridesAsync(teamKey, key, scopes);
     }
 
     public async Task SetRolesAsync(string teamKey, string key, string[] roles)
     {
-        await EnsureCanMutateAsync(teamKey, key);
+        var target = await EnsureCanMutateAsync(teamKey, key);
+        await _ceiling.EnsureCanGrantAsync(await GetCallerAsync(), teamKey, LevelOf(target), roles, target?.ScopeOverrides, oversightExempts: true);
         await _inner.SetRolesAsync(teamKey, key, roles);
     }
 
     /// <summary>
-    /// Guards mutation of an owner-scoped (private) key: only the owner, or a caller with oversight (audit
-    /// escape), may recycle/lock/delete/edit it. Team-wide keys (and unknown keys) pass through.
+    /// Guards mutation of a key. Two rules: an owner-scoped (private) key is only its owner's, or an overseer's;
+    /// and a key that holds more than the caller cannot be recycled, locked, disabled, deleted or re-scoped by
+    /// them (Tharga/Team#409) - refreshing one would hand the caller its secret. Unknown keys pass through, the
+    /// inner service handles validity. Returns the key, or null when unknown.
     /// </summary>
-    private async Task EnsureCanMutateAsync(string teamKey, string key)
+    private async Task<IApiKey> EnsureCanMutateAsync(string teamKey, string key)
     {
         IApiKey target = null;
         await foreach (var k in _inner.GetKeysAsync(teamKey))
@@ -115,14 +130,28 @@ public class ApiKeyManagementService : IApiKeyManagementService
             if (k.Key == key) { target = k; break; }
         }
 
-        if (target == null || string.IsNullOrEmpty(target.OwnerMemberKey)) return; // not private — inner handles ownership/validity
+        if (target == null) return null;
 
-        var callerMemberKey = GetCallerMemberKey();
-        var isOwner = callerMemberKey != null && target.OwnerMemberKey == callerMemberKey;
-        if (isOwner || CanOversee()) return;
+        if (!string.IsNullOrEmpty(target.OwnerMemberKey))
+        {
+            var callerMemberKey = GetCallerMemberKey();
+            var isOwner = callerMemberKey != null && target.OwnerMemberKey == callerMemberKey;
+            if (!isOwner && !CanOversee())
+                throw new UnauthorizedAccessException("This API key is private to another member and can only be managed by its owner.");
+        }
 
-        throw new UnauthorizedAccessException("This API key is private to another member and can only be managed by its owner.");
+        await _ceiling.EnsureCanChangeAsync(await GetCallerAsync(), teamKey, LevelOf(target), target.Roles, target.ScopeOverrides, oversightExempts: true);
+
+        return target;
     }
+
+    /// <summary>A key with no level is an Administrator (see <see cref="IApiKey.AccessLevel"/>), so it is checked as one.</summary>
+    private static AccessLevel LevelOf(IApiKey key) => key?.AccessLevel ?? AccessLevel.Administrator;
+
+    /// <summary>The caller: from the team principal accessor (a Blazor circuit has no request), else the request.</summary>
+    private async ValueTask<ClaimsPrincipal> GetCallerAsync()
+        => (_principalAccessor != null ? await _principalAccessor.GetCurrentAsync() : null)
+           ?? _httpContextAccessor?.HttpContext?.User;
 
     /// <summary>
     /// Whether a new key is personal, once the host's <see cref="ApiKeyOwnership"/> has had its say.

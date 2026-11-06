@@ -110,6 +110,33 @@ internal static class TeamScopePolicy
             .FirstOrDefault(value => !string.IsNullOrEmpty(value));
     }
 
+    /// <summary>
+    /// Every scope the caller holds <b>for</b> <paramref name="teamKey"/>, read as <see cref="HasTeamScope"/> reads one.
+    /// Empty when the caller's team is another.
+    /// </summary>
+    public static IReadOnlySet<string> TeamScopesFor(ClaimsPrincipal principal, string teamKey)
+    {
+        if (principal == null || string.IsNullOrEmpty(teamKey)) return new HashSet<string>();
+
+        var callerTeam = principal.FindFirst(TeamClaimTypes.TeamKey)?.Value;
+        if (string.IsNullOrEmpty(callerTeam) || callerTeam != teamKey) return new HashSet<string>();
+
+        return IdentitiesFor(principal, teamKey)
+            .SelectMany(identity => identity.FindAll(TeamClaimTypes.Scope))
+            .Select(c => c.Value)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>The caller's member key in <paramref name="teamKey"/>, read from the identity issued for it; null for a key or consent.</summary>
+    public static string MemberKeyFor(ClaimsPrincipal principal, string teamKey)
+    {
+        if (principal == null || string.IsNullOrEmpty(teamKey)) return null;
+
+        return IdentitiesFor(principal, teamKey)
+            .Select(identity => identity.FindFirst(TeamClaimTypes.MemberKey)?.Value)
+            .FirstOrDefault(v => !string.IsNullOrEmpty(v));
+    }
+
     /// <summary>The identities on <paramref name="principal"/> that were issued for <paramref name="teamKey"/>.</summary>
     private static IEnumerable<ClaimsIdentity> IdentitiesFor(ClaimsPrincipal principal, string teamKey)
         => principal.Identities.Where(identity => identity.HasClaim(TeamClaimTypes.TeamKey, teamKey));

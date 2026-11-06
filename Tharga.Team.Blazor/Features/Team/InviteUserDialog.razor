@@ -6,6 +6,7 @@
 @inject ITeamManagementService TeamManagementService
 @inject IServiceProvider ServiceProvider
 @inject IThargaTextProvider TextProvider
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
 @inject Microsoft.Extensions.Options.IOptions<Tharga.Team.Blazor.Framework.ThargaBlazorOptions> BlazorOptions
 
 <RadzenTemplateForm TItem="InviteUserModel" Data=@Model Submit=@OnSubmit Style="height: 100%;">
@@ -85,6 +86,11 @@
         // (a Custom member with no editable grants would be locked out). Keys surface it in ApiKeyView.
         _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.Apply(
             Tharga.Team.Blazor.Framework.AccessLevelVisibility.Member, BlazorOptions.Value.HiddenAccessLevels);
+        // Only the levels this caller may hand out (Tharga/Team#409); the service refuses the rest regardless.
+        var caller = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.ForGranter(_accessLevels,
+            Tharga.Team.Service.TeamScopePolicy.AccessLevelFor(caller, TeamKey));
+        if (_accessLevels.Length > 0 && !_accessLevels.Contains(Model.AccessLevel ?? AccessLevel.User)) Model.AccessLevel = _accessLevels[0];
         _emailSenderAvailable = ServiceProvider.GetService<ITeamEmailSender>() != null;
 
         await base.OnInitializedAsync();

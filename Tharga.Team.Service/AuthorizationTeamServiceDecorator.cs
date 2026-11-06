@@ -31,9 +31,11 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     private readonly ITenantRoleRegistry _tenantRoleRegistry;
     private readonly string _customRoleManageScope;
     private readonly ConsentOptions _consent;
+    private readonly GrantCeiling _ceiling;
 
-    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null, TeamPurgeCascade purgeCascade = null, ConsentOptions consentOptions = null, TeamMemberRemovalCascade memberRemovalCascade = null)
+    public AuthorizationTeamServiceDecorator(ITeamService inner, TeamAuthorizer authorizer, TeamLifecycleOptions lifecycle, IScopeRegistry scopeRegistry = null, ITenantRoleRegistry tenantRoleRegistry = null, string customRoleManageScope = null, TeamPurgeCascade purgeCascade = null, ConsentOptions consentOptions = null, TeamMemberRemovalCascade memberRemovalCascade = null, ITenantRoleService tenantRoleService = null)
     {
+        _ceiling = new GrantCeiling(scopeRegistry, tenantRoleService);
         _memberRemovalCascade = memberRemovalCascade;
         _consent = consentOptions ?? new ConsentOptions();
         _inner = inner;
@@ -253,12 +255,14 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     public async Task AddMemberAsync(string teamKey, InviteUserModel model)
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
+        await _ceiling.EnsureCanGrantAsync(await _authorizer.GetCallerAsync(), teamKey, model?.AccessLevel, [], [], oversightExempts: false);
         await _inner.AddMemberAsync(teamKey, model);
     }
 
     public async Task RemoveMemberAsync(string teamKey, string userKey)
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
+        await GuardMemberAsync(teamKey, userKey, selfEdit: false);
         await _inner.RemoveMemberAsync(teamKey, userKey);
         if (_memberRemovalCascade != null) await _memberRemovalCascade.RunAsync(teamKey, userKey);
     }
@@ -291,12 +295,15 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     public async Task SetMemberRoleAsync(string teamKey, string userKey, AccessLevel accessLevel)
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
+        var target = await GuardMemberAsync(teamKey, userKey, selfEdit: true);
+        await _ceiling.EnsureCanGrantAsync(await _authorizer.GetCallerAsync(), teamKey, accessLevel, target?.TenantRoles, target?.ScopeOverrides, oversightExempts: false);
         await _inner.SetMemberRoleAsync(teamKey, userKey, accessLevel);
     }
 
     public async Task SetMemberSuspendedAsync(string teamKey, string userKey, bool suspended)
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
+        await GuardMemberAsync(teamKey, userKey, selfEdit: false);
         await _inner.SetMemberSuspendedAsync(teamKey, userKey, suspended);
     }
 
@@ -309,12 +316,16 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     public async Task SetMemberTenantRolesAsync(string teamKey, string userKey, string[] tenantRoles)
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
+        var target = await GuardMemberAsync(teamKey, userKey, selfEdit: true);
+        await _ceiling.EnsureCanGrantAsync(await _authorizer.GetCallerAsync(), teamKey, target?.AccessLevel, tenantRoles, target?.ScopeOverrides, oversightExempts: false);
         await _inner.SetMemberTenantRolesAsync(teamKey, userKey, tenantRoles);
     }
 
     public async Task SetMemberScopeOverridesAsync(string teamKey, string userKey, string[] scopeOverrides)
     {
         await RequireTeamScopeAsync(TeamScopes.MemberManage, teamKey);
+        var target = await GuardMemberAsync(teamKey, userKey, selfEdit: true);
+        await _ceiling.EnsureCanGrantAsync(await _authorizer.GetCallerAsync(), teamKey, target?.AccessLevel, target?.TenantRoles, scopeOverrides, oversightExempts: false);
         await _inner.SetMemberScopeOverridesAsync(teamKey, userKey, scopeOverrides);
     }
 
@@ -408,6 +419,29 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
             $"Deleting team '{teamKey}' requires being its owner, with AllowTeamCreation enabled, " +
             $"or the '{SystemTeamScopes.Delete}' system scope. " +
             $"'{TeamScopes.Manage}' on the team is no longer sufficient on its own.");
+    }
+
+    /// <summary>
+    /// The member being acted on, after the two rules that concern the <i>target</i> (Tharga/Team#409): a member
+    /// who holds more than the caller is not the caller's to change, and nobody below Owner raises their own row
+    /// through <c>member:manage</c>. Null when the member is unknown, which the inner service reports.
+    /// </summary>
+    private async Task<ITeamMember> GuardMemberAsync(string teamKey, string userKey, bool selfEdit)
+    {
+        var target = await _inner.GetTeamMemberAsync(teamKey, userKey);
+        if (target == null) return null;
+
+        var caller = await _authorizer.GetCallerAsync();
+
+        if (selfEdit
+            && TeamScopePolicy.AccessLevelFor(caller, teamKey) != AccessLevel.Owner
+            && !string.IsNullOrEmpty(target.Key)
+            && target.Key == TeamScopePolicy.MemberKeyFor(caller, teamKey))
+            throw new UnauthorizedAccessException("You cannot change your own level, roles or scopes. Ask the Owner, or another Administrator, to do it.");
+
+        await _ceiling.EnsureCanChangeAsync(caller, teamKey, target.AccessLevel, target.TenantRoles, target.ScopeOverrides, oversightExempts: false);
+
+        return target;
     }
 
     private async Task RequireTeamScopeAsync(string scope, string teamKey)
