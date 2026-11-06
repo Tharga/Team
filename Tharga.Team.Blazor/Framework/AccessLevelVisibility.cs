@@ -65,6 +65,23 @@ public static class AccessLevelVisibility
     }
 
     /// <summary>
+    /// The levels <paramref name="granter"/> may hand out from <paramref name="offered"/>: all of them for an Owner or
+    /// Administrator (or <paramref name="exempt"/>), and for anyone else nothing at Administrator or Owner. Order is preserved.
+    /// </summary>
+    /// <remarks>
+    /// <b>A convenience, not the rule.</b> The services refuse a grant above the granter's whatever the UI offers
+    /// (Tharga/Team#409); this only keeps the picker from offering what would be refused. A level below
+    /// Administrator can still carry scopes the granter lacks, which the service names when it refuses.
+    /// </remarks>
+    public static AccessLevel[] ForGranter(IReadOnlyList<AccessLevel> offered, AccessLevel? granter, bool exempt = false)
+    {
+        if (offered == null) return [];
+        if (exempt || granter is AccessLevel.Owner or AccessLevel.Administrator) return [.. offered];
+
+        return [.. offered.Where(level => level is not (AccessLevel.Owner or AccessLevel.Administrator))];
+    }
+
+    /// <summary>
     /// The levels <paramref name="offered"/> minus anything the host hid. Order is preserved.
     /// </summary>
     public static AccessLevel[] Apply(IReadOnlyList<AccessLevel> offered, IEnumerable<AccessLevel> hidden)

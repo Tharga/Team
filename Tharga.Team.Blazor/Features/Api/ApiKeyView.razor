@@ -346,6 +346,12 @@ else
                      || TeamScopeGate.HasTeamScope(user, ApiKeyScopes.Manage, _selectedTeam.Key);
         if (!_hasAccess) { _teamLoaded = true; await base.OnInitializedAsync(); return; }
 
+        // Only the levels this caller may hand out (Tharga/Team#409). An overseer is exempt, as in the service.
+        _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.ForGranter(_accessLevels,
+            _selectedTeam == null ? null : Tharga.Team.Service.TeamScopePolicy.AccessLevelFor(user, _selectedTeam.Key),
+            exempt: Tharga.Team.Service.TeamScopePolicy.HasSystemScope(user, SystemApiKeyScopes.Oversee));
+        if (_accessLevels.Length > 0 && !_accessLevels.Contains(_newAccessLevel)) _newAccessLevel = _accessLevels[0];
+
         _scopeRegistry = ServiceProvider.GetService<IScopeRegistry>();
         _allScopeNames = _scopeRegistry?.All.Where(s => !s.GrantOnly).Select(s => s.Name).ToArray() ?? Array.Empty<string>();
         _scopeDescriptions = _scopeRegistry?.All.ToDictionary(s => s.Name, s => s.Description) ?? new Dictionary<string, string>();

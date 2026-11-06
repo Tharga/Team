@@ -1479,6 +1479,34 @@ Cleanup goes through `IApiKeyAdministrationService`, so it covers a custom key s
 
 The hook is public: implement `ITeamMemberRemovalParticipant` and register it with `services.TryAddEnumerable(ServiceDescriptor.Transient<ITeamMemberRemovalParticipant, MyCleanup>())` to clean up your own per-member data the same way.
 
+### Granting is limited to what the granter holds
+
+`apikey:manage` and `member:manage` say a caller may *administer* keys and members. They do not say how much
+the caller may give. Since 4.x a caller who is not an **Owner or Administrator of the team** can only hand
+out what they hold themselves on that team, and holders of `apikeys:oversee` are exempt for keys.
+
+| What | Rule |
+|---|---|
+| Create a key; set a key's roles or scope overrides | What the key would hold (level, roles and overrides, composed the way its claims are) must be a subset of the caller's scopes on that team |
+| Invite a member; change a member's level, roles or scope overrides | The same subset rule. Nobody below Administrator grants the Administrator or Owner level |
+| Refresh, lock, disable, delete or re-scope a key; suspend, remove or change a member | Refused when the target holds more than the caller. Refreshing a key would otherwise hand over its secret |
+| Change **your own** level, roles or overrides through `member:manage` | Refused for everyone below Owner |
+| Create a key at the Owner level | Refused for everyone. A key is not a person; ownership moves by transfer |
+| A scope override that is not a registered scope | Refused for everyone, Administrators included |
+
+An Administrator may still grant a **grant-only** scope as an override: no level holds one, so a subset rule
+would make it ungrantable. It must be a registered name.
+
+A refusal says which scopes the caller lacks, for example *"This would grant scopes you do not hold yourself:
+orders:approve. You can only grant what you hold."* The level pickers in `ApiKeyView` and the invite dialog
+offer only the levels the caller may hand out; the services refuse regardless of what a UI offers, so a custom
+UI or a REST call cannot get around it.
+
+**Behavior change for hosts.** If you handed `member:manage` or `apikey:manage` to a level below
+Administrator, or to a role or an override, and relied on those holders raising others (or themselves) past
+their own access, they will now see refusals. Grant the scopes the holder should be able to hand out, or
+leave the raising to an Administrator.
+
 ### Verification
 
 Create an API key via the UI, then call your API with `X-API-KEY: <key>` header. The request should authenticate successfully.
