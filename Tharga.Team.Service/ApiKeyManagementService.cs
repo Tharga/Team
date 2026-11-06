@@ -24,7 +24,7 @@ public class ApiKeyManagementService : IApiKeyManagementService
         _httpContextAccessor = httpContextAccessor;
         _ownership = options?.Value?.TeamKeys ?? ApiKeyOwnership.Both;
         _principalAccessor = principalAccessor;
-        _ceiling = new GrantCeiling(scopeRegistry, tenantRoleService);
+        _ceiling = new GrantCeiling(scopeRegistry, tenantRoleService, PrincipalKind.ApiKey);
     }
 
     public async IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false)

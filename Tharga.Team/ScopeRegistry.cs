@@ -58,6 +58,21 @@ public class ScopeRegistry : IScopeRegistry
     }
 
     /// <summary>
+    /// Registers a scope shown under <paramref name="group"/> that the access level grants to <paramref name="appliesTo"/>
+    /// only. <see cref="ScopePrincipals.Members"/> keeps it from API keys at the level (Tharga/Team#412).
+    /// </summary>
+    public void Register(string scopeName, AccessLevel defaultMinimumLevel, string description, string group, ScopePrincipals appliesTo)
+    {
+        Add(new ScopeDefinition(scopeName, defaultMinimumLevel, description, false, group, appliesTo));
+    }
+
+    /// <summary>Registers an ungrouped scope that the access level grants to <paramref name="appliesTo"/> only.</summary>
+    public void Register(string scopeName, AccessLevel defaultMinimumLevel, string description, ScopePrincipals appliesTo)
+    {
+        Add(new ScopeDefinition(scopeName, defaultMinimumLevel, description, false, null, appliesTo));
+    }
+
+    /// <summary>
     /// Registers a scope that no access level grants. The entry exists for documentation and validation:
     /// the scope appears in the catalogue with its description and can be validated against, but it is
     /// exempt from the Owner/Administrator all-scopes rule, rejected in tenant-defined custom roles, and
@@ -98,6 +113,9 @@ public class ScopeRegistry : IScopeRegistry
     }
 
     public IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel? accessLevel)
+        => GetScopesForAccessLevel(accessLevel, PrincipalKind.Member);
+
+    public IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel? accessLevel, PrincipalKind kind)
     {
         // First, and explicit. The lifted comparisons below already fail closed for null, but by accident: an
         // accident that happens to be correct is not a guarantee, and before 4.0 this value was Owner.
@@ -112,7 +130,9 @@ public class ScopeRegistry : IScopeRegistry
         // Filtered before both branches, not just the all-scopes one: a grant-only scope carries
         // DefaultMinimumLevel = Custom, which the fall-through comparison below would satisfy for User
         // and Viewer alike.
-        var granted = _scopes.Where(s => !s.GrantOnly);
+        // A members-only scope is not the level's to give an API key (Tharga/Team#412). Only the level's share is
+        // cut: a role or an override naming it still reaches the key, because that is someone deciding.
+        var granted = _scopes.Where(s => !s.GrantOnly && (kind == PrincipalKind.Member || s.AppliesTo == ScopePrincipals.All));
 
         if (accessLevel <= AccessLevel.Administrator)
             return granted.Select(s => s.Name).ToList();
@@ -124,11 +144,14 @@ public class ScopeRegistry : IScopeRegistry
     }
 
     public IReadOnlyList<string> GetEffectiveScopes(AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null)
+        => GetEffectiveScopes(accessLevel, roleNames, scopeOverrides, PrincipalKind.Member);
+
+    public IReadOnlyList<string> GetEffectiveScopes(AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides, PrincipalKind kind)
     {
         if (accessLevel is null)
             return Array.Empty<string>();
 
-        var accessLevelScopes = GetScopesForAccessLevel(accessLevel);
+        var accessLevelScopes = GetScopesForAccessLevel(accessLevel, kind);
 
         var roleScopes = _roleRegistry != null && roleNames != null
             ? _roleRegistry.GetScopesForRoles(roleNames)

@@ -112,6 +112,8 @@ public class TeamContextEndToEndTests
                     var registry = Substitute.For<IScopeRegistry>();
                     registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
                         .Returns(["audit:read"]);
+                    registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
+                        .Returns(["audit:read"]);
                     services.AddScoped(_ => registry);
 
                     services.AddScoped<TeamContextResolver>();

@@ -42,6 +42,8 @@ public class ConsentExpiryReadsTests
         var registry = Substitute.For<IScopeRegistry>();
         registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
             .Returns(call => [$"level:{call.ArgAt<AccessLevel>(0)}"]);
+        registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
+            .Returns(call => [$"level:{call.ArgAt<AccessLevel>(0)}"]);
         return registry;
     }
 
