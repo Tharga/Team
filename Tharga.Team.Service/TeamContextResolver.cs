@@ -36,6 +36,17 @@ public sealed record TeamContext(string TeamKey, IReadOnlyList<string> Scopes, T
     /// </remarks>
     public string MemberKey { get; init; }
 
+    /// <summary>
+    /// The level the caller holds in <see cref="TeamKey"/> (membership, or the consented level), or null when the
+    /// caller's own claims already carry it (Tharga/Team#416).
+    /// </summary>
+    /// <remarks>
+    /// Issued as a claim beside the scopes. Without it a request naming another team had scopes but no level, so
+    /// everything that reads the level (<c>AccessLevelProxy</c>, an owner check) refused it, though the caller's level
+    /// there would have allowed it.
+    /// </remarks>
+    public AccessLevel? AccessLevel { get; init; }
+
     internal static TeamContext None { get; } = new(null, null, TeamContextRefusal.None);
     internal static TeamContext Refused(TeamContextRefusal reason) => new(null, null, reason);
 }
@@ -132,7 +143,7 @@ public sealed class TeamContextResolver
 
             return grant == null
                 ? TeamContext.Refused(TeamContextRefusal.NotConsented)
-                : new TeamContext(headerTeamKey, grant.Scopes, TeamContextRefusal.None) { MemberKey = grant.MemberKey };
+                : new TeamContext(headerTeamKey, grant.Scopes, TeamContextRefusal.None) { MemberKey = grant.MemberKey, AccessLevel = grant.AccessLevel };
         }
 
         var team = await _teamService.GetTeamByKeyAsync(headerTeamKey);
@@ -149,6 +160,6 @@ public sealed class TeamContextResolver
             ? await _tenantRoleService.GetEffectiveScopesAsync(headerTeamKey, level, [], [])
             : _scopeRegistry?.GetEffectiveScopes(level, [], []) ?? [];
 
-        return new TeamContext(headerTeamKey, [.. scopes], TeamContextRefusal.None);
+        return new TeamContext(headerTeamKey, [.. scopes], TeamContextRefusal.None) { AccessLevel = level };
     }
 }
