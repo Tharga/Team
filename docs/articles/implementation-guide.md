@@ -617,6 +617,11 @@ X-Team-Key: ABC123
 | `success` | `true`/`false` |
 | `skip`, `take` | Paging; `take` is capped at 500 |
 
+When a request names another team this way, the caller's claims are replaced with that team's: its key, scopes,
+member key (for a member) **and access level**. The level is the one held there, as a member or as the consented
+level, so checks that read the level (`AccessLevelProxy`, an owner check) answer for the named team rather than
+refusing the request for having none.
+
 ### Authorization is on the services, not on any surface
 
 Reading audit goes through two registered services, and **no surface authorizes anything itself**:

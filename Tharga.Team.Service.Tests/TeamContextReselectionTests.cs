@@ -100,9 +100,20 @@ public class TeamContextReselectionTests
 
         Assert.Equal([TeamB], user.FindAll(TeamClaimTypes.TeamKey).Select(c => c.Value));
         Assert.Equal(["member-b"], user.FindAll(TeamClaimTypes.MemberKey).Select(c => c.Value));
-        Assert.DoesNotContain(user.Claims, c => c.Type == TeamClaimTypes.AccessLevel);
+        // The level in the team now acted on, not the one in the team left (Tharga/Team#416).
+        Assert.Equal([nameof(AccessLevel.Administrator)], user.FindAll(TeamClaimTypes.AccessLevel).Select(c => c.Value));
         Assert.False(user.IsInRole("TeamViewer"));
         Assert.False(user.IsInRole("TeamMember"));
+    }
+
+    /// <summary>The level is read in the named team only: an access-level check sees it, and not the old team's.</summary>
+    [Fact]
+    public async Task NamingAnotherTeam_CarriesTheLevelHeldThere()
+    {
+        var (context, _) = await RunAsync(ViewerOnTeamA(), TeamB);
+
+        Assert.Equal(AccessLevel.Administrator, TeamScopePolicy.AccessLevelFor(context.User, TeamB));
+        Assert.Null(TeamScopePolicy.AccessLevelFor(context.User, TeamA));
     }
 
     /// <summary>What does not describe a team stays: the subject, app roles and system grants.</summary>
