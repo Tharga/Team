@@ -31,6 +31,7 @@ public class SupportEmailRegistrationTests
         o.Email.Timeout = TimeSpan.FromSeconds(45);
         o.Email.PerCaseReplyTo = true;
         o.Email.Recipients = ["example.net"];
+        o.Email.SenderRules = [new MailSenderRule { Senders = ["noreply@example.com"], Action = MailSenderAction.Close }];
         o.Email.MaxAttachmentBytes = 10;
         o.Email.MaxAttachmentTotalBytes = 20;
         o.Email.MaxAttachmentCount = 3;
@@ -56,6 +57,7 @@ public class SupportEmailRegistrationTests
         Assert.Equal(TimeSpan.FromSeconds(45), options.Timeout);
         Assert.True(options.PerCaseReplyTo);
         Assert.Equal(["example.net"], options.Recipients);
+        Assert.Equal(MailSenderAction.Close, Assert.Single(options.SenderRules).Action);
     }
 
     /// <summary>
