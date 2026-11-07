@@ -73,6 +73,18 @@ public class MailOptions
     /// </remarks>
     public string[] Recipients { get; set; } = [];
 
+    /// <summary>
+    /// Senders whose mail is not a support case, each with the action to take. Empty by default: every sender is
+    /// handled as today.
+    /// </summary>
+    /// <remarks>
+    /// <b>Per mailbox</b>, like the rest of these options, so a rule on the primary mailbox says nothing about an
+    /// added one. The first rule that names the sender decides. Bindable from configuration, for example a rule
+    /// with <c>Senders</c> of <c>noreply-dmarc-support@google.com</c> and <c>Action</c> of <c>Ignore</c>.
+    /// See <see cref="MailSenderRule"/>.
+    /// </remarks>
+    public MailSenderRule[] SenderRules { get; set; } = [];
+
     /// <summary>Where a mailbox with no read position starts: only mail delivered on or after this date. Unset reads everything.</summary>
     /// <remarks>
     /// <b>Set it when connecting a mailbox that already holds mail</b>, or the first reads turn every message it

@@ -25,6 +25,12 @@ public static class SupportCaseActors
     public const string AutoClose = "system:auto-close";
 
     /// <summary>
+    /// Recorded as <see cref="SupportCase.ClosedBy"/> when a support mailbox stored a case already closed because
+    /// its sender matched a sender rule that closes (Tharga/Team#449).
+    /// </summary>
+    public const string SenderRule = "system:sender-rule";
+
+    /// <summary>
     /// The display name recorded against an answer an assistant wrote.
     /// </summary>
     /// <remarks>

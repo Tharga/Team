@@ -79,6 +79,18 @@ internal sealed class EmailEventHandler(
             return EmailHandlingOutcome.Ignored("already handled");
         }
 
+        // After the ledger, so the mail is not reconsidered, and before anything is created, so a rule that
+        // silences a sender cannot leave a case behind or announce one (Tharga/Team#449).
+        var rule = (mailOptions.SenderRules ?? []).FirstOrDefault(x => x != null && x.Matches(mail.From));
+        if (rule != null)
+        {
+            logger?.LogInformation("Applied the sender rule {Action} to a mail from {Sender} to the support mailbox {Mailbox}.", rule.Action, mail.From, mailbox.Name);
+
+            return rule.Action == MailSenderAction.Close
+                ? await RaiseAsync(mail, mailbox, cancellationToken, closed: true)
+                : EmailHandlingOutcome.Ignored("sender rule");
+        }
+
         var supportCase = await MatchAsync(mail, mailOptions, cancellationToken);
 
         // Mail that belongs to no existing case is somebody asking for help for the first time, so it opens
@@ -244,13 +256,20 @@ internal sealed class EmailEventHandler(
     /// host's, by decision.
     /// </para>
     /// </remarks>
-    private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, SupportMailbox mailbox, CancellationToken cancellationToken)
+    /// <remarks>
+    /// <paramref name="closed"/> stores the case already closed, for a sender rule that keeps a record. It is
+    /// unassigned and unattributed without looking the sender up, and it announces nothing: a case that was never
+    /// open is not <see cref="SupportCaseChange.Raised"/>, which is the point of the rule.
+    /// </remarks>
+    private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, SupportMailbox mailbox, CancellationToken cancellationToken, bool closed = false)
     {
         var text = QuotedText.Trim(mail.Body, out var textCut);
 
         if (IsEmpty(mail, text)) return EmailHandlingOutcome.Ignored("empty body");
 
-        var placement = SupportSenderPlacement.Decide(mail.SenderVerified, await SendersAsync(mail.From, cancellationToken));
+        var placement = closed
+            ? SupportSenderPlacement.Decide(false, [])
+            : SupportSenderPlacement.Decide(mail.SenderVerified, await SendersAsync(mail.From, cancellationToken));
         var team = placement.Team;
         var authorIdentity = placement.Sender?.Identity;
         var authorName = placement.Sender?.Name ?? mail.From;
@@ -271,8 +290,10 @@ internal sealed class EmailEventHandler(
             AuthorIdentity = authorIdentity,
             AuthorName = authorName,
             Subject = string.IsNullOrWhiteSpace(mail.Subject) ? SubjectFromMessage.Derive(SubjectSource(body, files.Stored)) : mail.Subject.Trim(),
-            Status = SupportCaseStatus.Open,
+            Status = closed ? SupportCaseStatus.Closed : SupportCaseStatus.Open,
             CreatedAt = now,
+            ClosedAt = closed ? now : null,
+            ClosedBy = closed ? SupportCaseActors.SenderRule : null,
             MessageCount = 1,
             Visibility = team == null ? null : DefaultVisibility(),
             SuggestedTeams = placement.Suggestions,
@@ -306,6 +327,8 @@ internal sealed class EmailEventHandler(
             Source = SupportChannelType.Email,
             Attachments = files.Stored
         }, cancellationToken);
+
+        if (closed) return EmailHandlingOutcome.Applied(caseId);
 
         if (team != null) await store.MarkReadAsync(team.Key, caseId, authorIdentity, 1, cancellationToken);
 

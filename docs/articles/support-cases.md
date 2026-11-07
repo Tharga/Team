@@ -873,6 +873,42 @@ Three things make sharing a mailbox actually safe, and each of them is load-bear
 - **Each instance keeps its own read position**, keyed on the recipients it answers for. Sharing a position
   would let the first instance to poll advance past a message addressed to the second.
 
+### Mail that is not a support case: sender rules
+
+Some automated mail carries no automated-mail marker and is addressed to the support address itself, so neither
+the automated check nor the recipient filter can tell it apart. The usual one is a DMARC aggregate report, when
+the support address is the `rua=mailto:` address: one mail a day, each opening an unassigned case and, in a host
+that announces on `SupportCaseChange.Raised`, an alert.
+
+```csharp
+o.Email.SenderRules =
+[
+    new MailSenderRule { Senders = ["dmarc-reports@reports.example.org", "*@dmarc.example.org"], Action = MailSenderAction.Ignore }
+];
+```
+
+or from settings:
+
+```json
+"SenderRules": [ { "Senders": [ "dmarc-reports@reports.example.org" ], "Action": "Ignore" } ]
+```
+
+| Action | Result |
+|---|---|
+| `Ignore` | No case, no event. The mail stays untouched in the mailbox, like everything else the handler ignores |
+| `Close` | The case is stored already closed (unassigned, `ClosedBy` = `SupportCaseActors.SenderRule`), for a host that wants a record |
+
+- **Neither action raises `SupportCaseChange.Raised`.** A host that announces on it stays silent with no code of its
+  own. A rule that opened the case and closed it afterwards would still have raised it.
+- A sender is an address, or `*@domain` for every address at exactly that domain (not its subdomains). Matching
+  ignores case. The first rule that names the sender decides.
+- Decided after the event ledger records the message id, so the mail is not reconsidered, and before anything is
+  created. Each matched mail logs one Information line naming the sender and the action.
+- **Per mailbox**: set it on the primary `Email` options or on an added mailbox's own options. A mail from a sender
+  not on the list behaves as before.
+- A `From` header authenticates nobody, so anyone can send as a listed address and have their mail dropped. The rule
+  only ever removes a case; it grants nothing.
+
 ### Reading the mailbox
 
 A background service polls on `o.Email.PollInterval` (default one minute) and applies what arrives. There is
