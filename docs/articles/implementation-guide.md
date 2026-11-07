@@ -2156,12 +2156,36 @@ Registering the scope rather than hiding it is what buys:
 > satisfies User and Viewer as well. A scope registered that way is granted to **every** level. The `Custom`
 > guard in `GetScopesForAccessLevel` applies to the *principal's* level, not the scope's.
 
-#### One limitation
+#### The toolkit's own scopes: override, don't register
 
-**The toolkit's own scopes cannot be made grant-only.** `team:read`, `team:manage`, `team:member:manage`,
-`apikey:manage`, `audit:read` and `simulation:use` are registered by `AddThargaTeamBlazor` before your
-`ConfigureScopes` runs, and `Register` throws on a duplicate name, so there is no way to relevel them. If you
-need one of those held only by explicit grant, please open an issue describing the case.
+`team:read`, `team:manage`, `team:member:manage`, `apikey:manage`, `audit:read` and `simulation:use` are registered
+by `AddThargaTeamBlazor` before your `ConfigureScopes` runs, and `Register` throws on a duplicate name. To change how
+one is granted, **override** it instead:
+
+```csharp
+o.ConfigureScopeOverrides = scopes =>
+{
+    scopes.Override("apikey:manage", grantOnly: true);                    // held only by an explicit grant
+    scopes.Override("audit:read", AccessLevel.User);                      // a different level
+    scopes.Override("team:read", group: "access", description: "See the team.");
+};
+```
+
+`Override` takes any of: the level (`defaultMinimumLevel`), `grantOnly`, `group`, `appliesTo` (`ScopePrincipals.Members`
+keeps an API key from getting it from the level) and `description`. Only what you pass changes.
+
+- **Order does not matter.** An override is kept by name and applied when the scope is read, so it holds whether it
+  is given before or after the module registering the scope. It also wins over what that module chose, including a
+  level the module took from its own option (for example the support module's scope access level).
+- **A name nobody registered stops the application at startup**, naming it. A mistyped override would otherwise
+  change nothing and say nothing, while you believed a scope had been narrowed.
+- **Grant-only and a level exclude each other**: no level grants a grant-only scope. Turning a grant-only scope
+  into an ordinary one needs the level: `Override("case:read", AccessLevel.Administrator, grantOnly: false)`.
+- **Mind what you narrow.** Owner and Administrator hold every scope that is not grant-only, so making
+  `team:manage` or `team:member:manage` grant-only leaves nobody holding it until someone is granted it by a role or
+  an override. That is what grant-only means; it is not guarded against.
+- **Calling `Override` again** for the same scope adds to the earlier call, and a value passed again replaces it.
+- `Override` can also be called on the `ScopeRegistry` directly, for a host that builds its own.
 
 #### The pre-3.14 alternative
 
