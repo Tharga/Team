@@ -179,7 +179,7 @@ else
                         <RadzenLabel Text="@_text[ApiKeyViewText.Scopes]" />
                         <ScopeOverrideEditor AllScopes="_allScopeNames"
                                              Descriptions="_scopeDescriptions"
-                                             InheritedScopes="@_scopeRegistry.GetEffectiveScopes(_newAccessLevel, _newRoles, null)"
+                                             InheritedScopes="@_scopeRegistry.GetEffectiveScopes(_newAccessLevel, _newRoles, null, PrincipalKind.ApiKey)"
                                              Overrides="_newScopeOverrides"
                                              HiddenScopes="_hiddenScopes"
                                              OverridesChanged="@(o => _newScopeOverrides = o.ToList())" />
@@ -460,9 +460,9 @@ else
     {
         if (_scopeRegistry == null) return "";
 
-        var accessLevelScopes = _scopeRegistry.GetScopesForAccessLevel(context.AccessLevel);
+        var accessLevelScopes = _scopeRegistry.GetScopesForAccessLevel(context.AccessLevel, PrincipalKind.ApiKey);
         var overrides = context.ScopeOverrides ?? Array.Empty<string>();
-        var allScopes = _scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.Roles, context.ScopeOverrides)
+        var allScopes = _scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.Roles, context.ScopeOverrides, PrincipalKind.ApiKey)
             .Where(s => !_hiddenScopes.Contains(s));
 
         var lines = new List<string>();
@@ -642,7 +642,7 @@ else
                     <RadzenLabel Text="@_text[ApiKeyViewText.ScopeOverrides]" />
                     <ScopeOverrideEditor AllScopes="_allScopeNames"
                                          Descriptions="_scopeDescriptions"
-                                         InheritedScopes="@_scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.Roles, null)"
+                                         InheritedScopes="@_scopeRegistry.GetEffectiveScopes(context.AccessLevel, context.Roles, null, PrincipalKind.ApiKey)"
                                          Overrides="@(context.ScopeOverrides ?? Array.Empty<string>())"
                                          HiddenScopes="_hiddenScopes"
                                          OverridesChanged="@(o => selectedScopes = o.ToList())"

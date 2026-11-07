@@ -155,11 +155,24 @@ internal sealed class TeamGrantResolver
     /// compares this with what the granter holds. It lives here so that question is answered by the one
     /// composition, not by a copy of it.
     /// </remarks>
-    public async Task<IReadOnlyList<string>> ResolveScopesAsync(string teamKey, AccessLevel? level, IEnumerable<string> roles, IEnumerable<string> overrides)
+    public Task<IReadOnlyList<string>> ResolveScopesAsync(string teamKey, AccessLevel? level, IEnumerable<string> roles, IEnumerable<string> overrides)
+        => ResolveScopesAsync(teamKey, level, roles, overrides, PrincipalKind.Member);
+
+    /// <summary>
+    /// <see cref="ResolveScopesAsync(string, AccessLevel?, IEnumerable{string}, IEnumerable{string})"/> for a given kind
+    /// of holder. A key's grant is composed for <see cref="PrincipalKind.ApiKey"/>, so a ceiling compares what the key
+    /// would actually carry, not the members-only scopes its level would have given a person (Tharga/Team#412).
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ResolveScopesAsync(string teamKey, AccessLevel? level, IEnumerable<string> roles, IEnumerable<string> overrides, PrincipalKind kind)
     {
+        // A member goes through the calls that existed before a kind did, unchanged: only a key needs the filter.
         var scopes = _tenantRoleService != null
-            ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, level, roles, overrides)
-            : _scopeRegistry?.GetEffectiveScopes(level, roles, overrides) ?? [];
+            ? kind == PrincipalKind.Member
+                ? await _tenantRoleService.GetEffectiveScopesAsync(teamKey, level, roles, overrides)
+                : await _tenantRoleService.GetEffectiveScopesAsync(teamKey, level, roles, overrides, kind)
+            : kind == PrincipalKind.Member
+                ? _scopeRegistry?.GetEffectiveScopes(level, roles, overrides) ?? []
+                : _scopeRegistry?.GetEffectiveScopes(level, roles, overrides, kind) ?? [];
 
         return [.. scopes];
     }

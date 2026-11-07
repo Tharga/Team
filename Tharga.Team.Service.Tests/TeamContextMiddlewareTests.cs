@@ -37,6 +37,8 @@ public class TeamContextMiddlewareTests
         var registry = Substitute.For<IScopeRegistry>();
         registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
             .Returns(["team:read", "audit:read"]);
+        registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
+            .Returns(["team:read", "audit:read"]);
 
         var context = new DefaultHttpContext { User = principal };
         context.Response.Body = new MemoryStream();

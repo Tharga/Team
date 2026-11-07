@@ -18,4 +18,22 @@ public interface IScopeRegistry
     /// overrides included: an unset level is a record nobody finished, and its extras must not make it worth something.
     /// </summary>
     IReadOnlyList<string> GetEffectiveScopes(AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides = null);
+
+    /// <summary>
+    /// <see cref="GetScopesForAccessLevel(AccessLevel?)"/> for a given kind of holder: for an API key, scopes registered
+    /// for <see cref="ScopePrincipals.Members"/> only are left out (Tharga/Team#412).
+    /// </summary>
+    /// <remarks>
+    /// <b>Every place that composes a key's scopes must call this, not the overload without a kind.</b> The default
+    /// here ignores the kind so a host's own registry keeps compiling, which means such a registry does not filter
+    /// anything; <see cref="ScopeRegistry"/> does.
+    /// </remarks>
+    IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel? accessLevel, PrincipalKind kind) => GetScopesForAccessLevel(accessLevel);
+
+    /// <summary>
+    /// <see cref="GetEffectiveScopes(AccessLevel?, IEnumerable{string}, IEnumerable{string})"/> for a given kind of
+    /// holder. Only the scopes the level supplies are filtered; roles and overrides are added as named.
+    /// </summary>
+    IReadOnlyList<string> GetEffectiveScopes(AccessLevel? accessLevel, IEnumerable<string> roleNames, IEnumerable<string> scopeOverrides, PrincipalKind kind)
+        => GetEffectiveScopes(accessLevel, roleNames, scopeOverrides);
 }

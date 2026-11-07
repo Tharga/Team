@@ -20,9 +20,19 @@ public static class ScopeViewText
         "team.scopeView.grantOnlyLegend",
         "A lock marks a grant-only scope: no access level grants it, so it stays greyed here unless a role you hold names it.");
 
+    /// <summary>Tooltip on the marker of a scope the access level grants to members only (Tharga/Team#412).</summary>
+    public static readonly TextKey MembersOnlyTooltip = new(
+        "team.scopeView.membersOnlyTooltip",
+        "Members only: the access level grants this scope to members, not to API keys. A key holds it only when a role or an override on the key names it.");
+
+    /// <summary>Legend line shown when at least one members-only scope is registered.</summary>
+    public static readonly TextKey MembersOnlyLegend = new(
+        "team.scopeView.membersOnlyLegend",
+        "A person marks a members-only scope: members at the level hold it, API keys at the same level do not.");
+
     /// <summary>Heading over the scopes that belong to no group, shown only when the host defined groups.</summary>
     public static readonly TextKey Ungrouped = new("team.scopeView.ungrouped", "Other");
 
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [GrantOnlyTooltip, GrantOnlyLegend, Ungrouped];
+    public static readonly TextKey[] All = [GrantOnlyTooltip, GrantOnlyLegend, MembersOnlyTooltip, MembersOnlyLegend, Ungrouped];
 }

@@ -46,6 +46,8 @@ public class TeamContextResolverTests
         var registry = Substitute.For<IScopeRegistry>();
         registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
             .Returns(scopesAtLevel.Length == 0 ? ["team:read"] : scopesAtLevel);
+        registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
+            .Returns(scopesAtLevel.Length == 0 ? ["team:read"] : scopesAtLevel);
 
         return new TeamContextResolver(teamService, registry);
     }
@@ -164,10 +166,12 @@ public class TeamContextResolverTests
         var registry = Substitute.For<IScopeRegistry>();
         registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
             .Returns(["team:read"]);
+        registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
+            .Returns(["team:read"]);
 
         await new TeamContextResolver(teamService, registry).ResolveAsync(SystemKeyCaller(), OtherTeam);
 
-        registry.Received(1).GetEffectiveScopes(level, Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>());
+        registry.Received(1).GetEffectiveScopes(level, Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey);
     }
 
     // ---------------- a person, who is not bound ----------------
@@ -199,6 +203,8 @@ public class TeamContextResolverTests
 
         var registry = Substitute.For<IScopeRegistry>();
         registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>())
+            .Returns(["team:read"]);
+        registry.GetEffectiveScopes(Arg.Any<AccessLevel>(), Arg.Any<IEnumerable<string>>(), Arg.Any<IEnumerable<string>>(), PrincipalKind.ApiKey)
             .Returns(["team:read"]);
 
         // A selected team, and no ApiKeyId -- a person, not a credential bound to one team.
