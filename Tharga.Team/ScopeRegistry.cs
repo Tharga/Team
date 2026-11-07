@@ -14,6 +14,8 @@ namespace Tharga.Team;
 public class ScopeRegistry : IScopeRegistry
 {
     private readonly List<ScopeDefinition> _scopes = new();
+    private readonly Dictionary<string, ScopeOverride> _overrides = new(StringComparer.Ordinal);
+    private IReadOnlyList<ScopeDefinition> _effective;
     private readonly List<ScopeGroup> _groups = new();
     private ITenantRoleRegistry _roleRegistry;
 
@@ -22,7 +24,8 @@ public class ScopeRegistry : IScopeRegistry
         _roleRegistry = roleRegistry;
     }
 
-    public IReadOnlyList<ScopeDefinition> All => _scopes;
+    /// <summary>Every registered scope, as the host's <see cref="Override"/> calls leave it.</summary>
+    public IReadOnlyList<ScopeDefinition> All => _effective ??= [.. _scopes.Select(Apply)];
 
     public IReadOnlyList<ScopeGroup> Groups => _groups;
 
@@ -110,7 +113,68 @@ public class ScopeRegistry : IScopeRegistry
             throw new InvalidOperationException($"Scope '{definition.Name}' is already registered.");
 
         _scopes.Add(definition);
+        _effective = null;
     }
+
+    /// <summary>
+    /// Changes how a registered scope is granted, whoever registered it and whenever this is called
+    /// (Tharga/Team#405). Only what is passed is changed.
+    /// </summary>
+    /// <remarks>
+    /// <b>Order does not matter.</b> The override is kept by name and applied when the scope is read, not when it
+    /// is registered, so it holds whether it is called before or after the module that registers the scope. That is
+    /// what <see cref="Register(string,AccessLevel,string)"/> cannot offer a host: it throws on a name a module
+    /// registered first. It wins over what the registering module chose, including a level that module took from its
+    /// own options. A name no module registers fails at startup, by <c>ScopeOverrideCheck</c>.
+    /// <para>
+    /// Calling it again for the same scope adds to the earlier call; a value passed again replaces the earlier one.
+    /// </para>
+    /// </remarks>
+    /// <param name="scopeName">The scope as registered, for example <c>apikey:manage</c>.</param>
+    /// <param name="defaultMinimumLevel">The least-privileged level that is granted it automatically.</param>
+    /// <param name="grantOnly">True to grant it to no access level, Owner and Administrator included; false to make a
+    /// grant-only scope an ordinary one (give <paramref name="defaultMinimumLevel"/> with it).</param>
+    /// <param name="group">The <see cref="ScopeGroup"/> key to show it under on the scope page.</param>
+    /// <param name="appliesTo">Who the level grants it to; <see cref="ScopePrincipals.Members"/> keeps it from API keys.</param>
+    /// <param name="description">The wording shown in the catalogue and pickers.</param>
+    public void Override(string scopeName, AccessLevel? defaultMinimumLevel = null, bool? grantOnly = null, string group = null, ScopePrincipals? appliesTo = null, string description = null)
+    {
+        if (string.IsNullOrWhiteSpace(scopeName))
+            throw new ArgumentException("A scope override needs the name of the scope.", nameof(scopeName));
+
+        if (grantOnly == true && defaultMinimumLevel is { } level && level != AccessLevel.Custom)
+            throw new ArgumentException($"'{scopeName}' cannot be both grant-only and given the level {level}: no level grants a grant-only scope.", nameof(grantOnly));
+
+        _overrides[scopeName] = _overrides.TryGetValue(scopeName, out var earlier)
+            ? new ScopeOverride(defaultMinimumLevel ?? earlier.Level, grantOnly ?? earlier.GrantOnly, group ?? earlier.Group, appliesTo ?? earlier.AppliesTo, description ?? earlier.Description)
+            : new ScopeOverride(defaultMinimumLevel, grantOnly, group, appliesTo, description);
+        _effective = null;
+    }
+
+    /// <summary>The names passed to <see cref="Override"/> that no module registered. Empty when every override has a scope.</summary>
+    public IReadOnlyList<string> UnmatchedOverrides => [.. _overrides.Keys.Where(k => _scopes.All(s => s.Name != k)).Order(StringComparer.Ordinal)];
+
+    private ScopeDefinition Apply(ScopeDefinition scope)
+    {
+        if (!_overrides.TryGetValue(scope.Name, out var o)) return scope;
+
+        var grantOnly = o.GrantOnly ?? scope.GrantOnly;
+
+        // A scope turned from grant-only to ordinary has no level of its own to fall back on.
+        if (scope.GrantOnly && !grantOnly && o.Level is null)
+            throw new InvalidOperationException($"Scope '{scope.Name}' is registered grant-only, so making it ordinary needs the level to grant it at.");
+
+        return scope with
+        {
+            GrantOnly = grantOnly,
+            DefaultMinimumLevel = grantOnly ? AccessLevel.Custom : o.Level ?? scope.DefaultMinimumLevel,
+            Group = o.Group ?? scope.Group,
+            AppliesTo = o.AppliesTo ?? scope.AppliesTo,
+            Description = o.Description ?? scope.Description,
+        };
+    }
+
+    private sealed record ScopeOverride(AccessLevel? Level, bool? GrantOnly, string Group, ScopePrincipals? AppliesTo, string Description);
 
     public IReadOnlyList<string> GetScopesForAccessLevel(AccessLevel? accessLevel)
         => GetScopesForAccessLevel(accessLevel, PrincipalKind.Member);
@@ -132,7 +196,7 @@ public class ScopeRegistry : IScopeRegistry
         // and Viewer alike.
         // A members-only scope is not the level's to give an API key (Tharga/Team#412). Only the level's share is
         // cut: a role or an override naming it still reaches the key, because that is someone deciding.
-        var granted = _scopes.Where(s => !s.GrantOnly && (kind == PrincipalKind.Member || s.AppliesTo == ScopePrincipals.All));
+        var granted = All.Where(s => !s.GrantOnly && (kind == PrincipalKind.Member || s.AppliesTo == ScopePrincipals.All));
 
         if (accessLevel <= AccessLevel.Administrator)
             return granted.Select(s => s.Name).ToList();

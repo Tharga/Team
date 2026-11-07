@@ -348,6 +348,34 @@ public class AddThargaTeamTests
         Assert.Single(registry.All);
     }
 
+    /// <summary>The host's override applies to a scope registered by ConfigureScopes (Tharga/Team#405).</summary>
+    [Fact]
+    public void ConfigureScopeOverrides_ChangesARegisteredScope_AndAddsTheStartupCheck()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o =>
+        {
+            o.ConfigureScopes = scopes => scopes.Register("test:read", AccessLevel.Viewer);
+            o.ConfigureScopeOverrides = scopes => scopes.Override("test:read", grantOnly: true);
+        });
+        var provider = builder.Services.BuildServiceProvider();
+
+        var registry = provider.GetRequiredService<IScopeRegistry>();
+        Assert.True(registry.All.Single().GrantOnly);
+        Assert.DoesNotContain("test:read", registry.GetScopesForAccessLevel(AccessLevel.Administrator));
+        Assert.Contains(provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), s => s.GetType().Name == "ScopeOverrideCheck");
+    }
+
+    [Fact]
+    public void WithoutOverrides_NoStartupCheckIsAdded()
+    {
+        var builder = CreateBuilder();
+        builder.AddThargaTeam(o => o.ConfigureScopes = scopes => scopes.Register("test:read", AccessLevel.Viewer));
+        var provider = builder.Services.BuildServiceProvider();
+
+        Assert.DoesNotContain(provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>(), s => s.GetType().Name == "ScopeOverrideCheck");
+    }
+
     [Fact]
     public void SkipsScopes_WhenNotConfigured()
     {
