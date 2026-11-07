@@ -125,6 +125,15 @@ public static class ThargaTeamRegistration
             builder.Services.AddThargaScopes(options.ConfigureScopes);
         }
 
+        // Overrides of how a registered scope is granted (Tharga/Team#405). Kept by name and applied on read, so the
+        // order against the modules registering the scopes does not matter; checked at startup.
+        if (options.ConfigureScopeOverrides != null)
+        {
+            builder.Services.AddThargaScopes(options.ConfigureScopeOverrides);
+            builder.Services.AddSingleton<Microsoft.Extensions.Hosting.IHostedService>(sp =>
+                new Tharga.Team.Service.ScopeOverrideCheck(sp.GetRequiredService<IScopeRegistry>()));
+        }
+
         // Tenant roles (opt-in, requires scopes)
         if (options.ConfigureTenantRoles != null)
         {
