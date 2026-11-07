@@ -157,8 +157,8 @@ public sealed class TeamContextResolver
         var level = consent.AccessLevel ?? AccessLevel.Viewer;
 
         var scopes = _tenantRoleService != null
-            ? await _tenantRoleService.GetEffectiveScopesAsync(headerTeamKey, level, [], [])
-            : _scopeRegistry?.GetEffectiveScopes(level, [], []) ?? [];
+            ? await _tenantRoleService.GetEffectiveScopesAsync(headerTeamKey, level, [], [], PrincipalKind.ApiKey)
+            : _scopeRegistry?.GetEffectiveScopes(level, [], [], PrincipalKind.ApiKey) ?? [];
 
         return new TeamContext(headerTeamKey, [.. scopes], TeamContextRefusal.None) { AccessLevel = level };
     }

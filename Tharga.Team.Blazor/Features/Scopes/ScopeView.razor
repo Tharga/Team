@@ -73,6 +73,10 @@
         {
             <text>@_text[ScopeViewText.GrantOnlyLegend]</text>
         }
+        @if (_rows.Any(r => r.AppliesTo == ScopePrincipals.Members))
+        {
+            <text> @_text[ScopeViewText.MembersOnlyLegend]</text>
+        }
     </RadzenText>
 
     @foreach (var section in _sections)
@@ -100,6 +104,11 @@
                         {
                             <RadzenIcon Icon="lock" Style="color: var(--rz-danger); margin-left: .35rem; font-size: 1rem; cursor: help;"
                                         title="@_text[ScopeViewText.GrantOnlyTooltip]" />
+                        }
+                        @if (context.AppliesTo == ScopePrincipals.Members)
+                        {
+                            <RadzenIcon Icon="person" Style="color: var(--rz-info); margin-left: .35rem; font-size: 1rem; cursor: help;"
+                                        title="@_text[ScopeViewText.MembersOnlyTooltip]" />
                         }
                     </Template>
                 </RadzenDataGridColumn>

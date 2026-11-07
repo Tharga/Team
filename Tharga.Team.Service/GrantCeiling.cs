@@ -27,8 +27,12 @@ internal sealed class GrantCeiling
     private readonly IScopeRegistry _scopeRegistry;
     private readonly TeamGrantResolver _resolver;
 
-    public GrantCeiling(IScopeRegistry scopeRegistry, ITenantRoleService tenantRoleService)
+    private readonly PrincipalKind _kind;
+
+    // kind: what is being granted to. A key's grant is composed as a key would carry it (Tharga/Team#412).
+    public GrantCeiling(IScopeRegistry scopeRegistry, ITenantRoleService tenantRoleService, PrincipalKind kind = PrincipalKind.Member)
     {
+        _kind = kind;
         _scopeRegistry = scopeRegistry;
         _resolver = new TeamGrantResolver(null, scopeRegistry, tenantRoleService);
     }
@@ -115,7 +119,7 @@ internal sealed class GrantCeiling
 
     private async Task<string[]> MissingAsync(ClaimsPrincipal caller, string teamKey, AccessLevel? level, IEnumerable<string> roles, IEnumerable<string> overrides)
     {
-        var wanted = await _resolver.ResolveScopesAsync(teamKey, level, roles ?? [], overrides ?? []);
+        var wanted = await _resolver.ResolveScopesAsync(teamKey, level, roles ?? [], overrides ?? [], _kind);
         var held = TeamScopePolicy.TeamScopesFor(caller, teamKey);
 
         return wanted.Where(s => !held.Contains(s)).Distinct().Order().ToArray();

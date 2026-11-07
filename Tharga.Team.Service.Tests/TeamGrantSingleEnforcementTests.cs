@@ -34,6 +34,15 @@ public class TeamGrantSingleEnforcementTests
     {
         ["TenantRoleService"] =
             "The scope-composition primitive itself — it is what the resolver calls, not a rival to it.",
+        ["ScopeRegistry"] =
+            "The level-and-roles-and-overrides composition itself. Its overload without a kind delegates to the one with " +
+            "a kind (Tharga/Team#412); neither is a rival to the resolver.",
+        ["IScopeRegistry"] =
+            "The interface's default for the overload with a kind, which forwards to the one without, so a host's own " +
+            "registry keeps compiling (Tharga/Team#412).",
+        ["ITenantRoleService"] =
+            "The interface's default for the overload with a kind, which forwards to the one without, so a host's own " +
+            "implementation keeps compiling (Tharga/Team#412).",
         ["TeamContextResolver"] =
             "The API-key consent path. A key holds no roles, so consent for a key is the team's level " +
             "rather than a role match; that is a different rule, documented on the type, not a copy of this one.",

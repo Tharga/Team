@@ -16,13 +16,18 @@ namespace Tharga.Team.Blazor.Features.Scopes;
 /// nobody happens to have.
 /// </param>
 /// <param name="Group">The key of the <see cref="ScopeGroup"/> the scope is shown under, or null when ungrouped.</param>
+/// <param name="AppliesTo">
+/// Who the access levels grant the scope to. <see cref="ScopePrincipals.Members"/> means API keys at those levels do
+/// not get it (Tharga/Team#412), which the page marks so nobody reads a key's missing scope as a defect.
+/// </param>
 public sealed record ScopeRow(
     string Name,
     string Description,
     IReadOnlyList<AccessLevel> AccessLevels,
     IReadOnlyList<string> Roles,
     bool GrantOnly = false,
-    string Group = null);
+    string Group = null,
+    ScopePrincipals AppliesTo = ScopePrincipals.All);
 
 /// <summary>
 /// How a single scope is granted under the current selection: by the selected access level, by one or
@@ -86,7 +91,8 @@ public static class ScopeReference
                 Levels.Where(l => byLevel[l].Contains(s.Name)).ToList(),
                 roleList.Where(r => r.Scopes != null && r.Scopes.Contains(s.Name)).Select(r => r.Name).ToList(),
                 s.GrantOnly,
-                s.Group))
+                s.Group,
+                s.AppliesTo))
             .ToList();
     }
 

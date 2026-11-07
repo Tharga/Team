@@ -2179,6 +2179,36 @@ that was never registered. On 3.14+ prefer `RegisterGrantOnly`: the authorizatio
 the catalogue entry, the description and the typo warning. The startup check will warn about a role scope
 left unregistered this way, which is the nudge to move it across.
 
+### Scopes for members only
+
+An access level grants its scopes to members **and** API keys alike. A host often keeps every application's key at
+`User` so the application can write back what it owns, and then "User members may do X" gives X to every
+application key as well, including one shipped in a public browser app. Register the scope for members only:
+
+```csharp
+scopes.Register("case:close", AccessLevel.User, "Close a case.", ScopePrincipals.Members);
+// with a group: scopes.Register("case:close", AccessLevel.User, "Close a case.", "cases", ScopePrincipals.Members);
+```
+
+Members at the level hold it as before. A key at the same level does not.
+
+- **Only the level's share is cut.** A key still holds the scope when a role names it or it is set as a scope
+  override on that key. That is the intended way to give one key what the level does not: naming it is a recorded
+  decision, where the level is a default.
+- **A personal key is a key.** A key owned by a member is still limited to what its owner holds, and it also no
+  longer inherits a members-only scope from its level; give it the override if it needs it.
+- **`/scopes` marks it** (a person icon on the row and a line of explanation), so a key missing the scope reads as
+  intended and not as a defect. The key pages compute what a key would carry as a key, so they agree with what is
+  issued.
+- **Granting is checked against what the key would carry** (see *Granting is limited to what the granter holds*): a
+  granter without the scope can still create a key at the level, since the key would not carry it, and cannot hand
+  out the scope as an override without holding it.
+- **For a host's own `IScopeRegistry` or `ITenantRoleService`**: the overloads taking a `PrincipalKind` have a
+  default that ignores the kind, so such an implementation keeps compiling but filters nothing. `ScopeRegistry` and
+  `TenantRoleService` filter. Call the overloads with a kind wherever you compose a key's scopes yourself.
+
+Adding this is a minor release, and nothing changes for a scope registered the old way.
+
 ### Built-in scopes
 
 | Scope | Kind | Source | Gates |

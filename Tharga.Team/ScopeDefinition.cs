@@ -49,10 +49,20 @@ namespace Tharga.Team;
 /// is invisible to the compiler and silently authorizes nothing.
 /// </para>
 /// </remarks>
-public record ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description = null, bool GrantOnly = false, string Group = null)
+/// <param name="AppliesTo">
+/// Who the access level grants the scope to by default. <see cref="ScopePrincipals.All"/> unless set;
+/// <see cref="ScopePrincipals.Members"/> keeps it from API keys at the level (Tharga/Team#412). A key can still
+/// hold it through a role or an override.
+/// </param>
+public record ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description = null, bool GrantOnly = false, string Group = null, ScopePrincipals AppliesTo = ScopePrincipals.All)
 {
     public ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description, bool GrantOnly)
-        : this(Name, DefaultMinimumLevel, Description, GrantOnly, null)
+        : this(Name, DefaultMinimumLevel, Description, GrantOnly, null, ScopePrincipals.All)
+    {
+    }
+
+    public ScopeDefinition(string Name, AccessLevel DefaultMinimumLevel, string Description, bool GrantOnly, string Group)
+        : this(Name, DefaultMinimumLevel, Description, GrantOnly, Group, ScopePrincipals.All)
     {
     }
 }
