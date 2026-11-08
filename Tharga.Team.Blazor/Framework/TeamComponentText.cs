@@ -107,6 +107,9 @@ public static class TeamComponentText
     public static readonly TextKey NoAccessLevel = new("team.component.noAccessLevel", "No access level");
     public static readonly TextKey HideNoAccessTeams = new("team.component.hideNoAccessTeams", "Hide teams I have no access to");
 
+    /// <summary>The switch that widens a list narrowed to the selected team (<c>TeamComponent.ShowSelectedTeamOnly</c>).</summary>
+    public static readonly TextKey ShowAllTeams = new("team.component.showAllTeams", "Show all teams");
+
     /// <summary>Label above the consent picker. <c>{0}</c> is the comma-separated list of consent roles.</summary>
     /// <remarks>
     /// The role list runs straight into the selected level so the two read as one sentence. Keeping the
@@ -162,6 +165,6 @@ public static class TeamComponentText
         ConsentAccessFor, ConfirmDeleteTeam, ConfirmSuspendTitle, ConfirmSuspendDetail, CouldNotSuspend,
         CouldNotRestore, SuspendedTooltip, SuspendedByTooltip, ActionCopyInviteLink, ActionAuditLog,
         ActionRestoreAccess, ActionSuspendAccess, ActionRemoveMember, ActionInviteUser, ActionSetIcon,
-        ActionTransferOwnership, ActionLeaveTeam, ActionDeleteTeam, ActionRenameTeam, AuditLogTitle, HideNoAccessTeams
+        ActionTransferOwnership, ActionLeaveTeam, ActionDeleteTeam, ActionRenameTeam, AuditLogTitle, HideNoAccessTeams, ShowAllTeams
     ];
 }

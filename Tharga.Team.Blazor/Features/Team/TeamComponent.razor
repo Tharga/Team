@@ -65,6 +65,13 @@ else
                 <RadzenLabel Text="@_text[TeamComponentText.HideNoAccessTeams]" Component="hideNoAccessTeams" />
             </RadzenStack>
         }
+        @if (TeamSelectionFilter.ShowToggle(_accessShown, ShowSelectedTeamOnly, _selectedTeam?.Key, t => t.Key))
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenSwitch Value="@_showAllTeams" ValueChanged="@((bool all) => SetShowAllTeams(all))" Name="showAllTeams" />
+                <RadzenLabel Text="@_text[TeamComponentText.ShowAllTeams]" Component="showAllTeams" />
+            </RadzenStack>
+        }
         @if (_teams.Any())
         {
             @* Two shapes for two situations, chosen by the same threshold the selector uses.
@@ -79,12 +86,12 @@ else
 
                Paging is a *rendering* fix, not a loading one: ReloadTeams still fetches every team with
                its members. A paged, member-less read is a service-contract change and is out of scope. *@
-            @if (TeamListPresentation.ShowAsGrid(_teams.Length, TeamFilterThreshold, TeamLayout))
+            @if (TeamListPresentation.ShowAsGrid(_layoutCount, TeamFilterThreshold, TeamLayout))
             {
                 <RadzenDataGrid @ref="_teamGrid" Data="@_shownTeams" TItem="ITeam<TMember>"
                                 AllowSorting="@AllowTeamSorting"
-                                AllowFiltering="@TeamSelectorGate.ShowFilter(_teams.Length, TeamFilterThreshold, AllowTeamFiltering)"
-                                AllowPaging="@TeamSelectorGate.ShowFilter(_teams.Length, TeamPageSize + 1, AllowTeamPaging)"
+                                AllowFiltering="@TeamSelectorGate.ShowFilter(_layoutCount, TeamFilterThreshold, AllowTeamFiltering)"
+                                AllowPaging="@TeamSelectorGate.ShowFilter(_layoutCount, TeamPageSize + 1, AllowTeamPaging)"
                                 FilterMode="FilterMode.Simple" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                                 PageSize="@TeamPageSize" PageSizeOptions="@TeamPageSizeOptionsValues"
                                 ShowPagingSummary="true" PagingSummaryFormat="@_text[TeamComponentText.PagingSummary]"
@@ -229,6 +236,18 @@ else
     /// <summary>Teams per page. Default 10.</summary>
     [Parameter] public int TeamPageSize { get; set; } = 10;
 
+    /// <summary>
+    /// Shows only the selected team, with a switch to all the teams the caller can see. Default false, so a host that
+    /// does not opt in shows what it always did (Tharga/Team#400).
+    /// </summary>
+    /// <remarks>
+    /// Presentation only: it narrows the list and nothing else. The component still loads every team it did before,
+    /// and what the caller may see or do is unchanged. The switch is offered only while there is another team to
+    /// switch to, and a caller with no selected team sees every team, since narrowing would leave an empty page.
+    /// Whether it should become the default is left for a major version.
+    /// </remarks>
+    [Parameter] public bool ShowSelectedTeamOnly { get; set; }
+
     /// <summary>Page sizes offered. Defaults to 10 / 25 / 50.</summary>
     [Parameter] public IEnumerable<int> TeamPageSizeOptionsValues { get; set; } = [10, 25, 50];
 
@@ -281,7 +300,10 @@ else
 
     private ITeam<TMember>[] _teams;
     private ITeam<TMember>[] _shownTeams = [];
+    private ITeam<TMember>[] _accessShown = [];
+    private int _layoutCount;
     private bool _hideNoAccess;
+    private bool _showAllTeams;
     /// <summary>
     /// Show a per-member action opening the audit log for that member, scoped to this team. Off by
     /// default — the log is only queryable when audit storage is configured, and the action is hidden
@@ -1440,7 +1462,7 @@ else
     private async Task SetHideNoAccessAsync(bool hide, bool remember = true)
     {
         _hideNoAccess = hide;
-        _shownTeams = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
+        ApplyTeamFilters();
         _selectedRowExpanded = false;
         StateHasChanged();
 
@@ -1453,6 +1475,27 @@ else
         {
             // Not remembered; the switch still applies for this visit.
         }
+    }
+
+    /// <summary>
+    /// The two presentation filters in order: the no-access switch first, then the selected-team narrowing. The
+    /// layout is chosen from what is left to draw, since a list narrowed to one team is a card, not a grid.
+    /// </summary>
+    private void ApplyTeamFilters()
+    {
+        _accessShown = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
+        _shownTeams = TeamSelectionFilter.Apply(_accessShown, ShowSelectedTeamOnly, _showAllTeams, _selectedTeam?.Key, t => t.Key);
+        _layoutCount = TeamSelectionFilter.IsNarrowed(_accessShown, ShowSelectedTeamOnly, _showAllTeams, _selectedTeam?.Key, t => t.Key)
+            ? _shownTeams.Length
+            : _teams.Length;
+    }
+
+    private void SetShowAllTeams(bool all)
+    {
+        _showAllTeams = all;
+        ApplyTeamFilters();
+        _selectedRowExpanded = false;
+        StateHasChanged();
     }
 
     private bool CanEditConsent(ITeam<TMember> team)
@@ -1472,7 +1515,7 @@ else
             ? await TeamOversightService.GetAllTeamsAsync<TMember>().ToArrayAsync()
             : await TeamDirectoryService.GetTeamsAsync<TMember>().ToArrayAsync();
         _teams = teams.OrderBy(x => x.Name).ToArray();
-        _shownTeams = TeamAccessFilter.Apply(_teams, _hideNoAccess, MyAccessLevel);
+        ApplyTeamFilters();
         await BuildVisibleRolesAsync();
         await BuildHiddenScopesAsync();
 
