@@ -22,7 +22,7 @@
 @if (_noScopesConfigured && !ShowSystemSection)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat">
-        No scopes are configured. Register them via <code>o.ConfigureScopes</code> in Program.cs.
+        @_text[ScopeViewText.NoScopesConfigured]
     </RadzenAlert>
 }
 
@@ -30,13 +30,13 @@
 {
     @if (ShowSystemSection)
     {
-        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">Team scopes</RadzenText>
+        <RadzenText TextStyle="TextStyle.H6" class="rz-mb-2">@_text[ScopeViewText.TeamScopesHeading]</RadzenText>
     }
     <RadzenStack Orientation="Orientation.Horizontal" Gap="1.5rem" AlignItems="AlignItems.End" Wrap="FlexWrap.Wrap" class="rz-mb-3">
         @if (ShowAccessLevelSelector)
         {
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenLabel Text="Access level" />
+                <RadzenLabel Text="@_text[ScopeViewText.AccessLevel]" />
                 <RadzenSelectBar @bind-Value="_selectedLevel" TValue="AccessLevel?" Change="@(_ => RecomputeGrants())" Size="ButtonSize.Small">
                     <Items>
                         @foreach (var level in _offeredLevels)
@@ -50,7 +50,7 @@
         @if (ShowRoles && _allRoleNames.Count > 0)
         {
             <RadzenStack Orientation="Orientation.Vertical" Gap="0">
-                <RadzenLabel Text="Roles" />
+                <RadzenLabel Text="@_text[ScopeViewText.Roles]" />
                 <RadzenSelectBar @bind-Value="_selectedRolesValue" TValue="IEnumerable<string>" Multiple="true" Change="@(_ => RecomputeGrants())" Size="ButtonSize.Small">
                     <Items>
                         @foreach (var role in _allRoleNames)
@@ -64,10 +64,10 @@
     </RadzenStack>
 
     <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-2">
-        Scopes granted by the selected access level and roles are shown in full; greyed rows are not granted.
+        @_text[ScopeViewText.Explanation]
         @if (_loadedFromMember)
         {
-            <text>Pre-selected to your current membership — <b>Override</b> marks your personal scope overrides.</text>
+            <text> @_text.Format(ScopeViewText.LoadedFromMember, _text[ScopeViewText.Override])</text>
         }
         @if (_rows.Any(r => r.GrantOnly))
         {
@@ -92,13 +92,13 @@
                         FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                         RowRender="@OnRowRender">
             <Columns>
-                <RadzenDataGridColumn Title="Scope" Property="@nameof(ScopeRow.Name)" Width="260px" SortOrder="SortOrder.Ascending">
+                <RadzenDataGridColumn Title="@_text[ScopeViewText.ColumnScope]" Property="@nameof(ScopeRow.Name)" Width="260px" SortOrder="SortOrder.Ascending">
                     <Template>
                         <code>@context.Name</code>
                         @if (Grant(context.Name).ByOverride)
                         {
                             <RadzenIcon Icon="star" Style="color: var(--rz-warning); margin-left: .35rem; font-size: 1rem; cursor: help;"
-                                        title="You have a personal scope override for this scope." />
+                                        title="@_text[ScopeViewText.PersonalOverrideTooltip]" />
                         }
                         @if (context.GrantOnly)
                         {
@@ -112,8 +112,8 @@
                         }
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn Title="Description" Property="@nameof(ScopeRow.Description)" Visible="@ShowDescription" Filterable="false" />
-                <RadzenDataGridColumn Title="Granted by" Sortable="false" Filterable="false">
+                <RadzenDataGridColumn Title="@_text[ScopeViewText.ColumnDescription]" Property="@nameof(ScopeRow.Description)" Visible="@ShowDescription" Filterable="false" />
+                <RadzenDataGridColumn Title="@_text[ScopeViewText.ColumnGrantedBy]" Sortable="false" Filterable="false">
                     <Template>
                         @{ var grant = Grant(context.Name); }
                         @if (!grant.Granted)
@@ -132,7 +132,7 @@
                             }
                             @if (grant.ByOverride)
                             {
-                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="Override" class="rz-mr-1 rz-mb-1" />
+                                <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text[ScopeViewText.Override]" class="rz-mr-1 rz-mb-1" />
                             }
                         }
                     </Template>
@@ -144,9 +144,9 @@
 
 @if (ShowSystemSection)
 {
-    <RadzenText TextStyle="TextStyle.H6" class="rz-mt-4 rz-mb-2">System scopes</RadzenText>
+    <RadzenText TextStyle="TextStyle.H6" class="rz-mt-4 rz-mb-2">@_text[ScopeViewText.SystemScopesHeading]</RadzenText>
     <RadzenText TextStyle="TextStyle.Body2" class="rz-mb-2">
-        Global capabilities you currently hold — granted to system API keys and via privileged roles.
+        @_text[ScopeViewText.SystemScopesExplanation]
     </RadzenText>
     <RadzenDataGrid Data="@_systemScopes" TItem="SystemScopeDefinition"
                     AllowSorting="@AllowGridSorting"
@@ -154,12 +154,12 @@
                     FilterMode="FilterMode.Simple"
                     FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive">
         <Columns>
-            <RadzenDataGridColumn Title="Scope" Property="@nameof(SystemScopeDefinition.Name)" Width="260px" SortOrder="SortOrder.Ascending">
+            <RadzenDataGridColumn Title="@_text[ScopeViewText.ColumnScope]" Property="@nameof(SystemScopeDefinition.Name)" Width="260px" SortOrder="SortOrder.Ascending">
                 <Template>
                     <code>@context.Name</code>
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Description" Property="@nameof(SystemScopeDefinition.Description)" Visible="@ShowDescription" Filterable="false" />
+            <RadzenDataGridColumn Title="@_text[ScopeViewText.ColumnDescription]" Property="@nameof(SystemScopeDefinition.Description)" Visible="@ShowDescription" Filterable="false" />
         </Columns>
     </RadzenDataGrid>
 }
@@ -233,7 +233,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _text = await TextProvider.ResolveAsync(ScopeViewText.All);
+        _text = await TextProvider.ResolveAsync([.. ScopeViewText.All, .. AccessLevelText.All]);
 
         var scopeRegistry = ServiceProvider.GetService<IScopeRegistry>();
         var roleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
@@ -276,7 +276,7 @@
         RecomputeGrants(); // refine with the loaded defaults
     }
 
-    private static string SelectorLabel(AccessLevel level) => level == AccessLevel.Administrator ? "Owner / Administrator" : level.ToString();
+    private string SelectorLabel(AccessLevel level) => level == AccessLevel.Administrator ? _text[ScopeViewText.LevelOwnerAdministrator] : _text[AccessLevelText.For(level)];
 
     /// <summary>
     /// Rebuilds the rows and the role bar from <paramref name="roles"/>, or from <see cref="Roles"/> when a
@@ -418,10 +418,10 @@
             args.Attributes["style"] = "opacity: 0.45;";
     }
 
-    private static string LevelLabel(AccessLevel? level) => level switch
+    private string LevelLabel(AccessLevel? level) => level switch
     {
-        AccessLevel.Administrator => "Owner / Admin",
-        null => "Custom",
-        _ => level.Value.ToString(),
+        AccessLevel.Administrator => _text[ScopeViewText.LevelOwnerAdmin],
+        null => _text[AccessLevelText.Custom],
+        _ => _text[AccessLevelText.For(level)],
     };
 }

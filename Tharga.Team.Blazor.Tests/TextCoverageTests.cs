@@ -107,6 +107,9 @@ public class TextCoverageTests
         "Features/Messages/ContactMessageLogView.razor",
         "Features/Messages/ContactMessageDetails.razor",
         "Features/User/UserNoticePreferencesView.razor",
+        "Features/Roles/TenantRoleManager.razor",
+        "Features/Scopes/ScopeView.razor",
+        "Features/User/UserProfileView.razor",
         "Features/Team/UserNoticeTeamDefaultsView.razor",
     ];
 
@@ -120,9 +123,6 @@ public class TextCoverageTests
     /// </remarks>
     private static readonly Dictionary<string, int> Pending = new()
     {
-        ["Features/Roles/TenantRoleManager.razor"] = 11,
-        ["Features/Scopes/ScopeView.razor"] = 12,
-        ["Features/User/UserProfileView.razor"] = 13,
     };
 
     private static string ComponentRoot()
@@ -169,22 +169,28 @@ public class TextCoverageTests
             "overriding the toolkit's wording will find this one still in English.");
     }
 
-    [Theory]
-    [MemberData(nameof(PendingComponents))]
-    public void APendingComponent_DoesNotGrow(string relativePath, int allowed)
+    /// <summary>
+    /// Every pending component stays at its recorded count. A loop rather than a theory: the table is empty once
+    /// the last component is migrated (Tharga/Team#401), and a theory with no data is an error, not a pass.
+    /// </summary>
+    [Fact]
+    public void APendingComponent_DoesNotGrow()
     {
-        var count = CountLiterals(relativePath);
-
-        Assert.True(count <= allowed,
-            $"'{relativePath}' has {count} literal string(s), up from the recorded {allowed}. " +
-            "#204 is a ratchet — this number may only go down. Route the new string through the text catalogue.");
-
-        if (count < allowed)
+        foreach (var (relativePath, allowed) in Pending)
         {
-            // Not a failure of the code, but the record is now wrong and the next reader would trust it.
-            Assert.Fail(
-                $"'{relativePath}' is down to {count} literal string(s) from {allowed} — good, but update the " +
-                "recorded count (or move it to Migrated if it is zero) so the remaining work stays accurate.");
+            var count = CountLiterals(relativePath);
+
+            Assert.True(count <= allowed,
+                $"'{relativePath}' has {count} literal string(s), up from the recorded {allowed}. " +
+                "#204 is a ratchet — this number may only go down. Route the new string through the text catalogue.");
+
+            if (count < allowed)
+            {
+                // Not a failure of the code, but the record is now wrong and the next reader would trust it.
+                Assert.Fail(
+                    $"'{relativePath}' is down to {count} literal string(s) from {allowed} — good, but update the " +
+                    "recorded count (or move it to Migrated if it is zero) so the remaining work stays accurate.");
+            }
         }
     }
 
@@ -301,10 +307,4 @@ public class TextCoverageTests
         return data;
     }
 
-    public static TheoryData<string, int> PendingComponents()
-    {
-        var data = new TheoryData<string, int>();
-        foreach (var (path, count) in Pending) data.Add(path, count);
-        return data;
-    }
 }

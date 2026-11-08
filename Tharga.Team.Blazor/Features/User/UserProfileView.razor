@@ -2,12 +2,14 @@
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.JSInterop
 @using Tharga.Team
+@using Tharga.Team.Blazor.Framework
 @using Tharga.Toolkit
 @inject IJSRuntime JS
 @inject IUserService UserService
 @inject IServiceProvider ServiceProvider
 @inject IconSettings IconSettings
 @inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
 
 <CascadingAuthenticationState>
     <AuthorizeView>
@@ -20,11 +22,11 @@
                             @if (_editingName)
                             {
                                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem">
-                                    <RadzenTextBox Value="@_editedName" ValueChanged="@(v => _editedName = v)" Placeholder="Your name" />
+                                    <RadzenTextBox Value="@_editedName" ValueChanged="@(v => _editedName = v)" Placeholder="@_text[UserProfileViewText.YourName]" />
                                     <RadzenButton Icon="check" ButtonStyle="ButtonStyle.Success" Variant="Variant.Flat" Size="ButtonSize.Small"
-                                                  Click="SaveName" title="Save" />
+                                                  Click="SaveName" title="@_text[UserProfileViewText.Save]" />
                                     <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Small"
-                                                  Click="@(() => _editingName = false)" title="Cancel" />
+                                                  Click="@(() => _editingName = false)" title="@_text[UserProfileViewText.Cancel]" />
                                 </RadzenStack>
                             }
                             else
@@ -32,7 +34,7 @@
                                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.25rem">
                                     <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-m-0"><strong>@(_user?.Name ?? context.User.GetEmail())</strong></RadzenText>
                                     <RadzenButton Icon="edit" Variant="Variant.Text" Size="ButtonSize.Small"
-                                                  Click="StartNameEdit" title="Edit your name" />
+                                                  Click="StartNameEdit" title="@_text[UserProfileViewText.EditName]" />
                                 </RadzenStack>
                             }
                             <RadzenText TextStyle="TextStyle.Caption">@(_user?.EMail ?? context.User.GetEmail())</RadzenText>
@@ -54,26 +56,27 @@
                                         @* A different style, because these follow the team selector rather than
                                            the person -- see ProfileRoles. *@
                                         <RadzenBadge BadgeStyle="BadgeStyle.Info" Variant="Variant.Flat" Text="@role" class="rz-mr-1 rz-mb-1"
-                                                     title="From the selected team — changes when you switch teams." />
+                                                     title="@_text[UserProfileViewText.TeamRoleTooltip]" />
                                     }
                                 </RadzenStack>
                                 @if (roles.Team.Length > 0)
                                 {
-                                    <RadzenText TextStyle="TextStyle.Caption">Blue roles come from the selected team.</RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Caption">@_text[UserProfileViewText.TeamRolesCaption]</RadzenText>
                                 }
                             }
                             @if (_canUpload)
                             {
-                                <RadzenButton Text="Change picture" Icon="photo_camera" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="ChangePicture" />
+                                <RadzenButton Text="@_text[UserProfileViewText.ChangePicture]" Icon="photo_camera" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="ChangePicture" />
                             }
                             @if (!string.IsNullOrEmpty(_user?.Icon))
                             {
-                                <RadzenText TextStyle="TextStyle.Caption">Using your uploaded picture.</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption">@_text[UserProfileViewText.UsingUploadedPicture]</RadzenText>
                             }
                             else if (IconSettings.GravatarEnabled)
                             {
                                 <RadzenText TextStyle="TextStyle.Caption">
-                                    Your picture comes from <RadzenLink Path="https://gravatar.com/" Target="gravatar">Gravatar</RadzenLink> (based on your email).@(_canUpload ? " Upload your own with “Change picture” above, or manage it at Gravatar." : " Register your email at Gravatar to change it.")
+                                    @_text[_canUpload ? UserProfileViewText.GravatarCanUpload : UserProfileViewText.GravatarNoUpload]
+                                    <RadzenLink Path="https://gravatar.com/" Target="gravatar" Text="@_text[UserProfileViewText.GravatarLink]" />
                                 </RadzenText>
                             }
                         </RadzenStack>
@@ -83,10 +86,10 @@
                 {
                     <AccessSimulationCard />
                 }
-                <ExpandableCard Icon="work" Text="Claims">
+                <ExpandableCard Icon="work" Text="@_text[UserProfileViewText.Claims]">
                     <ChildContent>
                         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" class="rz-mb-2">
-                            <RadzenButton Icon="content_copy" Text="Copy as JSON" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                            <RadzenButton Icon="content_copy" Text="@_text[UserProfileViewText.CopyAsJson]" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
                                           Click="@(() => CopyClaimsAsync(context.User))" />
                         </RadzenStack>
                         <ul style="word-break: break-all; overflow-wrap: break-word;">
@@ -100,7 +103,7 @@
             </RadzenStack>
         </Authorized>
         <NotAuthorized>
-            <RadzenText>Not authorized</RadzenText>
+            <RadzenText>@_text[UserProfileViewText.NotAuthorized]</RadzenText>
         </NotAuthorized>
     </AuthorizeView>
 </CascadingAuthenticationState>
@@ -126,9 +129,11 @@
     private bool _canUpload;
     private bool _editingName;
     private string _editedName;
+    private TextSet _text = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(UserProfileViewText.All);
         _user = await UserService.GetCurrentUserAsync();
         _canUpload = IconSettings.AllowUserUpload && ServiceProvider.GetService<IIconStore>() != null;
     }
@@ -159,7 +164,7 @@
 
     private async Task ChangePicture()
     {
-        var result = await DialogService.OpenAsync<UserIconDialog>("Profile picture",
+        var result = await DialogService.OpenAsync<UserIconDialog>(_text[UserProfileViewText.ProfilePictureTitle],
             new Dictionary<string, object> { { nameof(UserIconDialog.HasIcon), !string.IsNullOrEmpty(_user?.Icon) } },
             new DialogOptions { Width = "480px" });
 
