@@ -7,6 +7,7 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NotificationService NotificationService
 @inject IThargaTextProvider TextProvider
+@using Tharga.Team.Blazor.Framework
 
 @*
     Runtime role administration for the selected team: a team admin (team:manage) creates / edits / deletes
@@ -17,40 +18,40 @@
 @if (_scopeRegistry == null)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat">
-        No scopes are configured. Register them via <code>o.ConfigureScopes</code> in Program.cs before defining custom roles.
+        @_text[TenantRoleManagerText.NoScopesConfigured]
     </RadzenAlert>
 }
 else if (_tenantRoleService == null)
 {
     <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat">
-        Dynamic tenant roles are not enabled. Set <code>o.EnableDynamicRoles = true</code> in <code>AddThargaTeam</code>.
+        @_text[TenantRoleManagerText.DynamicRolesDisabled]
     </RadzenAlert>
 }
 else if (!_canManage)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning" ShowIcon="true" Variant="Variant.Flat">
-        Managing custom roles requires the <code>@_manageScope</code> scope on this team.
+        @_text.Format(TenantRoleManagerText.RequiresScope, _manageScope)
     </RadzenAlert>
 }
 else if (string.IsNullOrEmpty(_teamKey))
 {
-    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat">No team selected.</RadzenAlert>
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat">@_text[TenantRoleManagerText.NoTeamSelected]</RadzenAlert>
 }
 else
 {
     <RadzenDataGrid @ref="_grid" Data="@_model.Roles" TItem="EditableTenantRole" AllowSorting="false" AllowFiltering="false">
         <Columns>
-            <RadzenDataGridColumn Title="Name" Width="220px">
+            <RadzenDataGridColumn Title="@_text[TenantRoleManagerText.ColumnName]" Width="220px">
                 <Template>
-                    <RadzenTextBox @bind-Value="context.Name" Placeholder="Role name" Style="width: 100%;" />
+                    <RadzenTextBox @bind-Value="context.Name" Placeholder="@_text[TenantRoleManagerText.PlaceholderName]" Style="width: 100%;" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Description" Visible="@ShowDescription">
+            <RadzenDataGridColumn Title="@_text[TenantRoleManagerText.ColumnDescription]" Visible="@ShowDescription">
                 <Template>
-                    <RadzenTextBox @bind-Value="context.Description" Placeholder="Optional description" Style="width: 100%;" />
+                    <RadzenTextBox @bind-Value="context.Description" Placeholder="@_text[TenantRoleManagerText.PlaceholderDescription]" Style="width: 100%;" />
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="Scopes" Width="320px">
+            <RadzenDataGridColumn Title="@_text[TenantRoleManagerText.ColumnScopes]" Width="320px">
                 <Template>
                     <RadzenDropDown TValue="IEnumerable<string>"
                                     Multiple="true"
@@ -61,7 +62,7 @@ else
                                     Data="@_allScopeNames"
                                     Value="@context.Scopes"
                                     ValueChanged="@(v => context.Scopes = (v ?? Enumerable.Empty<string>()).ToList())"
-                                    Placeholder="Select scopes..."
+                                    Placeholder="@_text[TenantRoleManagerText.PlaceholderScopes]"
                                     Style="width: 100%;">
                         <Template Context="scope">
                             <span>@scope</span>
@@ -76,7 +77,7 @@ else
             <RadzenDataGridColumn Title="" Width="60px" Sortable="false" Filterable="false">
                 <Template>
                     <RadzenButton Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Flat" Size="ButtonSize.Small"
-                                  Click="@(() => RemoveRole(context))" title="Delete role" />
+                                  Click="@(() => RemoveRole(context))" title="@_text[TenantRoleManagerText.DeleteRole]" />
                 </Template>
             </RadzenDataGridColumn>
         </Columns>
@@ -95,9 +96,9 @@ else
     }
 
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" class="rz-mt-3">
-        <RadzenButton Icon="add" Text="Add role" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Flat"
+        <RadzenButton Icon="add" Text="@_text[TenantRoleManagerText.AddRole]" ButtonStyle="ButtonStyle.Secondary" Variant="Variant.Flat"
                       Size="ButtonSize.Small" Click="@AddRole" />
-        <RadzenButton Icon="save" Text="Save" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+        <RadzenButton Icon="save" Text="@_text[TenantRoleManagerText.Save]" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
                       IsBusy="@_saving" Disabled="@_saving" Click="@SaveAsync" />
     </RadzenStack>
 }
@@ -125,9 +126,12 @@ else
     private IReadOnlyList<string> _codeRoleNames = [];
     private IReadOnlyList<string> _errors = [];
     private bool _saving;
+    private TextSet _text = TextSet.Empty;
 
     protected override async Task OnInitializedAsync()
     {
+        _text = await TextProvider.ResolveAsync(TenantRoleManagerText.All);
+
         _scopeRegistry = ServiceProvider.GetService<IScopeRegistry>();
         _roleRegistry = ServiceProvider.GetService<ITenantRoleRegistry>();
         _tenantRoleService = ServiceProvider.GetService<ITenantRoleService>();
@@ -199,7 +203,7 @@ else
         try
         {
             await _managementService.SetTeamCustomRolesAsync(_teamKey, _model.ToDefinitions());
-            NotificationService.Notify(NotificationSeverity.Success, "Custom roles saved.");
+            NotificationService.Notify(NotificationSeverity.Success, _text[TenantRoleManagerText.Saved]);
             await ReloadAsync();
         }
         catch (Exception ex)
