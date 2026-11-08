@@ -70,6 +70,19 @@ public class ThargaTeamOptions
     public Action<ScopeRegistry> ConfigureScopes { get; set; }
 
     /// <summary>
+    /// Change how a scope is granted without registering it: its level, whether it is grant-only, its group, whether
+    /// its level grants it to API keys, its wording. Call <see cref="ScopeRegistry.Override"/> only
+    /// (Tharga/Team#405).
+    /// </summary>
+    /// <remarks>
+    /// <b>For the scopes a module registers before <see cref="ConfigureScopes"/> runs</b>, the toolkit's own among them,
+    /// where <c>Register</c> throws on the duplicate. An override is kept by name and applied when the scope is read,
+    /// so it does not depend on being called after the module, and it wins over what the module chose. A name nobody
+    /// registers stops the application at startup.
+    /// </remarks>
+    public Action<ScopeRegistry> ConfigureScopeOverrides { get; set; }
+
+    /// <summary>
     /// Configure tenant roles for role-based authorization within teams.
     /// When null, tenant role registration is skipped and role UI columns are hidden.
     /// </summary>
