@@ -2445,6 +2445,15 @@ on load.
 When the list contains a team you have no access to, a **Hide teams I have no access to** switch appears
 above it. It only hides rows, is remembered per browser, and does not change the layout.
 
+**Show only the selected team.** Set `ShowSelectedTeamOnly="true"` and the page lists just the team the
+caller is working in, with a **Show all teams** switch above it for reaching the others. The default is
+off, so a host that does not opt in shows what it always did; whether it should become the default is left
+for a major version. It is presentation only: the component still loads every team it did before, and what
+a caller may see or do is unchanged. The switch appears only while there is another team to switch to, the
+choice is not remembered, and a caller with no selected team sees every team, since narrowing would leave
+an empty page. A list narrowed to one team is drawn as a card, whatever `TeamLayout` threshold applies to
+the full list.
+
 **Only the team name sorts and filters.** Every other column is derived — your level comes from your
 membership or the team's consent — and a sort control that silently does nothing is worse than no
 control.
