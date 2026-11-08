@@ -217,11 +217,13 @@ builder.Services.AddThargaMcp(mcp =>
     mcp.AddTeam();
 });
 
-// TeamAccessInterceptor is deliberately NOT registered yet. Claim construction reads the user record to
-// decide what the caller may do, so it necessarily precedes any authorization decision — and every
-// self-service operation passes through its decorator without one either. Both are legitimately
-// unauthorized, so the guard rejected them and took the site down. See the notes in TeamAccessInterceptor.
-builder.AddMongoDB();
+// TeamAccessInterceptor (which refuses an unscoped call) is deliberately NOT registered: claim construction,
+// the self-service operations, the central service decorators and the background workers all reach the
+// database without recording an authorization, so the guard rejected them and took the site down. What is
+// registered is its log-only counterpart, which lets every call through and logs each distinct unscoped call
+// path once, at warning level ("Unscoped database call"). Use the log to see what would need a TeamAccess
+// scope before enforcing (Tharga/Team#397).
+builder.AddMongoDB(o => o.AddCollectionInterceptor<TeamAccessReportInterceptor>());
 
 // Demo: per-team features. billing:manage and case:read are hidden for a team unless its name contains
 // "Billing" / "Case" — rename a team to switch them on. Registered after AddThargaTeam, so it replaces the
