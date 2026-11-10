@@ -69,6 +69,29 @@ public interface IUserRepository<TUserEntity> : IRepository
     }
 
     Task AddAsync(TUserEntity user);
+
+    /// <summary>
+    /// Adds the user and answers <c>false</c> when the unique identity index already holds it, so a first sign-in that
+    /// races another for the same identity is told it lost rather than throwing.
+    /// </summary>
+    /// <remarks>
+    /// A default interface method that wraps <see cref="AddAsync"/>, so a host's own repository keeps compiling and
+    /// answering correctly. The built-in repository overrides it to add inside the collection's own operation, which is
+    /// what keeps the expected duplicate out of the error log (Tharga/Team#457).
+    /// </remarks>
+    async Task<bool> TryAddAsync(TUserEntity user)
+    {
+        try
+        {
+            await AddAsync(user);
+            return true;
+        }
+        catch (global::MongoDB.Driver.MongoWriteException e) when (e.WriteError?.Category == global::MongoDB.Driver.ServerErrorCategory.DuplicateKey)
+        {
+            return false;
+        }
+    }
+
     Task SetNameAsync(string userKey, string name);
 
     /// <summary>

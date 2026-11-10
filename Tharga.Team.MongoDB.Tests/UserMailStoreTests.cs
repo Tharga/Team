@@ -89,7 +89,7 @@ public class UserMailStoreTests
     public async Task ANewMail_IsInsertedQueued()
     {
         UserMailEntity added = null;
-        await _mail.AddAsync(Arg.Do<UserMailEntity>(x => added = x));
+        _mail.TryAddAsync(Arg.Do<UserMailEntity>(x => added = x), Arg.Any<IClientSessionHandle>()).Returns(true);
 
         var queued = await new MongoUserMailOutbox(_mail, _batches).AddAsync(Mail(), Now);
 
@@ -108,7 +108,30 @@ public class UserMailStoreTests
 
         Assert.True(queued.Duplicate);
         Assert.Equal(existing.Id.ToString(), queued.Id);
+        await _mail.DidNotReceive().TryAddAsync(Arg.Any<UserMailEntity>(), Arg.Any<IClientSessionHandle>());
+    }
+
+    [Fact]
+    public async Task AMailThatLosesTheRaceOnItsKey_NamesTheWinner_WithoutAnErrorBeingLogged()
+    {
+        // The first look finds nothing, the insert then answers false (the unique key is taken), and the winner is found.
+        var winner = MongoUserMailOutbox.ToEntity(Mail("d1"), Now);
+        _mail.GetOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserMailEntity, bool>>>(), Arg.Any<OneOption<UserMailEntity>>(), Arg.Any<CancellationToken>()).Returns(null, winner);
+        _mail.TryAddAsync(Arg.Any<UserMailEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
+
+        var queued = await new MongoUserMailOutbox(_mail, _batches).AddAsync(Mail("d1"), Now);
+
+        Assert.True(queued.Duplicate);
+        Assert.Equal(winner.Id.ToString(), queued.Id);
         await _mail.DidNotReceive().AddAsync(Arg.Any<UserMailEntity>());
+    }
+
+    [Fact]
+    public async Task AMailThatCouldNotBeInsertedAndHasNoWinner_Throws()
+    {
+        _mail.TryAddAsync(Arg.Any<UserMailEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new MongoUserMailOutbox(_mail, _batches).AddAsync(Mail(), Now));
     }
 
     [Fact]
@@ -220,7 +243,7 @@ public class UserMailStoreTests
 
         await Store().SetChoiceAsync("user-1", "news", false);
 
-        await _preferences.DidNotReceive().AddAsync(Arg.Any<UserMailPreferenceEntity>());
+        await _preferences.DidNotReceive().TryAddAsync(Arg.Any<UserMailPreferenceEntity>(), Arg.Any<IClientSessionHandle>());
     }
 
     [Fact]
@@ -229,11 +252,29 @@ public class UserMailStoreTests
         UserMailPreferenceEntity added = null;
         _preferences.UpdateOneAsync(Arg.Any<FilterDefinition<UserMailPreferenceEntity>>(), Arg.Any<UpdateDefinition<UserMailPreferenceEntity>>(), Arg.Any<OneOption<UserMailPreferenceEntity>>(), Arg.Any<IClientSessionHandle>())
             .Returns((EntityChangeResult<UserMailPreferenceEntity>)null);
-        await _preferences.AddAsync(Arg.Do<UserMailPreferenceEntity>(x => added = x));
+        _preferences.TryAddAsync(Arg.Do<UserMailPreferenceEntity>(x => added = x), Arg.Any<IClientSessionHandle>()).Returns(true);
 
         await Store().SetChoiceAsync("user-1", "news", false);
 
         Assert.Equal(("user-1", "news", false, Now), (added.UserKey, added.Category, added.Receives, added.UpdatedAt));
+    }
+
+    [Fact]
+    public async Task AFirstChoiceThatLosesTheRace_IsUpdatedInstead_AndAFailedInsertIsNotHidden()
+    {
+        _preferences.TryAddAsync(Arg.Any<UserMailPreferenceEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
+        _preferences.UpdateOneAsync(Arg.Any<FilterDefinition<UserMailPreferenceEntity>>(), Arg.Any<UpdateDefinition<UserMailPreferenceEntity>>(), Arg.Any<OneOption<UserMailPreferenceEntity>>(), Arg.Any<IClientSessionHandle>())
+            .Returns((EntityChangeResult<UserMailPreferenceEntity>)null, Changed(new UserMailPreferenceEntity { UserKey = "user-1", Category = "news", Receives = true, UpdatedAt = Now }));
+
+        await Store().SetChoiceAsync("user-1", "news", false);
+
+        await _preferences.Received(2).UpdateOneAsync(Arg.Any<FilterDefinition<UserMailPreferenceEntity>>(), Arg.Any<UpdateDefinition<UserMailPreferenceEntity>>(), Arg.Any<OneOption<UserMailPreferenceEntity>>(), Arg.Any<IClientSessionHandle>());
+
+        // Nothing there to update either: the insert did not lose a race, it failed.
+        _preferences.UpdateOneAsync(Arg.Any<FilterDefinition<UserMailPreferenceEntity>>(), Arg.Any<UpdateDefinition<UserMailPreferenceEntity>>(), Arg.Any<OneOption<UserMailPreferenceEntity>>(), Arg.Any<IClientSessionHandle>())
+            .Returns((EntityChangeResult<UserMailPreferenceEntity>)null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Store().SetChoiceAsync("user-1", "news", false));
     }
 
     [Fact]

@@ -86,17 +86,6 @@ public class UserNoticeStoreTests
         ClaimedUntil = Now.AddMinutes(5)
     };
 
-    private static MongoWriteException DuplicateKey()
-    {
-        var ex = (MongoWriteException)RuntimeHelpers.GetUninitializedObject(typeof(MongoWriteException));
-        var writeError = (WriteError)RuntimeHelpers.GetUninitializedObject(typeof(WriteError));
-
-        typeof(WriteError).GetFields(BindingFlags.Instance | BindingFlags.NonPublic).Single(f => f.FieldType == typeof(ServerErrorCategory)).SetValue(writeError, ServerErrorCategory.DuplicateKey);
-        typeof(MongoWriteException).GetFields(BindingFlags.Instance | BindingFlags.NonPublic).Single(f => f.FieldType == typeof(WriteError)).SetValue(ex, writeError);
-
-        return ex;
-    }
-
     [Fact]
     public void ARaisedOccurrence_SurvivesTheRoundTripToStorage()
     {
@@ -168,6 +157,7 @@ public class UserNoticeStoreTests
         UserNoticeStreamEntity created = null;
         _streams.UpdateOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<UpdateDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<IClientSessionHandle>())
             .Returns((EntityChangeResult<UserNoticeStreamEntity>)null);
+        _items.TryAddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>()).Returns(true);
         _streams.TryAddAsync(Arg.Do<UserNoticeStreamEntity>(x => created = x), Arg.Any<IClientSessionHandle>()).Returns(true);
 
         var stored = await Outbox.AddItemAsync(Item(), Now.AddMinutes(2), TestContext.Current.CancellationToken);
@@ -175,7 +165,7 @@ public class UserNoticeStoreTests
         Assert.True(stored);
         Received.InOrder(() =>
         {
-            _items.AddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>());
+            _items.TryAddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>());
             _streams.UpdateOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<UpdateDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<IClientSessionHandle>());
             _streams.TryAddAsync(Arg.Any<UserNoticeStreamEntity>(), Arg.Any<IClientSessionHandle>());
         });
@@ -194,7 +184,8 @@ public class UserNoticeStoreTests
     [Fact]
     public async Task TheSameOccurrenceForTheSameUser_IsNotStoredAgain_ButAWaitingOneKeepsItsStreamDue()
     {
-        _items.AddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>()).Returns(Task.FromException(DuplicateKey()));
+        // The duplicate is answered inside the collection's operation, so it is not logged as an error (Tharga/Team#459).
+        _items.TryAddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
         _items.GetOneAsync(Arg.Any<FilterDefinition<UserNoticeItemEntity>>(), Arg.Any<OneOption<UserNoticeItemEntity>>(), Arg.Any<CancellationToken>())
             .Returns(MongoUserNoticeOutbox.ToItemEntity(Item()));
         _streams.UpdateOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<UpdateDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<IClientSessionHandle>())
@@ -202,12 +193,24 @@ public class UserNoticeStoreTests
 
         Assert.False(await Outbox.AddItemAsync(Item(), Now, TestContext.Current.CancellationToken));
         await _streams.Received(1).UpdateOneAsync(Arg.Any<FilterDefinition<UserNoticeStreamEntity>>(), Arg.Any<UpdateDefinition<UserNoticeStreamEntity>>(), Arg.Any<OneOption<UserNoticeStreamEntity>>(), Arg.Any<IClientSessionHandle>());
+        await _items.DidNotReceive().AddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>());
+    }
+
+    [Fact]
+    public async Task AnItemThatCouldNotBeAddedAndIsNotThere_IsNotTakenForOneAlreadyRaised()
+    {
+        // TryAddAsync answers false for any write error, so a row that cannot be found means the write failed.
+        _items.TryAddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
+        _items.GetOneAsync(Arg.Any<FilterDefinition<UserNoticeItemEntity>>(), Arg.Any<OneOption<UserNoticeItemEntity>>(), Arg.Any<CancellationToken>())
+            .Returns((UserNoticeItemEntity)null);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Outbox.AddItemAsync(Item(), Now, TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public async Task TheSameOccurrenceAlreadyMailed_LeavesTheStreamAlone()
     {
-        _items.AddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>()).Returns(Task.FromException(DuplicateKey()));
+        _items.TryAddAsync(Arg.Any<UserNoticeItemEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
         _items.GetOneAsync(Arg.Any<FilterDefinition<UserNoticeItemEntity>>(), Arg.Any<OneOption<UserNoticeItemEntity>>(), Arg.Any<CancellationToken>())
             .Returns(MongoUserNoticeOutbox.ToItemEntity(Item()) with { Status = UserNoticeItemStatus.Mailed });
 
@@ -408,7 +411,7 @@ public class UserNoticeStoreTests
 
         Assert.Contains("\"UserKey\" : \"u-1\"", Render(filter));
         Assert.Contains("\"NoticeKey\" : \"case.opened\"", Render(filter));
-        await _choices.DidNotReceiveWithAnyArgs().AddAsync(default);
+        await _choices.DidNotReceiveWithAnyArgs().TryAddAsync(default);
     }
 
     [Fact]
@@ -417,7 +420,7 @@ public class UserNoticeStoreTests
         UserNoticePreferenceEntity added = null;
         _choices.UpdateOneAsync(Arg.Any<FilterDefinition<UserNoticePreferenceEntity>>(), Arg.Any<UpdateDefinition<UserNoticePreferenceEntity>>(), Arg.Any<OneOption<UserNoticePreferenceEntity>>(), Arg.Any<IClientSessionHandle>())
             .Returns((EntityChangeResult<UserNoticePreferenceEntity>)null);
-        await _choices.AddAsync(Arg.Do<UserNoticePreferenceEntity>(x => added = x), Arg.Any<IClientSessionHandle>());
+        _choices.TryAddAsync(Arg.Do<UserNoticePreferenceEntity>(x => added = x), Arg.Any<IClientSessionHandle>()).Returns(true);
 
         await Preferences.SetChoiceAsync("u-1", "case.opened", new UserNoticeSetting { Delivery = UserNoticeDelivery.AtOnce }, TestContext.Current.CancellationToken);
 

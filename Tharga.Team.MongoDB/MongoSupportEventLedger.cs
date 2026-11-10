@@ -20,20 +20,18 @@ internal sealed class MongoSupportEventLedger(ISupportEventLedgerCollection coll
         // Seeing an event again is ordinary, so it is answered by a read; the insert below still decides the race between instances.
         if (await collection.CountAsync(Builders<SupportEventLedgerEntity>.Filter.Where(x => x.Source == source && x.EventId == eventId)) > 0) return false;
 
-        try
-        {
-            await collection.AddAsync(new SupportEventLedgerEntity
+        // TryAddAsync keeps the expected duplicate out of the error log (Tharga/Team#457). It answers false for any write
+        // error, so the row is looked for: found means somebody else handled the event, missing means the write failed.
+        if (await collection.TryAddAsync(new SupportEventLedgerEntity
             {
                 Source = source,
                 EventId = eventId,
                 HandledAt = timeProvider.GetUtcNow().UtcDateTime
-            });
+            })) return true;
 
-            return true;
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            return false;
-        }
+        if (await collection.CountAsync(Builders<SupportEventLedgerEntity>.Filter.Where(x => x.Source == source && x.EventId == eventId)) == 0)
+            throw new InvalidOperationException($"The event '{eventId}' from '{source}' could not be recorded.");
+
+        return false;
     }
 }

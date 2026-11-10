@@ -49,13 +49,14 @@ public class UserServiceRepositoryBaseIdentityClaimTests
     {
         var repo = Substitute.For<IUserRepository<TestUserEntity>>();
         repo.GetAsync(Arg.Any<string>()).Returns((TestUserEntity)null);
+        repo.TryAddAsync(Arg.Any<TestUserEntity>()).Returns(true);
         var sut = new TestUserService(repo) { IdentityResolver = new UserIdentityResolver([DirectoryClaimTypes.ObjectId]) };
 
         var result = await sut.InvokeGetUserAsync(EntraPrincipal());
 
         Assert.Equal(Oid, sut.CreatedWithIdentity);
         Assert.Equal(Oid, result.Identity);
-        await repo.Received(1).AddAsync(Arg.Is<TestUserEntity>(x => x.Identity == Oid));
+        await repo.Received(1).TryAddAsync(Arg.Is<TestUserEntity>(x => x.Identity == Oid));
     }
 
     public record TestUserEntity : EntityBase, IUser

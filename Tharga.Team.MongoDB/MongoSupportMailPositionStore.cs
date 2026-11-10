@@ -57,19 +57,20 @@ internal sealed class MongoSupportMailPositionStore(
 
             if (result?.Before != null) return;
 
-            await collection.AddAsync(new SupportMailPositionEntity
-            {
-                Key = key,
-                UidValidity = position.UidValidity,
-                LastUid = position.LastUid,
-                UpdatedAt = now
-            });
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
+            if (await collection.TryAddAsync(new SupportMailPositionEntity
+                {
+                    Key = key,
+                    UidValidity = position.UidValidity,
+                    LastUid = position.LastUid,
+                    UpdatedAt = now
+                })) return;
+
             // Two instances polling for the first time together: the unique index lets exactly one insert,
             // and the loser has nothing to do -- the position it would have written is the one already
-            // there, or the next poll writes it.
+            // there, or the next poll writes it. Not logged as an error by the collection (Tharga/Team#457);
+            // a missing row means the insert failed for another reason, which the handler below reports.
+            if (await collection.CountAsync(filter) == 0) throw new InvalidOperationException("The mailbox position row could not be added.");
+
             logger?.LogDebug("Another instance recorded the mailbox position first.");
         }
         catch (Exception e)

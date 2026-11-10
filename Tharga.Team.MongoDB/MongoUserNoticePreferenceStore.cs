@@ -48,14 +48,11 @@ internal sealed class MongoUserNoticePreferenceStore(IUserNoticePreferenceCollec
 
         if ((await choices.UpdateOneAsync(OfUser(userKey, noticeKey), update, OneOption<UserNoticePreferenceEntity>.FirstOrDefault))?.Before != null) return;
 
-        try
-        {
-            await choices.AddAsync(new UserNoticePreferenceEntity { UserKey = userKey, NoticeKey = noticeKey, Enabled = setting.Enabled, Delivery = setting.Delivery, UpdatedAt = now });
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            await choices.UpdateOneAsync(OfUser(userKey, noticeKey), update, OneOption<UserNoticePreferenceEntity>.FirstOrDefault);
-        }
+        if (await choices.TryAddAsync(new UserNoticePreferenceEntity { UserKey = userKey, NoticeKey = noticeKey, Enabled = setting.Enabled, Delivery = setting.Delivery, UpdatedAt = now })) return;
+
+        // A racing insert won (not logged as an error: Tharga/Team#457); if the update finds nothing, the insert failed for another reason.
+        if ((await choices.UpdateOneAsync(OfUser(userKey, noticeKey), update, OneOption<UserNoticePreferenceEntity>.FirstOrDefault))?.Before == null)
+            throw new InvalidOperationException($"The notice choice of user '{userKey}' for '{noticeKey}' could not be saved.");
     }
 
     public async Task<IReadOnlyDictionary<string, UserNoticeSetting>> GetTeamDefaultsAsync(string teamKey, CancellationToken cancellationToken = default)
@@ -82,14 +79,11 @@ internal sealed class MongoUserNoticePreferenceStore(IUserNoticePreferenceCollec
 
         if ((await teamDefaults.UpdateOneAsync(OfTeam(teamKey, noticeKey), update, OneOption<UserNoticeTeamDefaultEntity>.FirstOrDefault))?.Before != null) return;
 
-        try
-        {
-            await teamDefaults.AddAsync(new UserNoticeTeamDefaultEntity { TeamKey = teamKey, NoticeKey = noticeKey, Enabled = setting.Enabled, Delivery = setting.Delivery, UpdatedAt = now });
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            await teamDefaults.UpdateOneAsync(OfTeam(teamKey, noticeKey), update, OneOption<UserNoticeTeamDefaultEntity>.FirstOrDefault);
-        }
+        if (await teamDefaults.TryAddAsync(new UserNoticeTeamDefaultEntity { TeamKey = teamKey, NoticeKey = noticeKey, Enabled = setting.Enabled, Delivery = setting.Delivery, UpdatedAt = now })) return;
+
+        // A racing insert won (not logged as an error: Tharga/Team#457); if the update finds nothing, the insert failed for another reason.
+        if ((await teamDefaults.UpdateOneAsync(OfTeam(teamKey, noticeKey), update, OneOption<UserNoticeTeamDefaultEntity>.FirstOrDefault))?.Before == null)
+            throw new InvalidOperationException($"The notice default of team '{teamKey}' for '{noticeKey}' could not be saved.");
     }
 
     public async Task<int> RemoveTeamDefaultsAsync(string teamKey, CancellationToken cancellationToken = default)

@@ -74,14 +74,13 @@ internal sealed class MongoUserNoticeOutbox(IUserNoticeCollection notices, IUser
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        try
+        // TryAddAsync swallows the duplicate inside the collection's operation, so the expected "already raised" is not
+        // logged as an error (Tharga/Team#459). It answers false for any write error, so a missing row is thrown.
+        if (!await items.TryAddAsync(ToItemEntity(item)))
         {
-            await items.AddAsync(ToItemEntity(item));
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            var existing = await items.GetOneAsync(OfOccurrence(item.OccurrenceKey, item.UserKey), cancellationToken: cancellationToken);
-            if (existing?.Status == UserNoticeItemStatus.Waiting) await MakeDueAsync(existing.UserKey, existing.Stream, dueBy);
+            var existing = await items.GetOneAsync(OfOccurrence(item.OccurrenceKey, item.UserKey), cancellationToken: cancellationToken)
+                ?? throw new InvalidOperationException($"Notice item for occurrence '{item.OccurrenceKey}' could not be added.");
+            if (existing.Status == UserNoticeItemStatus.Waiting) await MakeDueAsync(existing.UserKey, existing.Stream, dueBy);
 
             return false;
         }

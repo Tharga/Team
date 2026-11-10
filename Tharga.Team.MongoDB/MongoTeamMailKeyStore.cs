@@ -22,15 +22,13 @@ internal sealed class MongoTeamMailKeyStore(ITeamMailKeysCollection collection) 
 
     public async Task<bool> IssueAsync(TeamMailKeyRecord primary, CancellationToken cancellationToken = default)
     {
-        try
-        {
-            await collection.AddAsync(new TeamMailKeysEntity { TeamKey = primary.TeamKey, Keys = [ToEntry(primary)], Revision = 1 });
-            return true;
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            return false;
-        }
+        if (await collection.TryAddAsync(new TeamMailKeysEntity { TeamKey = primary.TeamKey, Keys = [ToEntry(primary)], Revision = 1 })) return true;
+
+        // The team already has its keys (not logged as an error: Tharga/Team#457); if it has none, the write failed.
+        if (await collection.GetOneAsync(x => x.TeamKey == primary.TeamKey) == null)
+            throw new InvalidOperationException($"The mail keys of team {primary.TeamKey} could not be issued.");
+
+        return false;
     }
 
     public async Task RotateAsync(string teamKey, TeamMailKeyRecord newPrimary, DateTime retiresAt, DateTime now, CancellationToken cancellationToken = default)

@@ -33,14 +33,11 @@ internal sealed class MongoSupportAiConnectionStore(ISupportAiConnectionCollecti
 
         if ((await collection.UpdateOneAsync(filter, update))?.Before != null) return;
 
-        try
-        {
-            await collection.AddAsync(ToEntity(connection));
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            await collection.UpdateOneAsync(filter, update);
-        }
+        if (await collection.TryAddAsync(ToEntity(connection))) return;
+
+        // A racing insert won (not logged as an error: Tharga/Team#457); if the update finds nothing, the insert failed for another reason.
+        if ((await collection.UpdateOneAsync(filter, update))?.Before == null)
+            throw new InvalidOperationException($"The support AI connection of team '{connection.TeamKey}' could not be saved.");
     }
 
     public async Task<bool> DeleteForTeamAsync(string teamKey, CancellationToken cancellationToken = default)

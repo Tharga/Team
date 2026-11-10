@@ -22,14 +22,14 @@ public class UserServiceRepositoryBaseRaceTests
     {
         var repo = Substitute.For<IUserRepository<TestUserEntity>>();
         repo.GetAsync("alice@example.com").Returns((TestUserEntity)null);
-        repo.AddAsync(Arg.Any<TestUserEntity>()).Returns(Task.CompletedTask);
+        repo.TryAddAsync(Arg.Any<TestUserEntity>()).Returns(true);
 
         var sut = new TestUserService(repo, new TestUserEntity { Identity = "alice@example.com", Key = "u-alice" });
         var result = await sut.InvokeGetUserAsync(BuildClaims("alice@example.com"));
 
         Assert.NotNull(result);
         Assert.Equal("u-alice", result.Key);
-        await repo.Received(1).AddAsync(Arg.Any<TestUserEntity>());
+        await repo.Received(1).TryAddAsync(Arg.Any<TestUserEntity>());
     }
 
     [Fact]
@@ -43,37 +43,61 @@ public class UserServiceRepositoryBaseRaceTests
         var result = await sut.InvokeGetUserAsync(BuildClaims("bob@example.com"));
 
         Assert.Same(existing, result);
-        await repo.DidNotReceive().AddAsync(Arg.Any<TestUserEntity>());
+        await repo.DidNotReceive().TryAddAsync(Arg.Any<TestUserEntity>());
     }
 
     [Fact]
-    public async Task GetUserAsync_AddThrowsDuplicateKey_ReReadsAndReturnsWinner()
+    public async Task GetUserAsync_TheInsertIsLost_ReReadsAndReturnsWinner()
     {
-        // Race: first GetAsync returns null, candidate is created, AddAsync hits the unique-Identity
-        // index conflict and throws. Recovery re-reads by Identity and returns the winner.
+        // Race: first GetAsync returns null, candidate is created, and the add answers false because the
+        // unique-Identity index already holds it. Recovery re-reads by Identity and returns the winner.
         var winner = new TestUserEntity { Identity = "carol@example.com", Key = "u-winner" };
         var repo = Substitute.For<IUserRepository<TestUserEntity>>();
         repo.GetAsync("carol@example.com").Returns((TestUserEntity)null, winner);
-        repo.AddAsync(Arg.Any<TestUserEntity>()).Returns<Task>(_ => throw BuildDuplicateKeyException());
+        repo.TryAddAsync(Arg.Any<TestUserEntity>()).Returns(false);
 
         var sut = new TestUserService(repo, new TestUserEntity { Identity = "carol@example.com", Key = "u-loser" });
         var result = await sut.InvokeGetUserAsync(BuildClaims("carol@example.com"));
 
         Assert.Same(winner, result);
         await repo.Received(2).GetAsync("carol@example.com");
-        await repo.Received(1).AddAsync(Arg.Any<TestUserEntity>());
+        await repo.Received(1).TryAddAsync(Arg.Any<TestUserEntity>());
     }
 
     [Fact]
-    public async Task GetUserAsync_AddThrowsNonDuplicateKey_Propagates()
+    public async Task GetUserAsync_TheInsertFailsAndNobodyElseAddedTheUser_Throws()
     {
+        // The collection answers false for any write error, so a missing winner means the write really failed,
+        // and signing in must not carry on as if it had worked.
         var repo = Substitute.For<IUserRepository<TestUserEntity>>();
         repo.GetAsync("dave@example.com").Returns((TestUserEntity)null);
-        repo.AddAsync(Arg.Any<TestUserEntity>()).Returns<Task>(_ => throw new InvalidOperationException("unrelated"));
+        repo.TryAddAsync(Arg.Any<TestUserEntity>()).Returns(false);
 
         var sut = new TestUserService(repo, new TestUserEntity { Identity = "dave@example.com", Key = "u-dave" });
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => sut.InvokeGetUserAsync(BuildClaims("dave@example.com")));
+    }
+
+    [Fact]
+    public async Task AHostRepository_WithOnlyAddAsync_StillAnswersFalseForADuplicate_AndThrowsForAnythingElse()
+    {
+        // TryAddAsync is a default interface method, so a host's own repository keeps compiling: it wraps AddAsync.
+        IUserRepository<TestUserEntity> duplicate = new HostRepository(BuildDuplicateKeyException());
+        IUserRepository<TestUserEntity> broken = new HostRepository(new TimeoutException("The database is down."));
+        IUserRepository<TestUserEntity> fine = new HostRepository(null);
+
+        Assert.False(await duplicate.TryAddAsync(new TestUserEntity { Identity = "x" }));
+        Assert.True(await fine.TryAddAsync(new TestUserEntity { Identity = "x" }));
+        await Assert.ThrowsAsync<TimeoutException>(() => broken.TryAddAsync(new TestUserEntity { Identity = "x" }));
+    }
+
+    private sealed class HostRepository(Exception onAdd) : IUserRepository<TestUserEntity>
+    {
+        public IAsyncEnumerable<TestUserEntity> GetAsync() => AsyncEnumerable.Empty<TestUserEntity>();
+        public Task<TestUserEntity> GetAsync(string identity) => Task.FromResult<TestUserEntity>(null);
+        public Task<TestUserEntity> GetByKeyAsync(string userKey) => Task.FromResult<TestUserEntity>(null);
+        public Task AddAsync(TestUserEntity user) => onAdd == null ? Task.CompletedTask : Task.FromException(onAdd);
+        public Task SetNameAsync(string userKey, string name) => Task.CompletedTask;
     }
 
     private static ClaimsPrincipal BuildClaims(string identity)

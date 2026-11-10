@@ -90,6 +90,11 @@ internal class UserRepository<TUserEntity> : IUserRepository<TUserEntity>
         return _collection.AddAsync(user);
     }
 
+    public virtual Task<bool> TryAddAsync(TUserEntity user)
+    {
+        return _collection.TryAddAsync(user);
+    }
+
     public virtual Task SetNameAsync(string userKey, string name)
     {
         var filter = new FilterDefinitionBuilder<TUserEntity>()

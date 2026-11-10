@@ -31,18 +31,14 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
 
         var entity = ToEntity(mail, queuedAt);
 
-        try
-        {
-            await collection.AddAsync(entity);
-            return new UserMailQueued(entity.Id.ToString(), false);
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey && mail.DeduplicationKey != null)
-        {
-            var winner = await FindByDeduplicationKeyAsync(mail.DeduplicationKey, cancellationToken);
-            if (winner == null) throw;
+        if (await collection.TryAddAsync(entity)) return new UserMailQueued(entity.Id.ToString(), false);
 
-            return new UserMailQueued(winner.Id.ToString(), true);
-        }
+        // Lost the race on the deduplication key (expected, so not logged as an error: Tharga/Team#457). Any other
+        // write failure leaves no winner to find, which is thrown.
+        var winner = mail.DeduplicationKey == null ? null : await FindByDeduplicationKeyAsync(mail.DeduplicationKey, cancellationToken);
+        if (winner == null) throw new InvalidOperationException("The mail could not be queued.");
+
+        return new UserMailQueued(winner.Id.ToString(), true);
     }
 
     /// <remarks>Stored as given up, so it is never claimed, and with its completion time, so it expires like any mail that is done.</remarks>
@@ -58,15 +54,13 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
             Refused = true
         };
 
-        try
-        {
-            await collection.AddAsync(entity);
-            return true;
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey && deduplicationKey != null)
-        {
-            return false;
-        }
+        if (await collection.TryAddAsync(entity)) return true;
+
+        // Already refused under this key; anything else leaves nothing to find, which is thrown.
+        if (deduplicationKey == null || await FindByDeduplicationKeyAsync(deduplicationKey, cancellationToken) == null)
+            throw new InvalidOperationException("The refused mail could not be stored.");
+
+        return false;
     }
 
     /// <remarks>Inserted already held, so no sender on any instance can claim it between the insert and the caller's attempt.</remarks>
