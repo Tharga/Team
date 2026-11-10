@@ -50,7 +50,22 @@ public class TeamMailStoreTests
 
         Assert.False(added);
         Assert.Contains("\"MailId\" : \"mail-1\"", Render(_sent));
-        await _collection.DidNotReceive().AddAsync(Arg.Any<InboundMailEntity>());
+        await _collection.DidNotReceive().TryAddAsync(Arg.Any<InboundMailEntity>(), Arg.Any<IClientSessionHandle>());
+    }
+
+    [Fact]
+    public async Task AMailAnotherInstanceTookInFirst_IsNotAdded_WithNoErrorLogged_ButAFailedWriteIsNotHidden()
+    {
+        // Not there at the first look, the insert answers false, and a second look finds it: somebody else took it in.
+        _collection.CountAsync(Arg.Any<FilterDefinition<InboundMailEntity>>()).Returns(0L, 1L);
+        _collection.TryAddAsync(Arg.Any<InboundMailEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
+
+        Assert.False(await new MongoTeamMailStore(_collection).AddAsync(Item()));
+
+        // Still not there at the second look: the write failed.
+        _collection.CountAsync(Arg.Any<FilterDefinition<InboundMailEntity>>()).Returns(0L);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new MongoTeamMailStore(_collection).AddAsync(Item()));
     }
 
     [Fact]

@@ -2,6 +2,7 @@ using System.Reflection;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
+using Tharga.MongoDB;
 
 namespace Tharga.Team.MongoDB.Tests;
 
@@ -21,28 +22,11 @@ public class UserMailRefusalStoreTests
     private static string Render(FilterDefinition<UserMailEntity> filter)
         => filter.Render(new RenderArgs<UserMailEntity>(BsonSerializer.LookupSerializer<UserMailEntity>(), BsonSerializer.SerializerRegistry)).ToString();
 
-    private static MongoWriteException DuplicateKey()
-    {
-        var ex = (MongoWriteException)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(MongoWriteException));
-        var writeError = (WriteError)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(WriteError));
-
-        typeof(WriteError)
-            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-            .Single(f => f.FieldType == typeof(ServerErrorCategory))
-            .SetValue(writeError, ServerErrorCategory.DuplicateKey);
-        typeof(MongoWriteException)
-            .GetFields(BindingFlags.Instance | BindingFlags.NonPublic)
-            .Single(f => f.FieldType == typeof(WriteError))
-            .SetValue(ex, writeError);
-
-        return ex;
-    }
-
     [Fact]
     public async Task ARefusedMail_IsStoredAsGivenUp_NeverAttempted_AndDoneSoItExpires()
     {
         UserMailEntity added = null;
-        await _mail.AddAsync(Arg.Do<UserMailEntity>(x => added = x));
+        _mail.TryAddAsync(Arg.Do<UserMailEntity>(x => added = x), Arg.Any<IClientSessionHandle>()).Returns(true);
 
         var recorded = await new MongoUserMailOutbox(_mail, _batches).AddRefusedAsync(Refused, "Not a category.", "refused:key", Now, TestContext.Current.CancellationToken);
 
@@ -55,7 +39,10 @@ public class UserMailRefusalStoreTests
     [Fact]
     public async Task ARefusalAlreadyRecorded_IsNotRecordedAgain_AndSaysSo()
     {
-        _mail.AddAsync(Arg.Any<UserMailEntity>()).Returns<Task>(_ => throw DuplicateKey());
+        // The insert answers false (the key is taken, and the collection logs nothing) and the earlier refusal is there to find.
+        _mail.TryAddAsync(Arg.Any<UserMailEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
+        _mail.GetOneAsync(Arg.Any<System.Linq.Expressions.Expression<Func<UserMailEntity, bool>>>(), Arg.Any<OneOption<UserMailEntity>>(), Arg.Any<CancellationToken>())
+            .Returns(MongoUserMailOutbox.ToEntity(Refused, Now));
 
         var recorded = await new MongoUserMailOutbox(_mail, _batches).AddRefusedAsync(Refused, "Not a category.", "refused:key", Now, TestContext.Current.CancellationToken);
 
@@ -63,11 +50,12 @@ public class UserMailRefusalStoreTests
     }
 
     [Fact]
-    public async Task AnyOtherFailureToStore_IsNotSwallowed()
+    public async Task AFailureToStore_WithNoEarlierRefusalToFind_IsNotSwallowed()
     {
-        _mail.AddAsync(Arg.Any<UserMailEntity>()).Returns<Task>(_ => throw new TimeoutException("The database is down."));
+        // The collection answers false for any write error, so a refusal that is not there means the write failed.
+        _mail.TryAddAsync(Arg.Any<UserMailEntity>(), Arg.Any<IClientSessionHandle>()).Returns(false);
 
-        await Assert.ThrowsAsync<TimeoutException>(() => new MongoUserMailOutbox(_mail, _batches).AddRefusedAsync(Refused, "Not a category.", "refused:key", Now, TestContext.Current.CancellationToken));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => new MongoUserMailOutbox(_mail, _batches).AddRefusedAsync(Refused, "Not a category.", "refused:key", Now, TestContext.Current.CancellationToken));
     }
 
     [Fact]

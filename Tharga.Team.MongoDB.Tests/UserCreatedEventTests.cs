@@ -42,36 +42,10 @@ public class UserCreatedEventTests
     {
         var identity = $"id-{Guid.NewGuid():N}";
         var repo = Substitute.For<IUserRepository<TestUserEntity>>();
+        repo.TryAddAsync(Arg.Any<TestUserEntity>()).Returns(true);
         var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, identity)], "test"));
 
         return (new TestUserService(repo), repo, principal, identity);
-    }
-
-    /// <summary>
-    /// A <see cref="MongoWriteException"/> the production filter will actually match. It guards on
-    /// <c>WriteError?.Category == ServerErrorCategory.DuplicateKey</c>, so an exception without a populated
-    /// write error propagates instead of being caught — which would test the wrong path entirely.
-    /// The type has no public constructor, so the field is set directly.
-    /// </summary>
-    private static MongoWriteException DuplicateKey()
-    {
-        var ex = (MongoWriteException)System.Runtime.CompilerServices.RuntimeHelpers
-            .GetUninitializedObject(typeof(MongoWriteException));
-
-        var writeError = (WriteError)System.Runtime.CompilerServices.RuntimeHelpers
-            .GetUninitializedObject(typeof(WriteError));
-
-        typeof(WriteError)
-            .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            .Single(f => f.FieldType == typeof(ServerErrorCategory))
-            .SetValue(writeError, ServerErrorCategory.DuplicateKey);
-
-        var field = typeof(MongoWriteException)
-            .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-            .Single(f => f.FieldType == typeof(WriteError));
-
-        field.SetValue(ex, writeError);
-        return ex;
     }
 
     [Fact]
@@ -117,7 +91,7 @@ public class UserCreatedEventTests
 
         var winner = new TestUserEntity { Identity = identity, Key = "winner" };
         repo.GetAsync(identity).Returns(_ => null, _ => winner);
-        repo.AddAsync(Arg.Any<TestUserEntity>()).Returns<Task>(_ => throw DuplicateKey());
+        repo.TryAddAsync(Arg.Any<TestUserEntity>()).Returns(false);
 
         var raised = 0;
         sut.UserCreatedEvent += (_, _) => raised++;

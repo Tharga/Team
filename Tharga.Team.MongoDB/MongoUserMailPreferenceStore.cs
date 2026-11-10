@@ -24,14 +24,11 @@ internal sealed class MongoUserMailPreferenceStore(IUserMailPreferenceCollection
 
         if ((await collection.UpdateOneAsync(Of(userKey, categoryKey), update))?.Before != null) return;
 
-        try
-        {
-            await collection.AddAsync(new UserMailPreferenceEntity { UserKey = userKey, Category = categoryKey, Receives = receives, UpdatedAt = now });
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            await collection.UpdateOneAsync(Of(userKey, categoryKey), update);
-        }
+        if (await collection.TryAddAsync(new UserMailPreferenceEntity { UserKey = userKey, Category = categoryKey, Receives = receives, UpdatedAt = now })) return;
+
+        // A racing insert won (not logged as an error: Tharga/Team#457); if the update finds nothing, the insert failed for another reason.
+        if ((await collection.UpdateOneAsync(Of(userKey, categoryKey), update))?.Before == null)
+            throw new InvalidOperationException($"The mail choice of user '{userKey}' for '{categoryKey}' could not be saved.");
     }
 
     public Task ClearChoiceAsync(string userKey, string categoryKey, CancellationToken cancellationToken = default)

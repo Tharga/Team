@@ -36,23 +36,21 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
         if (user != null) return user;
 
         var candidate = await CreateUserEntityAsync(claimsPrincipal, identity);
-        try
+        if (await _userRepository.TryAddAsync(candidate))
         {
-            await _userRepository.AddAsync(candidate);
-
-            // Only here. The duplicate-key path below lost the race, so another caller created the record and
+            // Only here. The path below lost the race, so another caller created the record and
             // announcing a second creation would put two entries in the audit log for one user.
             RaiseUserCreated(candidate, claimsPrincipal);
 
             return candidate;
         }
-        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            // Lost the race against a concurrent first-time login for the same identity.
-            // The unique Identity index on UserRepositoryCollection guarantees only one wins;
-            // re-read and return the winner. Issue Tharga/Team#65.
-            return await _userRepository.GetAsync(identity);
-        }
+
+        // Lost the race against a concurrent first-time login for the same identity.
+        // The unique Identity index on UserRepositoryCollection guarantees only one wins;
+        // re-read and return the winner. Issue Tharga/Team#65. The insert is not reported as an error because the
+        // loss is expected (Tharga/Team#457); a write that failed for another reason leaves no winner to read, which is thrown.
+        return await _userRepository.GetAsync(identity)
+            ?? throw new InvalidOperationException($"The user '{identity}' could not be added, and no other sign-in added it either.");
     }
 
     protected override IAsyncEnumerable<IUser> GetAllAsync()

@@ -66,14 +66,14 @@ public class SupportAiConnectionStoreTests
 
         await Store.SetAsync(Connection(), TestContext.Current.CancellationToken);
 
-        await _collection.DidNotReceive().AddAsync(Arg.Any<SupportAiConnectionEntity>());
+        await _collection.DidNotReceive().TryAddAsync(Arg.Any<SupportAiConnectionEntity>(), Arg.Any<IClientSessionHandle>());
     }
 
     [Fact]
     public async Task AFirstConnection_IsAdded_WithEveryField()
     {
         SupportAiConnectionEntity added = null;
-        await _collection.AddAsync(Arg.Do<SupportAiConnectionEntity>(x => added = x));
+        _collection.TryAddAsync(Arg.Do<SupportAiConnectionEntity>(x => added = x), Arg.Any<IClientSessionHandle>()).Returns(true);
 
         await Store.SetAsync(Connection(), TestContext.Current.CancellationToken);
 

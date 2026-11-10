@@ -16,15 +16,14 @@ internal sealed class MongoTeamMailStore(IInboundMailCollection collection) : IT
         // Every instance reads the mailbox, so a mail already taken in is the ordinary case; asking first keeps it out of the error log.
         if (await collection.CountAsync(Filter.Eq(x => x.MailId, item.Id)) > 0) return false;
 
-        try
-        {
-            await collection.AddAsync(ToEntity(item));
-            return true;
-        }
-        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
-        {
-            return false;
-        }
+        if (await collection.TryAddAsync(ToEntity(item))) return true;
+
+        // Another instance took it in between the read and the insert (not logged as an error: Tharga/Team#457);
+        // if it is not there, the write failed, which is thrown.
+        if (await collection.CountAsync(Filter.Eq(x => x.MailId, item.Id)) == 0)
+            throw new InvalidOperationException($"The mail '{item.Id}' could not be taken in.");
+
+        return false;
     }
 
     public async Task<InboundMailItem> GetAsync(string teamKey, string mailId, CancellationToken cancellationToken = default) =>
