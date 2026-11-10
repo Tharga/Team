@@ -1629,11 +1629,18 @@ classes that hold `ITeamService` on purpose (the team selector's state, the simu
 claims) are listed there, with the members each may call, so a new call fails until someone writes down why it is
 safe.
 
-> **The guard cannot see your assembly.** It scans the toolkit's own components and providers. If you write
-> components against these services, add the equivalent test over your assembly — the rule is the same, and
-> a host component injecting `ITeamService` is exactly as unchecked as a toolkit one would be. Reflect over
-> your `IComponent` types, collect constructor parameters and `[Inject]` properties, and assert none is
-> marked `EditorBrowsableState.Never`.
+> **The tests cannot see your assembly, so the package ships an analyzer that can.** `Tharga.Team` carries a
+> Roslyn analyzer that reports **`TTEAM001`** when a Blazor component, an MVC controller or an MCP provider in
+> your project takes an internal service as a constructor parameter (primary constructors included) or an
+> `[Inject]` property, which is what `@inject` compiles to. It names the gated service to use instead. It is
+> a warning, on by default, and it needs no setup: it arrives with the package, transitively. It applies the
+> same rule as the tests, a contract marked `[EditorBrowsable(Never)]`, so a new internal contract is covered
+> in both places at once.
+>
+> To refuse the build rather than warn, raise it in `.editorconfig`:
+> `dotnet_diagnostic.TTEAM001.severity = error`. A class of your own that *implements* the contract is not
+> reported, since that is what the contract is for. What the analyzer does not see is a service fetched from a
+> service provider with `GetService<ITeamService>()`, so keep reviewing for that.
 
 **An entry point's check need not be a scope.** An invitation is authorized by its invite code, because
 the invitee is not yet a member and holds nothing. The rule is that a first-level call is *checked*, not

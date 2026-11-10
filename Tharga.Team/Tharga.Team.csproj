@@ -35,6 +35,18 @@
   </ItemGroup>
   <ItemGroup>
     <!--
+      The analyzer that flags a component, controller or MCP provider injecting an internal-path service
+      (Tharga/Team#398). It is referenced for build order only (ReferenceOutputAssembly is off, so this assembly
+      does not load it), and its dll is packed under analyzers/dotnet/cs, which is where a consumer's compiler
+      picks it up. It lives in this package because the contracts it keys on live here; it reaches every project
+      that references the package, transitively.
+    -->
+    <ProjectReference Include="..\Tharga.Team.Analyzers\Tharga.Team.Analyzers.csproj" ReferenceOutputAssembly="false" />
+    <None Include="..\Tharga.Team.Analyzers\bin\$(Configuration)\netstandard2.0\Tharga.Team.Analyzers.dll"
+          Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
       TeamGrantResolver is internal and lives here because this package gates team reads and has to
       reach it. Its existing callers sit above: the claims builder and access simulation in .Blazor,
       the team-context resolver in .Service.
