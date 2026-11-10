@@ -10,7 +10,12 @@
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
     <DevelopmentDependency>true</DevelopmentDependency>
-    <NoWarn>$(NoWarn);RS1036</NoWarn>
+    <!--
+      RS1036: this is not a standalone analyzer package. RS2008: release tracking files are for analyzer packages
+      that version their rules on their own; this one ships inside Tharga.Team and follows its release notes.
+      RS1032: the message deliberately carries the advice sentence for the consumer after the statement.
+    -->
+    <NoWarn>$(NoWarn);RS1036;RS2008;RS1032</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <!-- 4.8 is the oldest compiler the supported SDKs ship; a newer one would stop loading on them. -->
