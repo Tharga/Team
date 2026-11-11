@@ -24,7 +24,11 @@ public class PackagedProjectsAreReleasedTests
     /// Projects that build a library but are deliberately not shipped. Listed explicitly so a new
     /// unpackaged project is a decision someone wrote down rather than a silent omission.
     /// </summary>
-    private static readonly string[] NotPackaged = ["Tharga.Team.Sample"];
+    /// <remarks>
+    /// <c>Tharga.Team.Analyzers</c> is not a package of its own: <c>Tharga.Team</c> packs its dll under
+    /// <c>analyzers/dotnet/cs</c>, so it reaches NuGet inside that package.
+    /// </remarks>
+    private static readonly string[] NotPackaged = ["Tharga.Team.Sample", "Tharga.Team.Analyzers"];
 
     private static DirectoryInfo RepoRoot()
     {
