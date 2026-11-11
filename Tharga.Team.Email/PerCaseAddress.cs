@@ -1,7 +1,9 @@
 namespace Tharga.Team.Email;
 
 /// <summary>
-/// The per-case reply address, <c>support+{caseId}@example.com</c>, built and read back.
+/// The per-case reply address, <c>support+{tag}@example.com</c>, built and read back. The tag is a short tracking token
+/// such as <c>tracking-3a3aac94fd15</c>, or the full case id in an address sent before tokens existed; this class only
+/// carries it, and the support module says which it is.
 /// </summary>
 /// <remarks>
 /// <b>Both directions live together on purpose.</b> They are one convention, and a build that disagrees with

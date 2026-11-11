@@ -336,6 +336,44 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         return entity == null ? null : ToCase(entity);
     }
 
+    public async Task<SupportCase> GetCaseByTrackingTokenAsync(string token, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+
+        var entity = await collection.GetOneAsync(Builders<SupportCaseEntity>.Filter.Eq(x => x.TrackingToken, token));
+
+        return entity == null ? null : ToCase(entity);
+    }
+
+    /// <remarks>
+    /// <b>The write is conditional on the case having no token</b>, so two answers racing each other cannot both set one: the
+    /// loser re-reads and returns the winner's. A token that belongs to another case is looked for first, which keeps the
+    /// ordinary collision away from the unique index; the index still decides the race that look cannot see.
+    /// </remarks>
+    public async Task<string> TrySetTrackingTokenAsync(string teamKey, string caseId, string token, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(token)) return null;
+
+        var existing = await RequireCaseAsync(teamKey, caseId);
+        if (!string.IsNullOrWhiteSpace(existing.TrackingToken)) return existing.TrackingToken;
+
+        if (await collection.CountAsync(Builders<SupportCaseEntity>.Filter.Eq(x => x.TrackingToken, token)) > 0) return null;
+
+        var unset = Builders<SupportCaseEntity>.Filter.And(Case(teamKey, caseId), Builders<SupportCaseEntity>.Filter.Eq(x => x.TrackingToken, null));
+
+        try
+        {
+            if ((await collection.UpdateOneAsync(unset, Builders<SupportCaseEntity>.Update.Set(x => x.TrackingToken, token)))?.Before != null) return token;
+        }
+        catch (MongoWriteException e) when (e.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return null;
+        }
+
+        // Another answer set one in between: that is the case's token.
+        return (await RequireCaseAsync(teamKey, caseId)).TrackingToken;
+    }
+
     public async Task AddAssistantGapsAsync(string teamKey, string caseId, string[] gaps, CancellationToken cancellationToken = default)
     {
         if (gaps is not { Length: > 0 }) return;
@@ -654,6 +692,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Bindings = entity.Bindings == null
             ? []
             : [.. entity.Bindings.Select(ToBinding)],
+        TrackingToken = entity.TrackingToken,
         SuggestedTeams = entity.SuggestedTeams == null
             ? []
             : [.. entity.SuggestedTeams.Select(x => new SupportCaseTeam { Key = x.Key, Name = x.Name })],

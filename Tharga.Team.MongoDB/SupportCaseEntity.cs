@@ -103,6 +103,10 @@ public record SupportCaseEntity : EntityBase
 
     public SupportChannelBindingEntity[] Bindings { get; init; }
 
+    /// <summary>The short token the case's reply address carries. Absent until an answer by mail asks for one.</summary>
+    [BsonIgnoreIfNull]
+    public string TrackingToken { get; init; }
+
     [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.String)]
     public SupportCaseVisibility? Visibility { get; init; }

@@ -281,6 +281,38 @@ public class EmailEventHandlerTests
     }
 
     [Fact]
+    public async Task AMailToAShortTrackingAddress_IsMatchedToItsCase()
+    {
+        var (handler, store, _, _) = Build();
+        store.GetCaseByTrackingTokenAsync("tracking-3a3aac94fd15", Arg.Any<CancellationToken>()).Returns(Case());
+
+        var outcome = await handler.HandleAsync(Mail() with
+        {
+            InReplyTo = null,
+            References = [],
+            DeliveredTo = ["support+tracking-3a3aac94fd15@example.net"]
+        });
+
+        Assert.True(outcome.WasApplied);
+        await store.Received(1).AppendMessageAsync(TeamKey, CaseId, Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task AMailToAnUnknownTrackingAddress_FindsNoCase_AsAnUnknownCaseIdDoesToday()
+    {
+        var (handler, store, _, _) = Build();
+
+        await handler.HandleAsync(Mail() with
+        {
+            InReplyTo = null,
+            References = [],
+            DeliveredTo = ["support+tracking-000000000000@example.net"]
+        });
+
+        await store.DidNotReceive().AppendMessageAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<SupportMessage>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task TheQuotedThread_IsTrimmedOffBeforeItIsStored()
     {
         var (handler, store, _, _) = Build();

@@ -400,9 +400,8 @@ internal sealed class EmailEventHandler(
             if (found != null) return found;
         }
 
-        var caseId = PerCaseAddress.CaseIdIn(mail.DeliveredTo, mailOptions.FromAddress);
-
-        return caseId == null ? null : await store.GetCaseByIdAsync(caseId, cancellationToken);
+        // The tag is a short tracking token in an address sent now and a full case id in one sent before tokens existed.
+        return await CaseReplyAddress.FindAsync(store, PerCaseAddress.CaseIdIn(mail.DeliveredTo, mailOptions.FromAddress), cancellationToken);
     }
 
     private static IEnumerable<string> ThreadIds(InboundMail mail)

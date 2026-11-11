@@ -169,7 +169,7 @@ internal sealed class EmailSupportChannel(
             Body: body,
             InReplyTo: thread[^1],
             References: thread,
-            ReplyTo: ReplyToFor(mailbox.Options, supportCase?.Id),
+            ReplyTo: await CaseReplyAddress.ForAsync(store, mailbox.Options, supportCase, logger, cancellationToken),
             Attachments: files,
             BodyHtml: _template.Render(subject, body, Html(message, earlier, frame, _template.IsSet)));
     }
@@ -309,15 +309,4 @@ internal sealed class EmailSupportChannel(
 
     private static string NameOf(SupportMessage message, string contentId)
         => (message.Attachments ?? []).FirstOrDefault(x => string.Equals(x.ContentId, contentId, StringComparison.Ordinal))?.FileName;
-
-    /// <summary>
-    /// The per-case reply address, when the host has confirmed its mail server accepts plus-addressing.
-    /// </summary>
-    /// <remarks>
-    /// Off unless <see cref="MailOptions.PerCaseReplyTo"/> says otherwise, because a server that rejects a
-    /// plus-addressed local part bounces the reply back at the customer. With it off, a reply is matched on
-    /// its threading headers instead.
-    /// </remarks>
-    private static string ReplyToFor(MailOptions mailOptions, string caseId)
-        => mailOptions.PerCaseReplyTo ? PerCaseAddress.Build(mailOptions.FromAddress, caseId) : null;
 }

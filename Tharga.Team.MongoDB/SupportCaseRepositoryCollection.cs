@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using MongoDB.Bson;
 using MongoDB.Driver;
 using Tharga.MongoDB;
 using Tharga.MongoDB.Disk;
@@ -40,6 +41,14 @@ public class SupportCaseRepositoryCollection : DiskRepositoryCollectionBase<Supp
                 .Ascending(x => x.TeamKey)
                 .Ascending(x => x.AuthorIdentity)
                 .Descending(x => x.CreatedAt),
-            new CreateIndexOptions { Name = "TeamKey_Author_CreatedAt" })
+            new CreateIndexOptions { Name = "TeamKey_Author_CreatedAt" }),
+        // A token names one case across every team, and most cases have none, so the index holds only those that do.
+        new(Builders<SupportCaseEntity>.IndexKeys.Ascending(x => x.TrackingToken),
+            new CreateIndexOptions<SupportCaseEntity>
+            {
+                Unique = true,
+                Name = "TrackingToken",
+                PartialFilterExpression = Builders<SupportCaseEntity>.Filter.Type(x => x.TrackingToken, BsonType.String)
+            })
     ];
 }

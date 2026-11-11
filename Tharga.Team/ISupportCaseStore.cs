@@ -307,6 +307,34 @@ public interface ISupportCaseStore
         => Task.FromResult<SupportCase>(null);
 
     /// <summary>
+    /// The case a short tracking token names, whatever team owns it, or <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>For inbound mail whose per-case address carries a token</b> (<c>support+tracking-3a3aac94fd15@…</c>), the
+    /// short form of <see cref="GetCaseByIdAsync"/>. Not scoped by team and reached only from a channel adapter, for
+    /// the same reason. <b>Defaults to finding nothing</b>, so a store written before this existed keeps compiling;
+    /// an address carrying the full case id still resolves through <see cref="GetCaseByIdAsync"/>.
+    /// </remarks>
+    Task<SupportCase> GetCaseByTrackingTokenAsync(string token, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportCase>(null);
+
+    /// <summary>
+    /// Gives a case the tracking token <paramref name="token"/> if it has none, and returns the token it holds.
+    /// </summary>
+    /// <returns>
+    /// The case's token: the one it already had, or <paramref name="token"/> when this call set it. <c>null</c> when
+    /// <paramref name="token"/> already belongs to another case, so the caller can try a different one, or when the store
+    /// cannot hold tokens.
+    /// </returns>
+    /// <remarks>
+    /// <b>A case keeps the first token it was given</b>, so an address already sent out never stops pointing at it, and
+    /// two answers racing each other end up with the same one. A token is unique across every case. <b>Defaults to
+    /// <c>null</c></b>, so a store written before this existed keeps compiling and its cases keep the full-id address.
+    /// </remarks>
+    Task<string> TrySetTrackingTokenAsync(string teamKey, string caseId, string token, CancellationToken cancellationToken = default)
+        => Task.FromResult<string>(null);
+
+    /// <summary>
     /// Adds to what the assistant could not do in a case, keeping the newest <see cref="SupportCaseLimits.MaxAssistantGaps"/>.
     /// </summary>
     /// <remarks>

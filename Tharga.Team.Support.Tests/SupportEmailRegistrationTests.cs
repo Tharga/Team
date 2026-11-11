@@ -30,6 +30,7 @@ public class SupportEmailRegistrationTests
         o.Email.PollInterval = TimeSpan.FromSeconds(30);
         o.Email.Timeout = TimeSpan.FromSeconds(45);
         o.Email.PerCaseReplyTo = true;
+        o.Email.TrackingPrefix = "case-";
         o.Email.Recipients = ["example.net"];
         o.Email.SenderRules = [new MailSenderRule { Senders = ["noreply@example.com"], Action = MailSenderAction.Close }];
         o.Email.MaxAttachmentBytes = 10;
