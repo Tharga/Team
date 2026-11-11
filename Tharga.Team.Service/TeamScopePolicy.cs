@@ -53,9 +53,27 @@ internal static class TeamScopePolicy
     /// </para>
     /// </remarks>
     public static bool HasDirectTeamScope(ClaimsPrincipal principal, string scope, string teamKey)
-    {
-        if (!HasTeamScope(principal, scope, teamKey)) return false;
+        => HasTeamScope(principal, scope, teamKey) && HoldsDirectly(principal, teamKey);
 
+    /// <summary>
+    /// Whether the caller is in <paramref name="teamKey"/> through the team's <b>consent</b>: it holds the team's identity,
+    /// but neither a membership of it nor a key issued for it.
+    /// </summary>
+    /// <remarks>
+    /// The complement of what <see cref="HasDirectTeamScope"/> calls direct, read from the same provenance, so the two can
+    /// never disagree about who is a member. A caller whose <c>TeamKey</c> claim names another team, or no team, is not in
+    /// this one at all and is not consented into it either.
+    /// </remarks>
+    public static bool HasConsentedAccess(ClaimsPrincipal principal, string teamKey)
+    {
+        if (principal == null || string.IsNullOrEmpty(teamKey)) return false;
+        if (principal.FindFirst(TeamClaimTypes.TeamKey)?.Value != teamKey) return false;
+
+        return !HoldsDirectly(principal, teamKey);
+    }
+
+    private static bool HoldsDirectly(ClaimsPrincipal principal, string teamKey)
+    {
         var isMember = IdentitiesFor(principal, teamKey)
             .Any(identity => !string.IsNullOrEmpty(identity.FindFirst(TeamClaimTypes.MemberKey)?.Value));
         var isTeamKey = principal.HasClaim(c => c.Type == TeamClaimTypes.ApiKeyId)

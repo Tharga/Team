@@ -108,6 +108,14 @@ public class CompositeAuditLogger : IAuditLogger
         if (entry.Action != null && _options.ExcludedActions.Contains(entry.Action, StringComparer.OrdinalIgnoreCase))
             return false;
 
+        if (!_options.RecordConsentedAccess && entry.EventType == AuditEventType.ServiceCall && IsConsented(entry))
+            return false;
+
         return true;
     }
+
+    private static bool IsConsented(AuditEntry entry)
+        => entry.Metadata != null
+           && entry.Metadata.TryGetValue(AuditMetadataKeys.AuthorizedVia, out var via)
+           && via == AuditMetadataKeys.AuthorizedViaConsent;
 }

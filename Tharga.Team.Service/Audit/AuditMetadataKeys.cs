@@ -145,4 +145,14 @@ public static class AuditMetadataKeys
 
     /// <summary>The <see cref="AuthorizedVia"/> value for a team-bound call admitted by a system grant of the scope.</summary>
     public const string AuthorizedViaSystemGrant = "system-grant";
+
+    /// <summary>
+    /// The <see cref="AuthorizedVia"/> value for a call by a caller who reached the team through its consent rather than
+    /// a membership or a key of the team's own.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="AuditOptions.RecordConsentedAccess"/> reads it, so an access trace a host writes itself is treated like
+    /// the proxies' own only when it carries this value too — see <see cref="AuditProvenance.IsConsented"/>.
+    /// </remarks>
+    public const string AuthorizedViaConsent = "consent";
 }
