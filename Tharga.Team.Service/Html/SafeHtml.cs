@@ -119,7 +119,7 @@ public static class SafeHtml
         UriAttributes = UriAttributes,
         AllowedCssProperties = new HashSet<string>(),
         AllowedAtRules = new HashSet<CssRuleType>(),
-        AllowedCssClasses = new HashSet<string>()
+        AllowedClasses = new HashSet<string>()
     })
     {
         KeepChildNodes = true

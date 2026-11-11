@@ -1,5 +1,4 @@
 using MimeKit.Cryptography;
-using Org.BouncyCastle.Crypto;
 
 namespace Tharga.Team.Email;
 
@@ -7,21 +6,24 @@ namespace Tharga.Team.Email;
 /// Hands the verifier a key only for the one domain alignment was checked against.
 /// </summary>
 /// <remarks>
-/// <b>This is what ties the alignment decision to the verification.</b> Alignment reads <c>d=</c> with this
-/// transport's parser and MimeKit verifies with its own; if the two ever read one header differently, the key
-/// asked for here would belong to a domain nobody checked. Refusing every other domain turns that disagreement
-/// into a failed verification rather than a verified stranger.
+/// <b>This is what ties the alignment decision to the verification.</b> Alignment reads <c>d=</c> and <c>s=</c>
+/// with this transport's parser and MimeKit verifies with its own; if the two ever read one header differently,
+/// the key asked for here would belong to a domain nobody checked. Answering only the one name,
+/// <c>{selector}._domainkey.{domain}</c>, that this transport read turns that disagreement into a failed
+/// verification rather than a verified stranger.
 /// </remarks>
-internal sealed class SingleDomainKeyLocator(IDkimPublicKeyLocator inner, string alignedDomain) : IDkimPublicKeyLocator
+internal sealed class SingleDomainKeyLocator(IDnsResolver inner, DkimSignature aligned) : IDnsResolver
 {
-    public AsymmetricKeyParameter LocatePublicKey(string methods, string domain, string selector, CancellationToken cancellationToken = default)
-        => inner.LocatePublicKey(methods, Require(domain), selector, cancellationToken);
+    private readonly string _name = aligned.Selector == null ? null : $"{aligned.Selector}._domainkey.{aligned.Domain}";
 
-    public Task<AsymmetricKeyParameter> LocatePublicKeyAsync(string methods, string domain, string selector, CancellationToken cancellationToken = default)
-        => inner.LocatePublicKeyAsync(methods, Require(domain), selector, cancellationToken);
+    public DnsTxtResponse QueryTxt(string domain, CancellationToken cancellationToken = default)
+        => IsAligned(domain) ? inner.QueryTxt(domain, cancellationToken) : Refused();
 
-    private string Require(string asked)
-        => string.Equals(asked?.Trim(), alignedDomain, StringComparison.OrdinalIgnoreCase)
-            ? asked
-            : throw new InvalidOperationException("The signature asked for a key from a domain other than the one it was aligned on.");
+    public Task<DnsTxtResponse> QueryTxtAsync(string domain, CancellationToken cancellationToken = default)
+        => IsAligned(domain) ? inner.QueryTxtAsync(domain, cancellationToken) : Task.FromResult(Refused());
+
+    private bool IsAligned(string asked)
+        => _name != null && string.Equals(asked?.Trim().TrimEnd('.'), _name, StringComparison.OrdinalIgnoreCase);
+
+    private static DnsTxtResponse Refused() => new(DnsQueryStatus.NonExistentDomain);
 }

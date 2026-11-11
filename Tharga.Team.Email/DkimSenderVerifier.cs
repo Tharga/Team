@@ -28,7 +28,7 @@ namespace Tharga.Team.Email;
 /// signatures are checked, because each can cost a DNS lookup and the mail decides how many it carries.
 /// </para>
 /// </remarks>
-internal sealed class DkimSenderVerifier(IDkimPublicKeyLocator keys)
+internal sealed class DkimSenderVerifier(IDnsResolver keys)
 {
     internal const int MaxVerifications = 3;
 
@@ -52,17 +52,19 @@ internal sealed class DkimSenderVerifier(IDkimPublicKeyLocator keys)
 
             if (++attempts > MaxVerifications) break;
 
-            if (await VerifiesAsync(message, header, signature.Domain, cancellationToken)) return signature.Domain;
+            if (await VerifiesAsync(message, header, signature, cancellationToken)) return signature.Domain;
         }
 
         return null;
     }
 
-    private async Task<bool> VerifiesAsync(MimeMessage message, Header header, string domain, CancellationToken cancellationToken)
+    private async Task<bool> VerifiesAsync(MimeMessage message, Header header, DkimSignature signature, CancellationToken cancellationToken)
     {
         try
         {
-            return await new DkimVerifier(new SingleDomainKeyLocator(keys, domain)).VerifyAsync(message, header, cancellationToken);
+            var result = await new DkimVerifier(new SingleDomainKeyLocator(keys, signature)).VerifyAsync(message, header, cancellationToken);
+
+            return result.Status == DkimSignatureStatus.Pass;
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
