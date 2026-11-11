@@ -506,6 +506,18 @@ you ask — set `o.Audit = new AuditOptions { DefaultAuditMode = AuditMode.None 
 and record by exception. **A refusal is recorded whatever the mode says**, and the existing
 `CallerFilter`/`EventFilter`/`ExcludedActions` still apply to whatever is written.
 
+**Keep consented staff's browsing out of a team's log**, while recording what they change. Entries written for a
+caller who reached the team through its consent rather than a membership carry `authorization.via = consent`, and
+
+```csharp
+o.Audit = new AuditOptions { RecordConsentedAccess = false };
+```
+
+drops their access traces. Their `DataChange` entries and their refusals are kept, so mark writes `AuditMode.Change`
+first. An entry you write yourself is dropped only if it carries the stamp: ask
+`AuditProvenance.IsConsented(principal, teamKey)`. See the
+[implementation guide](docs/articles/implementation-guide.md#callers-let-in-by-a-teams-consent).
+
 **Open the view on what a reader is looking for**, without taking the choice away from them:
 
 ```csharp
