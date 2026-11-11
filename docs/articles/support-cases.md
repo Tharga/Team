@@ -949,6 +949,14 @@ customer's mail program threads it, and whoever reads it on a phone sees what it
 **Every message id is recorded** — the mail that opened the case, every reply, every answer sent — so a reply to
 any of them finds its case, whichever one the customer's mail program chose to answer.
 
+**A short tracking address brings a reply back to its case when the mail program drops the headers.** With
+`PerCaseReplyTo` on, an answer asks for replies at `support+tracking-3a3aac94fd15@example.com`: the sending address,
+a `+`, then a short token the case is given the first time an answer needs one (12 hex characters, unique across
+cases, stored on the case and kept for good). The prefix is `MailOptions.TrackingPrefix`, `tracking-` unless you change
+it, and changing it breaks no address already sent. A case that existed before gets its token on its next answer, so
+there is nothing to migrate, and an address carrying the full case id, from before tokens, still finds its case. A
+store that cannot hold tokens keeps the full id in the address. The mailbox must accept plus-addressing, as before.
+
 **Outside production, a reply from the override address counts as the customer's.** The outbound policy sends
 every answer to the override address, so the person testing answers from there; that reply is accepted on the
 case as if the customer had written it.

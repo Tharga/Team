@@ -108,6 +108,16 @@ public record SupportCase
     public SupportChannelBinding[] Bindings { get; init; } = [];
 
     /// <summary>
+    /// The short token the case's reply address carries, such as <c>tracking-3a3aac94fd15</c>, or <c>null</c> until the
+    /// first answer by mail asks for one.
+    /// </summary>
+    /// <remarks>
+    /// Assigned lazily, so a case written before this existed needs no migration; the full <see cref="Id"/> keeps
+    /// working in an address already sent. See <see cref="ISupportCaseStore.TrySetTrackingTokenAsync"/>.
+    /// </remarks>
+    public string TrackingToken { get; init; }
+
+    /// <summary>
     /// Whether an assistant is answering this case.
     /// </summary>
     /// <remarks>

@@ -52,6 +52,16 @@ public class MailOptions
     public bool PerCaseReplyTo { get; set; }
 
     /// <summary>
+    /// What a case's short tracking token starts with in the per-case address, such as the <c>tracking-</c> of
+    /// <c>support+tracking-3a3aac94fd15@…</c>. Default <c>tracking-</c>.
+    /// </summary>
+    /// <remarks>
+    /// Only read when <see cref="PerCaseReplyTo"/> is on. The token is stored whole, so changing this does not break an
+    /// address already sent: it still resolves. An address carrying a full case id, from before tokens, resolves too.
+    /// </remarks>
+    public string TrackingPrefix { get; set; } = "tracking-";
+
+    /// <summary>
     /// Domains or full addresses this instance accepts mail for. Empty accepts everything.
     /// </summary>
     /// <remarks>
