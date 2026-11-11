@@ -315,6 +315,21 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     public Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
         => Task.FromResult(_cases.Select(x => x.Case).FirstOrDefault(x => x.Id == caseId));
 
+    public Task<SupportCase> GetCaseByTrackingTokenAsync(string token, CancellationToken cancellationToken = default)
+        => Task.FromResult(_cases.Select(x => x.Case).FirstOrDefault(x => token != null && x.TrackingToken == token));
+
+    public Task<string> TrySetTrackingTokenAsync(string teamKey, string caseId, string token, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+
+        if (!string.IsNullOrWhiteSpace(found.Case.TrackingToken)) return Task.FromResult(found.Case.TrackingToken);
+        if (_cases.Any(x => x.Case.TrackingToken == token)) return Task.FromResult<string>(null);
+
+        Replace(found.Case with { TrackingToken = token }, found.Messages);
+
+        return Task.FromResult(token);
+    }
+
     public Task AddBindingAsync(string teamKey, string caseId, SupportChannelBinding binding, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

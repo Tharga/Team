@@ -132,7 +132,7 @@ internal sealed class ExternalSupportCaseService(
         try
         {
             var text = string.IsNullOrWhiteSpace(_options.ReceiptText) ? SupportExternalCaseOptions.DefaultReceiptText : _options.ReceiptText;
-            var replyTo = mailbox.Options.PerCaseReplyTo ? PerCaseAddress.Build(mailbox.Options.FromAddress, supportCase.Id) : null;
+            var replyTo = await CaseReplyAddress.ForAsync(store, mailbox.Options, supportCase, logger, cancellationToken);
 
             var result = await mailClient.SendAsync(new OutboundMail(
                 To: supportCase.ExternalContact.Email,

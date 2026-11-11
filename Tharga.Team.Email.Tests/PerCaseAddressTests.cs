@@ -28,6 +28,15 @@ public class PerCaseAddressTests
     }
 
     [Fact]
+    public void ATrackingToken_IsCarriedAsTheTag_AndReadBack()
+    {
+        var address = PerCaseAddress.Build(From, "tracking-3a3aac94fd15");
+
+        Assert.Equal("support+tracking-3a3aac94fd15@fortdocs.se", address);
+        Assert.Equal("tracking-3a3aac94fd15", PerCaseAddress.CaseIdIn([address], From));
+    }
+
+    [Fact]
     public void TheCaseIsFound_AmongSeveralRecipients()
     {
         Assert.Equal("case-1", PerCaseAddress.CaseIdIn(["someone@example.com", "support+case-1@fortdocs.se"], From));
