@@ -53,7 +53,7 @@ public class SupportAnswerSigningTests
         await PostAsync(Channel([Customer(1, "Help")], new SupportAnswerOptions { Signature = ["Kind regards", "Example <Support> & co"] }), Answer("<p>Try <b>this</b>.</p>"));
 
         Assert.Equal("<p>Try <b>this</b>.</p><p class=\"signature\">Kind regards<br>Example &lt;Support&gt; &amp; co</p>" +
-                     "<p>On 2026-10-17 08:00 UTC, A User wrote:</p><blockquote>Help</blockquote>", _sent.BodyHtml);
+                     "<div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A User wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">Help</blockquote></div>", _sent.BodyHtml);
     }
 
     [Theory]
@@ -82,10 +82,8 @@ public class SupportAnswerSigningTests
 
         await PostAsync(Channel(earlier, new SupportAnswerOptions { SupportName = "Example Support" }), Answer("<p>Fixed.</p>") with { Sequence = 4 });
 
-        Assert.Contains("On 2026-10-17 08:02 UTC, Example Support wrote:\n> Have you tried again?", _sent.Body);
-        Assert.Contains("On 2026-10-17 08:01 UTC, Example Support wrote:\n> Which export?", _sent.Body);
-        Assert.Contains("On 2026-10-17 08:00 UTC, A User wrote:\n> Help", _sent.Body);
-        Assert.Contains("<p>On 2026-10-17 08:01 UTC, Example Support wrote:</p>", _sent.BodyHtml);
+        Assert.Contains("On 2026-10-17 08:02 UTC, Example Support wrote:\n> Have you tried again?\n>\n> On 2026-10-17 08:01 UTC, Example Support wrote:\n> > Which export?\n> >\n> > On 2026-10-17 08:00 UTC, A User wrote:\n> > > Help", _sent.Body);
+        Assert.Contains("<div class=\"gmail_attr\">On 2026-10-17 08:01 UTC, Example Support wrote:</div>", _sent.BodyHtml);
         Assert.DoesNotContain("Sam", _sent.Body + _sent.BodyHtml);
         Assert.DoesNotContain("Helper bot", _sent.Body + _sent.BodyHtml);
     }
@@ -109,8 +107,7 @@ public class SupportAnswerSigningTests
 
         await PostAsync(Channel([Support(2, "Which export?"), Customer(1, "Help")], texts: texts), Answer(null) with { Sequence = 3 });
 
-        Assert.Contains("Den 2026-10-17 08:01 UTC skrev Supporten:\n> Which export?", _sent.Body);
-        Assert.Contains("Den 2026-10-17 08:00 UTC skrev A User:\n> Help", _sent.Body);
+        Assert.Contains("Den 2026-10-17 08:01 UTC skrev Supporten:\n> Which export?\n>\n> Den 2026-10-17 08:00 UTC skrev A User:\n> > Help", _sent.Body);
     }
 
     [Fact]
@@ -129,7 +126,7 @@ public class SupportAnswerSigningTests
         await PostAsync(Channel([Customer(1, "Help")], new SupportAnswerOptions { TimeZoneId = "Europe/Stockholm" }), Answer("<p>Fixed.</p>"));
 
         Assert.Contains("On 2026-10-17 10:00, A User wrote:", _sent.Body);
-        Assert.Contains("<p>On 2026-10-17 10:00, A User wrote:</p>", _sent.BodyHtml);
+        Assert.Contains("<div class=\"gmail_attr\">On 2026-10-17 10:00, A User wrote:</div>", _sent.BodyHtml);
         Assert.DoesNotContain("UTC", _sent.Body);
     }
 
@@ -156,7 +153,7 @@ public class SupportAnswerSigningTests
         await PostAsync(channel, answer);
 
         Assert.Equal("<section><h1>Re: Export is empty</h1><p>Fixed.</p><p class=\"signature\">Example Support</p>" +
-                     "<p>On 2026-10-17 08:00 UTC, A User wrote:</p><blockquote>Help</blockquote><i></i></section>", _sent.BodyHtml);
+                     "<div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A User wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">Help</blockquote></div><i></i></section>", _sent.BodyHtml);
         Assert.Equal(_sent.BodyHtml, preview.Html);
         Assert.Equal(_sent.Body, preview.Text);
     }
@@ -201,7 +198,7 @@ public class SupportAnswerSigningTests
 
         var preview = await mail.PreviewAsync(await _store.GetCaseByBindingAsync(SupportChannelType.Email, OpeningId), Binding(), Answer("<p>Fixed.</p>") with { Sequence = 3 }, TestContext.Current.CancellationToken);
 
-        Assert.StartsWith("<section><p>Fixed.</p><p class=\"signature\">Example Support</p><p>On 2026-10-17 08:01 UTC, Example Support wrote:</p>", preview.Html);
+        Assert.StartsWith("<section><p>Fixed.</p><p class=\"signature\">Example Support</p><div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:01 UTC, Example Support wrote:</div>", preview.Html);
         Assert.Equal("Example Support", provider.GetRequiredService<IOptions<SupportCaseOptions>>().Value.Answers.SupportName);
     }
 

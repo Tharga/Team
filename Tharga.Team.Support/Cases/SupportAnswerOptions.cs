@@ -36,6 +36,12 @@ public class SupportAnswerOptions
     /// </summary>
     public string Closing { get; set; }
 
+    /// <summary>
+    /// How the conversation so far is quoted after an answer. <see cref="SupportQuoteStyle.Nested"/>, the default, quotes as Gmail does,
+    /// one block with a bar at its left and older entries nested inside; <see cref="SupportQuoteStyle.PerEntry"/> keeps one block per entry.
+    /// </summary>
+    public SupportQuoteStyle QuoteStyle { get; set; } = SupportQuoteStyle.Nested;
+
     /// <summary>The time zone the dates of quoted entries are shown in, as a system time zone id such as <c>Europe/Stockholm</c>, default <c>UTC</c>.</summary>
     /// <remarks>A date in UTC says so; one in another zone is shown as that zone's local time alone.</remarks>
     public string TimeZoneId { get; set; } = "UTC";

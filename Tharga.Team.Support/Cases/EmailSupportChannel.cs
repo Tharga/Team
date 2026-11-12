@@ -307,7 +307,14 @@ internal sealed class EmailSupportChannel(
 
         var parts = new List<string> { message.Body ?? string.Empty };
         if (frame.SignatureTextFor(message) is { } signature) parts.Add(signature);
-        parts.AddRange(earlier.Select(x => Quoted(x, frame)));
+        if (frame.QuoteStyle == SupportQuoteStyle.Nested)
+        {
+            if (earlier.Count > 0) parts.Add(string.Join("\n", QuotedNested(earlier, 0, frame)));
+        }
+        else
+        {
+            parts.AddRange(earlier.Select(x => Quoted(x, frame)));
+        }
 
         return string.Join("\n\n", parts);
     }
@@ -316,6 +323,21 @@ internal sealed class EmailSupportChannel(
     private static string Quoted(SupportMessage message, SupportAnswerFrame frame)
         => frame.Attribution(message) + "\n" + string.Join("\n", (message.Body ?? "").Split('\n').Select(x => "> " + x.TrimEnd('\r')));
 
+    // As Gmail quotes: the latest earlier entry under its attribution, every older one inside it a level deeper.
+    private static IEnumerable<string> QuotedNested(IReadOnlyList<SupportMessage> earlier, int index, SupportAnswerFrame frame)
+    {
+        yield return frame.Attribution(earlier[index]);
+
+        var inner = (earlier[index].Body ?? string.Empty).Split('\n').Select(x => x.TrimEnd('\r')).ToList();
+        if (index + 1 < earlier.Count)
+        {
+            inner.Add(string.Empty);
+            inner.AddRange(QuotedNested(earlier, index + 1, frame));
+        }
+
+        foreach (var line in inner) yield return line.Length == 0 ? ">" : "> " + line;
+    }
+
     /// <summary>
     /// The HTML version of <see cref="Body"/>, for an entry written with formatting; null for a plain entry, which is
     /// mailed as text alone as it always was, unless <paramref name="plainAsHtml"/> asks for its escaped text, as a
@@ -323,7 +345,8 @@ internal sealed class EmailSupportChannel(
     /// </summary>
     /// <remarks>
     /// The signature follows the answer as a paragraph of class <c>signature</c>. Each earlier message is quoted in a
-    /// <c>blockquote</c>, as its own formatting when it had some and as its escaped text otherwise. Everything is
+    /// <c>blockquote</c>, as its own formatting when it had some and as its escaped text otherwise: one block with the older
+    /// entries nested inside it as Gmail quotes, or one block each with <see cref="SupportQuoteStyle.PerEntry"/>. Everything is
     /// sanitized again on the way out. An image keeps its <c>cid:</c> reference only when this entry carries that file,
     /// so it travels beside the HTML; an earlier message's images are named rather than sent again.
     /// </remarks>
@@ -338,13 +361,35 @@ internal sealed class EmailSupportChannel(
         var html = new StringBuilder(own);
         if (frame.SignatureHtmlFor(message) is { } signature) html.Append(signature);
 
-        foreach (var quoted in earlier)
+        if (frame.QuoteStyle == SupportQuoteStyle.Nested)
         {
-            var body = SafeHtml.Sanitize(quoted.BodyHtml, contentId => HtmlImage.Described(NameOf(quoted, contentId))) ?? SafeHtml.FromPlainText(quoted.Body);
-
-            html.Append("<p>").Append(WebUtility.HtmlEncode(frame.Attribution(quoted))).Append("</p>");
-            html.Append("<blockquote>").Append(body).Append("</blockquote>");
+            if (earlier.Count > 0) html.Append(QuotedNestedHtml(earlier, 0, frame));
         }
+        else
+        {
+            foreach (var quoted in earlier)
+            {
+                html.Append("<p>").Append(WebUtility.HtmlEncode(frame.Attribution(quoted))).Append("</p>");
+                html.Append("<blockquote>").Append(QuotedBody(quoted)).Append("</blockquote>");
+            }
+        }
+
+        return html.ToString();
+    }
+
+    private static string QuotedBody(SupportMessage quoted)
+        => SafeHtml.Sanitize(quoted.BodyHtml, contentId => HtmlImage.Described(NameOf(quoted, contentId))) ?? SafeHtml.FromPlainText(quoted.Body);
+
+    private const string QuoteBar = "margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex";
+
+    // Marked as Gmail marks a quote, so a customer's reply that carries it back is cut off by the same rule that cuts theirs.
+    private static string QuotedNestedHtml(IReadOnlyList<SupportMessage> earlier, int index, SupportAnswerFrame frame)
+    {
+        var html = new StringBuilder();
+        html.Append("<div class=\"gmail_quote\"><div class=\"gmail_attr\">").Append(WebUtility.HtmlEncode(frame.Attribution(earlier[index]))).Append("</div>");
+        html.Append("<blockquote class=\"gmail_quote\" style=\"").Append(QuoteBar).Append("\">").Append(QuotedBody(earlier[index]));
+        if (index + 1 < earlier.Count) html.Append(QuotedNestedHtml(earlier, index + 1, frame));
+        html.Append("</blockquote></div>");
 
         return html.ToString();
     }

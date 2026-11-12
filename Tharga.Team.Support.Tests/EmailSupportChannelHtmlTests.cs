@@ -27,7 +27,7 @@ public class EmailSupportChannelHtmlTests
 
         await mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x =>
                 x.Body == EmailSupportChannel.Body(answer, earlier) &&
-                x.BodyHtml == "<p>Try <b>this</b>.</p><p>On 2026-10-17 08:00 UTC, A User wrote:</p><blockquote>It is &lt;empty&gt;.<br>Really.</blockquote>"),
+                x.BodyHtml == "<p>Try <b>this</b>.</p><div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A User wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">It is &lt;empty&gt;.<br>Really.</blockquote></div>"),
             Arg.Any<CancellationToken>());
     }
 
@@ -53,8 +53,8 @@ public class EmailSupportChannelHtmlTests
         var html = EmailSupportChannel.Html(Answer("<p><b>Fixed</b></p>"), earlier);
 
         Assert.Equal("<p><b>Fixed</b></p>" +
-                     "<p>On 2026-10-17 08:01 UTC, A User wrote:</p><blockquote><p>Still <i>empty</i></p></blockquote>" +
-                     "<p>On 2026-10-17 08:00 UTC, A User wrote:</p><blockquote>Help</blockquote>", html);
+                     "<div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:01 UTC, A User wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\"><p>Still <i>empty</i></p>" +
+                     "<div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A User wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">Help</blockquote></div></blockquote></div>", html);
     }
 
     /// <summary>Whatever was stored, what leaves is sanitized again.</summary>
@@ -73,7 +73,7 @@ public class EmailSupportChannelHtmlTests
     {
         var html = EmailSupportChannel.Html(Answer("<p><b>Fixed</b></p>"), [Customer(1, "Help") with { AuthorName = "<b>Eve</b>" }]);
 
-        Assert.Contains("<p>On 2026-10-17 08:00 UTC, &lt;b&gt;Eve&lt;/b&gt; wrote:</p>", html);
+        Assert.Contains("<div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, &lt;b&gt;Eve&lt;/b&gt; wrote:</div>", html);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class EmailSupportChannelHtmlTests
 
         var html = EmailSupportChannel.Html(Answer("<p><b>Fixed</b></p>"), [earlier]);
 
-        Assert.Contains("<blockquote><p>Look shot.png</p></blockquote>", html);
+        Assert.Contains("<p>Look shot.png</p></blockquote>", html);
         Assert.DoesNotContain("cid:", html);
     }
 

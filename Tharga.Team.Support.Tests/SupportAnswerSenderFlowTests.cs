@@ -300,7 +300,7 @@ public class SupportAnswerSenderFlowTests
         await Service(Mailbox(), answers, Anna()).AnswerCaseAsync(TeamKey, CaseId, string.Empty, "<p>Hi <b>there</b>.</p>", []);
 
         Assert.StartsWith("Hi there.\n\nBest wishes,\nAnna Andersson\nExample Support\n\nOn ", _sent.Body);
-        Assert.Equal("<p>Hi <b>there</b>.</p><p class=\"signature\">Best wishes,<br>Anna Andersson<br>Example Support</p><p>On 2026-10-17 08:00 UTC, A Customer wrote:</p><blockquote>The export is empty.</blockquote>", _sent.BodyHtml);
+        Assert.Equal("<p>Hi <b>there</b>.</p><p class=\"signature\">Best wishes,<br>Anna Andersson<br>Example Support</p><div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A Customer wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">The export is empty.</blockquote></div>", _sent.BodyHtml);
     }
 
     [Fact]
@@ -348,7 +348,7 @@ public class SupportAnswerSenderFlowTests
         await service.AnswerCaseAsync(TeamKey, CaseId, "Unnamed.", null, [], new SupportAnswerChoice { SignWithName = false });
         await service.AnswerCaseAsync(TeamKey, CaseId, "Third.");
 
-        Assert.Contains(", Anna Andersson wrote:\n> Named.", _sent.Body);
+        Assert.Contains(", Anna Andersson wrote:\n> > Named.", _sent.Body);
         Assert.Contains(", Example Support wrote:\n> Unnamed.", _sent.Body);
     }
 
