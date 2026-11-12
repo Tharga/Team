@@ -106,6 +106,30 @@ public class AuditingUserManagementServiceDecorator : IUserManagementService
     /// a query rather than a reading. The refusal to disable oneself is audited as a failure too: an
     /// administrator repeatedly trying it is worth seeing.
     /// </remarks>
+    /// <remarks>Records the identity moved and the one it replaced: after the duplicate is removed, this entry is the only trace of why two sign-ins are now one user.</remarks>
+    public async Task<UserLinkResult> LinkIdentityAsync(string userKey, string duplicateUserKey, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var result = await _inner.LinkIdentityAsync(userKey, duplicateUserKey, cancellationToken);
+            sw.Stop();
+            Log("link-identity", nameof(LinkIdentityAsync), sw.ElapsedMilliseconds, true, metadata: Meta(
+                (AuditMetadataKeys.UserKey, userKey),
+                (AuditMetadataKeys.LinkedUserKey, duplicateUserKey),
+                ("identity.new", result?.Identity),
+                ("identity.previous", result?.PreviousIdentity)));
+            return result;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            Log("link-identity", nameof(LinkIdentityAsync), sw.ElapsedMilliseconds, false, ex.Message,
+                metadata: Meta((AuditMetadataKeys.UserKey, userKey), (AuditMetadataKeys.LinkedUserKey, duplicateUserKey)));
+            throw;
+        }
+    }
+
     public async Task SetUserDisabledAsync(string userKey, bool disabled, CancellationToken cancellationToken = default)
     {
         var action = disabled ? "disable" : "enable";

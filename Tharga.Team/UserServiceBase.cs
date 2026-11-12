@@ -401,6 +401,11 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
             $"declare {nameof(IUser.DisabledAt)}/{nameof(IUser.DisabledBy)} on your user entity, to " +
             $"support disabling users (the '{SystemUserScopes.Manage}' system scope).");
 
+    public virtual Task SetUserIdentityAsync(string userKey, string identity)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetUserIdentityAsync)}. Implement it to support " +
+            $"linking a new sign-in identity to an existing user (the '{SystemUserScopes.Manage}' system scope).");
+
     public virtual Task DeleteUserAsync(string userKey)
         => throw new NotSupportedException(
             $"'{GetType().Name}' does not implement {nameof(DeleteUserAsync)}. Implement it to support " +

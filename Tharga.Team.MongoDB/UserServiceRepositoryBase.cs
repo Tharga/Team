@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using System.Security.Claims;
 using Tharga.MongoDB;
+using Tharga.Toolkit;
 
 namespace Tharga.Team.MongoDB;
 
@@ -10,6 +11,7 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
     where TUserEntity : EntityBase, IUser
 {
     private readonly IUserRepository<TUserEntity> _userRepository;
+    private readonly ILogger<UserServiceBase> _linkLogger;
 
     /// <param name="authenticationStateProvider">Resolves the calling principal when none is supplied.</param>
     /// <param name="userRepository">The user collection this service reads and writes.</param>
@@ -24,6 +26,7 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
         : base(authenticationStateProvider, logger, iconStore, cache)
     {
         _userRepository = userRepository;
+        _linkLogger = logger;
     }
 
     protected abstract Task<TUserEntity> CreateUserEntityAsync(ClaimsPrincipal claimsPrincipal, string identity);
@@ -33,6 +36,9 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
         var identity = ResolveUserIdentity(claimsPrincipal);
 
         var user = await _userRepository.GetAsync(identity);
+        if (user != null) return user;
+
+        user = await LinkToExistingUserAsync(claimsPrincipal, identity);
         if (user != null) return user;
 
         var candidate = await CreateUserEntityAsync(claimsPrincipal, identity);
@@ -51,6 +57,51 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
         // loss is expected (Tharga/Team#457); a write that failed for another reason leaves no winner to read, which is thrown.
         return await _userRepository.GetAsync(identity)
             ?? throw new InvalidOperationException($"The user '{identity}' could not be added, and no other sign-in added it either.");
+    }
+
+    /// <summary>
+    /// Whether somebody signing in with an identity no user holds is taken to be the one existing user with the same email
+    /// address, instead of being given a new, empty user. Default <c>false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Override it only when your identity provider verifies the email address it sends</b>, for example by returning
+    /// whether the principal carries a verified-email claim. Linking on an address nobody checked lets anyone who can register
+    /// that address at the provider sign in as the person who owns it here, with their teams. It is also off by default because
+    /// it is a decision about who your users are: a person who really has two accounts is joined into one.
+    /// <para>
+    /// Only an address held by exactly one user links; two or more, or none, leave the sign-in to create a user as before.
+    /// The existing user keeps their key, so their memberships and keys follow them, and from then on is found by the new
+    /// identity, so the old one no longer signs in as them.
+    /// </para>
+    /// </remarks>
+    protected virtual bool ShouldLinkToExistingUserByEmail(ClaimsPrincipal claimsPrincipal) => false;
+
+    private async Task<TUserEntity> LinkToExistingUserAsync(ClaimsPrincipal claimsPrincipal, string identity)
+    {
+        if (!ShouldLinkToExistingUserByEmail(claimsPrincipal)) return null;
+
+        var email = claimsPrincipal.GetEmail();
+        if (string.IsNullOrWhiteSpace(email)) return null;
+
+        try
+        {
+            var matches = await _userRepository.GetByEMailAsync(email);
+            if (matches.Length != 1) return null;
+
+            var existing = matches[0];
+            await _userRepository.SetIdentityAsync(existing.Key, identity);
+            await InvalidateUserCacheAsync(existing.Identity);
+            await InvalidateUserCacheAsync(identity);
+
+            return await _userRepository.GetAsync(identity);
+        }
+        catch (Exception e)
+        {
+            // Not linked, so the sign-in goes on to create a user as it always has rather than failing for want of a convenience.
+            _linkLogger?.LogWarning(e, "Could not link the sign-in '{Identity}' to the existing user with its email address.", identity);
+
+            return null;
+        }
     }
 
     protected override IAsyncEnumerable<IUser> GetAllAsync()
@@ -79,6 +130,21 @@ public abstract class UserServiceRepositoryBase<TUserEntity> : UserServiceBase
 
         await _userRepository.SetNameAsync(userKey, name);
         InvalidateUserCache(user.Identity);
+    }
+
+    /// <remarks>Both identities are dropped from the cache: the user was cached under the old one, and a sign-in that raced the move may have cached the new one.</remarks>
+    public override async Task SetUserIdentityAsync(string userKey, string identity)
+    {
+        if (string.IsNullOrEmpty(userKey)) return;
+        if (string.IsNullOrWhiteSpace(identity)) throw new ArgumentException("An identity is required.", nameof(identity));
+
+        var user = await _userRepository.GetByKeyAsync(userKey);
+        if (user == null) return;
+
+        await _userRepository.SetIdentityAsync(userKey, identity);
+        InvalidateUserCache(user.Identity);
+        InvalidateUserCache(identity);
+        await InvalidateUserByKeyAsync(userKey);
     }
 
     public override async Task SetUserEmailAsync(string userKey, string email)

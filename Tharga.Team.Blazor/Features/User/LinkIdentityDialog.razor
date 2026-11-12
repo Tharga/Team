@@ -1,0 +1,93 @@
+@using Tharga.Team
+@using Tharga.Team.Blazor.Framework
+@inject IUserManagementService UserManagementService
+@inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
+
+@*
+    An administrator moves the sign-in identity of a duplicate user onto the user who keeps the teams, through
+    IUserManagementService, which checks users:manage, refuses a duplicate that belongs to a team and audits the link.
+    Closes with true once it is done.
+*@
+<RadzenStack Gap="1rem" data-link-identity>
+    <RadzenText TextStyle="TextStyle.Body2">@_text.Format(LinkIdentityDialogText.Help, KeepName)</RadzenText>
+
+    @if (_choices.Length == 0)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Size="AlertSize.ExtraSmall" data-none>
+            @_text[LinkIdentityDialogText.AllHaveTeams]
+        </RadzenAlert>
+    }
+    else
+    {
+        <div>
+            <RadzenLabel Component="duplicate" Text="@_text[LinkIdentityDialogText.Candidate]" />
+            <RadzenDropDown Name="duplicate" Data="@_choices" TValue="string" @bind-Value="_duplicateKey" TextProperty="@nameof(Choice.Text)" ValueProperty="@nameof(Choice.Key)"
+                            Disabled="@_busy" Style="width: 100%;" data-duplicate-choice />
+        </div>
+    }
+
+    <span class="validation-message" data-error>@_error</span>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" Gap="0.5rem">
+        <RadzenButton Text="@_text[LinkIdentityDialogText.Link]" ButtonStyle="ButtonStyle.Primary" Disabled="@(_busy || _choices.Length == 0)"
+                      Click="LinkAsync" data-confirm-link />
+        <RadzenButton Text="@_text[LinkIdentityDialogText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="@(() => DialogService.Close(false))" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    /// <summary>The user who keeps their teams and takes the identity.</summary>
+    [Parameter] public string KeepUserKey { get; set; }
+
+    /// <summary>Who that user is, for the text.</summary>
+    [Parameter] public string KeepName { get; set; }
+
+    /// <summary>The other users with the same address, from which the duplicate is chosen.</summary>
+    [Parameter] public IReadOnlyList<UserViewModel> Candidates { get; set; } = [];
+
+    private sealed record Choice(string Key, string Text);
+
+    private TextSet _text = TextSet.Empty;
+    private Choice[] _choices = [];
+    private string _duplicateKey;
+    private string _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(LinkIdentityDialogText.All);
+
+        // A duplicate that belongs to a team is not offered: the service refuses it, and the list says why when none is left.
+        _choices = [.. Candidates.Where(x => x.Key != KeepUserKey && x.TeamCount == 0).Select(x => new Choice(x.Key, _text.Format(LinkIdentityDialogText.CandidateLine, x.Name ?? x.EMail, LastSeen(x))))];
+        if (_choices.Length == 1) _duplicateKey = _choices[0].Key;
+    }
+
+    private string LastSeen(UserViewModel user)
+        => LastSeenText.IsNever(user.LastSeen) ? _text[LinkIdentityDialogText.NeverSeen] : LastSeenText.Format(user.LastSeen.Value);
+
+    private async Task LinkAsync()
+    {
+        _error = null;
+        if (string.IsNullOrEmpty(_duplicateKey))
+        {
+            _error = _text[LinkIdentityDialogText.Required];
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            await UserManagementService.LinkIdentityAsync(KeepUserKey, _duplicateKey);
+            DialogService.Close(true);
+        }
+        catch (Exception e)
+        {
+            _error = e.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

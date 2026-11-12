@@ -119,6 +119,12 @@ public sealed class AuthorizationUserServiceDecorator : IUserService
         await _inner.SetUserEmailAsync(userKey, email);
     }
 
+    public async Task SetUserIdentityAsync(string userKey, string identity)
+    {
+        await RequireUsersManageAsync(nameof(SetUserIdentityAsync));
+        await _inner.SetUserIdentityAsync(userKey, identity);
+    }
+
     public async Task DeleteUserAsync(string userKey)
     {
         await RequireUsersManageAsync(nameof(DeleteUserAsync));

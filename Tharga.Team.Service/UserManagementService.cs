@@ -224,6 +224,31 @@ public class UserManagementService : IUserManagementService
         return new UserDeleteResult(directoryDeleted, directoryError, removedTeamCount);
     }
 
+    public async Task<UserLinkResult> LinkIdentityAsync(string userKey, string duplicateUserKey, CancellationToken cancellationToken = default)
+    {
+        if (string.Equals(userKey, duplicateUserKey, StringComparison.Ordinal))
+            throw new InvalidOperationException("A user cannot be linked to itself.");
+
+        var keep = await RequireUserAsync(userKey);
+        var duplicate = await RequireUserAsync(duplicateUserKey);
+
+        if (string.IsNullOrWhiteSpace(duplicate.Identity))
+            throw new InvalidOperationException($"User '{duplicateUserKey}' has no identity to move.");
+
+        var memberships = 0;
+        foreach (var level in Enum.GetValues<AccessLevel>())
+            memberships += (await _teamService.GetTeamsForUserWithAccessLevelAsync(duplicate.Key, level)).Count;
+
+        if (memberships > 0)
+            throw new InvalidOperationException($"User '{duplicateUserKey}' belongs to {memberships} team(s). Remove them from the teams first, so that nothing is lost.");
+
+        await _userService.DeleteUserAsync(duplicate.Key);
+        await RemovePersonalSystemKeysAsync(duplicate.Key);
+        await _userService.SetUserIdentityAsync(keep.Key, duplicate.Identity);
+
+        return new UserLinkResult(duplicate.Identity, keep.Identity);
+    }
+
     /// <summary>
     /// Deletes, or disables, a deleted user's personal system keys, per <see cref="ApiKeyOptions.OwnerRemovedAction"/>.
     /// </summary>
