@@ -154,6 +154,16 @@ public interface ISupportCaseService
     Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Closes a case with a comment saying why, kept in the transcript next to the closure.
+    /// </summary>
+    /// <remarks>
+    /// Authorized exactly as closing without one. The comment is internal: it is never mailed or posted to a channel, and
+    /// <see cref="GetMessagesAsync"/> returns it only to callers holding <see cref="SystemSupportScopes.AllRead"/> or
+    /// <see cref="SystemSupportScopes.AllManage"/>, or reading the unassigned queue. A blank comment closes the case without one.
+    /// </remarks>
+    Task CloseCaseAsync(string teamKey, string caseId, string comment, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Opens a closed case again, keeping its history.
     /// </summary>
     /// <remarks>

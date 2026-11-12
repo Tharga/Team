@@ -764,6 +764,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AsSupport = entity.AsSupport,
         SentFrom = entity.SentFrom,
         SignedWithName = entity.SignedWithName,
+        InternalComment = entity.InternalComment,
         Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)],
         Rating = entity.Rating,
         AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty })],
@@ -787,6 +788,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         AsSupport = message.AsSupport,
         SentFrom = message.SentFrom,
         SignedWithName = message.SignedWithName,
+        InternalComment = message.InternalComment,
         Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null,
         Rating = message.Rating,
         AssistantCalls = message.AssistantCalls is { Length: > 0 } calls

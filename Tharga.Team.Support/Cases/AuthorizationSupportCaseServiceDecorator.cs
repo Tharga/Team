@@ -252,14 +252,18 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
             $"or {CrossTeamScopesFor(CaseAccessKind.Write)}.");
     }
 
-    public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    public Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => CloseCaseAsync(teamKey, caseId, null, cancellationToken);
+
+    /// <remarks>Authorized exactly as closing without a comment, whether or not one is given.</remarks>
+    public async Task CloseCaseAsync(string teamKey, string caseId, string comment, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "close", CaseAccessKind.Write);
 
         if (staffCloseAfter != null && !string.IsNullOrEmpty(teamKey) && !await ClosesAsTheTeamAsync(teamKey, caseId))
             await RequireStaffMayCloseAsync(teamKey, caseId, staffCloseAfter.Value);
 
-        await inner.CloseCaseAsync(teamKey, caseId, cancellationToken);
+        await inner.CloseCaseAsync(teamKey, caseId, comment, cancellationToken);
     }
 
     /// <remarks>
@@ -330,7 +334,11 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     {
         await RequireCaseAccessAsync(teamKey, caseId, "read", CaseAccessKind.Read);
 
-        return await inner.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
+        var page = await inner.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
+
+        if (string.IsNullOrEmpty(teamKey) || page.Items.All(x => x.InternalComment == null) || await HasCrossTeamAccessAsync(CaseAccessKind.Read)) return page;
+
+        return page with { Items = [.. page.Items.Select(x => x.InternalComment == null ? x : x with { InternalComment = null })] };
     }
 
     /// <remarks>

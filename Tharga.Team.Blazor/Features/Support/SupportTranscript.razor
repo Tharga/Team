@@ -17,6 +17,12 @@
                 <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-style: italic; color: var(--rz-text-secondary-color);">
                     @message.Body — @Time(message.SentAt)
                 </RadzenText>
+                @if (!string.IsNullOrWhiteSpace(message.InternalComment))
+                {
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;" data-close-comment="@message.Sequence">
+                        <strong>@_text[SupportTranscriptText.ClosedBecause]</strong> @message.InternalComment
+                    </RadzenText>
+                }
             </div>
             continue;
         }

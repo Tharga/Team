@@ -305,7 +305,7 @@
             if (choice.Visibility is { } visibility && visibility != Case.Visibility)
                 await SupportCases.SetCaseVisibilityAsync(Case.TeamKey, Case.Id, visibility);
 
-            await SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id);
+            await SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id, choice.Comment);
         });
     }
 

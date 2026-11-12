@@ -198,12 +198,12 @@ public class SupportCaseListRenderTests : BunitContext
         OpenCase(view, "newest");
         await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click());
 
-        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", default), Times.Never);
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", null, default), Times.Never);
         Assert.Single(dialogs.FindAll("[data-close-dialog='team']"));
 
         await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
 
-        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", default), Times.Once);
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", null, default), Times.Once);
     }
 
     /// <summary>The dialog offers who reads the case from now on, and closing with another choice makes it.</summary>
@@ -221,7 +221,7 @@ public class SupportCaseListRenderTests : BunitContext
         await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
 
         cases.Verify(x => x.SetCaseVisibilityAsync(TeamKey, "newest", SupportCaseVisibility.Private, default), Times.Once);
-        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", default), Times.Once);
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "newest", null, default), Times.Once);
     }
 
     [Fact]
@@ -234,7 +234,7 @@ public class SupportCaseListRenderTests : BunitContext
         await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click());
         await dialogs.InvokeAsync(() => dialogs.FindAll("[data-close-dialog] button").First(b => b.TextContent.Contains("Cancel")).Click());
 
-        cases.Verify(x => x.CloseCaseAsync(TeamKey, It.IsAny<string>(), default), Times.Never);
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, It.IsAny<string>(), It.IsAny<string>(), default), Times.Never);
     }
 
     /// <summary>Staff may close any time, but are told first that it is better left to the organisation.</summary>
@@ -251,7 +251,33 @@ public class SupportCaseListRenderTests : BunitContext
 
         await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
 
-        cases.Verify(x => x.CloseCaseAsync(TeamKey, "waiting", default), Times.Once);
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "waiting", null, default), Times.Once);
+    }
+
+    [Fact]
+    public async Task StaffClosing_CanGiveAReason_WhichIsPassedOn()
+    {
+        var view = RenderStaff(out var cases, [Case("waiting", 5)]);
+        var dialogs = Render<RadzenDialog>();
+
+        OpenCase(view, "waiting");
+        await view.InvokeAsync(() => view.Find("[data-close]").Click());
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-close-comment-input]").Change("Answered by phone."));
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
+
+        cases.Verify(x => x.CloseCaseAsync(TeamKey, "waiting", "Answered by phone.", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task TheAuthorClosing_IsNotAskedForAReasonOnlyStaffSee()
+    {
+        var view = RenderCases(out _);
+        var dialogs = Render<RadzenDialog>();
+
+        OpenCase(view, "newest");
+        await view.InvokeAsync(() => view.FindAll("button").First(b => b.TextContent.Contains("Close case")).Click());
+
+        Assert.Empty(dialogs.FindAll("[data-close-comment-input]"));
     }
 
     [Fact]

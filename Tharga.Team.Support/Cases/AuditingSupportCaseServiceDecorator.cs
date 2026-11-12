@@ -287,12 +287,16 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportCaseUnread[]> GetMyUnreadByCaseAsync(string teamKey, CancellationToken cancellationToken = default)
         => inner.GetMyUnreadByCaseAsync(teamKey, cancellationToken);
 
-    public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    public Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => CloseCaseAsync(teamKey, caseId, null, cancellationToken);
+
+    /// <remarks>The comment is not audited: it can name people, and the audit trail is read more widely than the conversation.</remarks>
+    public async Task CloseCaseAsync(string teamKey, string caseId, string comment, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
         try
         {
-            await inner.CloseCaseAsync(teamKey, caseId, cancellationToken);
+            await inner.CloseCaseAsync(teamKey, caseId, comment, cancellationToken);
 
             Log("close", nameof(CloseCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
                 metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId)));
