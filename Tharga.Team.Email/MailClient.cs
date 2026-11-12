@@ -61,7 +61,9 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
             // The recipient is deliberately not logged: an address is personal data, and logs travel further than mail.
             logger?.LogError(e, "A mail could not be sent.");
 
-            return MailSendResult.Failed(e.Message);
+            return e is SmtpCommandException { ErrorCode: SmtpErrorCode.SenderNotAccepted }
+                ? MailSendResult.SenderNotAccepted(e.Message)
+                : MailSendResult.Failed(e.Message);
         }
     }
 

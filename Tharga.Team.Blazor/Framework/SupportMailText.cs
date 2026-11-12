@@ -9,6 +9,9 @@ public static class SupportMailText
     /// <summary>Who an earlier entry written by support is attributed to, when the host has not named its support.</summary>
     public static readonly TextKey SupportName = new(SupportMailTexts.SupportNameKey, SupportMailTexts.SupportName);
 
+    /// <summary>The words that close an answer signed with a name; <c>{Name}</c> is the answerer's name and <c>{newline}</c> a line break.</summary>
+    public static readonly TextKey Closing = new(SupportMailTexts.ClosingKey, SupportMailTexts.Closing);
+
     /// <summary>Every key here.</summary>
-    public static readonly TextKey[] All = [QuoteAttribution, SupportName];
+    public static readonly TextKey[] All = [QuoteAttribution, SupportName, Closing];
 }

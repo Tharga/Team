@@ -29,7 +29,7 @@ internal static class CaseReplyAddress
     /// <b>Writes the case's token the first time</b>, which is why a preview of an answer can assign one: it must show
     /// the address that will be sent, and a token drawn again for the real send would not match.
     /// </remarks>
-    public static async Task<string> ForAsync(ISupportCaseStore store, MailOptions mailOptions, SupportCase supportCase, ILogger logger, CancellationToken cancellationToken)
+    public static async Task<string> ForAsync(ISupportCaseStore store, MailOptions mailOptions, SupportCase supportCase, ILogger logger, CancellationToken cancellationToken, string supportAddress = null)
     {
         if (!mailOptions.PerCaseReplyTo || supportCase == null) return null;
 
@@ -38,7 +38,21 @@ internal static class CaseReplyAddress
             : supportCase.TrackingToken;
 
         // Falls back to the id, which an address has always been able to carry, rather than to no address at all.
-        return PerCaseAddress.Build(mailOptions.FromAddress, string.IsNullOrWhiteSpace(tag) ? supportCase.Id : tag);
+        return PerCaseAddress.Build(string.IsNullOrWhiteSpace(supportAddress) ? mailOptions.FromAddress : supportAddress, string.IsNullOrWhiteSpace(tag) ? supportCase.Id : tag);
+    }
+
+    /// <summary>The case an inbound mail's per-case address names, whichever of the mailbox's own addresses it was sent to: its sending address or a send-as address.</summary>
+    public static async Task<SupportCase> FindByRecipientAsync(ISupportCaseStore store, IEnumerable<string> deliveredTo, MailOptions mailOptions, CancellationToken cancellationToken)
+    {
+        var own = new[] { mailOptions.FromAddress }.Concat((mailOptions.SendAs ?? []).Select(x => x?.Address)).Where(x => !string.IsNullOrWhiteSpace(x));
+
+        foreach (var address in own)
+        {
+            var found = await FindAsync(store, PerCaseAddress.CaseIdIn(deliveredTo, address), cancellationToken);
+            if (found != null) return found;
+        }
+
+        return null;
     }
 
     /// <summary>

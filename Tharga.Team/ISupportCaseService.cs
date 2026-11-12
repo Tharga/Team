@@ -66,6 +66,9 @@ public interface ISupportCaseService
     /// <summary>Answers a case from the support side with formatted text and any files, authorized as a plain answer and sanitized and derived as the formatted reply is.</summary>
     Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
 
+    /// <summary>Answers as the other overloads do, with the sender and the signature chosen for this answer; an address that is not one of <see cref="SupportAnswerRoute.Senders"/> is refused.</summary>
+    Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, SupportAnswerChoice choice, CancellationToken cancellationToken = default);
+
     /// <summary>Opens a file carried by one entry of a case, authorized exactly as reading its transcript, or returns null when that entry carries no attachment with this id; the caller disposes it and serves it as <see cref="SupportAttachmentContentTypes.ServedAs"/> says.</summary>
     Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default);
 
@@ -97,6 +100,9 @@ public interface ISupportCaseService
     /// </summary>
     /// <remarks>Authorized exactly as answering; the draft is sanitized and derived as an answer is. Files are not rendered.</remarks>
     Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default);
+
+    /// <summary>The draft as <see cref="PreviewAnswerAsync(string, string, string, string, CancellationToken)"/> renders it, with the sender and the signature chosen for this answer.</summary>
+    Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, SupportAnswerChoice choice, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Has the assistant answer the newest message on a case, and appends what it says.

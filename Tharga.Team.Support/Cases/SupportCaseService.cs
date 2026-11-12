@@ -33,7 +33,8 @@ internal sealed class SupportCaseService(
     ISupportTypingNotifier typingNotifier = null,
     SupportDeskPresence deskPresence = null,
     IEnumerable<ISupportAssistantUsageSink> usageSinks = null,
-    ILogger<SupportCaseService> logger = null) : ISupportCaseService, ISupportCaseTeamQueries
+    ILogger<SupportCaseService> logger = null,
+    SupportAnswerOptions answerOptions = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
@@ -272,6 +273,9 @@ internal sealed class SupportCaseService(
     public Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
         => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: true, cancellationToken);
 
+    public Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: true, cancellationToken, choice);
+
     /// <remarks>
     /// The entry is read by its sequence and the attachment found on it, so an id belonging to another entry or
     /// another case finds nothing even before the store compares the case it was saved for.
@@ -320,17 +324,22 @@ internal sealed class SupportCaseService(
 
         if (binding == null) return SupportAnswerRoute.Site;
 
-        return AnswerMail?.RouteOf(supportCase, binding) ?? new SupportAnswerRoute { ByMail = true, To = binding.Address };
+        return AnswerMail?.RouteOf(supportCase, binding, await StaffSenderAsync()) ?? new SupportAnswerRoute { ByMail = true, To = binding.Address };
     }
 
     /// <remarks>The draft becomes the entry answering would append — the writer's name, the next sequence, sanitized and derived as written — and is mailed nowhere.</remarks>
-    public async Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+    public Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, CancellationToken cancellationToken = default)
+        => PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, null, cancellationToken);
+
+    public async Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
     {
         var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
         var binding = supportCase == null || AnswerMail == null ? null : MailBindingOf(supportCase);
         if (binding == null) return null;
 
         (body, bodyHtml) = Content(body, bodyHtml);
+
+        var (sentFrom, signed) = await SenderOfAnswerAsync(supportCase, binding, choice);
 
         var draft = new SupportMessage
         {
@@ -341,10 +350,43 @@ internal sealed class SupportCaseService(
             Body = body ?? string.Empty,
             BodyHtml = bodyHtml,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
-            AsSupport = true
+            AsSupport = true,
+            SentFrom = sentFrom,
+            SignedWithName = signed
         };
 
         return await AnswerMail.PreviewAsync(supportCase, binding, draft, cancellationToken);
+    }
+
+    /// <summary>The staff member's own address and name when the host lets their role send from it, otherwise null.</summary>
+    private async Task<SupportStaffSender> StaffSenderAsync()
+    {
+        var role = answerOptions?.StaffSenderRole;
+        if (string.IsNullOrWhiteSpace(role) || !await authorizer.HoldsAnyRoleAsync([role.Trim()])) return null;
+
+        var address = await authorizer.GetEmailAsync();
+
+        return string.IsNullOrWhiteSpace(address) ? null : new SupportStaffSender(address.Trim(), await DisplayNameAsync());
+    }
+
+    /// <summary>
+    /// The address an answer is sent from and whether it is signed with the answerer's name, from what they chose and the
+    /// host's defaults; an address that is not one of the route's senders is refused here, whatever the component offered.
+    /// </summary>
+    private async Task<(string SentFrom, bool SignedWithName)> SenderOfAnswerAsync(SupportCase supportCase, SupportChannelBinding binding, SupportAnswerChoice choice)
+    {
+        var signed = choice?.SignWithName ?? answerOptions?.NameTheAnswerer ?? false;
+        if (binding == null || AnswerMail == null) return (null, signed);
+
+        var route = AnswerMail.RouteOf(supportCase, binding, await StaffSenderAsync());
+        var chosen = choice?.SendFrom;
+
+        if (string.IsNullOrWhiteSpace(chosen)) return (route.From, signed);
+
+        var sender = route.Senders.FirstOrDefault(x => SupportMailboxes.SameAddress(x.Address, chosen))
+            ?? throw new InvalidOperationException("The answer cannot be sent from that address: it is not one the person answering may send from.");
+
+        return (sender.Address, signed);
     }
 
     private SupportChannelBinding MailBindingOf(SupportCase supportCase)
@@ -363,7 +405,7 @@ internal sealed class SupportCaseService(
         return string.IsNullOrEmpty(subject) ? [] : await store.GetUnreadByCaseAsync(teamKey, subject, cancellationToken);
     }
 
-    private async Task WriteAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken)
+    private async Task WriteAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken, SupportAnswerChoice choice = null)
     {
         (body, bodyHtml) = Content(body, bodyHtml);
         RequireWithinLength(body);
@@ -390,6 +432,9 @@ internal sealed class SupportCaseService(
             existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
         }
 
+        var mailBinding = asSupport && existing != null && AnswerMail != null ? MailBindingOf(existing) : null;
+        var (sentFrom, signed) = mailBinding == null ? (null, false) : await SenderOfAnswerAsync(existing, mailBinding, choice);
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var stored = await StoreAttachmentsAsync(caseId, uploads, cancellationToken);
 
@@ -403,6 +448,8 @@ internal sealed class SupportCaseService(
             BodyHtml = bodyHtml,
             SentAt = now,
             AsSupport = asSupport,
+            SentFrom = sentFrom,
+            SignedWithName = signed,
             Attachments = stored
         };
 

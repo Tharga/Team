@@ -159,6 +159,14 @@ public sealed class TeamAuthorizer
         return _identityResolver.GetSubject(principal);
     }
 
+    /// <summary>The caller's e-mail address from their claims, or <c>null</c> when there is none.</summary>
+    public async ValueTask<string> GetEmailAsync()
+    {
+        var principal = await _principalAccessor.GetCurrentAsync();
+
+        return principal?.FindFirst(ClaimTypes.Email)?.Value;
+    }
+
     /// <summary>
     /// The caller's display name, for snapshotting into durable history. Falls back through the usual
     /// chain and finally to the subject, so it is never empty for an authenticated caller.

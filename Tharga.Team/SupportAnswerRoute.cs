@@ -12,8 +12,11 @@ public sealed record SupportAnswerRoute
     /// <summary>The address the answer is mailed to.</summary>
     public string To { get; init; }
 
-    /// <summary>The address it is sent from, the mailbox the case came in through.</summary>
+    /// <summary>The address it is sent from by default: the answering staff member's own when they may send as it, otherwise the address the customer wrote to or the mailbox the case came in through.</summary>
     public string From { get; init; }
+
+    /// <summary>Every address the answering staff member may send from, <see cref="From"/> among them.</summary>
+    public SupportAnswerSender[] Senders { get; init; } = [];
 
     /// <summary>The name of that mailbox as support's configuration has it.</summary>
     public string Mailbox { get; init; }

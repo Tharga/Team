@@ -170,7 +170,7 @@ public static class SupportRegistration
     /// <b>Further mailboxes are added with <see cref="SupportCaseOptions.AddMailbox"/></b>; each is read on its own and answers the cases that came in through it.
     /// </para>
     /// <para>
-    /// <b>An answer mail names no staff member</b>: <see cref="SupportCaseOptions.Answers"/> sets the name earlier support entries are attributed to, the signature and the time zone of quoted dates.
+    /// <b>An answer mail names no staff member unless asked to</b>: <see cref="SupportCaseOptions.Answers"/> sets the name earlier support entries are attributed to, the signature, the time zone of quoted dates, whether an answer is signed with its writer's name and which role may send from their own address.
     /// </para>
     /// <para>
     /// <b>Nothing else may be registered as <see cref="ISupportCaseService"/>.</b> The only registration is
@@ -368,7 +368,8 @@ public static class SupportRegistration
                     sp.GetService<ISupportTypingNotifier>(),
                     sp.GetService<SupportDeskPresence>(),
                     sp.GetServices<ISupportAssistantUsageSink>(),
-                    sp.GetService<ILogger<SupportCaseService>>()),
+                    sp.GetService<ILogger<SupportCaseService>>(),
+                    sp.GetService<SupportAnswerOptions>()),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,

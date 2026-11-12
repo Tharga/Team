@@ -208,6 +208,29 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>Audited as an answer, exactly as one without a choice; the address it went from is a person's and is not in the audit entry.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, attachments, choice, cancellationToken);
+
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>Renders a draft and changes nothing, so it is not audited.</remarks>
+    public Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
+        => inner.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, choice, cancellationToken);
+
     /// <remarks>A read, and not audited, like every other read of a case.</remarks>
     public Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
         => inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
