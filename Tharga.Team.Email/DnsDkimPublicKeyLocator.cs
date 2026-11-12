@@ -1,17 +1,17 @@
 using System.Collections.Concurrent;
 using DnsClient;
 using MimeKit.Cryptography;
+using Org.BouncyCastle.Crypto;
 
 namespace Tharga.Team.Email;
 
 /// <summary>
-/// Finds the DKIM key records published in DNS, at <c>{selector}._domainkey.{domain}</c>, and keeps them briefly.
+/// Finds a DKIM public key in DNS, at <c>{selector}._domainkey.{domain}</c>, and keeps it briefly.
 /// </summary>
 /// <remarks>
 /// <b>Every failure is a missing key, never an error.</b> A resolver that is down, slow or answering garbage
 /// leaves the mail unverified — which only means it opens unassigned — so nothing here may throw past the
 /// verifier or hold up reading the mailbox. Each lookup is cut off after <see cref="DefaultLookupTimeout"/>.
-/// The records are handed over as published; MimeKit reads the key out of them and passes over the rest.
 /// <para>
 /// <b>Cached per process, misses too.</b> A support mailbox hears from the same few providers all day, and a
 /// key is published for months, so <see cref="KeyLifetime"/> saves nearly every lookup. A miss is kept for
@@ -20,7 +20,7 @@ namespace Tharga.Team.Email;
 /// whoever writes to the mailbox.
 /// </para>
 /// </remarks>
-internal sealed class DnsDkimPublicKeyLocator : IDnsResolver
+internal sealed class DnsDkimPublicKeyLocator : DkimPublicKeyLocatorBase
 {
     internal static readonly TimeSpan KeyLifetime = TimeSpan.FromMinutes(10);
     internal static readonly TimeSpan MissLifetime = TimeSpan.FromMinutes(1);
@@ -38,7 +38,7 @@ internal sealed class DnsDkimPublicKeyLocator : IDnsResolver
     private readonly Func<string, CancellationToken, Task<IReadOnlyList<string>>> _lookup;
     private readonly TimeProvider _time;
     private readonly TimeSpan _lookupTimeout;
-    private readonly ConcurrentDictionary<string, (DnsTxtResponse Response, DateTimeOffset Until)> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, (AsymmetricKeyParameter Key, DateTimeOffset Until)> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <param name="lookup">The TXT records published at a name, each with its strings joined.</param>
     /// <param name="time">The clock the cache expires by.</param>
@@ -53,41 +53,56 @@ internal sealed class DnsDkimPublicKeyLocator : IDnsResolver
     /// <summary>A locator asking the system's DNS servers.</summary>
     public static DnsDkimPublicKeyLocator Create() => new(LookupTxtAsync);
 
-    public DnsTxtResponse QueryTxt(string domain, CancellationToken cancellationToken = default)
-        => QueryTxtAsync(domain, cancellationToken).GetAwaiter().GetResult();
+    public override AsymmetricKeyParameter LocatePublicKey(string methods, string domain, string selector, CancellationToken cancellationToken = default)
+        => LocatePublicKeyAsync(methods, domain, selector, cancellationToken).GetAwaiter().GetResult();
 
-    public async Task<DnsTxtResponse> QueryTxtAsync(string domain, CancellationToken cancellationToken = default)
+    public override async Task<AsymmetricKeyParameter> LocatePublicKeyAsync(string methods, string domain, string selector, CancellationToken cancellationToken = default)
     {
+        var name = $"{selector}._domainkey.{domain}";
         var now = _time.GetUtcNow();
 
-        if (!_cache.TryGetValue(domain, out var cached) || cached.Until <= now)
+        if (!_cache.TryGetValue(name, out var cached) || cached.Until <= now)
         {
-            var response = await FetchAsync(domain, cancellationToken);
+            var key = await FetchAsync(name, cancellationToken);
 
             if (_cache.Count >= MaxCachedNames) _cache.Clear();
 
-            cached = (response, now + (response.Records.Count == 0 ? MissLifetime : KeyLifetime));
-            _cache[domain] = cached;
+            cached = (key, now + (key == null ? MissLifetime : KeyLifetime));
+            _cache[name] = cached;
         }
 
-        return cached.Response;
+        return cached.Key ?? throw new InvalidOperationException("No usable DKIM key is published for the signature's selector.");
     }
 
-    private async Task<DnsTxtResponse> FetchAsync(string name, CancellationToken cancellationToken)
+    private async Task<AsymmetricKeyParameter> FetchAsync(string name, CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(_lookupTimeout);
 
+        IReadOnlyList<string> records;
+
         try
         {
-            var records = await _lookup(name, timeout.Token).WaitAsync(timeout.Token);
-
-            return new DnsTxtResponse((records ?? []).Where(x => x != null));
+            records = await _lookup(name, timeout.Token).WaitAsync(timeout.Token);
         }
         catch (Exception) when (!cancellationToken.IsCancellationRequested)
         {
-            return new DnsTxtResponse(DnsQueryStatus.TemporaryFailure);
+            return null;
         }
+
+        foreach (var record in records ?? [])
+        {
+            try
+            {
+                if (record?.Contains("p=", StringComparison.Ordinal) == true) return GetPublicKey(record);
+            }
+            catch (Exception)
+            {
+                // A revoked key (an empty p=) or a malformed record is the same as none; another record may still serve.
+            }
+        }
+
+        return null;
     }
 
     private static async Task<IReadOnlyList<string>> LookupTxtAsync(string name, CancellationToken cancellationToken)

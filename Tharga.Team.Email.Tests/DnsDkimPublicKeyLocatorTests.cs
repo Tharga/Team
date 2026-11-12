@@ -1,5 +1,3 @@
-using MimeKit.Cryptography;
-
 namespace Tharga.Team.Email.Tests;
 
 /// <summary>
@@ -38,9 +36,9 @@ public class DnsDkimPublicKeyLocatorTests
     {
         var locator = Locator(DkimTestMail.TxtRecord(DkimTestMail.Example));
 
-        await locator.QueryTxtAsync(Name);
+        await locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1");
         _clock.Advance(DnsDkimPublicKeyLocator.KeyLifetime - TimeSpan.FromSeconds(1));
-        await locator.QueryTxtAsync(Name);
+        await locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1");
 
         Assert.Single(_asked);
     }
@@ -51,9 +49,9 @@ public class DnsDkimPublicKeyLocatorTests
     {
         var locator = Locator(DkimTestMail.TxtRecord(DkimTestMail.Example));
 
-        await locator.QueryTxtAsync(Name);
+        await locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1");
         _clock.Advance(DnsDkimPublicKeyLocator.KeyLifetime);
-        await locator.QueryTxtAsync(Name);
+        await locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1");
 
         Assert.Equal(2, _asked.Count);
     }
@@ -64,12 +62,12 @@ public class DnsDkimPublicKeyLocatorTests
     {
         var locator = Locator();
 
-        Assert.Empty((await locator.QueryTxtAsync(Name)).Records);
-        Assert.Empty((await locator.QueryTxtAsync(Name)).Records);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1"));
         Assert.Single(_asked);
 
         _clock.Advance(DnsDkimPublicKeyLocator.MissLifetime);
-        Assert.Empty((await locator.QueryTxtAsync(Name)).Records);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1"));
 
         Assert.Equal(2, _asked.Count);
     }
@@ -83,10 +81,10 @@ public class DnsDkimPublicKeyLocatorTests
     {
         var locator = new DnsDkimPublicKeyLocator((_, _) => new TaskCompletionSource<IReadOnlyList<string>>().Task, _clock, TimeSpan.FromMilliseconds(50));
 
-        var located = locator.QueryTxtAsync(Name);
+        var located = locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1");
 
         Assert.Same(located, await Task.WhenAny(located, Task.Delay(TimeSpan.FromSeconds(10))));
-        Assert.Equal(DnsQueryStatus.TemporaryFailure, (await located).Status);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => located);
     }
 
     [Fact]
@@ -94,23 +92,21 @@ public class DnsDkimPublicKeyLocatorTests
     {
         var locator = new DnsDkimPublicKeyLocator((_, _) => throw new TimeoutException("resolver down"), _clock);
 
-        Assert.Equal(DnsQueryStatus.TemporaryFailure, (await locator.QueryTxtAsync(Name)).Status);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1"));
     }
 
     [Fact]
-    public async Task ARevokedKey_VerifiesNothing()
+    public async Task ARevokedKey_CountsAsAMiss()
     {
-        var verifier = new DkimSenderVerifier(Locator("v=DKIM1; k=rsa; p="));
-
-        Assert.Null(await verifier.VerifiedDomainAsync(DkimTestMail.Signed("example.com")));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Locator("v=DKIM1; k=rsa; p=").LocatePublicKeyAsync("dns/txt", "example.com", "s1"));
     }
 
     [Fact]
     public async Task AnUnrelatedRecordBesideTheKey_IsPassedOver()
     {
-        var verifier = new DkimSenderVerifier(Locator("v=spf1 -all", DkimTestMail.TxtRecord(DkimTestMail.Example)));
+        var key = await Locator("v=spf1 -all", DkimTestMail.TxtRecord(DkimTestMail.Example)).LocatePublicKeyAsync("dns/txt", "example.com", "s1");
 
-        Assert.Equal("example.com", await verifier.VerifiedDomainAsync(DkimTestMail.Signed("example.com")));
+        Assert.Equal(DkimTestMail.Example.Public, key);
     }
 
     /// <summary>Stopping the application is not a miss, and must not be kept as one.</summary>
@@ -126,7 +122,7 @@ public class DnsDkimPublicKeyLocatorTests
         using var cancelled = new CancellationTokenSource();
         await cancelled.CancelAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => locator.QueryTxtAsync(Name, cancelled.Token));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => locator.LocatePublicKeyAsync("dns/txt", "example.com", "s1", cancelled.Token));
     }
 
     private sealed class ManualClock : TimeProvider

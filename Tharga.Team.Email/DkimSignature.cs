@@ -4,14 +4,13 @@ namespace Tharga.Team.Email;
 /// The tags of a <c>DKIM-Signature</c> header this transport decides on before asking DNS for a key.
 /// </summary>
 /// <param name="Domain">The signing domain, <c>d=</c>, lower-cased.</param>
-/// <param name="Selector">The key's selector, <c>s=</c>, or null when it has none.</param>
 /// <param name="SignedHeaders">The header names the signature covers, <c>h=</c>.</param>
 /// <param name="LimitsBodyLength">Whether it carries <c>l=</c>, covering only the start of the body.</param>
 /// <remarks>
 /// <b>A tag named twice makes the whole header unreadable</b>, as RFC 6376 requires. Picking one of two
 /// <c>d=</c> values here while the verifier picks the other would align one domain and verify another.
 /// </remarks>
-internal sealed record DkimSignature(string Domain, string Selector, string[] SignedHeaders, bool LimitsBodyLength)
+internal sealed record DkimSignature(string Domain, string[] SignedHeaders, bool LimitsBodyLength)
 {
     /// <summary>
     /// Whether a verified signature of this shape may count for the sender.
@@ -45,7 +44,6 @@ internal sealed record DkimSignature(string Domain, string Selector, string[] Si
 
         return new DkimSignature(
             domain.ToLowerInvariant(),
-            tags.GetValueOrDefault("s") is { Length: > 0 } selector ? selector : null,
             headers.Split(':', StringSplitOptions.RemoveEmptyEntries),
             tags.ContainsKey("l"));
     }
