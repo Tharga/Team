@@ -201,6 +201,10 @@ public record SupportMessageEntity
     [BsonIgnoreIfDefault]
     public bool SignedWithName { get; init; }
 
+    /// <summary>Why the case was closed; absent on every other entry and when no reason was given.</summary>
+    [BsonIgnoreIfNull]
+    public string InternalComment { get; init; }
+
     /// <summary>The files the entry carries, metadata only; absent when it carries none, as on every entry written before files were kept.</summary>
     [BsonIgnoreIfNull]
     public SupportAttachmentEntity[] Attachments { get; init; }

@@ -368,14 +368,33 @@ public class SupportUnassignedViewRenderTests : BunitContext
     }
 
     [Fact]
-    public void ClosingInsideTheCard_ClosesTheCase()
+    public async Task ClosingInsideTheCard_ClosesTheCase_AfterAskingForAReason()
     {
         var view = RenderView(out var cases);
+        var dialogs = Render<RadzenDialog>();
 
         Open(view, Case.Id);
-        view.Find("[data-close='case-1']").Click();
+        await view.InvokeAsync(() => view.Find("[data-close='case-1']").Click());
 
-        cases.Verify(x => x.CloseCaseAsync(null, Case.Id, default), Times.Once);
+        cases.Verify(x => x.CloseCaseAsync(null, Case.Id, It.IsAny<string>(), default), Times.Never);
+
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-close-comment-input]").Change("Spam."));
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
+
+        cases.Verify(x => x.CloseCaseAsync(null, Case.Id, "Spam.", default), Times.Once);
+    }
+
+    [Fact]
+    public async Task ClosingWithoutAReason_StillCloses()
+    {
+        var view = RenderView(out var cases);
+        var dialogs = Render<RadzenDialog>();
+
+        Open(view, Case.Id);
+        await view.InvokeAsync(() => view.Find("[data-close='case-1']").Click());
+        await dialogs.InvokeAsync(() => dialogs.Find("[data-confirm-close]").Click());
+
+        cases.Verify(x => x.CloseCaseAsync(null, Case.Id, null, default), Times.Once);
     }
 
     [Fact]

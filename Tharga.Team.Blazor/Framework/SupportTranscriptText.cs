@@ -75,10 +75,13 @@ public static class SupportTranscriptText
     public static readonly TextKey NoAnswerAway = new("team.support.transcript.noAnswerAway",
         "Support is away right now. We will get back to you here as soon as we can.");
 
+    /// <summary>Before the reason support gave for closing a case, under the closure.</summary>
+    public static readonly TextKey ClosedBecause = new("team.support.transcript.closedBecause", "Reason:");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, WorkingLoop, Thinking, ThinkingLoop, ServiceCall, ServiceCalls, Tokens, TokensInOut,
+        ClosedBecause, Assistant, Support, NotSentYet, NotDelivered, SendAgain, Typing, WorkingLoop, Thinking, ThinkingLoop, ServiceCall, ServiceCalls, Tokens, TokensInOut,
         Helpful, NotHelpful, RatedHelpful, RatedNotHelpful, NoAnswerYet, NoAnswerAway
     ];
 }

@@ -24,6 +24,14 @@
         }
     }
 
+    @if (AsStaff || Unassigned)
+    {
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_staff[SupportAcrossTeamsViewText.CloseCommentLabel]</RadzenText>
+            <RadzenTextArea Value="@_comment" ValueChanged="@(v => _comment = v)" Rows="3" Style="width: 100%;" MaxLength="@SupportCaseLimits.MaxMessageLength" data-close-comment-input="true" />
+        </RadzenStack>
+    }
+
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" JustifyContent="JustifyContent.End">
         <RadzenButton Text="@(AsStaff ? _staff[SupportAcrossTeamsViewText.CloseAnyway] : _member[SupportCasesViewText.Close])" Icon="check"
                       ButtonStyle="@(AsStaff ? ButtonStyle.Warning : ButtonStyle.Primary)" Click="Confirm" data-confirm-close="true" />
@@ -34,6 +42,9 @@
 @code {
     /// <summary>Closing as the product's support staff, who are warned rather than offered a choice.</summary>
     [Parameter] public bool AsStaff { get; set; }
+
+    /// <summary>Closing a case no team owns yet: only the reason is asked for, as nobody's visibility or warning applies.</summary>
+    [Parameter] public bool Unassigned { get; set; }
 
     /// <summary>Who reads the case now; the choice starts here.</summary>
     [Parameter] public SupportCaseVisibility? Visibility { get; set; }
@@ -54,5 +65,7 @@
         _visibility = Visibility ?? SupportCaseVisibility.Team;
     }
 
-    private void Confirm() => DialogService.Close(new SupportCaseCloseChoice(Choice?.MayChange == true ? _visibility : null));
+    private string _comment;
+
+    private void Confirm() => DialogService.Close(new SupportCaseCloseChoice(Choice?.MayChange == true ? _visibility : null, AsStaff || Unassigned ? _comment : null));
 }

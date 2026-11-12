@@ -677,8 +677,14 @@ internal sealed class SupportCaseService(
         return status;
     }
 
-    public async Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+    public Task CloseCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
+        => CloseCaseAsync(teamKey, caseId, null, cancellationToken);
+
+    public async Task CloseCaseAsync(string teamKey, string caseId, string comment, CancellationToken cancellationToken = default)
     {
+        comment = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+        RequireWithinLength(comment);
+
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
         var authorName = await DisplayNameAsync();
@@ -692,6 +698,7 @@ internal sealed class SupportCaseService(
             AuthorIdentity = subjectIdentity,
             AuthorName = authorName,
             Body = $"Case closed by {authorName}.",
+            InternalComment = comment,
             SentAt = now
         };
 

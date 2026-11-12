@@ -84,6 +84,12 @@ public record SupportMessage
     /// <summary>Whether a mailed answer was signed with its writer's name, so a later quote of it names them again.</summary>
     public bool SignedWithName { get; init; }
 
+    /// <summary>
+    /// Why the case was closed, as the closing staff member wrote it; <c>null</c> on every other entry and when no reason was given.
+    /// </summary>
+    /// <remarks>Internal: only readers with cross-team support access get it back, and it is never sent through a channel.</remarks>
+    public string InternalComment { get; init; }
+
     /// <summary>The files this entry carries, in the order they arrived; empty for none.</summary>
     public SupportAttachment[] Attachments { get; init; } = [];
 

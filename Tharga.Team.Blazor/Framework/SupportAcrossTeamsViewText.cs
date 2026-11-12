@@ -26,6 +26,10 @@ public static class SupportAcrossTeamsViewText
 
     public static readonly TextKey CloseAnyway = new("team.support.acrossTeams.close.anyway", "Close anyway");
 
+    /// <summary>Labels the optional reason in the close dialog; it says who will not see it, because that is what makes it safe to write plainly.</summary>
+    public static readonly TextKey CloseCommentLabel = new("team.support.acrossTeams.close.comment",
+        "Why is it closed? (optional, only support staff see this and it is never sent to the customer)");
+
     /// <summary>Names the one person who may read a case kept to its author.</summary>
     public static readonly TextKey OnlyTheAuthor = new("team.support.acrossTeams.onlyAuthor", "Only {0}");
 
@@ -67,7 +71,7 @@ public static class SupportAcrossTeamsViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
-        Awaiting, NoCases, NoneMatch, AnswerLabel, Close, CloseWarningTitle, CloseWarning, CloseAnyway, OnlyTheAuthor, Open, Closed, WithAssistant,
+        Awaiting, NoCases, NoneMatch, AnswerLabel, Close, CloseWarningTitle, CloseWarning, CloseAnyway, CloseCommentLabel, OnlyTheAuthor, Open, Closed, WithAssistant,
         ClosedForInactivity, NotPermitted, NeedsAnswer, Support, Assistant, AssistantCouldNot, RatedDown, RatedUp
     ];
 }

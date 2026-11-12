@@ -205,7 +205,18 @@
         await SupportAnswerPreview.ShowAsync(DialogService, _mail, preview, _files);
     }
 
-    private Task CloseAsync() => ActAsync(() => SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id));
+    private async Task CloseAsync()
+    {
+        var member = await TextProvider.ResolveAsync(SupportCasesViewText.All);
+        var result = await DialogService.OpenAsync<SupportCaseCloseDialog>(member[SupportCasesViewText.CloseConfirmTitle], new Dictionary<string, object>
+        {
+            [nameof(SupportCaseCloseDialog.Unassigned)] = true
+        });
+
+        if (result is not SupportCaseCloseChoice choice) return;
+
+        await ActAsync(() => SupportCases.CloseCaseAsync(Case.TeamKey, Case.Id, choice.Comment));
+    }
 
     private Task ReopenAsync() => ActAsync(() => SupportCases.ReopenCaseAsync(Case.TeamKey, Case.Id));
 

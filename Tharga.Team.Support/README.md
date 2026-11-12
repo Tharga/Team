@@ -183,6 +183,8 @@ is comes from `ISupportSenderDirectory`, which `Tharga.Team.MongoDB` registers.
   person answering can pick another per answer, and `o.Answers.StaffSenderRole` lets a role answer from its own
   address where the mailbox declares it may (`SendAsDomains`). Replies always go to a support address with the
   case's tracker.
+- **Why it was closed** — support can leave a reason when closing a case, shown in the conversation to staff only and
+  never sent to the customer, a team or a channel (`CloseCaseAsync(teamKey, caseId, comment)`).
 - **Delivery** — every answer says whether it reached the customer, a bounce marks it not delivered with the
   reason, and `ResendAsync` sends it again.
 
