@@ -249,7 +249,7 @@ public class SupportAttachmentRenderTests : BunitContext
 
         _cases.Verify(x => x.AnswerCaseAsync(null, CaseId, string.Empty, string.Empty,
             It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "log.zip"),
-            It.IsAny<CancellationToken>()), Times.Once);
+            It.IsAny<SupportAnswerChoice>(), It.IsAny<CancellationToken>()), Times.Once);
         _cases.Verify(x => x.AnswerCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
@@ -281,7 +281,7 @@ public class SupportAttachmentRenderTests : BunitContext
 
         if (asStaff)
             _cases.Verify(x => x.AnswerCaseAsync(TeamKey, CaseId, string.Empty, string.Empty,
-                It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "screenshot.png"), It.IsAny<CancellationToken>()), Times.Once);
+                It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "screenshot.png"), It.IsAny<SupportAnswerChoice>(), It.IsAny<CancellationToken>()), Times.Once);
         else
             _cases.Verify(x => x.ReplyToCaseAsync(TeamKey, CaseId, string.Empty, string.Empty,
                 It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "screenshot.png"), It.IsAny<CancellationToken>()), Times.Once);

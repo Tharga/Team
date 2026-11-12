@@ -18,6 +18,9 @@ public sealed record SupportAnswerRoute
     /// <summary>Every address the answering staff member may send from, <see cref="From"/> among them.</summary>
     public SupportAnswerSender[] Senders { get; init; } = [];
 
+    /// <summary>Whether an answer is signed with the answerer's name unless they choose otherwise, so a component can preselect it.</summary>
+    public bool SignWithName { get; init; }
+
     /// <summary>The name of that mailbox as support's configuration has it.</summary>
     public string Mailbox { get; init; }
 

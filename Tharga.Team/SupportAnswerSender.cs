@@ -11,4 +11,7 @@ public sealed record SupportAnswerSender
 
     /// <summary>True when it is the answering staff member's own address rather than one of support's.</summary>
     public bool Personal { get; init; }
+
+    /// <summary>The address as a person reads it, with the name when there is one: <c>Name &lt;address&gt;</c>.</summary>
+    public string Display => string.IsNullOrWhiteSpace(Name) ? Address : $"{Name} <{Address}>";
 }

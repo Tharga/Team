@@ -44,7 +44,7 @@ public class SupportAnswerRouteRenderTests : BunitContext
         _cases.Setup(x => x.GetMessagesAsync(teamKey, Case.Id, It.IsAny<string>(), It.IsAny<int>(), default))
             .ReturnsAsync(new SupportMessagePage { Items = [new SupportMessage { Sequence = 1, Kind = SupportMessageKind.User, AuthorName = "Unknown", Body = "The export is empty.", SentAt = Case.CreatedAt }] });
         _cases.Setup(x => x.GetAnswerRouteAsync(teamKey, Case.Id, default)).ReturnsAsync(route);
-        _cases.Setup(x => x.PreviewAnswerAsync(teamKey, Case.Id, It.IsAny<string>(), It.IsAny<string>(), default))
+        _cases.Setup(x => x.PreviewAnswerAsync(teamKey, Case.Id, It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAnswerChoice>(), default))
             .ReturnsAsync(new MailPreview { From = "Example Support <support@example.net>", To = Customer, Subject = "Re: Export is empty", Html = "<html><body><p>sam:</p></body></html>", Text = "sam:" });
 
         Services.AddSingleton(_cases.Object);
@@ -61,6 +61,8 @@ public class SupportAnswerRouteRenderTests : BunitContext
     private IRenderedComponent<SupportAnswerRouteLine> Line(SupportAnswerRoute route)
     {
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddRadzenComponents();
+        JSInterop.Mode = JSRuntimeMode.Loose;
 
         return Render<SupportAnswerRouteLine>(p => p.Add(x => x.Route, route));
     }
@@ -100,6 +102,79 @@ public class SupportAnswerRouteRenderTests : BunitContext
         Assert.Empty(line.FindAll("[data-answer-to]"));
     }
 
+    private static readonly SupportAnswerSender[] Senders =
+    [
+        new() { Address = "support@example.net", Name = "Example Support" },
+        new() { Address = "help@example.org" },
+        new() { Address = "anna@example.net", Name = "Anna Andersson", Personal = true }
+    ];
+
+    [Fact]
+    public void WithSeveralSenders_TheLineOffersThemAsAChoice()
+    {
+        var line = Line(Mailed with { Senders = Senders });
+
+        Assert.Single(line.FindAll("[data-answer-sender]"));
+        Assert.Contains(SupportAnswerRouteText.SendFrom.Default, line.Find("[data-answer-choices]").TextContent);
+    }
+
+    [Fact]
+    public void WithOneSender_ThereIsNothingToChooseBetween()
+    {
+        var line = Line(Mailed with { Senders = [Senders[0]] });
+
+        Assert.Empty(line.FindAll("[data-answer-sender]"));
+    }
+
+    [Fact]
+    public void TheChosenSender_IsWhatTheLineSaysTheAnswerIsSentFrom()
+    {
+        Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddRadzenComponents();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+
+        var line = Render<SupportAnswerRouteLine>(p => p
+            .Add(x => x.Route, Mailed with { Senders = Senders })
+            .Add(x => x.Choice, new SupportAnswerChoice { SendFrom = "help@example.org" }));
+
+        Assert.Equal($"The answer is mailed to {Customer} from help@example.org.", line.Find("[data-answer-to]").TextContent.Trim());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheSignWithMyNameChoice_StartsAsTheHostsDefault(bool byDefault)
+    {
+        var line = Line(Mailed with { SignWithName = byDefault });
+
+        Assert.Contains(SupportAnswerRouteText.SignWithName.Default, line.Find("[data-answer-choices]").TextContent);
+        Assert.Equal(byDefault ? "true" : "false", line.Find("[data-answer-sign]").GetAttribute("aria-checked"));
+    }
+
+    [Fact]
+    public void TickingTheName_ReportsTheChoice_WithTheSenderLeftAsItWas()
+    {
+        Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        Services.AddRadzenComponents();
+        JSInterop.Mode = JSRuntimeMode.Loose;
+        SupportAnswerChoice chosen = null;
+
+        var line = Render<SupportAnswerRouteLine>(p => p
+            .Add(x => x.Route, Mailed with { Senders = Senders })
+            .Add(x => x.Choice, new SupportAnswerChoice { SendFrom = "help@example.org" })
+            .Add(x => x.ChoiceChanged, EventCallback.Factory.Create<SupportAnswerChoice>(this, value => chosen = value)));
+
+        line.Find("[data-answer-sign]").Click();
+
+        Assert.Equal(new SupportAnswerChoice { SendFrom = "help@example.org", SignWithName = true }, chosen);
+    }
+
+    [Fact]
+    public void NoChoicesAreOffered_ForACaseAnsweredOnTheSite()
+    {
+        Assert.Empty(Line(SupportAnswerRoute.Site).FindAll("[data-answer-choices]"));
+    }
+
     [Fact]
     public void WithNoKnownSendingAddress_TheLineNamesTheRecipientAlone()
     {
@@ -124,12 +199,12 @@ public class SupportAnswerRouteRenderTests : BunitContext
 
         await view.InvokeAsync(() => view.Find("[data-preview-answer]").Click());
 
-        _cases.Verify(x => x.PreviewAnswerAsync(null, Case.Id, string.Empty, "<p>Try <b>this</b>.</p>", default), Times.Once);
+        _cases.Verify(x => x.PreviewAnswerAsync(null, Case.Id, string.Empty, "<p>Try <b>this</b>.</p>", It.IsAny<SupportAnswerChoice>(), default), Times.Once);
         var frame = dialogs.Find("iframe[data-mail-frame]");
         Assert.Equal(string.Empty, frame.GetAttribute("sandbox"));
         Assert.Equal("<html><body><p>sam:</p></body></html>", frame.GetAttribute("srcdoc"));
         Assert.Contains(Customer, dialogs.Find("[data-preview-header='to']").TextContent);
-        _cases.Verify(x => x.AnswerCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<SupportAttachmentUpload>>(), default), Times.Never);
+        _cases.Verify(x => x.AnswerCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<SupportAttachmentUpload>>(), It.IsAny<SupportAnswerChoice>(), default), Times.Never);
     }
 
     [Fact]
@@ -165,7 +240,7 @@ public class SupportAnswerRouteRenderTests : BunitContext
         await view.InvokeAsync(() => view.Find("[data-preview-answer]").Click());
 
         Assert.Contains("testers@example.net", view.Find("[data-answer-redirected]").TextContent);
-        _cases.Verify(x => x.PreviewAnswerAsync(TeamKey, Case.Id, string.Empty, string.Empty, default), Times.Once);
+        _cases.Verify(x => x.PreviewAnswerAsync(TeamKey, Case.Id, string.Empty, string.Empty, It.IsAny<SupportAnswerChoice>(), default), Times.Once);
         Assert.NotNull(dialogs.Find("iframe[data-mail-frame]"));
     }
 

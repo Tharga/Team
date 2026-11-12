@@ -157,7 +157,7 @@ public class RichTextEditorRenderTests : BunitContext
         view.TypeRichText("<p>Try <b>this</b>.</p>");
         view.Find($"[data-answer='{CaseId}']").Click();
 
-        _cases.Verify(x => x.AnswerCaseAsync(null, CaseId, string.Empty, "<p>Try <b>this</b>.</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), It.IsAny<CancellationToken>()), Times.Once);
+        _cases.Verify(x => x.AnswerCaseAsync(null, CaseId, string.Empty, "<p>Try <b>this</b>.</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), It.IsAny<SupportAnswerChoice>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

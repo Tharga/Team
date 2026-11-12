@@ -12,6 +12,19 @@
         else
         {
             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-answer-to="@Route.To">@MailedText()</RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap" data-answer-choices>
+                @if (Route.Senders.Length > 1)
+                {
+                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center">
+                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportAnswerRouteText.SendFrom]</RadzenText>
+                        <RadzenDropDown TValue="string" Value="@SendFrom" ValueChanged="SendFromChangedAsync" Data="Route.Senders"
+                                        ValueProperty="@nameof(SupportAnswerSender.Address)" TextProperty="@nameof(SupportAnswerSender.Display)"
+                                        AllowClear="false" Style="min-width: 16rem;" data-answer-sender />
+                    </RadzenStack>
+                }
+                <RadzenCheckBox TValue="bool" Value="@SignsWithName" ValueChanged="SignWithNameChangedAsync" Name="signWithName" data-answer-sign />
+                <RadzenLabel Text="@_text[SupportAnswerRouteText.SignWithName]" Component="signWithName" />
+            </RadzenStack>
             @if (Route.Effect == MailPolicyEffect.Redirect)
             {
                 <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-warning);" data-answer-redirected="@Route.RedirectedTo">@_text.Format(SupportAnswerRouteText.Redirected, Route.RedirectedTo)</RadzenText>
@@ -28,17 +41,32 @@
     /// <summary>Where the answer goes, from <c>ISupportCaseService.GetAnswerRouteAsync</c>; nothing is shown without one.</summary>
     [Parameter] public SupportAnswerRoute Route { get; set; }
 
+    /// <summary>What the person answering chose for this answer: the sender and whether to sign with their name. Bind it and pass it to the answer and the preview.</summary>
+    [Parameter] public SupportAnswerChoice Choice { get; set; }
+
+    [Parameter] public EventCallback<SupportAnswerChoice> ChoiceChanged { get; set; }
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
+
+    private string SendFrom => string.IsNullOrWhiteSpace(Choice?.SendFrom) ? Route.From : Choice.SendFrom;
+
+    private bool SignsWithName => Choice?.SignWithName ?? Route.SignWithName;
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(SupportAnswerRouteText.All);
     }
 
+    private Task SendFromChangedAsync(string address)
+        => ChoiceChanged.InvokeAsync((Choice ?? new SupportAnswerChoice()) with { SendFrom = address });
+
+    private Task SignWithNameChangedAsync(bool sign)
+        => ChoiceChanged.InvokeAsync((Choice ?? new SupportAnswerChoice()) with { SignWithName = sign });
+
     private string MailedText()
-        => string.IsNullOrWhiteSpace(Route.From)
+        => string.IsNullOrWhiteSpace(SendFrom)
             ? _text.Format(SupportAnswerRouteText.MailedTo, Route.To)
-            : _text.Format(SupportAnswerRouteText.Mailed, Route.To, Route.From);
+            : _text.Format(SupportAnswerRouteText.Mailed, Route.To, SendFrom);
 }

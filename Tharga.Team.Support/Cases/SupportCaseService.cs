@@ -324,7 +324,9 @@ internal sealed class SupportCaseService(
 
         if (binding == null) return SupportAnswerRoute.Site;
 
-        return AnswerMail?.RouteOf(supportCase, binding, await StaffSenderAsync()) ?? new SupportAnswerRoute { ByMail = true, To = binding.Address };
+        var route = AnswerMail?.RouteOf(supportCase, binding, await StaffSenderAsync()) ?? new SupportAnswerRoute { ByMail = true, To = binding.Address };
+
+        return route with { SignWithName = answerOptions?.NameTheAnswerer ?? false };
     }
 
     /// <remarks>The draft becomes the entry answering would append — the writer's name, the next sequence, sanitized and derived as written — and is mailed nowhere.</remarks>

@@ -18,6 +18,12 @@ public static class SupportAnswerRouteText
     /// <summary>Outside production the answer is not mailed at all.</summary>
     public static readonly TextKey Withheld = new("team.support.answerRoute.withheld", "In this environment the answer is not sent.");
 
+    /// <summary>The label of the choice of address the answer is sent from.</summary>
+    public static readonly TextKey SendFrom = new("team.support.answerRoute.sendFrom", "Send from");
+
+    /// <summary>The label of the choice to sign the answer with the answerer's own name.</summary>
+    public static readonly TextKey SignWithName = new("team.support.answerRoute.signWithName", "Sign with my name");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Mailed, MailedTo, Site, Redirected, Withheld];
+    public static readonly TextKey[] All = [Mailed, MailedTo, Site, Redirected, Withheld, SendFrom, SignWithName];
 }
