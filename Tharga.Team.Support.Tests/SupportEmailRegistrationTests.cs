@@ -33,6 +33,8 @@ public class SupportEmailRegistrationTests
         o.Email.TrackingPrefix = "case-";
         o.Email.Recipients = ["example.net"];
         o.Email.SenderRules = [new MailSenderRule { Senders = ["noreply@example.com"], Action = MailSenderAction.Close }];
+        o.Email.SendAs = [new MailSendAs { Address = "help@example.org", Name = "Example Help" }];
+        o.Email.SendAsDomains = ["example.net"];
         o.Email.MaxAttachmentBytes = 10;
         o.Email.MaxAttachmentTotalBytes = 20;
         o.Email.MaxAttachmentCount = 3;
@@ -59,6 +61,8 @@ public class SupportEmailRegistrationTests
         Assert.True(options.PerCaseReplyTo);
         Assert.Equal(["example.net"], options.Recipients);
         Assert.Equal(MailSenderAction.Close, Assert.Single(options.SenderRules).Action);
+        Assert.Equal(("help@example.org", "Example Help"), (Assert.Single(options.SendAs).Address, options.SendAs[0].Name));
+        Assert.Equal(["example.net"], options.SendAsDomains);
     }
 
     /// <summary>

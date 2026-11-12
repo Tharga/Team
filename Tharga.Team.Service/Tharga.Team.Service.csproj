@@ -39,9 +39,14 @@
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.18" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.14" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
   </ItemGroup>
   <ItemGroup>
+    <!--
+      Held at 10.3.1. Swashbuckle 11 requires Microsoft.OpenApi 3.x; Microsoft.AspNetCore.OpenApi 10.0.15 requires
+      2.x below 3.0, so restore fails with NU1107 in every project that references this one. Lift the hold when
+      Microsoft.AspNetCore.OpenApi moves to Microsoft.OpenApi 3.
+    -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <PackageReference Include="Tharga.MongoDB" Version="2.19.2" />
     <!--

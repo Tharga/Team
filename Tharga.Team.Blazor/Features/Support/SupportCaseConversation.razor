@@ -31,7 +31,7 @@
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
     @if (AsStaff)
     {
-        <SupportAnswerRouteLine Route="_route" />
+        <SupportAnswerRouteLine Route="_route" @bind-Choice="_answerChoice" />
     }
     <RichTextEditor Value="@_reply" ValueChanged="ReplyChanged" Label="@ReplyText" Disabled="_busy" Height="8rem" />
 
@@ -127,6 +127,7 @@
 
     private SupportCase _shown;
     private SupportAnswerRoute _route;
+    private SupportAnswerChoice _answerChoice = new();
     private SupportAttention _attention;
     private SupportCaseVisibilityChoice _choice = SupportCaseVisibilityChoice.None;
     private SupportMessage[] _messages = [];
@@ -209,6 +210,7 @@
         _noAnswer?.Follow(_messages, Case.AuthorIdentity);
         _choice = AsStaff ? SupportCaseVisibilityChoice.None : await SupportCases.GetVisibilityChoiceAsync(Case.TeamKey, Case.Id) ?? SupportCaseVisibilityChoice.None;
         _route = AsStaff ? await SupportAnswerPreview.RouteAsync(SupportCases, Case) : null;
+        _answerChoice = new SupportAnswerChoice();
 
         // Read again because the case changed, and a message arriving ends the dots that announced it.
         _typing?.Follow(Case.TeamKey, Case.Id, Case.AuthorIdentity, authorOnRight: !AsStaff);
@@ -238,7 +240,7 @@
         if (_reporter != null) await _reporter.SendingAsync();
 
         await ActAsync(() => AsStaff
-            ? SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files)
+            ? SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files, _answerChoice)
             : SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files));
         _reply = null;
         _files = [];
@@ -259,7 +261,7 @@
         MailPreview preview;
         try
         {
-            preview = await SupportCases.PreviewAnswerAsync(Case.TeamKey, Case.Id, string.Empty, _reply ?? string.Empty);
+            preview = await SupportCases.PreviewAnswerAsync(Case.TeamKey, Case.Id, string.Empty, _reply ?? string.Empty, _answerChoice);
         }
         finally
         {

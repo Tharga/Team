@@ -364,7 +364,7 @@ public class SupportUnassignedViewRenderTests : BunitContext
         view.TypeRichText("<p>Which organisation are you with?</p>");
         view.Find("[data-answer='case-1']").Click();
 
-        cases.Verify(x => x.AnswerCaseAsync(null, Case.Id, string.Empty, "<p>Which organisation are you with?</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), default), Times.Once);
+        cases.Verify(x => x.AnswerCaseAsync(null, Case.Id, string.Empty, "<p>Which organisation are you with?</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), It.IsAny<SupportAnswerChoice>(), default), Times.Once);
     }
 
     [Fact]

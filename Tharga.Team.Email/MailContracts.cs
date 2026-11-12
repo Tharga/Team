@@ -20,6 +20,7 @@ namespace Tharga.Team.Email;
 /// <param name="Attachments">Files to send with the mail, in order; null or empty sends the body alone.</param>
 /// <param name="BodyHtml">The same message as HTML the caller has sanitized, sent as <c>multipart/alternative</c> with <paramref name="Body"/> as its text and any file it names by <c>cid:</c> inline beside it; null sends the text alone.</param>
 /// <param name="UnsubscribeUrl">An address that unsubscribes the recipient, sent as <c>List-Unsubscribe</c>, with <c>List-Unsubscribe-Post</c> for one-click unsubscribing (RFC 8058) when it is https; null sends neither.</param>
+/// <param name="From">The sender as <c>Name &lt;address&gt;</c> or a bare address, when it is not the configured <see cref="MailOptions.FromAddress"/>; the account must be allowed to send as it. Null uses the configured sender.</param>
 public readonly record struct OutboundMail(
     string To,
     string Subject,
@@ -29,7 +30,8 @@ public readonly record struct OutboundMail(
     string ReplyTo = null,
     IReadOnlyList<MailAttachment> Attachments = null,
     string BodyHtml = null,
-    string UnsubscribeUrl = null);
+    string UnsubscribeUrl = null,
+    string From = null);
 
 /// <summary>
 /// A file sent with a mail.
@@ -58,6 +60,7 @@ public readonly record struct InboundAttachment(string FileName, string ContentT
 /// <param name="MessageId">
 /// The <c>Message-ID</c> the mail was sent with, or null when the send failed.
 /// </param>
+/// <param name="SenderRefused">True when the server refused the sender address, so the same mail may be sent from another address the account may use.</param>
 /// <remarks>
 /// <b><see cref="MessageId"/> is what makes a thread possible</b>, and it is generated before sending rather
 /// than reported by the server — SMTP does not return one. A caller that wants a conversation keeps it; the
@@ -67,13 +70,16 @@ public readonly record struct InboundAttachment(string FileName, string ContentT
 /// result means the server took responsibility for the message, not that anyone received it.
 /// </para>
 /// </remarks>
-public readonly record struct MailSendResult(bool Success, string Error, string MessageId = null)
+public readonly record struct MailSendResult(bool Success, string Error, string MessageId = null, bool SenderRefused = false)
 {
     /// <summary>The server accepted the mail.</summary>
     public static MailSendResult Ok(string messageId) => new(true, null, messageId);
 
     /// <summary>It did not, for the stated reason.</summary>
     public static MailSendResult Failed(string error) => new(false, error);
+
+    /// <summary>The server refused the sender address.</summary>
+    public static MailSendResult SenderNotAccepted(string error) => new(false, error, null, true);
 }
 
 /// <summary>

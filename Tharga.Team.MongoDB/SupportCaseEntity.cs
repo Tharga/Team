@@ -193,6 +193,14 @@ public record SupportMessageEntity
     [BsonIgnoreIfDefault]
     public bool AsSupport { get; init; }
 
+    /// <summary>The address a mailed answer was sent from; absent on every other entry, and on one written before it was kept.</summary>
+    [BsonIgnoreIfNull]
+    public string SentFrom { get; init; }
+
+    /// <summary>Whether a mailed answer was signed with its writer's name; absent when it was not.</summary>
+    [BsonIgnoreIfDefault]
+    public bool SignedWithName { get; init; }
+
     /// <summary>The files the entry carries, metadata only; absent when it carries none, as on every entry written before files were kept.</summary>
     [BsonIgnoreIfNull]
     public SupportAttachmentEntity[] Attachments { get; init; }

@@ -15,4 +15,10 @@ public static class SupportMailTexts
 
     /// <summary>Who an earlier entry written by support is attributed to, when the host has not named its support.</summary>
     public const string SupportName = "Support";
+
+    /// <summary>The key of <see cref="Closing"/>.</summary>
+    public const string ClosingKey = "team.support.mail.closing";
+
+    /// <summary>The words that close an answer signed with a name; <c>{Name}</c> is the answerer's name and <c>{newline}</c> a line break.</summary>
+    public const string Closing = "Kind regards,{newline}{Name}";
 }

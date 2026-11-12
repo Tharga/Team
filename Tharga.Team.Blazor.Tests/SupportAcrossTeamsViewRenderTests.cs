@@ -93,7 +93,7 @@ public class SupportAcrossTeamsViewRenderTests : BunitContext
         view.TypeRichText("<p>We are looking at it.</p>");
         view.FindAll("button").First(b => b.TextContent.Contains("Answer")).Click();
 
-        cases.Verify(x => x.AnswerCaseAsync("acme", "case-acme", string.Empty, "<p>We are looking at it.</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), default), Times.Once);
+        cases.Verify(x => x.AnswerCaseAsync("acme", "case-acme", string.Empty, "<p>We are looking at it.</p>", It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0), It.IsAny<SupportAnswerChoice>(), default), Times.Once);
     }
 
     /// <summary>A change made on another instance reaches no in-process notifier, so the host asks for the re-read.</summary>

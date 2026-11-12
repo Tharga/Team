@@ -963,7 +963,8 @@ case as if the customer had written it.
 
 ### How an answer speaks for support
 
-**An answer mail names no staff member.** It starts with the answer itself, with no author heading; the host's
+**An answer mail names no staff member, unless you ask it to** ([signing with a name](#signing-an-answer-with-a-name)).
+It starts with the answer itself, with no author heading; the host's
 signature follows it, before the conversation it quotes, the way a mail program places a signature; and every
 earlier entry written by support — a person answering from the support side, or the assistant — is attributed to
 **support's name**, never the person. The customer's own entries keep the name they were written under.
@@ -989,6 +990,84 @@ builder.Services.AddThargaSupportCases(o =>
 - **The language is the culture of whoever answers**, as the request runs in it; there is no per-recipient
   language yet.
 
+### Signing an answer with a name
+
+An answer can carry the name of the person who wrote it, in a closing you control. Off by default, so existing hosts
+send exactly what they sent before.
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Answers.NameTheAnswerer = true;                          // default: false
+    o.Answers.Closing = "Vänliga hälsningar,{newline}{Name}";  // default: the text key team.support.mail.closing, "Kind regards,{newline}{Name}"
+    o.Answers.Signature = ["Example Support"];                 // still follows, as before
+});
+```
+
+- **The closing comes first**, then the configured signature lines: `Vänliga hälsningar,` / `Daniel` / `Example Support`,
+  in the text and in the HTML signature paragraph. `{Name}` is the display name the service already records for the
+  author, never their e-mail address; `{newline}` is a line break. The closing is a translatable text key.
+- **Per answer.** The answer box has a *Sign with my name* checkbox, ticked when the option is on and unticked when it
+  is off. `SupportAnswerChoice.SignWithName` carries the choice to `AnswerCaseAsync` and `PreviewAnswerAsync`.
+- **Quoted history follows the answer.** An earlier support entry that was signed with a name is quoted under that
+  name; one signed without is quoted under `SupportName`, as before.
+
+### Which address an answer is sent from
+
+A mailbox answers from its own `FromAddress` unless you declare more. Nothing about an address is built in: the
+addresses, their names and their domains all come from configuration.
+
+```csharp
+o.Email.FromAddress = "support@example.net";
+o.Email.SendAs =
+[
+    new() { Address = "help@example.net", Name = "Example Help" },   // an alias delivered into this mailbox
+    new() { Address = "info@example.org" }                           // an address on another domain works too
+];
+o.Email.SendAsDomains = ["example.net"];                              // see "A staff member's own address"
+```
+
+```json
+"SendAs": [ { "Address": "help@example.net", "Name": "Example Help" } ],
+"SendAsDomains": [ "example.net" ]
+```
+
+- **An alias needs nothing more to be read.** Mail to the alias is delivered into the mailbox's IMAP inbox, and the
+  address it was delivered to is remembered on the case. `SendAs` says the same SMTP account may send as that alias,
+  as with Google Workspace *Send mail as*; it need share neither the local part nor the domain of `FromAddress`.
+- **The default.** An answer goes from the address the customer wrote to when it is the mailbox's own or one of its
+  `SendAs` addresses, otherwise from the mailbox's `FromAddress`. A case delivered to the main address is answered
+  exactly as before.
+- **Choose per answer.** The route line of the answer box offers every address the person answering may send from,
+  across all mailboxes, with the default selected. The chosen address decides the SMTP account and the `From`
+  header, and is stored on the entry (`SupportMessage.SentFrom`), so the history shows which address answered and a
+  resend goes out from it again.
+- **An address in no mailbox's list is refused** by the service with an `InvalidOperationException`, not only left
+  out of the picker, whatever a component or a REST caller sends.
+- **The reply address follows the sender**, so the per-case address of a `help@` answer is
+  `help+tracking-…@example.net`, and a reply to it finds the case.
+
+#### A staff member's own address
+
+Some teams want the customer to see who answered. Set the role whose members may do that:
+
+```csharp
+o.Answers.StaffSenderRole = "Support";   // default: none, so nobody answers from a personal address
+```
+
+A member of that role has an answer sent from `Name <their e-mail address>`, taken from their claims, when the
+mailbox says its account may send as it: the address is in `SendAs`, or on one of `SendAsDomains`. Otherwise the
+answer falls back, in order, to the address the customer wrote to and then the mailbox's own, and the personal
+address is not offered in the picker.
+
+- **Replies still reach support.** `Reply-To` is always the support address the customer wrote to, with the case's
+  tracker when the mailbox uses one — also when `PerCaseReplyTo` is off — never the staff member's own address.
+- **It is declared, not detected.** A mail server that does not allow the account to send as an address either
+  refuses the mail or quietly sends it from the account's own address, and neither says so up front, so the mailbox
+  declares what it may do. If the server does refuse the sender, the answer is marked as not delivered with the
+  address named, and is not silently sent from another one.
+- **Mail nobody wrote** — receipts, the assistant's answers, notices — never goes from a personal address.
+
 ### Where the answer goes, and its preview
 
 Staff answering a mailed case see **the address the answer is mailed to** and **the support address it is sent
@@ -1003,12 +1082,15 @@ var route = await cases.GetAnswerRouteAsync(teamKey, caseId);          // null f
 var preview = await cases.PreviewAnswerAsync(teamKey, caseId, body: null, bodyHtml: draft);  // null when not mailed
 ```
 
-- **`GetAnswerRouteAsync`** returns a `SupportAnswerRoute`: `ByMail`, `To`, `From` and `Mailbox` (the mailbox the
-  case came in through, or the primary when that one is no longer configured), and `Effect` —
+- **`GetAnswerRouteAsync`** returns a `SupportAnswerRoute`: `ByMail`, `To`, `From` (the address it goes from unless
+  another is chosen), `Senders` (every address the caller may choose, each with `Address`, `Name` and `Personal`),
+  `SignWithName` (the host's default), `Mailbox` (the mailbox whose account sends it), and `Effect` —
   `MailPolicyEffect.None`, `Redirect` with `RedirectedTo`, or `Withhold` — from `IOutboundMailPolicy.Decide`.
   `SupportAnswerRoute.Site` is a case answered on the site: one with no mail thread, or a host that mails nothing.
+- **A choice goes with the answer and the preview**: `AnswerCaseAsync(…, new SupportAnswerChoice { SendFrom = "help@example.net", SignWithName = true })`
+  and the matching `PreviewAnswerAsync` overload. Leave a part null for the default.
 - **`PreviewAnswerAsync`** returns the draft as a `MailPreview` — `From`, `To`, `ReplyTo` (the per-case address
-  when the mailbox uses one), `Subject`, the `Html` in the host's [mail template](user-mail.md#the-mail-template) —
+  when the mailbox uses one, and a support address whenever the answer is sent from a personal one), `Subject`, the `Html` in the host's [mail template](user-mail.md#the-mail-template) —
   its support frame when it has one — with the signature and the conversation so far quoted, and the `Text`
   alternative — **composed by the code that sends the answer**,
   without sending or storing anything. The draft is sanitized and derived exactly as an answer is, and written as
@@ -1016,7 +1098,7 @@ var preview = await cases.PreviewAnswerAsync(teamKey, caseId, body: null, bodyHt
 - **Both are authorized exactly as answering**, since they show the correspondent's address to whoever may write to
   it; neither is audited, as reads are not — the answer is, when it is sent.
 
-The components show them: `SupportAnswerRouteLine` (`Route`) and `MailPreviewDialog` (in `Tharga.Team.Blazor`'s
+The components show them: `SupportAnswerRouteLine` (`Route`, and `Choice` to bind the sender and the signing choice) and `MailPreviewDialog` (in `Tharga.Team.Blazor`'s
 framework, `Preview`, `FileNames`), which renders the mail in an `iframe` given the HTML as `srcdoc` and sandboxed
 with no permissions, so the template's styles stay inside it and nothing in it runs. A reader who may not answer
 is shown no route and no preview. Their texts are `team.support.answerRoute.*` and `team.mailPreview.*`.

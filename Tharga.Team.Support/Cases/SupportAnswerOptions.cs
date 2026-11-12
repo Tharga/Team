@@ -15,6 +15,27 @@ public class SupportAnswerOptions
     /// <remarks>In the HTML part the lines are one paragraph with the class <c>signature</c>, encoded and joined by line breaks, so a template can style it.</remarks>
     public string[] Signature { get; set; } = [];
 
+    /// <summary>
+    /// The role whose members have their answers sent from their own address and name, such as <c>Support</c>. Empty, the
+    /// default, sends every answer from a support address.
+    /// </summary>
+    /// <remarks>
+    /// <b>Needs the mailbox to say it may.</b> The address is used only when its domain is in <c>MailOptions.SendAsDomains</c>
+    /// or it is one of the mailbox's <c>SendAs</c> addresses; otherwise the answer falls back to the address the customer wrote
+    /// to, and then to the mailbox's own. Replies always go to a support address, with the case's tracker, never to the staff address.
+    /// Mail nobody wrote, such as a receipt or the assistant's answer, never goes from a personal address.
+    /// </remarks>
+    public string StaffSenderRole { get; set; }
+
+    /// <summary>Whether an answer is signed with the name of the staff member who wrote it by default. Default <c>false</c>; the one answering can change it per answer.</summary>
+    public bool NameTheAnswerer { get; set; }
+
+    /// <summary>
+    /// The words that close an answer when it is signed with a name, such as <c>Vänliga hälsningar,{newline}{Name}</c>; null uses the text key
+    /// <c>team.support.mail.closing</c>, <c>Kind regards,{newline}{Name}</c> in English. <c>{Name}</c> is the answerer's name and <c>{newline}</c> a line break.
+    /// </summary>
+    public string Closing { get; set; }
+
     /// <summary>The time zone the dates of quoted entries are shown in, as a system time zone id such as <c>Europe/Stockholm</c>, default <c>UTC</c>.</summary>
     /// <remarks>A date in UTC says so; one in another zone is shown as that zone's local time alone.</remarks>
     public string TimeZoneId { get; set; } = "UTC";

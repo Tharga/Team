@@ -15,7 +15,9 @@ internal static class MailMessageFactory
 {
     public static MimeMessage Create(OutboundMail mail, MailOptions options)
     {
-        var from = new MailboxAddress(options.FromName ?? string.Empty, options.FromAddress);
+        var from = string.IsNullOrWhiteSpace(mail.From)
+            ? new MailboxAddress(options.FromName ?? string.Empty, options.FromAddress)
+            : MailboxAddress.Parse(mail.From);
 
         var message = new MimeMessage
         {

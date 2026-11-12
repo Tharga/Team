@@ -78,6 +78,12 @@ public record SupportMessage
     /// </remarks>
     public SupportChannelType? Source { get; init; }
 
+    /// <summary>The address a mailed answer was sent from, or <c>null</c> for an entry that was not mailed, or was before this was recorded.</summary>
+    public string SentFrom { get; init; }
+
+    /// <summary>Whether a mailed answer was signed with its writer's name, so a later quote of it names them again.</summary>
+    public bool SignedWithName { get; init; }
+
     /// <summary>The files this entry carries, in the order they arrived; empty for none.</summary>
     public SupportAttachment[] Attachments { get; init; } = [];
 

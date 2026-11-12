@@ -26,6 +26,27 @@ public class MailOptions
     /// <summary>Display name on outgoing mail.</summary>
     public string FromName { get; set; }
 
+    /// <summary>
+    /// Further addresses this mailbox's SMTP account may send as, each with an optional display name. Empty by default:
+    /// the mailbox sends only as <see cref="FromAddress"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Nothing here is built in.</b> The usual case is an alias: mail to the alias is delivered into this mailbox, and
+    /// the same account sends as it, as with Google Workspace's "Send mail as". An address need not share the local part or
+    /// the domain of <see cref="FromAddress"/>. Bindable from configuration.
+    /// </remarks>
+    public MailSendAs[] SendAs { get; set; } = [];
+
+    /// <summary>
+    /// Domains whose every address this mailbox's SMTP account may send as, so that a staff member's own address is used
+    /// when they answer. Empty by default: no personal address is sent as.
+    /// </summary>
+    /// <remarks>
+    /// <b>The host declares this; the package cannot find it out.</b> A mail server that does not allow the account to send
+    /// as an address either refuses the mail or quietly sends it from the account's own address, and neither says so up front.
+    /// </remarks>
+    public string[] SendAsDomains { get; set; } = [];
+
     /// <summary>Mailbox folder to read. Default <c>INBOX</c>.</summary>
     public string Folder { get; set; } = "INBOX";
 

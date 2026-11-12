@@ -306,7 +306,7 @@ internal sealed class EmailEventHandler(
                     ExternalId = mail.MessageId,
                     Address = mail.From,
                     Mailbox = mailbox.Name,
-                    MailboxAddress = string.IsNullOrWhiteSpace(mailbox.Options.FromAddress) ? null : mailbox.Options.FromAddress.Trim()
+                    MailboxAddress = SupportAnswerSenders.DeliveredAddress(mailbox.Options, mail.DeliveredTo)
                 }
             ]
         };
@@ -401,7 +401,7 @@ internal sealed class EmailEventHandler(
         }
 
         // The tag is a short tracking token in an address sent now and a full case id in one sent before tokens existed.
-        return await CaseReplyAddress.FindAsync(store, PerCaseAddress.CaseIdIn(mail.DeliveredTo, mailOptions.FromAddress), cancellationToken);
+        return await CaseReplyAddress.FindByRecipientAsync(store, mail.DeliveredTo, mailOptions, cancellationToken);
     }
 
     private static IEnumerable<string> ThreadIds(InboundMail mail)

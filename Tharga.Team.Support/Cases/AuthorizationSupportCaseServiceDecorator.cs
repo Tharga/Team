@@ -134,6 +134,22 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
     }
 
+    /// <remarks>Authorized exactly as a plain answer; which addresses the answerer may send from is decided by the service, which refuses any other.</remarks>
+    public async Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        await inner.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, attachments, choice, cancellationToken);
+    }
+
+    /// <remarks>Authorized as answering is.</remarks>
+    public async Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
+    {
+        await RequireSupportAnswerAsync(teamKey, caseId);
+
+        return await inner.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, choice, cancellationToken);
+    }
+
     /// <remarks>
     /// Authorized exactly as reading the transcript is — the team's support read grant, the unassigned read grant
     /// for a case with no team, the cross-team grant, or authorship, with per-case visibility applied — because a

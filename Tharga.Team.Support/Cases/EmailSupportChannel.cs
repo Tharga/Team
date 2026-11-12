@@ -80,7 +80,7 @@ internal sealed class EmailSupportChannel(
     /// </remarks>
     public async Task<SupportChannelPostResult> PostWithResultAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
-        var (mailbox, sender) = SenderFor(binding);
+        var (option, sender) = SenderFor(binding, message);
 
         if (!sender.CanSend) return SupportChannelPostResult.Failed("No mail server is configured for sending.");
         if (string.IsNullOrWhiteSpace(binding?.Address)) return SupportChannelPostResult.Failed("The case has no address to mail.");
@@ -97,7 +97,7 @@ internal sealed class EmailSupportChannel(
         var (files, missing) = await FilesOfAsync(supportCase, message, cancellationToken);
         if (missing != null) return SupportChannelPostResult.Failed(missing);
 
-        var result = await sender.SendAsync(await ComposeAsync(supportCase, binding, message, mailbox, files, cancellationToken), cancellationToken);
+        var result = await sender.SendAsync(await ComposeAsync(supportCase, binding, message, option, files, cancellationToken), cancellationToken);
 
         // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case,
         // and a bounce naming it finds the very entry that did not arrive.
@@ -114,20 +114,26 @@ internal sealed class EmailSupportChannel(
             }, cancellationToken);
         }
 
+        if (result.SenderRefused)
+            return SupportChannelPostResult.Failed($"The mail server refused to send as {option.Address}. Answer again from another address, or ask whoever runs the mail server to allow sending as it.");
+
         return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
     }
 
-    public SupportAnswerRoute RouteOf(SupportCase supportCase, SupportChannelBinding binding)
+    public SupportAnswerRoute RouteOf(SupportCase supportCase, SupportChannelBinding binding, SupportStaffSender staff = null)
     {
         var mailbox = MailboxOf(binding);
+        var allowed = SupportAnswerSenders.Allowed(Sending, mailbox, staff);
+        var sender = SupportAnswerSenders.Default(allowed, mailbox, binding.MailboxAddress);
         var decision = policy?.Decide(binding.Address, Subject(supportCase));
 
         return new SupportAnswerRoute
         {
             ByMail = true,
             To = binding.Address,
-            From = mailbox.Options.FromAddress,
-            Mailbox = mailbox.Name,
+            From = sender?.Address ?? mailbox.Options.FromAddress,
+            Senders = [.. allowed.Select(x => new SupportAnswerSender { Address = x.Address, Name = x.Name, Personal = x.Personal })],
+            Mailbox = sender?.Mailbox.Name ?? mailbox.Name,
             Effect = decision?.Action switch
             {
                 OutboundMailAction.Redirect => MailPolicyEffect.Redirect,
@@ -140,12 +146,12 @@ internal sealed class EmailSupportChannel(
 
     public async Task<MailPreview> PreviewAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
-        var mailbox = MailboxOf(binding);
-        var mail = await ComposeAsync(supportCase, binding, message, mailbox, [], cancellationToken);
+        var option = SenderOption(binding, message);
+        var mail = await ComposeAsync(supportCase, binding, message, option, [], cancellationToken);
 
         return new MailPreview
         {
-            From = SenderOf(mailbox.Options),
+            From = option.Formatted,
             ReplyTo = mail.ReplyTo,
             To = mail.To,
             Subject = mail.Subject,
@@ -155,13 +161,19 @@ internal sealed class EmailSupportChannel(
     }
 
     /// <summary>The answer mail as it goes out, before the outbound policy: the thread, the signature, the conversation so far quoted, the mailbox's Reply-To, and the HTML in the host's support frame.</summary>
-    private async Task<OutboundMail> ComposeAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, SupportMailbox mailbox, IReadOnlyList<MailAttachment> files, CancellationToken cancellationToken)
+    private async Task<OutboundMail> ComposeAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, SupportSenderOption sender, IReadOnlyList<MailAttachment> files, CancellationToken cancellationToken)
     {
         var thread = ThreadOf(supportCase, binding);
         var earlier = supportCase == null ? [] : await EarlierAsync(supportCase, message, cancellationToken);
         var frame = await SupportAnswerFrame.CreateAsync(answers, texts);
         var subject = Subject(supportCase);
         var body = Body(message, earlier, frame);
+        var mailOptions = sender.Mailbox.Options;
+
+        // A reply never goes to a staff member's own address: it goes to the support address the customer wrote to, with the case's tracker when the mailbox uses one.
+        var supportAddress = sender.Personal ? SupportAddressOf(binding) : sender.Address;
+        var replyTo = await CaseReplyAddress.ForAsync(store, mailOptions, supportCase, logger, cancellationToken, supportAddress);
+        if (replyTo == null && sender.Personal) replyTo = supportAddress;
 
         return new OutboundMail(
             To: binding.Address,
@@ -169,21 +181,62 @@ internal sealed class EmailSupportChannel(
             Body: body,
             InReplyTo: thread[^1],
             References: thread,
-            ReplyTo: await CaseReplyAddress.ForAsync(store, mailbox.Options, supportCase, logger, cancellationToken),
+            ReplyTo: replyTo,
             Attachments: files,
-            BodyHtml: _template.Render(subject, body, Html(message, earlier, frame, _template.IsSet)));
+            BodyHtml: _template.Render(subject, body, Html(message, earlier, frame, _template.IsSet)),
+            From: SupportMailboxes.SameAddress(sender.Address, mailOptions.FromAddress) ? null : sender.Formatted);
     }
 
-    /// <summary>The mailbox the case came in through and its client, or the primary's with a warning when that mailbox is no longer configured.</summary>
-    private (SupportMailbox Mailbox, IMailClient Client) SenderFor(SupportChannelBinding binding)
+    /// <summary>The mailboxes an answer can be sent through: all of them when each has a client of its own, otherwise the primary alone.</summary>
+    private IReadOnlyList<SupportMailbox> Sending => mailClients == null ? [_mailboxes.Primary] : _mailboxes.All;
+
+    /// <summary>The support address replies go to when the answer is sent from a personal one: the address the customer wrote to when the mailbox may send as it, otherwise the mailbox's own.</summary>
+    private string SupportAddressOf(SupportChannelBinding binding)
+    {
+        var mailbox = MailboxOf(binding);
+
+        return SupportAnswerSenders.Default(SupportAnswerSenders.Allowed(Sending, mailbox, null), mailbox, binding?.MailboxAddress)?.Address ?? mailbox.Options.FromAddress;
+    }
+
+    /// <summary>
+    /// The address an answer is sent from: the one recorded on the entry when the mailbox may still send as it, otherwise the address the
+    /// customer wrote to or the mailbox's own. An entry nobody chose an address for — a receipt, the assistant, an answer from before
+    /// this was recorded — takes the default.
+    /// </summary>
+    private SupportSenderOption SenderOption(SupportChannelBinding binding, SupportMessage message)
+    {
+        var mailbox = MailboxOf(binding);
+        var allowed = SupportAnswerSenders.Allowed(Sending, mailbox, null);
+        var fallback = SupportAnswerSenders.Default(allowed, mailbox, binding?.MailboxAddress)
+                       ?? new SupportSenderOption(mailbox, mailbox.Options.FromAddress?.Trim(), mailbox.Options.FromName, false);
+        var chosen = message?.SentFrom;
+
+        if (string.IsNullOrWhiteSpace(chosen)) return fallback;
+
+        var listed = allowed.FirstOrDefault(x => SupportMailboxes.SameAddress(x.Address, chosen));
+        if (listed != null) return listed;
+
+        var owner = new[] { mailbox }.Concat(Sending).FirstOrDefault(x => SupportAnswerSenders.Covers(x.Options, chosen));
+
+        return owner == null ? fallback : new SupportSenderOption(owner, chosen.Trim(), string.IsNullOrWhiteSpace(message.AuthorName) ? null : message.AuthorName.Trim(), true);
+    }
+
+    /// <summary>The sender of an answer and the client that sends it, or the primary mailbox's with a warning when the mailbox its case came in through is no longer configured.</summary>
+    private (SupportSenderOption Sender, IMailClient Client) SenderFor(SupportChannelBinding binding, SupportMessage message)
     {
         if (_mailboxes.Find(binding?.Mailbox) == null)
             logger?.LogWarning("A support answer goes out through the primary mailbox, because the mailbox {Mailbox} its case came in through is no longer configured.", binding?.Mailbox);
 
-        var mailbox = MailboxOf(binding);
-        var client = mailbox.IsPrimary ? mailClient : mailClients.For(mailbox);
+        var option = SenderOption(binding, message);
+        var client = option.Mailbox.IsPrimary ? mailClient : mailClients.For(option.Mailbox);
 
-        return client == null ? (_mailboxes.Primary, mailClient) : (mailbox, client);
+        if (client != null) return (option, client);
+
+        var primary = _mailboxes.Primary;
+        var primaryOption = SupportAnswerSenders.Default(SupportAnswerSenders.Allowed([primary], primary, null), primary, binding?.MailboxAddress)
+                            ?? new SupportSenderOption(primary, primary.Options.FromAddress?.Trim(), primary.Options.FromName, false);
+
+        return (primaryOption, mailClient);
     }
 
     /// <summary>The mailbox an answer goes out through: the one the case came in through, or the primary when that one is no longer configured or cannot be given a client of its own.</summary>
@@ -192,14 +245,6 @@ internal sealed class EmailSupportChannel(
         var mailbox = _mailboxes.Find(binding?.Mailbox);
 
         return mailbox == null || (!mailbox.IsPrimary && mailClients == null) ? _mailboxes.Primary : mailbox;
-    }
-
-    private static string SenderOf(MailOptions mailOptions)
-    {
-        var address = mailOptions.FromAddress?.Trim();
-        if (string.IsNullOrEmpty(address)) return null;
-
-        return string.IsNullOrWhiteSpace(mailOptions.FromName) ? address : new MailboxAddress(mailOptions.FromName, address).ToString();
     }
 
     /// <summary>
@@ -261,7 +306,7 @@ internal sealed class EmailSupportChannel(
         frame ??= SupportAnswerFrame.Default;
 
         var parts = new List<string> { message.Body ?? string.Empty };
-        if (frame.SignatureText is { } signature) parts.Add(signature);
+        if (frame.SignatureTextFor(message) is { } signature) parts.Add(signature);
         parts.AddRange(earlier.Select(x => Quoted(x, frame)));
 
         return string.Join("\n\n", parts);
@@ -291,7 +336,7 @@ internal sealed class EmailSupportChannel(
         if (own == null) return null;
 
         var html = new StringBuilder(own);
-        if (frame.SignatureHtml is { } signature) html.Append(signature);
+        if (frame.SignatureHtmlFor(message) is { } signature) html.Append(signature);
 
         foreach (var quoted in earlier)
         {

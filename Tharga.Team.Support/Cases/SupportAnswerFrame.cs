@@ -13,20 +13,29 @@ internal sealed class SupportAnswerFrame
 {
     private const string DateFormat = "yyyy-MM-dd HH:mm";
 
+    private const string NamePlaceholder = "{Name}";
+    private const string NewlinePlaceholder = "{newline}";
+
     private readonly string _supportName;
     private readonly string _attribution;
+    private readonly string _closing;
     private readonly TimeZoneInfo _zone;
 
-    private SupportAnswerFrame(IReadOnlyList<string> signature, string supportName, string attribution, TimeZoneInfo zone)
+    private SupportAnswerFrame(IReadOnlyList<string> signature, string supportName, string attribution, TimeZoneInfo zone, string closing, bool nameTheAnswerer)
     {
         Signature = signature;
         _supportName = supportName;
         _attribution = attribution;
         _zone = zone;
+        _closing = closing;
+        NameTheAnswerer = nameTheAnswerer;
     }
 
-    /// <summary>No signature, entries attributed in English, dates in UTC.</summary>
-    public static SupportAnswerFrame Default { get; } = new([], SupportMailTexts.SupportName, SupportMailTexts.QuoteAttribution, TimeZoneInfo.Utc);
+    /// <summary>No signature, entries attributed in English, dates in UTC, answers signed with no name.</summary>
+    public static SupportAnswerFrame Default { get; } = new([], SupportMailTexts.SupportName, SupportMailTexts.QuoteAttribution, TimeZoneInfo.Utc, SupportMailTexts.Closing, false);
+
+    /// <summary>Whether an answer is signed with the name of the one who wrote it unless they choose otherwise.</summary>
+    public bool NameTheAnswerer { get; }
 
     /// <summary>The frame for the host's options, its text through the host's text provider in the current culture.</summary>
     public static async Task<SupportAnswerFrame> CreateAsync(SupportAnswerOptions options, ITextResolver texts)
@@ -38,22 +47,43 @@ internal sealed class SupportAnswerFrame
             ? await text.GetAsync(SupportMailTexts.SupportNameKey, SupportMailTexts.SupportName)
             : options.SupportName.Trim();
 
-        return new SupportAnswerFrame(Lines(options.Signature), name, await text.GetAsync(SupportMailTexts.QuoteAttributionKey, SupportMailTexts.QuoteAttribution), Zone(options.TimeZoneId));
+        var closing = string.IsNullOrWhiteSpace(options.Closing)
+            ? await text.GetAsync(SupportMailTexts.ClosingKey, SupportMailTexts.Closing)
+            : options.Closing;
+
+        return new SupportAnswerFrame(Lines(options.Signature), name, await text.GetAsync(SupportMailTexts.QuoteAttributionKey, SupportMailTexts.QuoteAttribution), Zone(options.TimeZoneId), closing, options.NameTheAnswerer);
     }
 
     /// <summary>The signature's lines, without blank lines before or after; empty for none.</summary>
     public IReadOnlyList<string> Signature { get; }
 
     /// <summary>The signature as text, or null for none.</summary>
-    public string SignatureText => Signature.Count == 0 ? null : string.Join("\n", Signature);
+    public string SignatureText => SignatureTextFor(null);
 
     /// <summary>The signature as one encoded paragraph of class <c>signature</c>, or null for none.</summary>
-    public string SignatureHtml => Signature.Count == 0 ? null : $"<p class=\"signature\">{string.Join("<br>", Signature.Select(WebUtility.HtmlEncode))}</p>";
+    public string SignatureHtml => SignatureHtmlFor(null);
 
-    /// <summary>The line above a quoted entry: when it was written, in the host's time zone, and by whom — support's name for an entry written by support.</summary>
+    /// <summary>The lines signed after an answer: the closing with the answerer's name when the answer was signed with it, then the host's signature.</summary>
+    public IReadOnlyList<string> SignatureOf(SupportMessage answer)
+    {
+        if (answer is not { SignedWithName: true } || string.IsNullOrWhiteSpace(answer.AuthorName)) return Signature;
+
+        return [.. Lines([ClosingOf(answer.AuthorName)]), .. Signature];
+    }
+
+    /// <summary>The signature of an answer as text, or null for none.</summary>
+    public string SignatureTextFor(SupportMessage answer) => SignatureOf(answer) is { Count: > 0 } lines ? string.Join("\n", lines) : null;
+
+    /// <summary>The signature of an answer as one encoded paragraph of class <c>signature</c>, or null for none.</summary>
+    public string SignatureHtmlFor(SupportMessage answer)
+        => SignatureOf(answer) is { Count: > 0 } lines ? $"<p class=\"signature\">{string.Join("<br>", lines.Select(WebUtility.HtmlEncode))}</p>" : null;
+
+    private string ClosingOf(string name) => _closing.Replace(NamePlaceholder, name).Replace(NewlinePlaceholder, "\n");
+
+    /// <summary>The line above a quoted entry: when it was written, in the host's time zone, and by whom — support's name for an entry written by support, unless it was signed with its writer's name.</summary>
     public string Attribution(SupportMessage quoted)
     {
-        var who = IsSupport(quoted) ? _supportName : quoted.AuthorName;
+        var who = IsSupport(quoted) && !(quoted.SignedWithName && !string.IsNullOrWhiteSpace(quoted.AuthorName)) ? _supportName : quoted.AuthorName;
         var when = When(quoted.SentAt);
 
         try

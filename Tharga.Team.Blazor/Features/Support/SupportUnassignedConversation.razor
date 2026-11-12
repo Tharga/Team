@@ -42,7 +42,7 @@
 
     @if (Case.Status == SupportCaseStatus.Open)
     {
-        <SupportAnswerRouteLine Route="_route" />
+        <SupportAnswerRouteLine Route="_route" @bind-Choice="_answerChoice" />
         <RichTextEditor @bind-Value="_answer" Label="@_text[SupportUnassignedViewText.AnswerLabel]" Disabled="_busy" Height="8rem" />
         <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
         <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
@@ -136,6 +136,7 @@
 
     private SupportCase _shown;
     private SupportAnswerRoute _route;
+    private SupportAnswerChoice _answerChoice = new();
     private SupportMessage[] _messages = [];
     private string _answer;
     private IReadOnlyList<SupportAttachmentUpload> _files = [];
@@ -165,6 +166,7 @@
         _shown = Case;
         _messages = (await SupportCases.GetMessagesAsync(Case.TeamKey, Case.Id, null, SupportCaseLimits.MaxMessagesPerCase)).Items;
         _route = await SupportAnswerPreview.RouteAsync(SupportCases, Case);
+        _answerChoice = new SupportAnswerChoice();
     }
 
     private bool IsListed(string teamKey) => (Teams ?? []).Any(x => x.Key == teamKey);
@@ -182,7 +184,7 @@
         var html = _answer ?? string.Empty;
         var files = SupportAttachmentPicker.Rewound(_files);
 
-        await ActAsync(() => SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files));
+        await ActAsync(() => SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files, _answerChoice));
         _answer = null;
         _files = [];
     }
@@ -193,7 +195,7 @@
         MailPreview preview;
         try
         {
-            preview = await SupportCases.PreviewAnswerAsync(Case.TeamKey, Case.Id, string.Empty, _answer ?? string.Empty);
+            preview = await SupportCases.PreviewAnswerAsync(Case.TeamKey, Case.Id, string.Empty, _answer ?? string.Empty, _answerChoice);
         }
         finally
         {

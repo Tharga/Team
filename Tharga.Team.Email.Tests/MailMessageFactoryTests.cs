@@ -34,6 +34,17 @@ public class MailMessageFactoryTests
         Assert.Equal("It returns nothing.", message.TextBody);
     }
 
+    [Fact]
+    public void AMailWithItsOwnSender_IsSentFromIt_AndItsIdBelongsToThatDomain()
+    {
+        var message = MailMessageFactory.Create(
+            new OutboundMail("user@example.com", "Export is empty", "Looking.", ReplyTo: "help+tracking-1@example.org", From: "Anna Andersson <anna@example.org>"), Options());
+
+        Assert.Equal(("anna@example.org", "Anna Andersson"), (message.From.Mailboxes.Single().Address, message.From.Mailboxes.Single().Name));
+        Assert.Equal("help+tracking-1@example.org", message.ReplyTo.Mailboxes.Single().Address);
+        Assert.EndsWith("example.org", message.MessageId);
+    }
+
     /// <summary>
     /// SMTP reports no identifier, so the thread's identity is generated here and stored by the caller.
     /// </summary>

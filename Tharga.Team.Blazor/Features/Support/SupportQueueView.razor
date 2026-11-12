@@ -69,7 +69,7 @@ else
 
                             @if (_selected.Status == SupportCaseStatus.Open)
                             {
-                                <SupportAnswerRouteLine Route="_route" />
+                                <SupportAnswerRouteLine Route="_route" @bind-Choice="_answerChoice" />
                                 <RichTextEditor Value="@_answer" ValueChanged="AnswerChanged" Label="@_text[SupportQueueViewText.AnswerLabel]" Disabled="_busy" Height="8rem" />
                                 <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
@@ -116,6 +116,7 @@ else
     private SupportCase[] _cases = [];
     private SupportCase _selected;
     private SupportAnswerRoute _route;
+    private SupportAnswerChoice _answerChoice = new();
     private SupportMessage[] _messages = [];
     private SupportTypingWatch _typing;
     private SupportTypingReporter _reporter;
@@ -185,7 +186,7 @@ else
             var files = SupportAttachmentPicker.Rewound(_files);
             await _reporter.SendingAsync();
 
-            await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, string.Empty, _answer ?? string.Empty, files);
+            await SupportCases.AnswerCaseAsync(_teamKey, _selected.Id, string.Empty, _answer ?? string.Empty, files, _answerChoice);
 
             _answer = null;
             _files = [];
@@ -213,7 +214,7 @@ else
         MailPreview preview;
         try
         {
-            preview = await SupportCases.PreviewAnswerAsync(_teamKey, _selected.Id, string.Empty, _answer ?? string.Empty);
+            preview = await SupportCases.PreviewAnswerAsync(_teamKey, _selected.Id, string.Empty, _answer ?? string.Empty, _answerChoice);
         }
         finally
         {
@@ -307,6 +308,7 @@ else
         _selected = await SupportCases.GetCaseAsync(_teamKey, caseId);
         _messages = _selected == null ? [] : (await SupportCases.GetMessagesAsync(_teamKey, caseId)).Items;
         _route = await SupportAnswerPreview.RouteAsync(SupportCases, _selected);
+        _answerChoice = new SupportAnswerChoice();
 
         _typing?.Follow(_teamKey, _selected?.Id, _selected?.AuthorIdentity, authorOnRight: false);
         _typing?.Clear();
