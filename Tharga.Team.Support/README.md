@@ -178,6 +178,8 @@ is comes from `ISupportSenderDirectory`, which `Tharga.Team.MongoDB` registers.
   signature after it, earlier support entries attributed to support's name in the host's time zone (`o.Answers`),
   and the host's support frame (`MailTemplateOptions.SupportHtml`) around it. `o.Answers.NameTheAnswerer` signs
   an answer with its writer's name in a closing you configure, and the person answering can switch it per answer.
+- **Quoted like Gmail** — an answer quotes the conversation so far as one block with a bar at its left and the older
+  entries nested inside it; `o.Answers.QuoteStyle = SupportQuoteStyle.PerEntry` keeps one block for each entry.
 - **Which address answers** — `o.Email.SendAs` lists further addresses a mailbox may send as (an alias that delivers
   into it, or an address on another domain); an answer goes from the address the customer wrote to by default, the
   person answering can pick another per answer, and `o.Answers.StaffSenderRole` lets a role answer from its own

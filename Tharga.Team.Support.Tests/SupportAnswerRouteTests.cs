@@ -176,7 +176,7 @@ public class SupportAnswerRouteTests
         Assert.Equal(Customer, preview.To);
         Assert.Equal("Re: Export is empty", preview.Subject);
         Assert.Null(preview.ReplyTo);
-        Assert.Equal("<p>Try <b>this</b>.</p><p>On 2026-10-17 08:00 UTC, A Customer wrote:</p><blockquote>The export is empty.</blockquote>", preview.Html);
+        Assert.Equal("<p>Try <b>this</b>.</p><div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A Customer wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">The export is empty.</blockquote></div>", preview.Html);
         Assert.StartsWith("Try this.\n\nOn 2026-10-17 08:00 UTC, A Customer wrote:\n> The export is empty.", preview.Text);
     }
 
@@ -218,7 +218,7 @@ public class SupportAnswerRouteTests
         await staff.AnswerCaseAsync(TeamKey, CaseId, string.Empty, "<p>Try <b>this</b>.</p>", []);
 
         await _mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x =>
-                x.BodyHtml == "<body><h1>Re: Export is empty</h1><p>Try <b>this</b>.</p><p>On 2026-10-17 08:00 UTC, A Customer wrote:</p><blockquote>The export is empty.</blockquote><i></i></body>"),
+                x.BodyHtml == "<body><h1>Re: Export is empty</h1><p>Try <b>this</b>.</p><div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A Customer wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">The export is empty.</blockquote></div><i></i></body>"),
             Arg.Any<CancellationToken>());
     }
 
@@ -231,7 +231,7 @@ public class SupportAnswerRouteTests
         await staff.AnswerCaseAsync(TeamKey, CaseId, "Plain <words>.\nTwo lines.");
 
         await _mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x =>
-                x.BodyHtml == "<div><p>Plain &lt;words&gt;.<br>Two lines.</p><p>On 2026-10-17 08:00 UTC, A Customer wrote:</p><blockquote>The export is empty.</blockquote></div>" &&
+                x.BodyHtml == "<div><p>Plain &lt;words&gt;.<br>Two lines.</p><div class=\"gmail_quote\"><div class=\"gmail_attr\">On 2026-10-17 08:00 UTC, A Customer wrote:</div><blockquote class=\"gmail_quote\" style=\"margin:0 0 0 0.8ex;border-left:1px solid #cccccc;padding-left:1ex\">The export is empty.</blockquote></div></div>" &&
                 x.Body.StartsWith("Plain <words>.\nTwo lines.\n\n")),
             Arg.Any<CancellationToken>());
     }

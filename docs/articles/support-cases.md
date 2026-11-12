@@ -998,6 +998,13 @@ builder.Services.AddThargaSupportCases(o =>
 - **The signature** is plain text lines: in the text body after a blank line, and in the HTML one paragraph,
   `<p class="signature">`, its lines encoded and joined by `<br>`, so a template can style it. Without one nothing
   is added.
+- **The quote is nested, as Gmail does it.** After the answer and signature comes one line, `team.support.mail.wrote`
+  ("On {0}, {1} wrote:", `{0}` when and `{1}` who), and one quoted block holding the latest earlier entry, with a vertical
+  bar at its left. The older entries are nested inside that block, each under its own line and with a bar of its own, not
+  stacked beside it. In the text part the same shape is `> ` prefixes, one level deeper for each older entry. The HTML
+  carries Gmail's own markers (`gmail_quote`, `gmail_attr`), so when a customer's reply brings it back, the cut that removes
+  their mail client's quote removes ours too. `o.Answers.QuoteStyle = SupportQuoteStyle.PerEntry` keeps one line and one
+  block for each entry, as earlier versions did.
 - **Each quoted entry** is introduced by one translatable line, `team.support.mail.wrote` — "On {0}, {1} wrote:",
   `{0}` when and `{1}` who. The time is `yyyy-MM-dd HH:mm` in `TimeZoneId`, followed by `UTC` only when that is UTC.
   An unknown zone is refused at registration.

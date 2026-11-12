@@ -21,8 +21,9 @@ internal sealed class SupportAnswerFrame
     private readonly string _closing;
     private readonly TimeZoneInfo _zone;
 
-    private SupportAnswerFrame(IReadOnlyList<string> signature, string supportName, string attribution, TimeZoneInfo zone, string closing, bool nameTheAnswerer)
+    private SupportAnswerFrame(IReadOnlyList<string> signature, string supportName, string attribution, TimeZoneInfo zone, string closing, bool nameTheAnswerer, SupportQuoteStyle quoteStyle)
     {
+        QuoteStyle = quoteStyle;
         Signature = signature;
         _supportName = supportName;
         _attribution = attribution;
@@ -32,7 +33,10 @@ internal sealed class SupportAnswerFrame
     }
 
     /// <summary>No signature, entries attributed in English, dates in UTC, answers signed with no name.</summary>
-    public static SupportAnswerFrame Default { get; } = new([], SupportMailTexts.SupportName, SupportMailTexts.QuoteAttribution, TimeZoneInfo.Utc, SupportMailTexts.Closing, false);
+    public static SupportAnswerFrame Default { get; } = new([], SupportMailTexts.SupportName, SupportMailTexts.QuoteAttribution, TimeZoneInfo.Utc, SupportMailTexts.Closing, false, SupportQuoteStyle.Nested);
+
+    /// <summary>How the conversation so far is quoted.</summary>
+    public SupportQuoteStyle QuoteStyle { get; }
 
     /// <summary>Whether an answer is signed with the name of the one who wrote it unless they choose otherwise.</summary>
     public bool NameTheAnswerer { get; }
@@ -51,7 +55,7 @@ internal sealed class SupportAnswerFrame
             ? await text.GetAsync(SupportMailTexts.ClosingKey, SupportMailTexts.Closing)
             : options.Closing;
 
-        return new SupportAnswerFrame(Lines(options.Signature), name, await text.GetAsync(SupportMailTexts.QuoteAttributionKey, SupportMailTexts.QuoteAttribution), Zone(options.TimeZoneId), closing, options.NameTheAnswerer);
+        return new SupportAnswerFrame(Lines(options.Signature), name, await text.GetAsync(SupportMailTexts.QuoteAttributionKey, SupportMailTexts.QuoteAttribution), Zone(options.TimeZoneId), closing, options.NameTheAnswerer, options.QuoteStyle);
     }
 
     /// <summary>The signature's lines, without blank lines before or after; empty for none.</summary>
