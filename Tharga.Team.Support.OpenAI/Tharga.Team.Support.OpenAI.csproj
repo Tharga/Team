@@ -33,9 +33,9 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="11.0.0" />
     <PackageReference Include="OpenAI" Version="2.15.0" />
-    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.14" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="11.0.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team.Support\Tharga.Team.Support.csproj" />
