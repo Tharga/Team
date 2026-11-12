@@ -3328,6 +3328,43 @@ Two properties worth relying on:
   be recorded an escape hatch without a special rule: mark it `Change` and it records a `DataChange`, which
   survives a host filter that drops service calls.
 
+### Callers let in by a team's consent
+
+A caller who is not a member of a team but holds a role the team consented to reaches it like a member, and
+every call they make is traced like a member's. Each entry written for such a caller now says so:
+`Metadata["authorization.via"] = "consent"` (`AuditMetadataKeys.AuthorizedViaConsent`), beside the existing
+`"system-grant"`. A member's entries carry no `authorization.via`.
+
+When the roles teams consent to are your own staff — support, operations — a team usually should not find
+their browsing in its log, but must still find what they changed. Turn their access traces off:
+
+```csharp
+o.Audit = new AuditOptions { RecordConsentedAccess = false };
+```
+
+| Written for a consented caller | `RecordConsentedAccess = false` |
+|---|---|
+| Access trace (`ServiceCall`) — a read, or any method left at `Access` | dropped |
+| `DataChange` — a method marked `AuditMode.Change`, a change the toolkit's decorators record | kept |
+| Refusal (`ScopeDenial`, `AccessLevelDenial`) | kept |
+
+**It only works as intended where writes are marked `Change`.** A write left at `Access` is an access trace
+like any read, and is dropped with them. Mark every write before turning this off.
+
+**An entry you write yourself is dropped only if it carries the stamp.** `IAuditEntryFactory` sees no principal
+in a Blazor circuit, so it cannot stamp for you. Ask `AuditProvenance.IsConsented(principal, teamKey)` and add
+the stamp to the metadata of your own reads:
+
+```csharp
+var metadata = AuditProvenance.IsConsented(user, teamKey)
+    ? new Dictionary<string, string> { [AuditMetadataKeys.AuthorizedVia] = AuditMetadataKeys.AuthorizedViaConsent }
+    : null;
+auditLogger.Log(auditEntryFactory.Create(AuditEventType.ServiceCall, "case", "CaseRead", teamKey: teamKey, metadata: metadata));
+```
+
+Consent is read from the claims: a member carries a `MemberKey` for the team and a team API key carries an
+`ApiKeyId`, while a consented caller carries the team's `TeamKey` and scopes and neither of those.
+
 ### What a row is about: the Operation column
 
 The grid's **Operation** column shows the scope that was checked, or — for an entry your application wrote,

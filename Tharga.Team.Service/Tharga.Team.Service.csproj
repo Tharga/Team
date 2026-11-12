@@ -49,7 +49,7 @@
       and at every render. A maintained library rather than hand-rolled parsing, because a sanitizer is only as
       good as its parser's agreement with the browser's, and AngleSharp parses as HTML5 does.
     -->
-    <PackageReference Include="HtmlSanitizer" Version="9.2.1039" />
+    <PackageReference Include="HtmlSanitizer" Version="11.0.26" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Tharga.Team\Tharga.Team.csproj" />

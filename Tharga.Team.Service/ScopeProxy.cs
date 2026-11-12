@@ -96,6 +96,8 @@ public class ScopeProxy<T> : DispatchProxy where T : class
                         TeamKey = ResolveTeamKey(targetMethod, args),
                         Metadata = new Dictionary<string, string> { [AuditMetadataKeys.AuthorizedVia] = AuditMetadataKeys.AuthorizedViaSystemGrant }
                     };
+                else if (path == AuthorizationPath.TeamScope && TeamScopePolicy.HasConsentedAccess(principal, ResolveTeamKey(targetMethod, args)))
+                    entry = entry with { Metadata = new Dictionary<string, string> { [AuditMetadataKeys.AuthorizedVia] = AuditMetadataKeys.AuthorizedViaConsent } };
                 _auditLogger?.Log(entry);
             });
     }

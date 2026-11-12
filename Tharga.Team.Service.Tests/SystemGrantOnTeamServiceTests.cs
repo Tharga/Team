@@ -183,7 +183,7 @@ public class SystemGrantOnTeamServiceTests
 
         var entry = Assert.Single(audit.Entries);
         Assert.Equal(TargetTeam, entry.TeamKey);
-        Assert.True(entry.Metadata == null || !entry.Metadata.ContainsKey(AuditMetadataKeys.AuthorizedVia));
+        Assert.NotEqual(AuditMetadataKeys.AuthorizedViaSystemGrant, entry.Metadata?.GetValueOrDefault(AuditMetadataKeys.AuthorizedVia));
     }
 
     [Fact]

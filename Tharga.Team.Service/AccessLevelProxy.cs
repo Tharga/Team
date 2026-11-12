@@ -55,10 +55,13 @@ public class AccessLevelProxy<T> : DispatchProxy where T : class
                 $"Method '{typeof(T).Name}.{targetMethod.Name}' is missing the [RequireAccessLevel] attribute. " +
                 $"All methods on services registered with AddScopedWithAccessLevel must declare their required access level.");
 
+        var admitted = false;
+
         return ProxyInvoker.Invoke(targetMethod, args, _target, _principalAccessor,
             enforce: principal =>
             {
                 CheckAccessLevel(principal, attribute.MinimumLevel);
+                admitted = true;
                 return TeamAccess.ForTeam(principal?.FindFirst(TeamClaimTypes.TeamKey)?.Value);
             },
             audit: (principal, ms, success, ex) =>
@@ -69,12 +72,12 @@ public class AccessLevelProxy<T> : DispatchProxy where T : class
 
                 LogAudit(principal, attribute.MinimumLevel, targetMethod.Name, ms, success,
                     AuditModeResolver.EventTypeFor(mode, denied, AuditEventType.AccessLevelDenial),
-                    success ? null : ex?.Message);
+                    success ? null : ex?.Message, admitted);
             });
     }
 
     private void LogAudit(ClaimsPrincipal user, AccessLevel minimumLevel, string methodName, long durationMs, bool success,
-        AuditEventType? eventType = null, string errorMessage = null)
+        AuditEventType? eventType = null, string errorMessage = null, bool admitted = false)
     {
         if (_auditLogger == null) return;
 
@@ -106,6 +109,9 @@ public class AccessLevelProxy<T> : DispatchProxy where T : class
             CallerSource = callerSource,
             ScopeChecked = $"AccessLevel>={minimumLevel}",
             ScopeResult = success ? AuditScopeResult.Allowed : AuditScopeResult.Denied,
+            Metadata = admitted && TeamScopePolicy.HasConsentedAccess(user, user?.FindFirst(TeamClaimTypes.TeamKey)?.Value)
+                ? new Dictionary<string, string> { [AuditMetadataKeys.AuthorizedVia] = AuditMetadataKeys.AuthorizedViaConsent }
+                : null,
         };
 
         _auditLogger.Log(entry);

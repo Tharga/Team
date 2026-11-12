@@ -39,6 +39,11 @@
       client, and taking MailKit for reading makes a second SMTP stack pointless. Support cases and an
       organisation's own mailbox both use it; a consumer who wants neither never takes it.
     -->
+    <!--
+      Held at 4.18.2. MimeKit 5 ships no MimeKit.dll, so a host whose other dependencies were built on MailKit or
+      MimeKit 4 builds green on 5 and fails to load MimeKit at run time when they send mail. The port to 5 is done;
+      it waits for those dependencies to move in step. Tharga/Team#469.
+    -->
     <PackageReference Include="MailKit" Version="4.18.2" />
     <!--
       DNS TXT lookups for the DKIM keys that verify an inbound sender; the BCL resolves addresses only. Every
@@ -50,7 +55,7 @@
       an HTML body names. Referenced here rather than taken through the sanitizer's dependency, because the
       transport uses it on its own account and has to keep doing so if it is lifted out.
     -->
-    <PackageReference Include="AngleSharp" Version="1.9.0" />
+    <PackageReference Include="AngleSharp" Version="1.10.2" />
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
     <!-- Mail to users protects its unsubscribe links with Data Protection and answers them on an ASP.NET route.
          Private, so it does not flow to a consumer taking this package for the transport alone. -->

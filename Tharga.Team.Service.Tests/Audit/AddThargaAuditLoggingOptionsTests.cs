@@ -46,6 +46,7 @@ public class AddThargaAuditLoggingOptionsTests
             EventFilter = AuditEventFilter.All,
             ExcludedActions = ["read"],
             DefaultAuditMode = AuditMode.None,
+            RecordConsentedAccess = false,
             ExcludedEndpoints = ["/health"],
             RetentionDays = 12,
             BatchSize = 7,

@@ -39,6 +39,26 @@ public class AuditOptions
     /// </remarks>
     public AuditMode DefaultAuditMode { get; set; } = AuditMode.Access;
 
+    /// <summary>
+    /// Whether an access trace is recorded for a caller who reached the team through its consent rather than a
+    /// membership. Default: <c>true</c> — recorded, as it always has been.
+    /// </summary>
+    /// <remarks>
+    /// <b>Set this to <c>false</c> when the roles teams consent to are your own staff</b> — support, operations — whose
+    /// browsing a team should not find in its log. Every entry written for such a caller is stamped
+    /// <see cref="AuditMetadataKeys.AuthorizedVia"/> = <see cref="AuditMetadataKeys.AuthorizedViaConsent"/>, and with this
+    /// off a stamped <see cref="AuditEventType.ServiceCall"/> is dropped.
+    /// <para>
+    /// <b>What they change is recorded regardless</b>: a method declaring <see cref="AuditMode.Change"/> writes a
+    /// <see cref="AuditEventType.DataChange"/>, which this never drops, and nor does it drop a refusal. So the switch only
+    /// works as intended where writes are declared as changes — an unannotated write is an access trace like any read.
+    /// </para>
+    /// <para>
+    /// An entry a host writes itself is dropped only when it carries the stamp; see <see cref="AuditProvenance"/>.
+    /// </para>
+    /// </remarks>
+    public bool RecordConsentedAccess { get; set; } = true;
+
     /// <summary>Endpoints to exclude from logging (e.g. "/health"). Default: empty.</summary>
     public string[] ExcludedEndpoints { get; set; } = Array.Empty<string>();
 
