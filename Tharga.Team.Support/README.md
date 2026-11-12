@@ -174,9 +174,15 @@ is comes from `ISupportSenderDirectory`, which `Tharga.Team.MongoDB` registers.
   through one sanitizer on the way in and at every render; a formatted answer is mailed as HTML beside the text.
 - **The thread** — an answer carries the whole conversation and every message id is recorded, so a reply to any
   of them finds its case.
-- **Speaking for support** — an answer names no staff member: no author heading, the host's signature after it,
-  earlier support entries attributed to support's name in the host's time zone (`o.Answers`), and the host's
-  support frame (`MailTemplateOptions.SupportHtml`) around it.
+- **Speaking for support** — an answer names no staff member unless you ask it to: no author heading, the host's
+  signature after it, earlier support entries attributed to support's name in the host's time zone (`o.Answers`),
+  and the host's support frame (`MailTemplateOptions.SupportHtml`) around it. `o.Answers.NameTheAnswerer` signs
+  an answer with its writer's name in a closing you configure, and the person answering can switch it per answer.
+- **Which address answers** — `o.Email.SendAs` lists further addresses a mailbox may send as (an alias that delivers
+  into it, or an address on another domain); an answer goes from the address the customer wrote to by default, the
+  person answering can pick another per answer, and `o.Answers.StaffSenderRole` lets a role answer from its own
+  address where the mailbox declares it may (`SendAsDomains`). Replies always go to a support address with the
+  case's tracker.
 - **Delivery** — every answer says whether it reached the customer, a bounce marks it not delivered with the
   reason, and `ResendAsync` sends it again.
 
