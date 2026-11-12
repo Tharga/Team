@@ -269,6 +269,23 @@ that long; otherwise the service refuses. `SupportAcrossTeamsView` takes the sam
 does not offer Close where the service would refuse it. Without a window, the view still asks first, and says
 it is better that the team closes the case themselves.
 
+### Saying why a case was closed
+
+Support can leave a reason when closing, from the close dialog in `SupportAcrossTeamsView` and in the unassigned
+queue, or in code:
+
+```csharp
+await cases.CloseCaseAsync(teamKey, caseId, "Answered by phone, a duplicate of another case.");
+```
+
+The comment is stored with the closure and shown under it in the conversation, with who closed it and when. It is
+**internal**: it is never mailed or posted to Slack, and `GetMessagesAsync` leaves it out for the case's author, their
+team and the team's own support readers. Only callers holding `support:all:read` or `support:all:manage`, and those
+reading the unassigned queue, get it back. It is not written to the audit log either, so it can name people.
+Closing without a comment, or with a blank one, is unchanged, and the comment stays in the history when the case is
+reopened. It is limited to the length of a message. A person closing their own case is not asked for one, since they
+would never see it.
+
 ## Closing after inactivity
 
 A case support answered and nobody came back to closes itself after seven days.
