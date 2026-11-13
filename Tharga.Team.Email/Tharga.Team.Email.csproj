@@ -56,7 +56,7 @@
       transport uses it on its own account and has to keep doing so if it is lifted out.
     -->
     <PackageReference Include="AngleSharp" Version="1.10.2" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <!-- Mail to users protects its unsubscribe links with Data Protection and answers them on an ASP.NET route.
          Private, so it does not flow to a consumer taking this package for the transport alone. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" PrivateAssets="all" />
