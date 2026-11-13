@@ -20,6 +20,7 @@ public class SupportDeskPresenceTests
     private const string Ann = "ann-subject";
     private const string Ben = "ben-subject";
     private static readonly TimeSpan IdleAfter = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan LapseAfter = TimeSpan.FromHours(8);
 
     [Fact]
     public void WithNobodyOnTheDesk_ItIsUnknown()
@@ -30,14 +31,14 @@ public class SupportDeskPresenceTests
     }
 
     [Fact]
-    public void SomebodyWhoChoseOnline_MakesSupportOnline()
+    public void SomebodyWhoChoseAutomatic_MakesSupportOnline()
     {
         var (desk, _) = Build();
 
-        desk.Set(Ann, SupportStaffStatus.Online);
+        desk.Set(Ann, SupportStaffStatus.Automatic);
 
         Assert.Equal(SupportPresenceState.Online, desk.State);
-        Assert.Equal(SupportStaffStatus.Online, desk.StatusOf(Ann));
+        Assert.Equal(SupportStaffStatus.Automatic, desk.StatusOf(Ann));
     }
 
     [Fact]
@@ -77,7 +78,7 @@ public class SupportDeskPresenceTests
     public void GoingHidden_TakesSupportOffTheIndicator_AndSaysSo()
     {
         var (desk, _) = Build();
-        desk.Set(Ann, SupportStaffStatus.Online);
+        desk.Set(Ann, SupportStaffStatus.Automatic);
         var changes = 0;
         desk.Changed += (_, _) => changes++;
 
@@ -88,10 +89,10 @@ public class SupportDeskPresenceTests
     }
 
     [Fact]
-    public void Online_CountsAsAwayOnceIdle_AndSaysSo()
+    public void Automatic_CountsAsAwayOnceIdle_AndSaysSo()
     {
         var (desk, time) = Build();
-        desk.Set(Ann, SupportStaffStatus.Online);
+        desk.Set(Ann, SupportStaffStatus.Automatic);
         var changes = 0;
         desk.Changed += (_, _) => changes++;
 
@@ -102,14 +103,14 @@ public class SupportDeskPresenceTests
         time.Advance(TimeSpan.FromSeconds(1));
         Assert.Equal(SupportPresenceState.Away, desk.State);
         Assert.Equal(1, changes);
-        Assert.Equal(SupportStaffStatus.Online, desk.StatusOf(Ann));
+        Assert.Equal(SupportStaffStatus.Automatic, desk.StatusOf(Ann));
     }
 
     [Fact]
-    public void Acting_KeepsOnlineCounting_AndBringsSomebodyIdleBack()
+    public void Acting_KeepsAutomaticCounting_AndBringsSomebodyIdleBack()
     {
         var (desk, time) = Build();
-        desk.Set(Ann, SupportStaffStatus.Online);
+        desk.Set(Ann, SupportStaffStatus.Automatic);
 
         time.Advance(TimeSpan.FromMinutes(8));
         desk.Acted(Ann);
@@ -127,13 +128,74 @@ public class SupportDeskPresenceTests
         Assert.Equal(1, changes);
     }
 
+    /// <summary>Online is for somebody at the desk who reads rather than clicks, so idleness does not count against it.</summary>
     [Fact]
-    public void OnePersonOnline_IsEnough_UntilTheLastGoesIdle()
+    public void Online_StaysOnlineWhileIdle()
     {
         var (desk, time) = Build();
         desk.Set(Ann, SupportStaffStatus.Online);
-        time.Advance(TimeSpan.FromMinutes(5));
+        var changes = 0;
+        desk.Changed += (_, _) => changes++;
+
+        time.Advance(IdleAfter * 3);
+
+        Assert.Equal(SupportPresenceState.Online, desk.State);
+        Assert.Equal(0, changes);
+        Assert.Equal(SupportStaffStatus.Online, desk.StatusOf(Ann));
+    }
+
+    /// <summary>A choice nobody switches off must not say support is there long after the person left.</summary>
+    [Fact]
+    public void Online_LapsesToAway_AfterTheLapseTime_AndSaysSo_AndActingBringsItBack()
+    {
+        var (desk, time) = Build();
+        desk.Set(Ann, SupportStaffStatus.Online);
+        var changes = 0;
+        desk.Changed += (_, _) => changes++;
+
+        time.Advance(LapseAfter - TimeSpan.FromSeconds(1));
+        Assert.Equal(SupportPresenceState.Online, desk.State);
+        Assert.Equal(0, changes);
+
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(SupportPresenceState.Away, desk.State);
+        Assert.Equal(1, changes);
+        Assert.Equal(SupportStaffStatus.Online, desk.StatusOf(Ann));
+
+        desk.Acted(Ann);
+        Assert.Equal(SupportPresenceState.Online, desk.State);
+        Assert.Equal(2, changes);
+    }
+
+    [Fact]
+    public void Online_BesideAnIdleAutomatic_KeepsSupportOnline()
+    {
+        var (desk, time) = Build();
+        desk.Set(Ann, SupportStaffStatus.Automatic);
         desk.Set(Ben, SupportStaffStatus.Online);
+
+        time.Advance(IdleAfter * 2);
+
+        Assert.Equal(SupportPresenceState.Online, desk.State);
+    }
+
+    /// <summary>The choice is remembered in the browser as a number; what was Online (0) must come back as Automatic.</summary>
+    [Fact]
+    public void TheRememberedNumbers_KeepTheirMeaning()
+    {
+        Assert.Equal(SupportStaffStatus.Automatic, (SupportStaffStatus)0);
+        Assert.Equal(SupportStaffStatus.Away, (SupportStaffStatus)1);
+        Assert.Equal(SupportStaffStatus.Hidden, (SupportStaffStatus)2);
+        Assert.Equal(SupportStaffStatus.Online, (SupportStaffStatus)3);
+    }
+
+    [Fact]
+    public void OnePersonAutomatic_IsEnough_UntilTheLastGoesIdle()
+    {
+        var (desk, time) = Build();
+        desk.Set(Ann, SupportStaffStatus.Automatic);
+        time.Advance(TimeSpan.FromMinutes(5));
+        desk.Set(Ben, SupportStaffStatus.Automatic);
 
         time.Advance(TimeSpan.FromMinutes(6));
         Assert.Equal(SupportPresenceState.Online, desk.State);
@@ -176,19 +238,19 @@ public class SupportDeskPresenceTests
         desk.Changed += (_, _) => throw new InvalidOperationException("host handler is broken");
         desk.Changed += (_, _) => reached = true;
 
-        var exception = Record.Exception(() => desk.Set(Ann, SupportStaffStatus.Online));
+        var exception = Record.Exception(() => desk.Set(Ann, SupportStaffStatus.Automatic));
 
         Assert.Null(exception);
         Assert.True(reached);
     }
 
     [Fact]
-    public async Task TheDeskOnline_IsOnline_WithoutAskingSlack()
+    public async Task TheDeskAutomatic_IsOnline_WithoutAskingSlack()
     {
         var (desk, time) = Build();
         var slack = Substitute.For<ISlackClient>();
         var presence = new SupportPresence(desk, Slack(slack, time));
-        desk.Set(Ann, SupportStaffStatus.Online);
+        desk.Set(Ann, SupportStaffStatus.Automatic);
 
         Assert.Equal(SupportPresenceState.Online, await presence.GetAsync());
         await slack.DidNotReceive().GetChannelMembersAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -232,7 +294,7 @@ public class SupportDeskPresenceTests
         void Handler(object sender, EventArgs e) => changes++;
 
         presence.Changed += Handler;
-        desk.Set(Ann, SupportStaffStatus.Online);
+        desk.Set(Ann, SupportStaffStatus.Automatic);
         presence.Changed -= Handler;
         desk.Set(Ann, SupportStaffStatus.Away);
 
@@ -242,7 +304,7 @@ public class SupportDeskPresenceTests
     internal static (SupportDeskPresence Desk, ManualClock Time) Build()
     {
         var time = new ManualClock();
-        return (new SupportDeskPresence(Options.Create(new SupportCaseOptions { StaffIdleAfter = IdleAfter }), time), time);
+        return (new SupportDeskPresence(Options.Create(new SupportCaseOptions { StaffIdleAfter = IdleAfter, StaffOnlineLapseAfter = LapseAfter }), time), time);
     }
 
     private static SlackSupportPresence Slack(ISlackClient slack, TimeProvider time)
@@ -272,9 +334,9 @@ public class SupportStaffStatusTests
 
         Assert.Null(await staff.GetMyStaffStatusAsync());
 
-        await staff.SetMyStaffStatusAsync(SupportStaffStatus.Online);
+        await staff.SetMyStaffStatusAsync(SupportStaffStatus.Automatic);
 
-        Assert.Equal(SupportStaffStatus.Online, await staff.GetMyStaffStatusAsync());
+        Assert.Equal(SupportStaffStatus.Automatic, await staff.GetMyStaffStatusAsync());
         Assert.Equal(SupportPresenceState.Online, world.Desk.State);
     }
 
@@ -284,7 +346,7 @@ public class SupportStaffStatusTests
         var world = new World();
         var alice = world.Member(Alice);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => alice.SetMyStaffStatusAsync(SupportStaffStatus.Online));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => alice.SetMyStaffStatusAsync(SupportStaffStatus.Automatic));
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => alice.GetMyStaffStatusAsync());
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => alice.ReportStaffActivityAsync());
 
@@ -298,7 +360,7 @@ public class SupportStaffStatusTests
     {
         var world = new World();
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => world.SupportStaff(scope).SetMyStaffStatusAsync(SupportStaffStatus.Online));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => world.SupportStaff(scope).SetMyStaffStatusAsync(SupportStaffStatus.Automatic));
     }
 
     [Fact]
@@ -306,7 +368,7 @@ public class SupportStaffStatusTests
     {
         var world = new World();
         var staff = world.SupportStaff(SystemSupportScopes.AllManage);
-        await staff.SetMyStaffStatusAsync(SupportStaffStatus.Online);
+        await staff.SetMyStaffStatusAsync(SupportStaffStatus.Automatic);
         world.Time.Advance(TimeSpan.FromMinutes(11));
         Assert.Equal(SupportPresenceState.Away, world.Desk.State);
 
@@ -321,7 +383,7 @@ public class SupportStaffStatusTests
         var world = new World();
         var raised = await world.Member(Alice).RaiseCaseAsync(TeamA, null, "Body");
         var staff = world.SupportStaff(SystemSupportScopes.AllManage);
-        await staff.SetMyStaffStatusAsync(SupportStaffStatus.Online);
+        await staff.SetMyStaffStatusAsync(SupportStaffStatus.Automatic);
 
         world.Time.Advance(TimeSpan.FromMinutes(11));
         await staff.ReportTypingAsync(TeamA, raised.Id, asSupport: true);
@@ -365,7 +427,7 @@ public class SupportStaffStatusTests
         Assert.Equal(SupportPresenceState.Unknown, await presence.GetAsync());
 
         using var scope = provider.CreateScope();
-        await scope.ServiceProvider.GetRequiredService<ISupportCaseService>().SetMyStaffStatusAsync(SupportStaffStatus.Online);
+        await scope.ServiceProvider.GetRequiredService<ISupportCaseService>().SetMyStaffStatusAsync(SupportStaffStatus.Automatic);
 
         Assert.Equal(SupportPresenceState.Online, await presence.GetAsync());
     }

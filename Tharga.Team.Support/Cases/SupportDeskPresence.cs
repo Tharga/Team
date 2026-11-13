@@ -7,8 +7,9 @@ namespace Tharga.Team.Support.Cases;
 /// Who is on the support desk: each support person's status, and when they last did something in support.
 /// </summary>
 /// <remarks>
-/// <b>Online</b> while somebody chose <see cref="SupportStaffStatus.Online"/> and acted within
-/// <see cref="SupportCaseOptions.StaffIdleAfter"/>. <b>Away</b> while somebody chose Online or Away and nobody is online.
+/// <b>Online</b> while somebody chose <see cref="SupportStaffStatus.Automatic"/> and acted within
+/// <see cref="SupportCaseOptions.StaffIdleAfter"/>, or chose <see cref="SupportStaffStatus.Online"/> and acted within
+/// <see cref="SupportCaseOptions.StaffOnlineLapseAfter"/>. <b>Away</b> while somebody chose anything but Hidden and nobody is online.
 /// <b>Unknown</b> otherwise, which renders as nothing: those who chose Hidden are not counted at all, so members are told
 /// nothing about support while they answer. Somebody known stays known until the application restarts, so after hours
 /// members are told support will reply later.
@@ -21,6 +22,7 @@ namespace Tharga.Team.Support.Cases;
 internal sealed class SupportDeskPresence(IOptions<SupportCaseOptions> options, TimeProvider timeProvider, ILogger<SupportDeskPresence> logger = null) : IDisposable
 {
     private readonly TimeSpan _idleAfter = options.Value.StaffIdleAfter;
+    private readonly TimeSpan _onlineLapseAfter = options.Value.StaffOnlineLapseAfter;
     private readonly Lock _lock = new();
     private readonly Dictionary<string, (SupportStaffStatus Status, DateTimeOffset ActedAt)> _staff = new(StringComparer.Ordinal);
 
@@ -89,7 +91,15 @@ internal sealed class SupportDeskPresence(IOptions<SupportCaseOptions> options, 
     }
 
     private bool IsOnline((SupportStaffStatus Status, DateTimeOffset ActedAt) entry, DateTimeOffset now)
-        => entry.Status == SupportStaffStatus.Online && now - entry.ActedAt < _idleAfter;
+        => WindowOf(entry.Status) is { } window && now - entry.ActedAt < window;
+
+    // How long somebody counts as online after acting: Automatic follows activity, Online holds far longer.
+    private TimeSpan? WindowOf(SupportStaffStatus status) => status switch
+    {
+        SupportStaffStatus.Automatic => _idleAfter,
+        SupportStaffStatus.Online => _onlineLapseAfter,
+        _ => null
+    };
 
     private bool Recompute(DateTimeOffset now)
     {
@@ -111,7 +121,7 @@ internal sealed class SupportDeskPresence(IOptions<SupportCaseOptions> options, 
         var online = _staff.Values.Where(x => IsOnline(x, now)).ToArray();
         if (online.Length == 0) return;
 
-        var next = online.Min(x => x.ActedAt + _idleAfter) - now;
+        var next = online.Min(x => x.ActedAt + WindowOf(x.Status).Value) - now;
         _timer = timeProvider.CreateTimer(_ => Lapse(), null, next < TimeSpan.Zero ? TimeSpan.Zero : next, Timeout.InfiniteTimeSpan);
     }
 

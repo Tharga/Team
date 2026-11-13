@@ -251,11 +251,23 @@ public class SupportDeskStatusTests : BunitContext
     }
 
     [Fact]
-    public void OpeningTheDesk_TheFirstTime_PutsThemOnline()
+    public void OpeningTheDesk_TheFirstTime_StartsThemOnAutomatic()
     {
         var view = Render();
 
-        _cases.Verify(x => x.SetMyStaffStatusAsync(SupportStaffStatus.Online, default), Times.Once);
+        _cases.Verify(x => x.SetMyStaffStatusAsync(SupportStaffStatus.Automatic, default), Times.Once);
+        Assert.Equal("Automatic", Pressed(view));
+        Assert.Equal(SupportDeskStatusText.AutomaticHint.Default, view.Find("[data-status-hint]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void TheDesk_OffersFourChoices_EachWithItsHint()
+    {
+        var view = Render();
+
+        Assert.Equal(["Automatic", "Online", "Away", "Hidden"], view.FindAll("[data-status-choice]").Select(x => x.GetAttribute("data-status-choice")));
+
+        view.Find("[data-status-choice='Online']").Click();
         Assert.Equal("Online", Pressed(view));
         Assert.Equal(SupportDeskStatusText.OnlineHint.Default, view.Find("[data-status-hint]").TextContent.Trim());
     }

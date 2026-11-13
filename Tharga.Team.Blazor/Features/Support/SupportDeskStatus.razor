@@ -9,8 +9,8 @@
 @inject IThargaTextProvider TextProvider
 @inject IServiceProvider Services
 
-@* How a support person is shown to members: Online, Away or Hidden, chosen here, with Online counting only while they
-   are active in support. Using this page counts, reported at most once a minute. Renders nothing for anybody who is
+@* How a support person is shown to members: Automatic, Online, Away or Hidden, chosen here, with Automatic counting as
+   online only while they are active in support. Using this page counts, reported at most once a minute. Renders nothing for anybody who is
    not on the support desk. *@
 
 @if (_allowed)
@@ -34,7 +34,7 @@
 @code {
     private const string ModulePath = "./_content/Tharga.Team.Blazor/support-desk.js";
     private static readonly TimeSpan ActivityInterval = TimeSpan.FromMinutes(1);
-    private static readonly SupportStaffStatus[] Statuses = [SupportStaffStatus.Online, SupportStaffStatus.Away, SupportStaffStatus.Hidden];
+    private static readonly SupportStaffStatus[] Statuses = [SupportStaffStatus.Automatic, SupportStaffStatus.Online, SupportStaffStatus.Away, SupportStaffStatus.Hidden];
 
     /// <summary>Where the choice is remembered in the browser, for the next visit.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.DeskStatus";
@@ -43,7 +43,7 @@
     private TextSet _text = TextSet.Empty;
     private bool _allowed;
     private bool _watching;
-    private SupportStaffStatus _status = SupportStaffStatus.Online;
+    private SupportStaffStatus _status = SupportStaffStatus.Automatic;
     private ISupportPresence _presence;
     private IJSObjectReference _module;
     private DotNetObjectReference<SupportDeskStatus> _self;
@@ -66,8 +66,9 @@
         }
 
         // What another page of theirs set since the application started, else their choice last time in this browser,
-        // else Online, since they just opened the desk.
-        _status = set ?? await RememberedAsync() ?? SupportStaffStatus.Online;
+        // else Automatic, since they just opened the desk. A choice remembered as the number 0, from when that was Online,
+        // comes back as Automatic, which is what it meant.
+        _status = set ?? await RememberedAsync() ?? SupportStaffStatus.Automatic;
         await SupportCases.SetMyStaffStatusAsync(_status);
         _allowed = true;
 
@@ -151,6 +152,7 @@
 
     private static TextKey TextOf(SupportStaffStatus status) => status switch
     {
+        SupportStaffStatus.Automatic => SupportDeskStatusText.Automatic,
         SupportStaffStatus.Online => SupportDeskStatusText.Online,
         SupportStaffStatus.Away => SupportDeskStatusText.Away,
         _ => SupportDeskStatusText.Hidden
@@ -158,6 +160,7 @@
 
     private static TextKey HintOf(SupportStaffStatus status) => status switch
     {
+        SupportStaffStatus.Automatic => SupportDeskStatusText.AutomaticHint,
         SupportStaffStatus.Online => SupportDeskStatusText.OnlineHint,
         SupportStaffStatus.Away => SupportDeskStatusText.AwayHint,
         _ => SupportDeskStatusText.HiddenHint
@@ -165,6 +168,7 @@
 
     private static string IconOf(SupportStaffStatus status) => status switch
     {
+        SupportStaffStatus.Automatic => "autorenew",
         SupportStaffStatus.Online => "radio_button_checked",
         SupportStaffStatus.Away => "schedule",
         _ => "visibility_off"
