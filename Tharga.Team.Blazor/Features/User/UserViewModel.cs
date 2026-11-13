@@ -19,6 +19,9 @@ public record UserViewModel
 
     public string EMail { get; init; }
 
+    /// <summary>How many other users hold the same email address, compared trimmed and ignoring case. More than none is the mark of a person who signs in through two identities.</summary>
+    public int SameEmailCount { get; init; }
+
     /// <summary>
     /// The identity the user authenticates by (<see cref="IUser.Identity"/>) — the subject claim from the
     /// identity provider. Stable across name and email changes, which is what makes it the value worth

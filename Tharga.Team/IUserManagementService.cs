@@ -139,6 +139,27 @@ public interface IUserManagementService
     Task<IReadOnlyList<ITeam>> GetOwnedTeamsAsync(string userKey, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Moves the sign-in identity of a duplicate user onto the user who should keep their teams, and removes the duplicate.
+    /// </summary>
+    /// <remarks>
+    /// <b>For the person who signs in through another identity provider and is given a second, empty user.</b> The kept user
+    /// stays the same record with the same key, so their memberships, API keys and history need no moving; only the identity
+    /// they sign in by changes.
+    /// <para>
+    /// <b>Refused when the duplicate belongs to any team</b>, so nothing is lost by removing it. Remove the memberships first.
+    /// The duplicate's personal system API keys are removed as they are when a user is deleted. The two are not required to share an email address.
+    /// </para>
+    /// <para>
+    /// Not atomic: the duplicate is removed first, because an identity can be held by one user only. When the second step fails
+    /// the duplicate is gone, and it was empty, so the person's next sign-in creates it again and the link can be repeated.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">Either user was not found, they are the same user, or the duplicate belongs to a team.</exception>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task<UserLinkResult> LinkIdentityAsync(string userKey, string duplicateUserKey, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(LinkIdentityAsync)}.");
+
+    /// <summary>
     /// List directory users that have no matching local user (matched by directory id, falling back to
     /// email), streamed as directory pages arrive.
     /// </summary>

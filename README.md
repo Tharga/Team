@@ -198,6 +198,16 @@ and a failure never fails the sign-in. Each refresh is audited as `auth/user-pro
 A custom `IUserRepository` must implement the new `SetEMailAsync`. See
 [Keeping name and email current from trusted sign-ins](docs/articles/user-management.md#keeping-name-and-email-current-from-trusted-sign-ins).
 
+## One person, two users
+
+A user is found by their identity, so a person whose provider now sends a different identity is given a second, empty
+user with the same email address. The users grid marks users sharing an address, and an administrator with `users:manage`
+links them with *Link sign-in identity* (`IUserManagementService.LinkIdentityAsync`): the duplicate is removed and its
+identity moves onto the user who keeps the teams. A host whose provider verifies email can opt in to linking at sign-in by
+overriding `ShouldLinkToExistingUserByEmail`. A custom `IUserRepository` or `IUserService` needs `SetIdentityAsync` and
+`SetUserIdentityAsync` to support it. See
+[One person who signs in through two identities](docs/articles/user-management.md#one-person-who-signs-in-through-two-identities).
+
 ## Extending the member grid
 
 A host that adds a field to its member type can surface it on the member row itself rather than in a second

@@ -128,6 +128,18 @@ public interface IUserRepository<TUserEntity> : IRepository
             "changing a user's email address.");
 
     /// <summary>
+    /// Sets <see cref="IUser.Identity"/> on the user document, so the person is found by the identity of a new identity provider.
+    /// </summary>
+    /// <remarks>
+    /// Declared with a default implementation so existing custom repositories keep compiling. The default throws rather than
+    /// no-opping, as <see cref="SetEMailAsync"/> does. Identity is unique, so the caller removes any other user holding it first.
+    /// </remarks>
+    Task SetIdentityAsync(string userKey, string identity)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetIdentityAsync)}. Implement it to support " +
+            "linking a new sign-in identity to an existing user.");
+
+    /// <summary>
     /// Deletes the user document.
     /// </summary>
     /// <remarks>

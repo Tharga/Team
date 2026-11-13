@@ -534,6 +534,48 @@ is overwritten by the next trusted sign-in. Leave `ShouldRefreshProfile` alone a
 
 Each refresh is audited under feature `auth` as `user-profile-refreshed` — see [Audit](#audit).
 
+## One person who signs in through two identities
+
+A user is found by their **identity**, the claim the sign-in sends. When a host moves to another identity provider, or
+the provider sends a different value for the same person, that person is not found: they are given a **second user** with
+the same email address and no teams, while the first keeps the teams. The two are not linked by anything.
+
+- **They are marked.** In the users grid a user whose address another user also holds (compared trimmed and ignoring
+  case) carries a *Same email as N other* badge.
+- **An administrator links them.** *Link sign-in identity* in the row menu of the user who keeps the teams, or in code:
+
+  ```csharp
+  var result = await userManagementService.LinkIdentityAsync(keepUserKey, duplicateUserKey);
+  ```
+
+  The duplicate is removed and its sign-in identity moves onto the kept user, so the kept user keeps their key and
+  everything held under it (memberships, API keys, history) without anything being moved. It needs `users:manage` and is
+  audited under feature `user` as `link-identity`, with both users and both identities.
+- **A duplicate that belongs to a team is refused**, and the dialog does not offer it, so nothing is lost: remove its
+  memberships first. Its personal system API keys are removed as they are when a user is deleted.
+- **Not atomic.** The duplicate goes first, because an identity belongs to one user only. If the second step fails the
+  duplicate is gone, it was empty, and the person's next sign-in creates it again and the link can be repeated.
+
+A host with its **own** `IUserService` implements `SetUserIdentityAsync(userKey, identity)`, and a custom `IUserRepository`
+`SetIdentityAsync`; until then the call throws `NotSupportedException`. A service built on `UserServiceRepositoryBase` has both.
+
+### Linking at sign-in, when the host chooses
+
+Override `ShouldLinkToExistingUserByEmail` on your user service to have a sign-in that no user holds taken over by the one
+existing user with the same email address, instead of being given a new user. Off by default.
+
+```csharp
+protected override bool ShouldLinkToExistingUserByEmail(ClaimsPrincipal claimsPrincipal)
+    => claimsPrincipal.FindFirst("email_verified")?.Value == "true";
+```
+
+**Return `true` only when your provider verifies the address it sends.** Linking on an address nobody checked lets whoever
+can register it at the provider sign in as its owner here, with their teams. Only an address held by exactly one user links;
+none, or two or more, leaves the sign-in to create a user as before. From then on the user is found by the new identity,
+so the old one no longer signs in as them. A failure to link is logged and the sign-in carries on as it always did.
+
+To avoid the duplicate in the first place, see [Which claim identifies a user](implementation-guide.md#which-claim-identifies-a-user).
+
 ## Verifying users
 
 - **Per user** — the Verify action on a row checks the directory and shows a badge:

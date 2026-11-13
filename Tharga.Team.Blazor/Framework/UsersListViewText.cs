@@ -47,6 +47,23 @@ public static class UsersListViewText
     public static readonly TextKey NameDiffersPlaceholderTooltip = new("team.usersList.nameDiffersPlaceholderTooltip",
         "The directory has no real name for this user.");
 
+    /// <summary>Badge on a user whose address another user also holds. <c>{0}</c> is how many others.</summary>
+    public static readonly TextKey BadgeSameEmail = new("team.usersList.badgeSameEmail", "Same email as {0} other");
+
+    /// <summary>Tooltip on <see cref="BadgeSameEmail"/>.</summary>
+    public static readonly TextKey SameEmailTooltip = new("team.usersList.sameEmailTooltip",
+        "Another user holds this address. It is often one person who signs in through two identities; link them to keep one user.");
+
+    public static readonly TextKey ActionLinkIdentity = new("team.usersList.actionLinkIdentity", "Link sign-in identity");
+
+    /// <summary>Title of the link dialog. <c>{0}</c> is the user who keeps their teams.</summary>
+    public static readonly TextKey LinkIdentityTitle = new("team.usersList.linkIdentityTitle", "Link sign-in identity — {0}");
+
+    public static readonly TextKey IdentityLinkedTitle = new("team.usersList.identityLinkedTitle", "Identity linked");
+
+    /// <summary>Notification text after a link. <c>{0}</c> is the user who kept their teams.</summary>
+    public static readonly TextKey IdentityLinkedDetail = new("team.usersList.identityLinkedDetail", "{0} now signs in with the linked identity, and the duplicate is removed.");
+
     public static readonly TextKey NameTakenFromDirectory = new("team.usersList.nameTakenFromDirectory", "Name taken from the directory");
     public static readonly TextKey NameWrittenToDirectory = new("team.usersList.nameWrittenToDirectory", "Name written to the directory");
 
@@ -187,6 +204,6 @@ public static class UsersListViewText
         CannotDeleteSelfTitle, CannotDeleteSelfDetail, DeleteUserTitle, DeletedLocallyTitle,
         DirectoryDeleteIncomplete, UserDeleted, DeleteFailed, RemovedFromOneTeam, RemovedFromManyTeams,
         RemovedFromOneTeamAndDirectory, RemovedFromManyTeamsAndDirectory, PagingSummary, BadgeNameDiffers, NameDiffersTooltip, NameDiffersPlaceholderTooltip,
-        NameTakenFromDirectory, NameWrittenToDirectory
+        NameTakenFromDirectory, NameWrittenToDirectory, BadgeSameEmail, SameEmailTooltip, ActionLinkIdentity, LinkIdentityTitle, IdentityLinkedTitle, IdentityLinkedDetail
     ];
 }

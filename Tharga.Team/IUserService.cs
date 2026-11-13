@@ -154,6 +154,17 @@ public interface IUserService
             $"declare {nameof(IUser.DisabledAt)}/{nameof(IUser.DisabledBy)} on your user entity, to " +
             $"support disabling users.");
 
+    /// <summary>
+    /// Changes the sign-in identity the user is found by, so a person who now signs in through another identity provider keeps
+    /// their record, their key and everything held under it.
+    /// </summary>
+    /// <remarks>The identity must not be held by another user; the caller removes that user first.</remarks>
+    [RequireScope(SystemUserScopes.Manage)]
+    Task SetUserIdentityAsync(string userKey, string identity)
+        => throw new NotSupportedException(
+            $"'{GetType().Name}' does not implement {nameof(SetUserIdentityAsync)}. Implement it to support " +
+            $"linking a new sign-in identity to an existing user (the '{SystemUserScopes.Manage}' system scope).");
+
     [RequireScope(SystemUserScopes.Manage)]
     Task DeleteUserAsync(string userKey)
         => throw new NotSupportedException(

@@ -110,6 +110,9 @@ public static class AuditMetadataKeys
     /// <summary>User the operation acted on (cross-team user administration).</summary>
     public const string UserKey = "user.key";
 
+    /// <summary>The user record removed when its sign-in identity was moved onto another user.</summary>
+    public const string LinkedUserKey = "user.linked.key";
+
     /// <summary>Directory verification outcome (Found / NotFound / Disabled / NotLinked).</summary>
     public const string DirectoryStatus = "directory.status";
 

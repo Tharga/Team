@@ -66,6 +66,7 @@ public class TextCoverageTests
         "Features/Team/TeamInviteView.razor",
         "Features/Team/InviteUserDialog.razor",
         "Features/User/DeleteUserDialog.razor",
+        "Features/User/LinkIdentityDialog.razor",
         "Features/User/TeamsListView.razor",
         "Features/User/UsersListView.razor",
         "Features/Team/TeamComponent.razor",

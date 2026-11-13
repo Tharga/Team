@@ -15,4 +15,7 @@ public static class LastSeenText
 
     /// <summary>True when the value should render as <see cref="Never"/> rather than as a date.</summary>
     public static bool IsNever(DateTime? value) => !value.HasValue;
+
+    /// <summary>A timestamp as text, to the minute, for a place that takes a string rather than a date component.</summary>
+    public static string Format(DateTime value) => value.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
 }

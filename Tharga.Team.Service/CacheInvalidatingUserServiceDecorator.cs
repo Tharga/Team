@@ -103,6 +103,13 @@ public sealed class CacheInvalidatingUserServiceDecorator : IUserService
         await InvalidateAsync(userKey);
     }
 
+    /// <remarks>The user was cached under the identity it signed in by, which no longer finds it, so the entry is dropped by key.</remarks>
+    public async Task SetUserIdentityAsync(string userKey, string identity)
+    {
+        await _inner.SetUserIdentityAsync(userKey, identity);
+        await InvalidateAsync(userKey);
+    }
+
     public async Task DeleteUserAsync(string userKey)
     {
         await _inner.DeleteUserAsync(userKey);

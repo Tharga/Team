@@ -90,7 +90,18 @@ else if (_loaded)
                     </RadzenStack>
                 </Template>
             </RadzenDataGridColumn>
-            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnEmail]" Property="EMail" />
+            <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnEmail]" Property="EMail">
+                <Template>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap" Gap="0.5rem">
+                        <span>@context.EMail</span>
+                        @if (context.SameEmailCount > 0)
+                        {
+                            <RadzenBadge BadgeStyle="BadgeStyle.Warning" Variant="Variant.Flat" Text="@_text.Format(UsersListViewText.BadgeSameEmail, context.SameEmailCount)"
+                                         title="@_text[UsersListViewText.SameEmailTooltip]" data-same-email="@context.Key" />
+                        }
+                    </RadzenStack>
+                </Template>
+            </RadzenDataGridColumn>
             <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnTeams]" Property="@nameof(UserViewModel.TeamCount)" Filterable="false" />
             <RadzenDataGridColumn Title="@_text[UsersListViewText.ColumnLastSeen]" Property="@nameof(UserViewModel.LastSeen)" Filterable="false">
                 <Template>
@@ -178,6 +189,10 @@ else if (_loaded)
                                 }
                                 <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionRename]" Value="@RenameAction" Icon="edit" />
                                 <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionChangeEmail]" Value="@ChangeEmailAction" Icon="alternate_email" />
+                                @if (context.SameEmailCount > 0)
+                                {
+                                    <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionLinkIdentity]" Value="@LinkIdentityAction" Icon="link" />
+                                }
                                 @if (_showAdminUpload)
                                 {
                                     <RadzenSplitButtonItem Text="@_text[UsersListViewText.ActionSetIcon]" Value="@SetIconAction" Icon="image" />
@@ -318,6 +333,7 @@ else
     private const string SetIconAction = "set-icon";
     private const string RenameAction = "rename";
     private const string ChangeEmailAction = "change-email";
+    private const string LinkIdentityAction = "link-identity";
     private const string AuditAction = "audit";
     private const string DisableAction = "disable";
     private const string EnableAction = "enable";
@@ -566,12 +582,16 @@ else
         // Carried across the rebuild, so a rename or delete does not wipe the results of a Verify all.
         var verified = _allUsers.Where(x => x.DirectoryStatus != null).ToDictionary(x => x.Key);
 
+        var addressCounts = _users.Where(x => HasAddress(x.EMail)).GroupBy(x => x.EMail.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
         _allUsers = _users.Select(u => new UserViewModel
         {
             Key = u.Key,
             Name = u.Name ?? TeamServiceBase.ResolveDisplayName(u),
             StoredName = u.Name,
             EMail = u.EMail,
+            SameEmailCount = HasAddress(u.EMail) ? addressCounts[u.EMail.Trim()] - 1 : 0,
             Identity = u.Identity,
             DirectoryId = u.DirectoryId,
             Icon = u.Icon,
@@ -622,6 +642,9 @@ else
                 break;
             case ChangeEmailAction:
                 await ChangeEmailAsync(user);
+                break;
+            case LinkIdentityAction:
+                await LinkIdentityAsync(user);
                 break;
             case AuditAction:
                 await OpenAuditLogAsync(user);
@@ -690,6 +713,33 @@ else
 
         if (saved is true) await LoadDataAsync();
     }
+
+    /// <summary>Moves the sign-in identity of a duplicate onto this user, who keeps their teams; the duplicates are the other users with the same address.</summary>
+    private async Task LinkIdentityAsync(UserViewModel user)
+    {
+        var candidates = _allUsers.Where(x => x.Key != user.Key && SameEmail(x.EMail, user.EMail)).ToArray();
+
+        var linked = await DialogService.OpenAsync<LinkIdentityDialog>(_text.Format(UsersListViewText.LinkIdentityTitle, user.Name ?? user.EMail),
+            new Dictionary<string, object>
+            {
+                { nameof(LinkIdentityDialog.KeepUserKey), user.Key },
+                { nameof(LinkIdentityDialog.KeepName), user.Name ?? user.EMail },
+                { nameof(LinkIdentityDialog.Candidates), candidates }
+            },
+            new DialogOptions { Width = "560px" });
+
+        if (linked is not true) return;
+
+        NotificationService.Notify(NotificationSeverity.Success, _text[UsersListViewText.IdentityLinkedTitle],
+            _text.Format(UsersListViewText.IdentityLinkedDetail, user.Name ?? user.EMail));
+        await LoadDataAsync();
+    }
+
+    /// <summary>An address worth comparing: not blank, and not the placeholder a sign-in with no email is stored under.</summary>
+    private static bool HasAddress(string address) => !string.IsNullOrWhiteSpace(address) && address.Contains('@');
+
+    private static bool SameEmail(string a, string b)
+        => !string.IsNullOrWhiteSpace(a) && string.Equals(a.Trim(), b?.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private void ToggleDetails(UserViewModel user)
     {

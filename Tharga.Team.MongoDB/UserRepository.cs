@@ -105,6 +105,16 @@ internal class UserRepository<TUserEntity> : IUserRepository<TUserEntity>
         return _collection.UpdateOneAsync(filter, update);
     }
 
+    public virtual Task SetIdentityAsync(string userKey, string identity)
+    {
+        var filter = new FilterDefinitionBuilder<TUserEntity>()
+            .Eq(x => x.Key, userKey);
+        var update = new UpdateDefinitionBuilder<TUserEntity>()
+            .Set(x => x.Identity, identity);
+
+        return _collection.UpdateOneAsync(filter, update);
+    }
+
     public virtual Task SetEMailAsync(string userKey, string email)
     {
         var filter = new FilterDefinitionBuilder<TUserEntity>()

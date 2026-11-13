@@ -43,6 +43,12 @@ public sealed class AuthorizationUserManagementServiceDecorator : IUserManagemen
         return await _inner.GetOwnedTeamsAsync(userKey, cancellationToken);
     }
 
+    public async Task<UserLinkResult> LinkIdentityAsync(string userKey, string duplicateUserKey, CancellationToken cancellationToken = default)
+    {
+        await RequireUsersManageAsync(nameof(LinkIdentityAsync));
+        return await _inner.LinkIdentityAsync(userKey, duplicateUserKey, cancellationToken);
+    }
+
     public async Task<DirectoryVerificationResult> VerifyUserAsync(string userKey, CancellationToken cancellationToken = default)
     {
         await RequireUsersManageAsync(nameof(VerifyUserAsync));
