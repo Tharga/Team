@@ -163,13 +163,13 @@ public class SupportCaseOptions
 
     /// <summary>
     /// How long a support person who chose <see cref="SupportStaffStatus.Online"/> counts as online without doing
-    /// anything in support. Default 8 hours.
+    /// anything in support. Default 20 minutes.
     /// </summary>
     /// <remarks>
     /// Online is meant to hold while somebody reads rather than clicks, but a choice nobody switches off would say support
     /// is there long after the person left. Past it they count as away until they act again; what they chose stays Online.
     /// </remarks>
-    public TimeSpan StaffOnlineLapseAfter { get; set; } = TimeSpan.FromHours(8);
+    public TimeSpan StaffOnlineLapseAfter { get; set; } = TimeSpan.FromMinutes(20);
 
     /// <summary>The name the mailbox configured on <see cref="Email"/> is stored under on the cases that come in through it.</summary>
     public const string PrimaryMailboxName = "primary";

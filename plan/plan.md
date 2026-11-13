@@ -8,7 +8,7 @@
 ## Decisions
 - `Automatic = 0`, `Away = 1`, `Hidden = 2`, `Online = 3`: the old Online was 0, so a remembered choice (stored as a number) and a status in memory come back as Automatic with no migration. Values are explicit so the order can never change them.
 - A new person starts on Automatic.
-- Online lapses: after `SupportCaseOptions.StaffOnlineLapseAfter` (8 hours) without acting it counts as away, as Automatic does after ten minutes, so support is not shown as there long after the person left. Acting brings it back.
+- Online lapses: after `SupportCaseOptions.StaffOnlineLapseAfter` (20 minutes by default, configurable) without acting it counts as away, as Automatic does after ten minutes, so support is not shown as there long after the person left. Acting brings it back.
 
 ## Release notes
 `SupportStaffStatus.Automatic` added; `Online` now means online regardless of activity (until it lapses). Existing remembered "Online" choices become Automatic.

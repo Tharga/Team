@@ -1755,7 +1755,7 @@ customer the assistant could not answer, beside **Talk to a person**, rather tha
   writing an answer, or using that page, which reports at most once a minute. After `o.StaffIdleAfter` with nothing done,
   ten minutes by default, they count as away until they act again. **Online** counts as online for as long as it stands,
   active or not, for somebody who is at the desk reading rather than clicking; so that it does not say support is there
-  long after the person left, it too lapses to away after `o.StaffOnlineLapseAfter` without activity, eight hours by
+  long after the person left, it too lapses to away after `o.StaffOnlineLapseAfter` without activity, twenty minutes by
   default. Hidden answers as usual and is not counted at all. Support is `Away` while somebody chose anything but Hidden
   and nobody counts as online, and `Unknown` otherwise: while nobody has opened the desk since the application started,
   and while everybody there chose Hidden.

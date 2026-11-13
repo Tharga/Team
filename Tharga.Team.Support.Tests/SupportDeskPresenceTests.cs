@@ -20,7 +20,7 @@ public class SupportDeskPresenceTests
     private const string Ann = "ann-subject";
     private const string Ben = "ben-subject";
     private static readonly TimeSpan IdleAfter = TimeSpan.FromMinutes(10);
-    private static readonly TimeSpan LapseAfter = TimeSpan.FromHours(8);
+    private static readonly TimeSpan LapseAfter = TimeSpan.FromMinutes(20);
 
     [Fact]
     public void WithNobodyOnTheDesk_ItIsUnknown()
@@ -137,7 +137,7 @@ public class SupportDeskPresenceTests
         var changes = 0;
         desk.Changed += (_, _) => changes++;
 
-        time.Advance(IdleAfter * 3);
+        time.Advance(IdleAfter * 1.5);
 
         Assert.Equal(SupportPresenceState.Online, desk.State);
         Assert.Equal(0, changes);
@@ -167,6 +167,23 @@ public class SupportDeskPresenceTests
         Assert.Equal(2, changes);
     }
 
+    /// <summary>Two operators, neither active for the lapse time: support is no longer shown as online, until one acts.</summary>
+    [Fact]
+    public void TwoOperators_NeitherActiveForTheLapseTime_SupportIsNoLongerOnline()
+    {
+        var (desk, time) = Build();
+        desk.Set(Ann, SupportStaffStatus.Online);
+        desk.Set(Ben, SupportStaffStatus.Online);
+
+        time.Advance(LapseAfter - TimeSpan.FromSeconds(1));
+        desk.Acted(Ben);
+        time.Advance(LapseAfter - TimeSpan.FromSeconds(1));
+        Assert.Equal(SupportPresenceState.Online, desk.State);
+
+        time.Advance(TimeSpan.FromSeconds(1));
+        Assert.Equal(SupportPresenceState.Away, desk.State);
+    }
+
     [Fact]
     public void Online_BesideAnIdleAutomatic_KeepsSupportOnline()
     {
@@ -174,7 +191,7 @@ public class SupportDeskPresenceTests
         desk.Set(Ann, SupportStaffStatus.Automatic);
         desk.Set(Ben, SupportStaffStatus.Online);
 
-        time.Advance(IdleAfter * 2);
+        time.Advance(IdleAfter * 1.5);
 
         Assert.Equal(SupportPresenceState.Online, desk.State);
     }
