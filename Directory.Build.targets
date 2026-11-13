@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Tharga.Team supports .NET 10 until spring 2027. A net10.0 build that references an 11.x Microsoft.* or System.* package
+    pulls the .NET 11 line into every .NET 10 host (restore fails with NU1605 for a host that pins 10.x, and a package with no
+    net10.0 build is replaced by its netstandard2.0 one). A dependency update must not raise one past 10.x; put an 11.x reference
+    in a net11.0 group if that target is ever added. Direct references only: what a package brings in is for restore to resolve.
+  -->
+  <Target Name="GuardNet10DependencyLine" BeforeTargets="Restore;CollectPackageReferences" Condition="'$(TargetFramework)' == 'net10.0'">
+    <ItemGroup>
+      <_Net11Reference Include="@(PackageReference)"
+                       Condition="($([System.String]::new('%(Identity)').StartsWith('Microsoft.')) Or $([System.String]::new('%(Identity)').StartsWith('System.'))) And $([System.String]::new('%(Version)').StartsWith('11.'))" />
+    </ItemGroup>
+    <Error Condition="'@(_Net11Reference)' != ''"
+           Text="'$(MSBuildProjectName)' targets net10.0 but references the .NET 11 package line: @(_Net11Reference->'%(Identity) %(Version)', ', '). Keep the net10.0 dependency group on 10.x until spring 2027, or put it in a net11.0 group." />
+  </Target>
+</Project>

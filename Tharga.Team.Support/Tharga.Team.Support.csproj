@@ -38,8 +38,8 @@
       installs. Mail comes from Tharga.Team.Email, which carries MailKit. Slack needs no third-party package
       of its own — it is an HTTPS endpoint that takes JSON, so IHttpClientFactory covers it.
     -->
-    <PackageReference Include="Microsoft.Extensions.AI" Version="11.0.0" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="11.0.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.11.0" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <!-- The inbound Slack endpoint is an ASP.NET route. Private, so it does not flow to consumers that
          only reference this package for the notification sink. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" PrivateAssets="all" />
