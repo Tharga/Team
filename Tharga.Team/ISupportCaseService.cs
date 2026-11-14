@@ -240,6 +240,13 @@ public interface ISupportCaseService
     Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetCaseByIdAsync)}.");
 
+    /// <summary>Raises a case as <see cref="RaiseCaseAsync(string, string, string, SupportAssistance, CancellationToken)"/> does, with what else a host can ask for: bound to mail from the start.</summary>
+    /// <remarks>The same authorization as raising a case. The default throws, so a host's own implementation keeps compiling.</remarks>
+    /// <exception cref="ArgumentException">The mail address is not a single plain address.</exception>
+    /// <exception cref="InvalidOperationException">A mail address is given and no mail is set up for support.</exception>
+    Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportRaiseOptions options, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(RaiseCaseAsync)} with options.");
+
     /// <summary>
     /// Starts a case by sending a mail to somebody who has not written first, and returns it.
     /// </summary>

@@ -60,6 +60,29 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>Audited as a raise, and with the address and mailbox it was bound to mail with when it was: who raised it, to which address answers go.</remarks>
+    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportRaiseOptions options, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var raised = await inner.RaiseCaseAsync(teamKey, subject, body, options, cancellationToken);
+            var bound = raised.Bindings?.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email);
+
+            Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject), (AuditMetadataKeys.TeamName, raised.TeamName),
+                    (SupportAuditMetadataKeys.WithAssistant, Flag(raised.AssistantState == SupportAssistantState.Active)),
+                    (SupportAuditMetadataKeys.MailAddress, bound?.Address), (SupportAuditMetadataKeys.Mailbox, bound?.Mailbox)));
+
+            return raised;
+        }
+        catch (Exception ex)
+        {
+            Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message, Meta((SupportAuditMetadataKeys.CaseSubject, subject)));
+            throw;
+        }
+    }
+
     /// <remarks>
     /// Audited only when it answered. A call that found no assistant on the case did nothing, and a row per
     /// non-event is how an audit log stops being read.
@@ -212,12 +235,23 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public async Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
     {
         var sw = Stopwatch.StartNew();
+
+        // Read before the answer, because answering is what binds the case: afterwards the offer is gone and so is the address that was offered.
+        var switching = choice?.ByMail == true ? (await inner.GetAnswerRouteAsync(teamKey, caseId, cancellationToken))?.MailOffer : null;
         try
         {
             await inner.AnswerCaseAsync(teamKey, caseId, body, bodyHtml, attachments, choice, cancellationToken);
 
             Log("answer", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
                 metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments))));
+
+            // The switch is its own entry: which case went to mail, to which address and from which mailbox, who did it being the entry's own caller.
+            if (switching != null)
+            {
+                var mailbox = (await inner.GetAnswerRouteAsync(teamKey, caseId, cancellationToken))?.Mailbox;
+                Log("switch-to-mail", nameof(AnswerCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                    metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.MailAddress, switching.To), (SupportAuditMetadataKeys.Mailbox, mailbox)));
+            }
         }
         catch (Exception ex)
         {

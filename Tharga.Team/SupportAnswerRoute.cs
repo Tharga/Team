@@ -29,6 +29,12 @@ public sealed record SupportAnswerRoute
 
     /// <summary>The address it goes to instead, when <see cref="Effect"/> is <see cref="MailPolicyEffect.Redirect"/>.</summary>
     public string RedirectedTo { get; init; }
+
+    /// <summary>
+    /// For a case with no mail thread whose author the host can write to: the route the answer would take if it were mailed, so a component can offer
+    /// <i>Answer by mail</i> and show where it would go from. Null when there is nothing to offer, which is every case that already has a mail thread.
+    /// </summary>
+    public SupportAnswerRoute MailOffer { get; init; }
 }
 
 /// <summary>What an environment's outbound mail policy does with a mail to one address.</summary>

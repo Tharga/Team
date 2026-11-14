@@ -268,7 +268,7 @@ internal sealed class ExternalSupportCaseService(
     }
 
     /// <summary>One bare address: no display name, no list, no line breaks to smuggle a header in.</summary>
-    private static bool IsPlainAddress(string email)
+    internal static bool IsPlainAddress(string email)
         => email.All(c => !char.IsWhiteSpace(c) && !char.IsControl(c) && c is not (',' or ';' or '<' or '>'))
            && MailAddress.TryCreate(email, out var parsed)
            && string.Equals(parsed.Address, email, StringComparison.Ordinal);
