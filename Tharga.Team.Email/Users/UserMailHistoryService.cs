@@ -68,7 +68,7 @@ internal sealed class UserMailHistoryService(
         }
 
         var page = await queue.ListAsync(filter, cursor, Math.Clamp(pageSize, 1, MaxPageSize), cancellationToken) ?? new UserMailDeliveryPage();
-        var names = await NamesAsync([.. page.Items.Select(x => x.RecipientUserKey).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)], cancellationToken);
+        var names = await NamesAsync([.. page.Items.SelectMany(x => new[] { x.RecipientUserKey, x.SentByUserKey }).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal)], cancellationToken);
 
         var result = new UserMailHistoryPage
         {
@@ -76,7 +76,8 @@ internal sealed class UserMailHistoryService(
             {
                 RecipientUserKey = x.RecipientUserKey,
                 RecipientName = x.RecipientUserKey != null ? names.GetValueOrDefault(x.RecipientUserKey) : x.RecipientName,
-                TeamKey = x.TeamKey
+                TeamKey = x.TeamKey,
+                SentByName = x.SentByUserKey != null ? names.GetValueOrDefault(x.SentByUserKey) : null
             })],
             NextCursor = page.NextCursor
         };
@@ -84,6 +85,57 @@ internal sealed class UserMailHistoryService(
         AuditLog(result.Items.Length, sw.ElapsedMilliseconds, true, null);
 
         return result;
+    }
+
+    /// <remarks>
+    /// Read by the user who sent the mail, or by staff; anybody else is refused, and so is a mail that does not exist for a caller who is not staff,
+    /// so the refusal says nothing about whether an id is real. Staff reading a mail they did not send is audited, with its id and never an address.
+    /// </remarks>
+    public async Task<UserMailHistoryItem> GetMailAsync(string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        var sw = Stopwatch.StartNew();
+        var delivery = await queue.GetAsync(id.Trim(), cancellationToken);
+        var current = await userService.GetCurrentUserAsync();
+        var sender = delivery?.SentByUserKey;
+        var own = sender != null && current?.Key != null && string.Equals(current.Key, sender, StringComparison.Ordinal);
+
+        if (own) return await ToMailAsync(delivery, cancellationToken);
+
+        if (!await authorizer.HasSystemScopeAsync(SystemUserScopes.Manage))
+        {
+            var refusal = $"{nameof(GetMailAsync)} requires being the user who sent the mail, or the '{SystemUserScopes.Manage}' system scope.";
+            AuditMail(id.Trim(), sw.ElapsedMilliseconds, false, refusal);
+            throw new UnauthorizedAccessException(refusal);
+        }
+
+        var item = delivery == null ? null : await ToMailAsync(delivery, cancellationToken);
+        AuditMail(id.Trim(), sw.ElapsedMilliseconds, true, null);
+
+        return item;
+    }
+
+    private async Task<UserMailHistoryItem> ToMailAsync(UserMailDelivery delivery, CancellationToken cancellationToken)
+    {
+        var keys = new[] { delivery.RecipientUserKey, delivery.SentByUserKey }.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToArray();
+        var names = await NamesAsync(keys, cancellationToken);
+
+        return ToItem(delivery) with
+        {
+            RecipientUserKey = delivery.RecipientUserKey,
+            RecipientName = delivery.RecipientUserKey != null ? names.GetValueOrDefault(delivery.RecipientUserKey) : delivery.RecipientName,
+            TeamKey = delivery.TeamKey,
+            SentByName = delivery.SentByUserKey != null ? names.GetValueOrDefault(delivery.SentByUserKey) : null
+        };
+    }
+
+    private void AuditMail(string id, long durationMs, bool success, string error)
+    {
+        if (auditLogger == null || auditEntryFactory == null) return;
+
+        auditLogger.Log(auditEntryFactory.Create(AuditEventType.ServiceCall, UserMailAudit.Feature, UserMailAudit.LogAction, nameof(IUserMailHistoryService.GetMailAsync), durationMs, success, error,
+            metadata: new Dictionary<string, string> { [UserMailAudit.MailId] = id }));
     }
 
     private async Task<Dictionary<string, string>> NamesAsync(string[] userKeys, CancellationToken cancellationToken)
@@ -119,7 +171,11 @@ internal sealed class UserMailHistoryService(
         Reason = x.Reason,
         Address = x.RecipientAddress,
         QueuedAt = x.QueuedAt,
-        ChangedAt = x.ChangedAt
+        ChangedAt = x.ChangedAt,
+        SentByUserKey = x.SentByUserKey,
+        FromAddress = x.FromAddress,
+        ReplyTo = x.ReplyTo,
+        CaseId = x.CaseId
     };
 
     private void AuditLog(int count, long durationMs, bool success, string error)

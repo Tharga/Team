@@ -35,6 +35,14 @@ public interface IUserMailHistoryService
     /// <exception cref="UnauthorizedAccessException">The caller does not hold <c>users:manage</c>.</exception>
     Task<UserMailHistoryPage> ListAllAsync(UserMailFilter filter = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListAllAsync)}.");
+
+    /// <summary>One mail by its id, as the log lists it — subject, status, reason, From, Reply-To and who sent it — without its body or files; null when there is no such mail.</summary>
+    /// <remarks>
+    /// For a host that shows the sender what became of their mail without granting the whole log: the caller must be the user who sent it, or hold <see cref="SystemUserScopes.Manage"/>. Anybody else is refused, whether or not the id exists, so the refusal tells nothing about it. Staff reading a mail they did not send is audited.
+    /// </remarks>
+    /// <exception cref="UnauthorizedAccessException">The caller did not send the mail and does not hold <c>users:manage</c>.</exception>
+    Task<UserMailHistoryItem> GetMailAsync(string id, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetMailAsync)}.");
 }
 
 /// <summary>One mail in a user's history.</summary>
@@ -75,6 +83,21 @@ public sealed record UserMailHistoryItem
 
     /// <summary>The key of the team it is about; null when it records none. Set in the global log only.</summary>
     public string TeamKey { get; init; }
+
+    /// <summary>The key of the user who sent it; null when the application did.</summary>
+    public string SentByUserKey { get; init; }
+
+    /// <summary>The name of the user who sent it, when it is known. Set in the global log and in a single mail read by its id.</summary>
+    public string SentByName { get; init; }
+
+    /// <summary>The address it was sent from; null until it is sent.</summary>
+    public string FromAddress { get; init; }
+
+    /// <summary>The address replies were asked to go to; null when there was none, or until it is sent.</summary>
+    public string ReplyTo { get; init; }
+
+    /// <summary>The support case it is part of, or null.</summary>
+    public string CaseId { get; init; }
 }
 
 /// <summary>One page of a user's mail history, newest first.</summary>

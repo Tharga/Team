@@ -87,7 +87,22 @@ else
                                 <Template Context="item"><span data-category="@item.Category">@CategoryName(item.Category)</span></Template>
                             </RadzenDataGridColumn>
                             <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnSubject]">
-                                <Template Context="item"><span data-subject>@item.Subject</span></Template>
+                                <Template Context="item">
+                                    <span data-subject>@item.Subject</span>
+                                    @if (!string.IsNullOrWhiteSpace(item.CaseId))
+                                    {
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-case="@item.CaseId">@_text.Format(UserMailLogViewText.CaseLabel, item.CaseId)</RadzenText>
+                                    }
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnFrom]">
+                                <Template Context="item"><span data-from>@item.FromAddress</span></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnReplyTo]">
+                                <Template Context="item"><span data-reply-to>@item.ReplyTo</span></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnSentBy]">
+                                <Template Context="item"><span data-sent-by="@item.SentByUserKey">@(item.SentByName ?? item.SentByUserKey)</span></Template>
                             </RadzenDataGridColumn>
                             <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnResult]">
                                 <Template Context="item">
@@ -162,7 +177,7 @@ else
         _categories = Preferences.GetCategories() ?? [];
         _text = await TextProvider.ResolveAsync([.. UserMailLogViewText.All, .. UserMailHistoryViewText.All, .. _categories.Select(x => new TextKey(x.NameKey, x.Name))]);
 
-        UserMailKind[] kinds = [UserMailKind.Mail, UserMailKind.Message, UserMailKind.Notice, UserMailKind.Invitation, UserMailKind.Contact];
+        UserMailKind[] kinds = [UserMailKind.Mail, UserMailKind.Message, UserMailKind.Notice, UserMailKind.Invitation, UserMailKind.Contact, UserMailKind.SupportAnswer, UserMailKind.SupportReceipt];
         UserMailStatus[] statuses = [UserMailStatus.Queued, UserMailStatus.Sent, UserMailStatus.Skipped, UserMailStatus.Failed, UserMailStatus.Bounced];
         _kindChoices = [.. kinds.Select(x => new Choice<UserMailKind>(x, _text[UserMailHistoryViewText.For(x)]))];
         _statusChoices = [.. statuses.Select(x => new Choice<UserMailStatus>(x, _text[UserMailHistoryViewText.For(x)]))];

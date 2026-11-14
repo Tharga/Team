@@ -21,6 +21,10 @@ public interface IMailClient
     /// <summary>Whether enough is configured to read.</summary>
     bool CanRead { get; }
 
+    /// <summary>The address mail is sent from when a mail names none, so the mail log can say what it was sent from; null when the client does not know it.</summary>
+    /// <remarks>A default member, so a client written earlier keeps compiling; the log then shows no From for the mail it sent.</remarks>
+    string DefaultFrom => null;
+
     /// <summary>Sends one mail.</summary>
     /// <returns>The outcome, carrying the <c>Message-ID</c> that identifies the thread.</returns>
     Task<MailSendResult> SendAsync(OutboundMail mail, CancellationToken cancellationToken = default);

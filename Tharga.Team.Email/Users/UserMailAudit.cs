@@ -27,6 +27,9 @@ public static class UserMailAudit
     /// <summary>Metadata holding whether the user now receives the category, <c>True</c> or <c>False</c>.</summary>
     public const string Receives = "usermail.receives";
 
+    /// <summary>Metadata naming the mail a single read was about.</summary>
+    public const string MailId = "usermail.mail";
+
     /// <summary>Metadata holding how many mails a page of history held.</summary>
     public const string Count = "usermail.count";
 }

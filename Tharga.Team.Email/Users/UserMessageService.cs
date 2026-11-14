@@ -278,6 +278,8 @@ internal sealed class UserMessageService(
         var reached = await ReachAsync(message.Recipients, cancellationToken);
         if (reached.Length == 0) throw new ArgumentException("The selection reaches nobody: no active member of the chosen teams matches it, and no user added is an active member of any team.", nameof(message));
 
+        var sender = await SenderAsync();
+
         var queued = await queue.QueueBatchAsync(new UserMailBatch
         {
             RecipientUserKeys = [.. reached.Select(x => x.UserKey)],
@@ -286,10 +288,9 @@ internal sealed class UserMessageService(
             BodyHtml = message.BodyHtml,
             Body = message.Body,
             Attachments = message.Attachments ?? [],
-            TeamKey = TeamOf(message.Recipients)
+            TeamKey = TeamOf(message.Recipients),
+            SentByUserKey = sender.UserKey
         }, cancellationToken);
-
-        var sender = await SenderAsync();
         var entry = new UserMessageLogEntry
         {
             Id = queued.Id,

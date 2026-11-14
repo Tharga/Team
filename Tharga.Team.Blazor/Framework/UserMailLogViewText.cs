@@ -40,6 +40,18 @@ public static class UserMailLogViewText
     public static readonly TextKey ColumnResult = new("team.userMail.log.column.result", "Result");
     public static readonly TextKey ColumnTeam = new("team.userMail.log.column.team", "Team");
 
+    /// <summary>The column of the address the mail was sent from.</summary>
+    public static readonly TextKey ColumnFrom = new("team.userMail.log.column.from", "From");
+
+    /// <summary>The column of the address replies were asked to go to.</summary>
+    public static readonly TextKey ColumnReplyTo = new("team.userMail.log.column.replyTo", "Reply-To");
+
+    /// <summary>The column of who sent the mail.</summary>
+    public static readonly TextKey ColumnSentBy = new("team.userMail.log.column.sentBy", "Sent by");
+
+    /// <summary>Points back to the support case a mail is part of; <c>{0}</c> is the case's id.</summary>
+    public static readonly TextKey CaseLabel = new("team.userMail.log.case", "Case {0}");
+
     /// <summary>The row action that shows all the mail sent to one user; <c>{0}</c> identifies the user.</summary>
     public static readonly TextKey UserMail = new("team.userMail.log.userMail", "Mail sent to {0}");
 
@@ -51,6 +63,6 @@ public static class UserMailLogViewText
     [
         Title, Explanation, Empty, ShowMore, NotPermitted, Search, Clear, FilterKind, FilterStatus, FilterCategory, FilterFrom,
         FilterTo, FilterRecipient, FilterTeam, ColumnWhen, ColumnRecipient, ColumnKind, ColumnCategory, ColumnSubject,
-        ColumnResult, ColumnTeam, UserMail, UserMailTitle
+        ColumnResult, ColumnTeam, ColumnFrom, ColumnReplyTo, ColumnSentBy, CaseLabel, UserMail, UserMailTitle
     ];
 }

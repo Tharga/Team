@@ -35,7 +35,9 @@ internal sealed class EmailEventHandler(
     IOptions<SupportCaseOptions> caseOptions = null,
     ISupportAttachmentStore attachmentStore = null,
     SupportMailboxes mailboxes = null,
-    IEnumerable<IMailBounceHandler> bounceHandlers = null)
+    IEnumerable<IMailBounceHandler> bounceHandlers = null,
+    IUserMailOutbox mailLog = null,
+    MailOutcomeNotifier outcomes = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
     /// <remarks>One source for every mailbox, so a mail that reached two of them is applied once.</remarks>
@@ -200,7 +202,45 @@ internal sealed class EmailEventHandler(
 
         logger?.LogWarning("The answer {Sequence} on support case {CaseId} bounced and is marked as not delivered.", sequence.Value, supportCase.Id);
 
+        await LogBounceAsync(mail, supportCase, cancellationToken);
+
         return EmailHandlingOutcome.Undelivered(supportCase.Id);
+    }
+
+    /// <summary>
+    /// Keeps the mail log in step with the case: the row of the answer that bounced is marked bounced, and the outcome sinks are told once, when the
+    /// row changed. A bounce read again changes nothing and tells nobody. A log that cannot be updated never undoes what the case now says.
+    /// </summary>
+    private async Task LogBounceAsync(InboundMail mail, SupportCase supportCase, CancellationToken cancellationToken)
+    {
+        if (mailLog == null) return;
+
+        try
+        {
+            var at = timeProvider.GetUtcNow().UtcDateTime;
+            var reason = string.IsNullOrWhiteSpace(mail.BounceReason) ? "The receiving mail server returned the answer as undeliverable." : mail.BounceReason.Trim();
+            var marked = await mailLog.MarkBouncedAsync(mail.BouncedMessageId, reason, at, cancellationToken);
+
+            if (marked?.Outcome != UserMailBounceOutcome.Bounced || outcomes == null) return;
+
+            var row = await mailLog.GetAsync(marked.Id, cancellationToken);
+            await outcomes.NotifyAsync(new MailOutcome
+            {
+                MailId = marked.Id,
+                Outcome = MailOutcomeKind.Bounced,
+                Kind = UserMailKind.SupportAnswer,
+                Subject = row?.Mail.Subject,
+                Reason = reason,
+                SentByUserKey = row?.Mail.SentByUserKey,
+                TeamKey = supportCase.TeamKey,
+                CaseId = supportCase.Id,
+                At = at
+            }, cancellationToken);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger?.LogWarning(e, "The bounce of an answer on support case {CaseId} could not be applied to the mail log.", supportCase.Id);
+        }
     }
 
     /// <summary>Offers the bounce to each registered handler in turn until one recognises the mail it names.</summary>

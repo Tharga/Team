@@ -65,13 +65,16 @@ public static class UserMailRegistration
             sp.GetRequiredService<IOptions<UserMailOptions>>().Value,
             sp.GetRequiredService<UserMailFrequencies>()));
 
+        services.TryAddScoped(sp => new MailOutcomeNotifier(sp.GetServices<IMailOutcomeSink>(), sp.GetService<ILogger<MailOutcomeNotifier>>()));
+
         services.TryAddScoped<IUserMailQueue>(sp => new UserMailQueue(
             sp.GetRequiredService<UserMailCategoryRegistry>(),
             sp.GetRequiredService<IUserMailOutbox>(),
             sp.GetRequiredService<IOptions<UserMailOptions>>(),
             sp.GetRequiredService<TimeProvider>(),
             sp.GetRequiredService<UserMailDispatcher>(),
-            sp.GetService<ILogger<UserMailQueue>>()));
+            sp.GetService<ILogger<UserMailQueue>>(),
+            sp.GetRequiredService<MailOutcomeNotifier>()));
 
         services.TryAddScoped<IUserMailHistoryService>(sp => new UserMailHistoryService(
             sp.GetRequiredService<IUserMailQueue>(),
@@ -93,7 +96,8 @@ public static class UserMailRegistration
             sp.GetRequiredService<TimeProvider>(),
             sp.GetService<ILogger<UserMailDispatcher>>(),
             sp.GetService<MailTemplate>(),
-            sp.GetService<ContactMailSending>()));
+            sp.GetService<ContactMailSending>(),
+            sp.GetRequiredService<MailOutcomeNotifier>()));
 
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, UserMailSender>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailBounceHandler, UserMailBounceHandler>());
@@ -118,7 +122,8 @@ public static class UserMailRegistration
                 sp.GetRequiredService<IOptions<UserMailOptions>>(),
                 sp.GetRequiredService<TimeProvider>(),
                 sp.GetRequiredService<UserMailDispatcher>(),
-                sp.GetService<ILogger<UserMailQueue>>()),
+                sp.GetService<ILogger<UserMailQueue>>(),
+                sp.GetRequiredService<MailOutcomeNotifier>()),
             sp.GetRequiredService<UserMailText>(),
             sp.GetRequiredService<IOptions<UserMailOptions>>()));
     }

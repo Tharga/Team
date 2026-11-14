@@ -29,6 +29,9 @@ public sealed record UserMailBatch
 
     /// <summary>The key of the team every mail of the batch is about, so the mail log can be filtered by organisation; null when it belongs to none or to several.</summary>
     public string TeamKey { get; init; }
+
+    /// <summary>The key of the user who sent the batch, shown on every mail of it in the mail log; null when the application sent it on its own.</summary>
+    public string SentByUserKey { get; init; }
 }
 
 /// <summary>An address one mail of a batch goes to alone, and the name it is addressed to.</summary>

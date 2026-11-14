@@ -28,6 +28,8 @@ internal sealed class PolicyGovernedMailClient(
 
     public bool CanRead => inner.CanRead;
 
+    public string DefaultFrom => inner.DefaultFrom;
+
     public Task<MailSendResult> SendAsync(OutboundMail mail, CancellationToken cancellationToken = default)
     {
         var decision = policy.Decide(mail.To, mail.Subject);

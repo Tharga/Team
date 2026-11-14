@@ -63,6 +63,50 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         return false;
     }
 
+    /// <remarks>Stored done, with its completion time so it expires like any mail that is done, and never claimed.</remarks>
+    public async Task<string> AddCompletedAsync(UserMail mail, UserMailStatus status, string reason, string messageId, string address, UserMailRoute route, DateTime at, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mail);
+
+        // One row per key: the same answer sent again, or a receipt retried, updates the row so the log says what the case says.
+        if (mail.DeduplicationKey != null && await FindByDeduplicationKeyAsync(mail.DeduplicationKey, cancellationToken) is { } existing)
+        {
+            var route2 = route ?? new UserMailRoute(mail.FromAddress, null);
+            await SetOutcomeAsync(existing.Id.ToString(), status, reason, messageId, route2, at, cancellationToken);
+
+            return existing.Id.ToString();
+        }
+
+        var entity = ToEntity(mail, at) with
+        {
+            Status = status,
+            Reason = reason,
+            MessageId = messageId,
+            RecipientAddress = string.IsNullOrWhiteSpace(address) ? (mail.RecipientUserKey == null ? mail.RecipientAddress : null) : address.Trim().ToLowerInvariant(),
+            FromAddress = route?.From ?? mail.FromAddress,
+            EffectiveReplyTo = route?.ReplyTo,
+            CompletedAt = at
+        };
+
+        await collection.AddAsync(entity);
+
+        return entity.Id.ToString();
+    }
+
+    public async Task<bool> SetOutcomeAsync(string id, UserMailStatus status, string reason, string messageId, UserMailRoute route, DateTime at, CancellationToken cancellationToken = default)
+    {
+        if (!ObjectId.TryParse(id, out var objectId)) return false;
+
+        var update = Builders<UserMailEntity>.Update.Set(x => x.Status, status).Set(x => x.CompletedAt, at);
+        update = reason == null ? update.Unset(x => x.Reason) : update.Set(x => x.Reason, reason);
+        update = messageId == null ? update : update.Set(x => x.MessageId, messageId);
+        update = route?.From == null ? update : update.Set(x => x.FromAddress, route.From);
+        update = route?.ReplyTo == null ? update : update.Set(x => x.EffectiveReplyTo, route.ReplyTo);
+        if (status != UserMailStatus.Bounced) update = update.Unset(x => x.BouncedAt);
+
+        return (await collection.UpdateOneAsync(Filter.Eq(x => x.Id, objectId), update, OneOption<UserMailEntity>.FirstOrDefault))?.Before != null;
+    }
+
     /// <remarks>Inserted already held, so no sender on any instance can claim it between the insert and the caller's attempt.</remarks>
     public async Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
     {
@@ -99,6 +143,9 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
 
     public Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, DateTime at, CancellationToken cancellationToken = default)
         => CompleteAsync(id, claimant, UserMailStatus.Sent, null, messageId, address, at);
+
+    public Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, UserMailRoute route, DateTime at, CancellationToken cancellationToken = default)
+        => CompleteAsync(id, claimant, UserMailStatus.Sent, null, messageId, address, at, route);
 
     public Task<bool> MarkSkippedAsync(string id, string claimant, string reason, DateTime at, CancellationToken cancellationToken = default)
         => CompleteAsync(id, claimant, UserMailStatus.Skipped, reason, null, null, at);
@@ -300,7 +347,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
     {
         var parts = new List<FilterDefinition<UserMailEntity>>();
         if (!string.IsNullOrEmpty(userKey)) parts.Add(Filter.Eq(x => x.RecipientUserKey, userKey));
-        if (!string.IsNullOrEmpty(address)) parts.Add(Filter.Eq(x => x.RecipientUserKey, null) & Filter.Eq(x => x.RecipientAddress, address) & Filter.Ne(x => x.Kind, UserMailKind.Contact));
+        if (!string.IsNullOrEmpty(address)) parts.Add(Filter.Eq(x => x.RecipientUserKey, null) & Filter.Eq(x => x.RecipientAddress, address) & Filter.Nin(x => x.Kind, [UserMailKind.Contact, UserMailKind.SupportAnswer, UserMailKind.SupportReceipt]));
 
         return parts.Count == 0 ? Filter.Eq(x => x.Id, ObjectId.Empty) : Filter.Or(parts) & Filter.Ne(x => x.Refused, true);
     }
@@ -374,7 +421,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         => delivery.Outcomes.Queued == 0 && delivery.Outcomes.Sent + delivery.Outcomes.Skipped + delivery.Outcomes.Failed + delivery.Outcomes.Bounced >= recipientCount;
 
     /// <remarks>The files' content goes with the outcome: the record of what was sent is kept, the bytes are not.</remarks>
-    private async Task<bool> CompleteAsync(string id, string claimant, UserMailStatus status, string reason, string messageId, string address, DateTime at)
+    private async Task<bool> CompleteAsync(string id, string claimant, UserMailStatus status, string reason, string messageId, string address, DateTime at, UserMailRoute route = null)
     {
         if (!ObjectId.TryParse(id, out var objectId)) return false;
 
@@ -388,6 +435,8 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         update = reason == null ? update : update.Set(x => x.Reason, reason);
         update = messageId == null ? update : update.Set(x => x.MessageId, messageId);
         update = address == null ? update : update.Set(x => x.RecipientAddress, address);
+        update = route?.From == null ? update : update.Set(x => x.FromAddress, route.From);
+        update = route?.ReplyTo == null ? update : update.Set(x => x.EffectiveReplyTo, route.ReplyTo);
 
         var before = (await collection.UpdateOneAsync(HeldBy(objectId, claimant), update, OneOption<UserMailEntity>.FirstOrDefault))?.Before;
         if (before == null) return false;
@@ -476,6 +525,7 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         Subject = batch.Subject,
         Kind = batch.Kind,
         TeamKey = batch.TeamKey,
+        SentByUserKey = batch.SentByUserKey,
         BatchId = batchId,
         Status = UserMailStatus.Queued,
         QueuedAt = queuedAt,
@@ -507,6 +557,9 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         ReplyTo = mail.ReplyTo,
         DeduplicationKey = mail.DeduplicationKey,
         TeamKey = mail.TeamKey,
+        SentByUserKey = mail.SentByUserKey,
+        FromAddress = mail.FromAddress,
+        CaseId = mail.CaseId,
         Status = UserMailStatus.Queued,
         QueuedAt = queuedAt,
         NextAttemptAt = queuedAt
@@ -528,7 +581,10 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
             ReplyTo = entity.ReplyTo,
             DeduplicationKey = entity.DeduplicationKey,
             Kind = entity.Kind ?? (entity.BatchId != null ? UserMailKind.Message : UserMailKind.Mail),
-            TeamKey = entity.TeamKey
+            TeamKey = entity.TeamKey,
+            SentByUserKey = entity.SentByUserKey,
+            FromAddress = entity.FromAddress,
+            CaseId = entity.CaseId
         },
         BatchId = entity.BatchId,
         Refused = entity.Refused,
@@ -542,7 +598,9 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         CompletedAt = entity.CompletedAt,
         Reason = entity.Reason,
         MessageId = entity.MessageId,
-        BouncedAt = entity.BouncedAt
+        BouncedAt = entity.BouncedAt,
+        FromAddress = entity.FromAddress,
+        EffectiveReplyTo = entity.EffectiveReplyTo
     };
 
     private static UserMailAttachmentEntity ToAttachmentEntity(UserMailAttachment x) => new()

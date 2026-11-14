@@ -140,6 +140,18 @@ public sealed record UserMailDelivery
     /// <summary>When the receiving server's report that it bounced was read, in UTC; null unless it bounced.</summary>
     public DateTime? BouncedAt { get; init; }
 
+    /// <summary>The key of the user who sent it, or null when the application did.</summary>
+    public string SentByUserKey { get; init; }
+
+    /// <summary>The address it was sent from; null until it is sent.</summary>
+    public string FromAddress { get; init; }
+
+    /// <summary>The address replies were asked to go to; null when there was none, or until it is sent.</summary>
+    public string ReplyTo { get; init; }
+
+    /// <summary>The support case it is part of, or null.</summary>
+    public string CaseId { get; init; }
+
     /// <summary>When it last changed, in UTC: when it was queued, sent, skipped, given up or reported bounced.</summary>
     public DateTime ChangedAt => BouncedAt ?? CompletedAt ?? QueuedAt;
 }

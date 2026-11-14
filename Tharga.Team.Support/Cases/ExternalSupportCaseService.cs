@@ -32,7 +32,8 @@ internal sealed class ExternalSupportCaseService(
     ISupportSenderDirectory senderDirectory = null,
     IMailClient mailClient = null,
     SupportExternalCaseOptions options = null,
-    ILogger<ExternalSupportCaseService> logger = null) : IExternalSupportCaseService
+    ILogger<ExternalSupportCaseService> logger = null,
+    IUserMailOutbox mailLog = null) : IExternalSupportCaseService
 {
     private readonly SupportExternalCaseOptions _options = options ?? new SupportExternalCaseOptions();
 
@@ -140,6 +141,8 @@ internal sealed class ExternalSupportCaseService(
                 Body: $"{text}\n\n> {body.ReplaceLineEndings("\n> ")}",
                 ReplyTo: replyTo), cancellationToken);
 
+            await LogReceiptAsync(supportCase, mailbox, result, replyTo, cancellationToken);
+
             // The receipt's own id joins the thread, so the visitor's reply to it finds the case.
             if (result.Success && !string.IsNullOrWhiteSpace(result.MessageId))
             {
@@ -160,6 +163,37 @@ internal sealed class ExternalSupportCaseService(
         catch (Exception e) when (e is not OperationCanceledException)
         {
             logger?.LogWarning(e, "The receipt for support case {CaseId} could not be sent; the case stands.", supportCase.Id);
+        }
+    }
+
+    /// <summary>Records the receipt in the mail log, as sent or failed, pointing back to the case; a log that cannot be written is logged and the case stands.</summary>
+    private async Task LogReceiptAsync(SupportCase supportCase, SupportMailbox mailbox, MailSendResult result, string replyTo, CancellationToken cancellationToken)
+    {
+        if (mailLog == null) return;
+
+        try
+        {
+            var from = string.IsNullOrWhiteSpace(mailbox.Options.FromAddress) ? mailClient?.DefaultFrom : mailbox.Options.FromAddress.Trim();
+            var mail = new UserMail
+            {
+                RecipientAddress = supportCase.ExternalContact.Email,
+                RecipientName = supportCase.ExternalContact.Name,
+                Category = SupportMailLog.Category,
+                Subject = $"Re: {supportCase.Subject}",
+                Kind = UserMailKind.SupportReceipt,
+                TeamKey = supportCase.TeamKey,
+                FromAddress = from,
+                CaseId = supportCase.Id,
+                ReplyTo = replyTo,
+                DeduplicationKey = SupportMailLog.ReceiptKey(supportCase.Id)
+            };
+
+            await mailLog.AddCompletedAsync(mail, result.Success ? UserMailStatus.Sent : UserMailStatus.Failed, result.Success ? null : result.Error, result.MessageId,
+                supportCase.ExternalContact.Email, new UserMailRoute(from, replyTo), timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger?.LogWarning(e, "The receipt for support case {CaseId} could not be recorded in the mail log; it was still sent.", supportCase.Id);
         }
     }
 
