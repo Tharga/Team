@@ -3,8 +3,12 @@ using Microsoft.Extensions.Logging;
 namespace Tharga.Team.Email.Users;
 
 /// <summary>Marks the user mail a bounce names as bounced, with the receiving server's reason; a report for a mail it does not know is left to the next handler.</summary>
-/// <remarks>Neither the reason nor any address is logged, because a bounce's reason often quotes the recipient's address.</remarks>
-internal sealed class UserMailBounceHandler(IUserMailOutbox outbox, ILogger<UserMailBounceHandler> logger = null) : IMailBounceHandler
+/// <remarks>
+/// Neither the reason nor any address is logged, because a bounce's reason often quotes the recipient's address. Only the
+/// report that changed the mail tells the <see cref="IMailOutcomeSink"/>s, so a bounce read twice, or on two instances, is
+/// reported once.
+/// </remarks>
+internal sealed class UserMailBounceHandler(IUserMailOutbox outbox, ILogger<UserMailBounceHandler> logger = null, MailOutcomeNotifier outcomes = null) : IMailBounceHandler
 {
     internal const string DefaultReason = "The receiving mail server returned the mail as undeliverable.";
 
@@ -20,6 +24,7 @@ internal sealed class UserMailBounceHandler(IUserMailOutbox outbox, ILogger<User
         {
             case UserMailBounceOutcome.Bounced:
                 logger?.LogInformation("User mail {Id} bounced and is marked as not delivered.", result.Id);
+                if (outcomes != null) await outcomes.NotifyBouncedAsync(outbox, result.Id, reason, bounce.ReceivedAt, null, cancellationToken);
                 return true;
             case UserMailBounceOutcome.AlreadyBounced:
                 logger?.LogDebug("User mail {Id} was already marked as bounced; the report changed nothing.", result.Id);

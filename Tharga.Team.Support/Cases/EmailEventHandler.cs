@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Tharga.Team.Email;
+using Tharga.Team.Email.Users;
 using Tharga.Team.Service.Html;
 
 namespace Tharga.Team.Support.Cases;
@@ -36,7 +37,8 @@ internal sealed class EmailEventHandler(
     ISupportAttachmentStore attachmentStore = null,
     SupportMailboxes mailboxes = null,
     IEnumerable<IMailBounceHandler> bounceHandlers = null,
-    IUserMailOutbox userMailOutbox = null)
+    IUserMailOutbox userMailOutbox = null,
+    MailOutcomeNotifier mailOutcomes = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
     /// <remarks>One source for every mailbox, so a mail that reached two of them is applied once.</remarks>
@@ -170,7 +172,8 @@ internal sealed class EmailEventHandler(
     /// and opening a case from it would put a mail server's complaint in the queue as if a customer had
     /// written. Such a bounce is handed to the registered <see cref="IMailBounceHandler"/>s. The reason is kept
     /// on the entry rather than logged, because it often quotes the recipient's address. The answer's row in the mail
-    /// log is marked bounced too, by the answer's <c>Message-ID</c>.
+    /// log is marked bounced too, by the answer's <c>Message-ID</c>, and only the bounce that changed that row is reported
+    /// to the <see cref="IMailOutcomeSink"/>s.
     /// </remarks>
     private async Task<EmailHandlingOutcome> BounceAsync(InboundMail mail, CancellationToken cancellationToken)
     {
@@ -191,7 +194,9 @@ internal sealed class EmailEventHandler(
         var reason = string.IsNullOrWhiteSpace(mail.BounceReason) ? "The receiving mail server returned the answer as undeliverable." : mail.BounceReason;
 
         await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence.Value, SupportMessageDelivery.Failed, reason, cancellationToken);
-        await SupportMailLog.MarkBouncedAsync(userMailOutbox, mail.BouncedMessageId, reason, timeProvider.GetUtcNow().UtcDateTime, logger, supportCase.Id, cancellationToken);
+        var at = timeProvider.GetUtcNow().UtcDateTime;
+        var known = new MailOutcome { Kind = UserMailKind.SupportAnswer, Status = UserMailStatus.Bounced, Reason = reason, TeamKey = supportCase.TeamKey, CaseId = supportCase.Id, CaseMessageSequence = sequence, At = at };
+        await SupportMailLog.MarkBouncedAsync(userMailOutbox, mailOutcomes, mail.BouncedMessageId, reason, at, known, logger, supportCase.Id, cancellationToken);
 
         notifier?.Notify(new SupportCaseUpdatedEventArgs
         {

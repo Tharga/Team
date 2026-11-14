@@ -377,6 +377,8 @@ public static class SupportRegistration
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
 
+        services.TryAddScoped<Tharga.Team.Email.Users.MailOutcomeNotifier>();
+
         // The one entry point that needs no signed-in user: a public contact form opens an unassigned case through it.
         // It is a separate interface so ISupportCaseService stays user-only, and it is audited like the rest. What it
         // refuses (malformed or over-long input) it refuses itself; rate limiting and bot defence are the host's.
@@ -391,7 +393,8 @@ public static class SupportRegistration
                 sp.GetService<IMailClient>(),
                 sp.GetRequiredService<SupportExternalCaseOptions>(),
                 sp.GetService<ILogger<ExternalSupportCaseService>>(),
-                sp.GetService<IUserMailOutbox>()),
+                sp.GetService<IUserMailOutbox>(),
+                sp.GetService<Tharga.Team.Email.Users.MailOutcomeNotifier>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
 

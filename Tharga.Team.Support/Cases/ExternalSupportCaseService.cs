@@ -1,6 +1,7 @@
 using System.Net.Mail;
 using Microsoft.Extensions.Logging;
 using Tharga.Team.Email;
+using Tharga.Team.Email.Users;
 
 namespace Tharga.Team.Support.Cases;
 
@@ -33,7 +34,8 @@ internal sealed class ExternalSupportCaseService(
     IMailClient mailClient = null,
     SupportExternalCaseOptions options = null,
     ILogger<ExternalSupportCaseService> logger = null,
-    IUserMailOutbox userMailOutbox = null) : IExternalSupportCaseService
+    IUserMailOutbox userMailOutbox = null,
+    MailOutcomeNotifier mailOutcomes = null) : IExternalSupportCaseService
 {
     private readonly SupportExternalCaseOptions _options = options ?? new SupportExternalCaseOptions();
 
@@ -121,7 +123,7 @@ internal sealed class ExternalSupportCaseService(
     /// <b>A receipt never costs the visitor their case.</b> The case is written first; a mail server that is down, not
     /// configured or refusing is logged, and staff still see the message. Off by default, because a public form that
     /// mails whoever types an address into it is how it ends up used to mail other people. Each attempt is recorded in
-    /// the mail log, sent or not.
+    /// the mail log, sent or not, and one recorded as failed is reported to every <see cref="IMailOutcomeSink"/>.
     /// </remarks>
     private async Task SendReceiptAsync(SupportCase supportCase, SupportMailbox mailbox, string body, CancellationToken cancellationToken)
     {
@@ -175,7 +177,7 @@ internal sealed class ExternalSupportCaseService(
 
     /// <summary>The receipt in the mail log, sent by nobody but the application: sent with its <c>Message-ID</c>, or failed for the reason given.</summary>
     private Task RecordReceiptAsync(SupportCase supportCase, SupportMailbox mailbox, string subject, string replyTo, bool sent, string messageId, string error, CancellationToken cancellationToken)
-        => SupportMailLog.RecordAsync(userMailOutbox, () => Task.FromResult(new UserMailRecord
+        => SupportMailLog.RecordAsync(userMailOutbox, mailOutcomes, () => Task.FromResult(new UserMailRecord
         {
             Kind = UserMailKind.Receipt,
             RecipientAddress = supportCase.ExternalContact.Email,

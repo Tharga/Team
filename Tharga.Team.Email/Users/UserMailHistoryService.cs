@@ -63,7 +63,7 @@ internal sealed class UserMailHistoryService(
         if (!await authorizer.HasSystemScopeAsync(SystemUserScopes.Manage))
         {
             var refusal = $"{nameof(ListAllAsync)} requires the '{SystemUserScopes.Manage}' system scope.";
-            AuditLog(0, sw.ElapsedMilliseconds, false, refusal);
+            AuditLog(nameof(ListAllAsync), 0, sw.ElapsedMilliseconds, false, refusal);
             throw new UnauthorizedAccessException(refusal);
         }
 
@@ -72,23 +72,48 @@ internal sealed class UserMailHistoryService(
 
         var result = new UserMailHistoryPage
         {
-            Items = [.. page.Items.Select(x => ToItem(x) with
-            {
-                RecipientUserKey = x.RecipientUserKey,
-                RecipientName = x.RecipientUserKey != null ? names.GetValueOrDefault(x.RecipientUserKey) : x.RecipientName,
-                TeamKey = x.TeamKey,
-                SentByUserKey = x.SentByUserKey,
-                SentByName = x.SentByName,
-                CaseId = x.CaseId,
-                CaseMessageSequence = x.CaseMessageSequence
-            })],
+            Items = [.. page.Items.Select(x => ToLogItem(x, names))],
             NextCursor = page.NextCursor
         };
 
-        AuditLog(result.Items.Length, sw.ElapsedMilliseconds, true, null);
+        AuditLog(nameof(ListAllAsync), result.Items.Length, sw.ElapsedMilliseconds, true, null);
 
         return result;
     }
+
+    /// <remarks>
+    /// The sender is the one signed in now whose key the mail recorded as having caused it; staff holding
+    /// <see cref="SystemUserScopes.Manage"/> read any mail, audited as a read of the log. Anyone else learns nothing, not even
+    /// whether the mail exists, so neither their call nor an unknown id is audited.
+    /// </remarks>
+    public async Task<UserMailHistoryItem> GetSentAsync(string id, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+
+        var sw = Stopwatch.StartNew();
+        var mail = await queue.GetAsync(id.Trim(), cancellationToken);
+        if (mail == null) return null;
+
+        var current = await userService.GetCurrentUserAsync();
+        var sender = !string.IsNullOrWhiteSpace(current?.Key) && string.Equals(current.Key, mail.SentByUserKey, StringComparison.Ordinal);
+        if (!sender && !await authorizer.HasSystemScopeAsync(SystemUserScopes.Manage)) return null;
+
+        var item = ToLogItem(mail, await NamesAsync(mail.RecipientUserKey == null ? [] : [mail.RecipientUserKey], cancellationToken));
+        if (!sender) AuditLog(nameof(GetSentAsync), 1, sw.ElapsedMilliseconds, true, null);
+
+        return item;
+    }
+
+    private static UserMailHistoryItem ToLogItem(UserMailDelivery x, IReadOnlyDictionary<string, string> names) => ToItem(x) with
+    {
+        RecipientUserKey = x.RecipientUserKey,
+        RecipientName = x.RecipientUserKey != null ? names.GetValueOrDefault(x.RecipientUserKey) : x.RecipientName,
+        TeamKey = x.TeamKey,
+        SentByUserKey = x.SentByUserKey,
+        SentByName = x.SentByName,
+        CaseId = x.CaseId,
+        CaseMessageSequence = x.CaseMessageSequence
+    };
 
     private async Task<Dictionary<string, string>> NamesAsync(string[] userKeys, CancellationToken cancellationToken)
     {
@@ -129,11 +154,11 @@ internal sealed class UserMailHistoryService(
         ReplyTo = x.ReplyTo
     };
 
-    private void AuditLog(int count, long durationMs, bool success, string error)
+    private void AuditLog(string method, int count, long durationMs, bool success, string error)
     {
         if (auditLogger == null || auditEntryFactory == null) return;
 
-        auditLogger.Log(auditEntryFactory.Create(AuditEventType.ServiceCall, UserMailAudit.Feature, UserMailAudit.LogAction, nameof(IUserMailHistoryService.ListAllAsync), durationMs, success, error,
+        auditLogger.Log(auditEntryFactory.Create(AuditEventType.ServiceCall, UserMailAudit.Feature, UserMailAudit.LogAction, method, durationMs, success, error,
             metadata: new Dictionary<string, string> { [UserMailAudit.Count] = count.ToString(CultureInfo.InvariantCulture) }));
     }
 

@@ -35,6 +35,16 @@ public interface IUserMailHistoryService
     /// <exception cref="UnauthorizedAccessException">The caller does not hold <c>users:manage</c>.</exception>
     Task<UserMailHistoryPage> ListAllAsync(UserMailFilter filter = null, string cursor = null, int pageSize = 50, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(ListAllAsync)}.");
+
+    /// <summary>One mail from the mail log, as the global log shows it, to the user who sent it or to staff holding <see cref="SystemUserScopes.Manage"/>; null to anyone else and for an id nobody knows.</summary>
+    /// <remarks>
+    /// <b>A filtered read</b>: it names no team, so no scope attribute can gate it, and a caller who may not see the mail is
+    /// told nothing rather than refused, the same answer an unknown id gets. The recipient is not the sender, so their own
+    /// copy is read through <see cref="GetMineAsync"/>. Staff reading a mail they did not send is audited like a read of the
+    /// global log, never with an address; the sender's own read is not. A host's own service that does not offer it gives null.
+    /// </remarks>
+    Task<UserMailHistoryItem> GetSentAsync(string id, CancellationToken cancellationToken = default)
+        => Task.FromResult<UserMailHistoryItem>(null);
 }
 
 /// <summary>One mail in a user's history.</summary>
@@ -67,19 +77,19 @@ public sealed record UserMailHistoryItem
     /// <summary>When it last changed, in UTC.</summary>
     public required DateTime ChangedAt { get; init; }
 
-    /// <summary>The key of the user it is for; null for a mail to an address alone. Set in the global log only.</summary>
+    /// <summary>The key of the user it is for; null for a mail to an address alone. Set in the global log and by <see cref="IUserMailHistoryService.GetSentAsync"/> only.</summary>
     public string RecipientUserKey { get; init; }
 
-    /// <summary>The name of the user it is for, or of the contact or invited person it is addressed to when it has one. Set in the global log only.</summary>
+    /// <summary>The name of the user it is for, or of the contact or invited person it is addressed to when it has one. Set in the global log and by <see cref="IUserMailHistoryService.GetSentAsync"/> only.</summary>
     public string RecipientName { get; init; }
 
-    /// <summary>The key of the team it is about; null when it records none. Set in the global log only.</summary>
+    /// <summary>The key of the team it is about; null when it records none. Set in the global log and by <see cref="IUserMailHistoryService.GetSentAsync"/> only.</summary>
     public string TeamKey { get; init; }
 
-    /// <summary>The key of the user who caused it to be sent, such as the staff member who wrote it; null for mail the application sent on its own. Set in the global log only.</summary>
+    /// <summary>The key of the user who caused it to be sent, such as the staff member who wrote it; null for mail the application sent on its own. Set in the global log and by <see cref="IUserMailHistoryService.GetSentAsync"/> only.</summary>
     public string SentByUserKey { get; init; }
 
-    /// <summary>The name of the user who caused it to be sent; null for mail the application sent on its own. Set in the global log only.</summary>
+    /// <summary>The name of the user who caused it to be sent; null for mail the application sent on its own. Set in the global log and by <see cref="IUserMailHistoryService.GetSentAsync"/> only.</summary>
     public string SentByName { get; init; }
 
     /// <summary>The From address it was sent with, or would have been when it was not; null until an attempt resolved it.</summary>
@@ -91,10 +101,10 @@ public sealed record UserMailHistoryItem
     /// <summary>The Reply-To it was sent with, or would have been when it was not; null when replies go to the From address or until an attempt resolved it.</summary>
     public string ReplyTo { get; init; }
 
-    /// <summary>The support case a support answer or receipt belongs to; null for any other mail. Set in the global log only.</summary>
+    /// <summary>The support case a support answer or receipt belongs to; null for any other mail. Set in the global log and by <see cref="IUserMailHistoryService.GetSentAsync"/> only.</summary>
     public string CaseId { get; init; }
 
-    /// <summary>The entry of the case a support answer mailed; null for a receipt and for any other mail. Set in the global log only.</summary>
+    /// <summary>The entry of the case a support answer mailed; null for a receipt and for any other mail. Set in the global log and by <see cref="IUserMailHistoryService.GetSentAsync"/> only.</summary>
     public int? CaseMessageSequence { get; init; }
 }
 

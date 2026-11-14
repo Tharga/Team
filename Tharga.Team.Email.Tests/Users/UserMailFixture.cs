@@ -43,6 +43,9 @@ internal sealed class UserMailFixture
     public SteppingTimeProvider Time { get; } = new(Start);
     public IDataProtectionProvider DataProtection { get; } = new EphemeralDataProtectionProvider();
     public RecordingAuditLogger Audit { get; }
+    public RecordingMailOutcomeSink Outcomes { get; } = new();
+
+    public MailOutcomeNotifier Notifier => new([Outcomes]);
 
     public IOptions<UserMailOptions> Wrapped => Microsoft.Extensions.Options.Options.Create(Options);
 
@@ -71,7 +74,7 @@ internal sealed class UserMailFixture
     };
 
     public UserMailDispatcher Dispatcher(ITextResolver texts = null)
-        => new(Outbox, Categories, Preferences, Recipients, Mail, Policy, Footer(texts), Wrapped, Time, null, Template);
+        => new(Outbox, Categories, Preferences, Recipients, Mail, Policy, Footer(texts), Wrapped, Time, null, Template, outcomes: Notifier);
 
     public Task<UserMailQueued> QueueAsync(string category = News, string dedup = null, UserMailAttachment[] attachments = null)
         => Queue.QueueAsync(new UserMail
@@ -541,6 +544,22 @@ internal sealed class RecordingAuditLogger : IAuditLogger
     public void Log(AuditEntry entry) => Entries.Add(entry);
 
     public Task<AuditQueryResult> QueryAsync(AuditQuery query) => Task.FromResult(new AuditQueryResult());
+}
+
+internal sealed class RecordingMailOutcomeSink : IMailOutcomeSink
+{
+    private readonly List<MailOutcome> _told = [];
+
+    public IReadOnlyList<MailOutcome> Told
+    {
+        get { lock (_told) return [.. _told]; }
+    }
+
+    public Task OnMailOutcomeAsync(MailOutcome outcome, CancellationToken cancellationToken)
+    {
+        lock (_told) _told.Add(outcome);
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class DictionaryTextResolver(Dictionary<string, string> texts) : ITextResolver

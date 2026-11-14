@@ -20,7 +20,8 @@ public static class UserMailRegistration
     /// <remarks>
     /// Storage comes from <c>AddThargaTeamRepository</c>, the unsubscribe route from <see cref="MapThargaMailUnsubscribe"/>, and
     /// every instance must share one persisted Data Protection key ring. A bounce handler is registered too, so mail sent
-    /// from the address of a mailbox support reads is marked bounced when the receiving server returns it. Invitations
+    /// from the address of a mailbox support reads is marked bounced when the receiving server returns it. Every registered
+    /// <see cref="IMailOutcomeSink"/> is told when a mail is given up or bounces. Invitations
     /// are sent as mail to users, recorded and in the account category, unless the host registered its own
     /// <see cref="ITeamEmailSender"/>. Every mail is framed in the template set with
     /// <see cref="MailTemplateRegistration.AddThargaMailTemplate"/>, when there is one.
@@ -93,8 +94,10 @@ public static class UserMailRegistration
             sp.GetRequiredService<TimeProvider>(),
             sp.GetService<ILogger<UserMailDispatcher>>(),
             sp.GetService<MailTemplate>(),
-            sp.GetService<ContactMailSending>()));
+            sp.GetService<ContactMailSending>(),
+            sp.GetService<MailOutcomeNotifier>()));
 
+        services.TryAddScoped<MailOutcomeNotifier>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, UserMailSender>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailBounceHandler, UserMailBounceHandler>());
         RegisterInvitations(services);

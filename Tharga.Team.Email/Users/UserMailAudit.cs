@@ -15,7 +15,7 @@ public static class UserMailAudit
     /// <summary>The action of staff reading another user's mail history, or being refused it.</summary>
     public const string HistoryAction = "history";
 
-    /// <summary>The action of staff reading the global mail log, or being refused it.</summary>
+    /// <summary>The action of staff reading the global mail log or one mail from it, or being refused the log.</summary>
     public const string LogAction = "log";
 
     /// <summary>Metadata naming the user whose choice or history it is.</summary>

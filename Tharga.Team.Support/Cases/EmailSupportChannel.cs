@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using MimeKit;
 using Tharga.Team.Email;
+using Tharga.Team.Email.Users;
 using Tharga.Team.Service.Email;
 using Tharga.Team.Service.Html;
 
@@ -48,7 +49,8 @@ internal sealed class EmailSupportChannel(
     ITextResolver texts = null,
     IUserMailOutbox userMailOutbox = null,
     IUserService userService = null,
-    TimeProvider timeProvider = null) : ISupportChannel, ISupportAnswerMail
+    TimeProvider timeProvider = null,
+    MailOutcomeNotifier mailOutcomes = null) : ISupportChannel, ISupportAnswerMail
 {
     private readonly SupportMailboxes _mailboxes = mailboxes ?? new SupportMailboxes(options.Value);
     private readonly MailTemplate _template = (template ?? MailTemplate.None).Support;
@@ -81,7 +83,8 @@ internal sealed class EmailSupportChannel(
     /// <remarks>
     /// The reason is the mail client's own, so a mail withheld by the non-production policy says so rather than
     /// reading as a transport failure. Every attempt that reaches the case is recorded in the mail log, sent or not, with
-    /// the From and Reply-To it went with; recording never changes the result.
+    /// the From and Reply-To it went with; recording never changes the result. Each attempt recorded as failed is reported
+    /// to every <see cref="IMailOutcomeSink"/>, so a resend that fails again is reported again.
     /// </remarks>
     public async Task<SupportChannelPostResult> PostWithResultAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
@@ -141,7 +144,7 @@ internal sealed class EmailSupportChannel(
 
     /// <summary>The attempt in the mail log as a support answer to the case entry: sent with its <c>Message-ID</c>, or failed for the reason given.</summary>
     private Task RecordAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, UserMailHeaders headers, bool sent, string messageId, string error, CancellationToken cancellationToken)
-        => SupportMailLog.RecordAsync(userMailOutbox, async () =>
+        => SupportMailLog.RecordAsync(userMailOutbox, mailOutcomes, async () =>
         {
             var (senderKey, senderName) = await AuthorOfAsync(message);
 

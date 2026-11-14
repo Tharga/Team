@@ -20,6 +20,10 @@ namespace Tharga.Team.Email.Users;
 /// be read. A user with no address, a category no longer registered or a mail the non-production policy withholds
 /// would fail the same way every time, so they fail at once with the reason. The recipient's address is never logged.
 /// </para>
+/// <para>
+/// <b>A mail given up is reported to every <see cref="IMailOutcomeSink"/></b>, once: only by the sender whose write recorded
+/// it, and never for a mail skipped or left to be tried again.
+/// </para>
 /// </remarks>
 internal sealed class UserMailDispatcher(
     IUserMailOutbox outbox,
@@ -33,7 +37,8 @@ internal sealed class UserMailDispatcher(
     TimeProvider timeProvider,
     ILogger<UserMailDispatcher> logger = null,
     MailTemplate template = null,
-    ContactMailSending contacts = null)
+    ContactMailSending contacts = null,
+    MailOutcomeNotifier outcomes = null)
 {
     internal const string OptedOutReason = "The recipient does not receive this category.";
     internal const string WithheldReason = "Withheld by the non-production mail policy: set Email:Override to receive it.";
@@ -244,13 +249,19 @@ internal sealed class UserMailDispatcher(
 
     private async Task<UserMailStatus> FailAsync(UserMailItem item, string claimant, UserMailHeaders headers, string reason, CancellationToken cancellationToken)
     {
-        await RecordAsync(outbox.MarkFailedAsync(item.Id, claimant, reason, headers, Now(), cancellationToken), item);
+        var at = Now();
+        if (await RecordAsync(outbox.MarkFailedAsync(item.Id, claimant, reason, headers, at, cancellationToken), item) && outcomes != null)
+            await outcomes.NotifyAsync(MailOutcomeNotifier.Of(item, UserMailStatus.Failed, reason, at), cancellationToken);
+
         return UserMailStatus.Failed;
     }
 
-    private async Task RecordAsync(Task<bool> write, UserMailItem item)
+    private async Task<bool> RecordAsync(Task<bool> write, UserMailItem item)
     {
-        if (!await write) logger?.LogWarning("User mail {Id} was taken by another sender before its outcome was recorded here; the other sender's outcome stands.", item.Id);
+        if (await write) return true;
+
+        logger?.LogWarning("User mail {Id} was taken by another sender before its outcome was recorded here; the other sender's outcome stands.", item.Id);
+        return false;
     }
 
     /// <summary>The wait after the given number of attempts: the retry delay, doubled after each further attempt, never longer than the maximum.</summary>
