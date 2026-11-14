@@ -113,7 +113,12 @@ internal sealed partial class UserMailQueue(
         CompletedAt = item.CompletedAt,
         Reason = item.Reason,
         MessageId = item.MessageId,
-        BouncedAt = item.BouncedAt
+        BouncedAt = item.BouncedAt,
+        SentByUserKey = item.Mail.SentByUserKey,
+        SentByName = item.Mail.SentByName,
+        FromAddress = item.FromAddress,
+        FromName = item.FromName,
+        ReplyTo = item.ReplyTo
     };
 
     private static UserMailDeliveryPage ToPage(UserMailItemPage page) => new()
@@ -192,7 +197,9 @@ internal sealed partial class UserMailQueue(
             Category = Truncated(mail.Category?.Trim(), MaxRecordedTextLength) ?? string.Empty,
             Subject = Truncated(OneLine(mail.Subject), MaxRecordedTextLength) ?? string.Empty,
             Kind = mail.Kind,
-            TeamKey = Truncated(Team(mail.TeamKey), MaxRecordedTextLength)
+            TeamKey = Truncated(Team(mail.TeamKey), MaxRecordedTextLength),
+            SentByUserKey = Truncated(SentByKey(mail.SentByUserKey), MaxRecordedTextLength),
+            SentByName = Truncated(SentByName(mail.SentByName), MaxRecordedTextLength)
         };
     }
 
@@ -247,11 +254,17 @@ internal sealed partial class UserMailQueue(
             ReplyTo = replyTo,
             DeduplicationKey = deduplicationKey,
             Kind = mail.Kind,
-            TeamKey = Team(mail.TeamKey)
+            TeamKey = Team(mail.TeamKey),
+            SentByUserKey = SentByKey(mail.SentByUserKey),
+            SentByName = SentByName(mail.SentByName)
         };
     }
 
     private static string Team(string teamKey) => string.IsNullOrWhiteSpace(teamKey) ? null : teamKey.Trim();
+
+    private static string SentByKey(string userKey) => string.IsNullOrWhiteSpace(userKey) ? null : userKey.Trim();
+
+    private static string SentByName(string name) => string.IsNullOrWhiteSpace(name) ? null : OneLine(name);
 
     /// <summary>The batch as it is stored: each recipient once, and its content checked exactly as a single mail's is.</summary>
     internal UserMailBatch Accept(UserMailBatch batch)
@@ -264,7 +277,14 @@ internal sealed partial class UserMailQueue(
 
         var content = AcceptContent(batch.Category, batch.Subject, batch.BodyHtml, batch.Body, batch.Attachments, nameof(batch));
 
-        return content with { RecipientUserKeys = recipients, Kind = batch.Kind, TeamKey = Team(batch.TeamKey) };
+        return content with
+        {
+            RecipientUserKeys = recipients,
+            Kind = batch.Kind,
+            TeamKey = Team(batch.TeamKey),
+            SentByUserKey = SentByKey(batch.SentByUserKey),
+            SentByName = SentByName(batch.SentByName)
+        };
     }
 
     private UserMailBatch AcceptContent(string categoryKey, string subjectLine, string bodyHtml, string bodyText, UserMailAttachment[] attachments, string parameterName)

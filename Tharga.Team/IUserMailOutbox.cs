@@ -33,6 +33,22 @@ public interface IUserMailOutbox
     /// <summary>The stored mail with this id, or null.</summary>
     Task<UserMailItem> GetAsync(string id, CancellationToken cancellationToken = default);
 
+    /// <summary>Records a claimed mail as sent, as <see cref="MarkSentAsync(string, string, string, string, DateTime, CancellationToken)"/> does, with the From and Reply-To it was sent with; an outbox that does not keep them records the rest.</summary>
+    Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, UserMailHeaders headers, DateTime at, CancellationToken cancellationToken = default)
+        => MarkSentAsync(id, claimant, messageId, address, at, cancellationToken);
+
+    /// <summary>Records a claimed mail as skipped, as <see cref="MarkSkippedAsync(string, string, string, DateTime, CancellationToken)"/> does, with the From and Reply-To it would have been sent with; an outbox that does not keep them records the rest.</summary>
+    Task<bool> MarkSkippedAsync(string id, string claimant, string reason, UserMailHeaders headers, DateTime at, CancellationToken cancellationToken = default)
+        => MarkSkippedAsync(id, claimant, reason, at, cancellationToken);
+
+    /// <summary>Records a claimed mail as given up, as <see cref="MarkFailedAsync(string, string, string, DateTime, CancellationToken)"/> does, with the From and Reply-To it would have been sent with; an outbox that does not keep them records the rest.</summary>
+    Task<bool> MarkFailedAsync(string id, string claimant, string reason, UserMailHeaders headers, DateTime at, CancellationToken cancellationToken = default)
+        => MarkFailedAsync(id, claimant, reason, at, cancellationToken);
+
+    /// <summary>Releases a claimed mail to be tried again, as <see cref="PostponeAsync(string, string, string, DateTime, CancellationToken)"/> does, with the From and Reply-To this attempt used; an outbox that does not keep them records the rest.</summary>
+    Task<bool> PostponeAsync(string id, string claimant, string reason, UserMailHeaders headers, DateTime nextAttemptAt, CancellationToken cancellationToken = default)
+        => PostponeAsync(id, claimant, reason, nextAttemptAt, cancellationToken);
+
     /// <summary>Stores the batch's content once and one queued mail, due at once, per recipient it names — each user key, then each address alone — and returns the batch's id.</summary>
     Task<string> AddBatchAsync(UserMailBatch batch, DateTime queuedAt, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddBatchAsync)}. Implement it to queue one mail to many users.");
@@ -169,4 +185,13 @@ public sealed record UserMailItem
 
     /// <summary>When the report that it bounced was read, in UTC; null unless it bounced.</summary>
     public DateTime? BouncedAt { get; init; }
+
+    /// <summary>The From address it was sent with, or would have been when it was not; null until an attempt resolved it.</summary>
+    public string FromAddress { get; init; }
+
+    /// <summary>The From display name it was sent with, or would have been when it was not; null when there was none or until an attempt resolved it.</summary>
+    public string FromName { get; init; }
+
+    /// <summary>The Reply-To it was sent with, or would have been when it was not, whether the mail's own or the configured one; null when replies go to the From address or until an attempt resolved it.</summary>
+    public string ReplyTo { get; init; }
 }

@@ -117,7 +117,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                 _items.Add(new UserMailItem
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey },
+                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey, SentByUserKey = batch.SentByUserKey, SentByName = batch.SentByName },
                     BatchId = id,
                     Status = UserMailStatus.Queued,
                     QueuedAt = queuedAt,
@@ -130,7 +130,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                 _items.Add(new UserMailItem
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    Mail = new UserMail { RecipientAddress = recipient.Address, RecipientName = recipient.Name, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey },
+                    Mail = new UserMail { RecipientAddress = recipient.Address, RecipientName = recipient.Name, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey, SentByUserKey = batch.SentByUserKey, SentByName = batch.SentByName },
                     BatchId = id,
                     RecipientAddress = recipient.Address,
                     Status = UserMailStatus.Queued,
@@ -395,6 +395,21 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
     {
         lock (_gate) return Task.FromResult(_items.FirstOrDefault(x => x.Id == id));
     }
+
+    public Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, UserMailHeaders headers, DateTime at, CancellationToken cancellationToken = default)
+        => Write(id, claimant, x => SentWith(Done(x, UserMailStatus.Sent, at) with { MessageId = messageId, RecipientAddress = address ?? x.RecipientAddress }, headers));
+
+    public Task<bool> MarkSkippedAsync(string id, string claimant, string reason, UserMailHeaders headers, DateTime at, CancellationToken cancellationToken = default)
+        => Write(id, claimant, x => SentWith(Done(x, UserMailStatus.Skipped, at) with { Reason = reason }, headers));
+
+    public Task<bool> MarkFailedAsync(string id, string claimant, string reason, UserMailHeaders headers, DateTime at, CancellationToken cancellationToken = default)
+        => Write(id, claimant, x => SentWith(Done(x, UserMailStatus.Failed, at) with { Reason = reason }, headers));
+
+    public Task<bool> PostponeAsync(string id, string claimant, string reason, UserMailHeaders headers, DateTime nextAttemptAt, CancellationToken cancellationToken = default)
+        => Write(id, claimant, x => SentWith(x with { NextAttemptAt = nextAttemptAt, Reason = reason, ClaimedBy = null, ClaimedUntil = null }, headers));
+
+    private static UserMailItem SentWith(UserMailItem item, UserMailHeaders headers)
+        => headers == null ? item : item with { FromAddress = headers.FromAddress, FromName = headers.FromName, ReplyTo = headers.ReplyTo };
 
     private Task<bool> Write(string id, string claimant, Func<UserMailItem, UserMailItem> change)
     {

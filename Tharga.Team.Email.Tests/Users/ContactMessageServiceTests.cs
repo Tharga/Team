@@ -143,6 +143,15 @@ public class ContactMessageServiceTests
     }
 
     [Fact]
+    public async Task EachMailQueued_NamesTheStaffMemberWhoSentIt()
+    {
+        await _fixture.Service.SendAsync(ContactMessageFixture.Message(Mixed()), Ct);
+
+        Assert.Equal(3, _fixture.Mail.Outbox.Items.Count);
+        Assert.All(_fixture.Mail.Outbox.Items, x => Assert.Equal((ContactMessageFixture.StaffKey, "Sam Staff"), (x.Mail.SentByUserKey, x.Mail.SentByName)));
+    }
+
+    [Fact]
     public async Task Sending_RecordsTheMessageAndItsList_InTheLog()
     {
         var sent = await _fixture.Service.SendAsync(ContactMessageFixture.Message(Mixed()), Ct);

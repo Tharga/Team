@@ -21,6 +21,12 @@ internal sealed class ContactMailSending(
     /// <summary>The transport, sending from the contact sender.</summary>
     public IMailClient Mail => mail;
 
+    /// <summary>The sending address.</summary>
+    public string FromAddress => ContactMailSender.Address(mailOptions.Value, contactOptions.Value);
+
+    /// <summary>The sending name, or null when there is none.</summary>
+    public string FromName => ContactMailSender.Name(mailOptions.Value, contactOptions.Value);
+
     /// <summary>Where replies go, or null for the sending address.</summary>
     public string ReplyTo => ContactMailSender.ReplyTo(mailOptions.Value, contactOptions.Value);
 

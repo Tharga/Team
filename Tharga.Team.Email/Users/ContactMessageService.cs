@@ -222,9 +222,16 @@ internal sealed class ContactMessageService(
         if (reached.Length == 0) throw new ArgumentException("Nobody on the list can be mailed: every address is left out or has opted out.", nameof(message));
 
         var now = Now();
-        var batchId = await outbox.AddBatchAsync(content with { RecipientUserKeys = [], RecipientAddresses = reached, Kind = UserMailKind.Contact }, now, cancellationToken);
-
         var sender = await SenderAsync();
+        var batchId = await outbox.AddBatchAsync(content with
+        {
+            RecipientUserKeys = [],
+            RecipientAddresses = reached,
+            Kind = UserMailKind.Contact,
+            SentByUserKey = sender.UserKey,
+            SentByName = sender.Name
+        }, now, cancellationToken);
+
         var entry = new ContactMessageLogEntry
         {
             Id = batchId,

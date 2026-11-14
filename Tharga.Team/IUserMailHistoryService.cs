@@ -75,6 +75,21 @@ public sealed record UserMailHistoryItem
 
     /// <summary>The key of the team it is about; null when it records none. Set in the global log only.</summary>
     public string TeamKey { get; init; }
+
+    /// <summary>The key of the user who caused it to be sent, such as the staff member who wrote it; null for mail the application sent on its own. Set in the global log only.</summary>
+    public string SentByUserKey { get; init; }
+
+    /// <summary>The name of the user who caused it to be sent; null for mail the application sent on its own. Set in the global log only.</summary>
+    public string SentByName { get; init; }
+
+    /// <summary>The From address it was sent with, or would have been when it was not; null until an attempt resolved it.</summary>
+    public string FromAddress { get; init; }
+
+    /// <summary>The From display name it was sent with, or would have been when it was not; null when there was none or until an attempt resolved it.</summary>
+    public string FromName { get; init; }
+
+    /// <summary>The Reply-To it was sent with, or would have been when it was not; null when replies go to the From address or until an attempt resolved it.</summary>
+    public string ReplyTo { get; init; }
 }
 
 /// <summary>One page of a user's mail history, newest first.</summary>

@@ -85,6 +85,18 @@ public class UserMailHistoryTests
     }
 
     [Fact]
+    public async Task EachMail_SaysTheFromAndReplyToItWentWith_ButNotWhichStaffMemberSentIt()
+    {
+        await _mail.Queue.QueueAsync(new UserMail { RecipientUserKey = UserMailFixture.UserKey, Category = UserMailFixture.News, Subject = "Hello", Body = "Hi.", SentByUserKey = "staff-1", SentByName = "Sam Staff" });
+        await _mail.Dispatcher().RunAsync("me", TestContext.Current.CancellationToken);
+
+        var item = (await Service().GetMineAsync(cancellationToken: TestContext.Current.CancellationToken)).Items.Single();
+
+        Assert.Equal(("hello@example.com", "Example", "support@example.com"), (item.FromAddress, item.FromName, item.ReplyTo));
+        Assert.Equal(((string)null, (string)null), (item.SentByUserKey, item.SentByName));
+    }
+
+    [Fact]
     public async Task AnotherUsersMail_IsNotInMine()
     {
         await QueueAsync("Mine");

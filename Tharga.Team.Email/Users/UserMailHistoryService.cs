@@ -76,7 +76,9 @@ internal sealed class UserMailHistoryService(
             {
                 RecipientUserKey = x.RecipientUserKey,
                 RecipientName = x.RecipientUserKey != null ? names.GetValueOrDefault(x.RecipientUserKey) : x.RecipientName,
-                TeamKey = x.TeamKey
+                TeamKey = x.TeamKey,
+                SentByUserKey = x.SentByUserKey,
+                SentByName = x.SentByName
             })],
             NextCursor = page.NextCursor
         };
@@ -119,7 +121,10 @@ internal sealed class UserMailHistoryService(
         Reason = x.Reason,
         Address = x.RecipientAddress,
         QueuedAt = x.QueuedAt,
-        ChangedAt = x.ChangedAt
+        ChangedAt = x.ChangedAt,
+        FromAddress = x.FromAddress,
+        FromName = x.FromName,
+        ReplyTo = x.ReplyTo
     };
 
     private void AuditLog(int count, long durationMs, bool success, string error)

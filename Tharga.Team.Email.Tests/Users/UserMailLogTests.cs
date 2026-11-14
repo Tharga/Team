@@ -196,6 +196,28 @@ public class UserMailLogTests
     }
 
     [Fact]
+    public async Task EachMail_SaysWhoSentIt_AndTheFromAndReplyToItWentWith()
+    {
+        await _mail.Queue.QueueAsync(new UserMail { RecipientUserKey = UserMailFixture.UserKey, Category = UserMailFixture.News, Subject = "Hello", Body = "Hi.", ReplyTo = "team@example.com", SentByUserKey = "staff-1", SentByName = "Sam Staff" });
+        await _mail.Dispatcher().RunAsync("me", TestContext.Current.CancellationToken);
+
+        var item = (await Service(Manage).ListAllAsync(cancellationToken: TestContext.Current.CancellationToken)).Items.Single();
+
+        Assert.Equal(("staff-1", "Sam Staff"), (item.SentByUserKey, item.SentByName));
+        Assert.Equal(("hello@example.com", "Example", "team@example.com"), (item.FromAddress, item.FromName, item.ReplyTo));
+    }
+
+    [Fact]
+    public async Task AMailNotYetAttempted_HasNoFromOrReplyTo_AndAnAutomaticOneNamesNoSender()
+    {
+        await _mail.QueueAsync();
+
+        var item = (await Service(Manage).ListAllAsync(cancellationToken: TestContext.Current.CancellationToken)).Items.Single();
+
+        Assert.Equal((null, null, null, null, null), (item.SentByUserKey, item.SentByName, item.FromAddress, item.FromName, item.ReplyTo));
+    }
+
+    [Fact]
     public async Task AUserTheDirectoryNoLongerKnows_IsStillNamedByKey()
     {
         await _mail.Queue.QueueAsync(new UserMail { RecipientUserKey = "gone", Category = UserMailFixture.News, Subject = "Hello", Body = "Hi." });

@@ -308,6 +308,25 @@ public class UserMessageServiceTests
     }
 
     [Fact]
+    public async Task EachMail_NamesTheStaffMemberWhoSentIt_AndKeepsDoingSoOnceSent()
+    {
+        var fixture = new UserMessageFixture();
+        await fixture.Service.SendAsync(UserMessageFixture.Message(Everyone(UserMessageFixture.Alpha)), TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, fixture.Mail.Outbox.Items.Count);
+        Assert.All(fixture.Mail.Outbox.Items, x => Assert.Equal((UserMessageFixture.StaffKey, "Sam Staff"), (x.Mail.SentByUserKey, x.Mail.SentByName)));
+
+        await fixture.Mail.Dispatcher().RunAsync("me", TestContext.Current.CancellationToken);
+
+        Assert.All(fixture.Mail.Outbox.Items, x =>
+        {
+            Assert.Equal(UserMailStatus.Sent, x.Status);
+            Assert.Equal((UserMessageFixture.StaffKey, "Sam Staff"), (x.Mail.SentByUserKey, x.Mail.SentByName));
+            Assert.Equal(("hello@example.com", "support@example.com"), (x.FromAddress, x.ReplyTo));
+        });
+    }
+
+    [Fact]
     public async Task EachMail_GoesFromTheHost_WithTheHostsReplyTo()
     {
         var fixture = new UserMessageFixture();

@@ -99,6 +99,26 @@ public record UserMailEntity : EntityBase
     /// <summary>When the report that it bounced was read, in UTC.</summary>
     [BsonIgnoreIfNull]
     public DateTime? BouncedAt { get; init; }
+
+    /// <summary>The key of the user who caused the mail to be sent, or null for mail the application sent on its own.</summary>
+    [BsonIgnoreIfNull]
+    public string SentByUserKey { get; init; }
+
+    /// <summary>The name of the user who caused the mail to be sent, or null for mail the application sent on its own.</summary>
+    [BsonIgnoreIfNull]
+    public string SentByName { get; init; }
+
+    /// <summary>The From address the last attempt sent it with, or would have; null until an attempt resolved it.</summary>
+    [BsonIgnoreIfNull]
+    public string FromAddress { get; init; }
+
+    /// <summary>The From display name the last attempt sent it with, or would have; null when there was none or until an attempt resolved it.</summary>
+    [BsonIgnoreIfNull]
+    public string FromName { get; init; }
+
+    /// <summary>The Reply-To the last attempt sent it with, or would have, unlike <see cref="ReplyTo"/>, which is the mail's own override; null when replies went to the From address or until an attempt resolved it.</summary>
+    [BsonIgnoreIfNull]
+    public string EffectiveReplyTo { get; init; }
 }
 
 /// <summary>A file kept with a queued mail; its content is removed once the mail is done.</summary>

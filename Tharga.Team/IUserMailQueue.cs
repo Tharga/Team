@@ -142,4 +142,19 @@ public sealed record UserMailDelivery
 
     /// <summary>When it last changed, in UTC: when it was queued, sent, skipped, given up or reported bounced.</summary>
     public DateTime ChangedAt => BouncedAt ?? CompletedAt ?? QueuedAt;
+
+    /// <summary>The key of the user who caused it to be sent, such as the staff member who wrote it; null for mail the application sent on its own.</summary>
+    public string SentByUserKey { get; init; }
+
+    /// <summary>The name of the user who caused it to be sent; null for mail the application sent on its own.</summary>
+    public string SentByName { get; init; }
+
+    /// <summary>The From address it was sent with, or would have been when it was not; null until an attempt resolved it.</summary>
+    public string FromAddress { get; init; }
+
+    /// <summary>The From display name it was sent with, or would have been when it was not; null when there was none or until an attempt resolved it.</summary>
+    public string FromName { get; init; }
+
+    /// <summary>The Reply-To it was sent with, or would have been when it was not; null when replies go to the From address or until an attempt resolved it.</summary>
+    public string ReplyTo { get; init; }
 }
