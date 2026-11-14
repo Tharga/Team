@@ -4,8 +4,8 @@
 @inject IUserMailPreferenceService Preferences
 @inject DialogService DialogService
 
-@* Every mail the application sent or tried to send, to users and contacts, newest first: who it was for, what kind and
-   category it was, its subject, what became of it and the team it was about, never its body. For staff holding
+@* Every mail the application sent or tried to send, to users and contacts, newest first: who it was from and for, what kind
+   and category it was, its subject, what became of it, who sent it and the team it was about, never its body. For staff holding
    users:manage; the service refuses anyone else. Narrowed by the filters above the list, a page at a time. *@
 
 @if (Framed)
@@ -69,6 +69,24 @@ else
                             <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnWhen]" Width="10rem">
                                 <Template Context="item"><span data-time>@Time(item.QueuedAt)</span></Template>
                             </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnFrom]">
+                                <Template Context="item">
+                                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" data-from="@item.Id">
+                                        @if (!string.IsNullOrWhiteSpace(item.FromName))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-from-name><strong>@item.FromName</strong></RadzenText>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(item.FromAddress))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-from-address>@item.FromAddress</RadzenText>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(item.ReplyTo))
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-reply-to>@_text.Format(UserMailLogViewText.ReplyTo, item.ReplyTo)</RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </Template>
+                            </RadzenDataGridColumn>
                             <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnRecipient]">
                                 <Template Context="item">
                                     <RadzenStack Orientation="Orientation.Vertical" Gap="0" data-recipient="@item.Id">
@@ -87,7 +105,15 @@ else
                                 <Template Context="item"><span data-category="@item.Category">@CategoryName(item.Category)</span></Template>
                             </RadzenDataGridColumn>
                             <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnSubject]">
-                                <Template Context="item"><span data-subject>@item.Subject</span></Template>
+                                <Template Context="item">
+                                    <RadzenStack Orientation="Orientation.Vertical" Gap="0">
+                                        <span data-subject>@item.Subject</span>
+                                        @if (CaseLink(item) is { } href)
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0"><a href="@href" class="rz-link" data-case="@item.CaseId">@_text[UserMailLogViewText.OpenCase]</a></RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </Template>
                             </RadzenDataGridColumn>
                             <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnResult]">
                                 <Template Context="item">
@@ -99,6 +125,9 @@ else
                                         }
                                     </RadzenStack>
                                 </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnSentBy]">
+                                <Template Context="item"><span data-sent-by="@item.Id">@item.SentByName</span></Template>
                             </RadzenDataGridColumn>
                             <RadzenDataGridColumn Title="@_text[UserMailLogViewText.ColumnTeam]">
                                 <Template Context="item"><span data-team>@item.TeamKey</span></Template>
@@ -136,6 +165,9 @@ else
     /// <summary>How many mails one page reads.</summary>
     [Parameter] public int PageSize { get; set; } = 50;
 
+    /// <summary>Where the support case of a support answer or receipt is opened, such as <c>x =&gt; $"/support/{x.CaseId}"</c>; a row whose mail has a case links to it when this gives an address. Without it no case is linked.</summary>
+    [Parameter] public Func<UserMailHistoryItem, string> CaseHref { get; set; }
+
     private sealed record Choice<T>(T Value, string Text);
 
     private TextSet _text = TextSet.Empty;
@@ -162,7 +194,7 @@ else
         _categories = Preferences.GetCategories() ?? [];
         _text = await TextProvider.ResolveAsync([.. UserMailLogViewText.All, .. UserMailHistoryViewText.All, .. _categories.Select(x => new TextKey(x.NameKey, x.Name))]);
 
-        UserMailKind[] kinds = [UserMailKind.Mail, UserMailKind.Message, UserMailKind.Notice, UserMailKind.Invitation, UserMailKind.Contact];
+        UserMailKind[] kinds = [UserMailKind.Mail, UserMailKind.Message, UserMailKind.Notice, UserMailKind.Invitation, UserMailKind.Contact, UserMailKind.SupportAnswer, UserMailKind.Receipt];
         UserMailStatus[] statuses = [UserMailStatus.Queued, UserMailStatus.Sent, UserMailStatus.Skipped, UserMailStatus.Failed, UserMailStatus.Bounced];
         _kindChoices = [.. kinds.Select(x => new Choice<UserMailKind>(x, _text[UserMailHistoryViewText.For(x)]))];
         _statusChoices = [.. statuses.Select(x => new Choice<UserMailStatus>(x, _text[UserMailHistoryViewText.For(x)]))];
@@ -247,6 +279,9 @@ else
     /// <summary>The address a mail went to; before it is sent, the user's key.</summary>
     private static string Who(UserMailHistoryItem item)
         => !string.IsNullOrWhiteSpace(item.Address) ? item.Address : item.RecipientUserKey;
+
+    private string CaseLink(UserMailHistoryItem item)
+        => string.IsNullOrWhiteSpace(item.CaseId) || CaseHref?.Invoke(item) is not { } href || string.IsNullOrWhiteSpace(href) ? null : href;
 
     private string CategoryName(string key)
         => _categories.FirstOrDefault(x => x.Key == key) is { } category ? _text[new TextKey(category.NameKey, category.Name)] : key;

@@ -39,6 +39,12 @@ public static class UserMailHistoryViewText
     /// <summary>A message staff wrote to contacts. Seen in the mail log only, never in a user's history.</summary>
     public static readonly TextKey KindContact = new("team.userMail.history.kind.contact", "Contact");
 
+    /// <summary>An answer to a support case. Seen in the mail log only, never in a user's history.</summary>
+    public static readonly TextKey KindSupportAnswer = new("team.userMail.history.kind.supportAnswer", "Support answer");
+
+    /// <summary>A receipt for a support case raised through a public form. Seen in the mail log only, never in a user's history.</summary>
+    public static readonly TextKey KindReceipt = new("team.userMail.history.kind.receipt", "Receipt");
+
     /// <summary>A mail waiting to be sent, or to be tried again.</summary>
     public static readonly TextKey StatusQueued = new("team.userMail.history.status.queued", "Waiting");
 
@@ -61,6 +67,8 @@ public static class UserMailHistoryViewText
         UserMailKind.Notice => KindNotice,
         UserMailKind.Invitation => KindInvitation,
         UserMailKind.Contact => KindContact,
+        UserMailKind.SupportAnswer => KindSupportAnswer,
+        UserMailKind.Receipt => KindReceipt,
         _ => KindMail
     };
 
@@ -78,6 +86,6 @@ public static class UserMailHistoryViewText
     public static readonly TextKey[] All =
     [
         Title, Explanation, Empty, ShowMore, NotPermitted, NoUser, To, KindMail, KindMessage, KindNotice, KindInvitation, KindContact,
-        StatusQueued, StatusSent, StatusSkipped, StatusFailed, StatusBounced
+        KindSupportAnswer, KindReceipt, StatusQueued, StatusSent, StatusSkipped, StatusFailed, StatusBounced
     ];
 }

@@ -59,10 +59,44 @@ public class UserMailLogViewRenderTests : BunitContext
         RecipientName = "Cora Carlsson"
     };
 
+    private static readonly UserMailHistoryItem Answer = new()
+    {
+        Id = "m4",
+        Kind = UserMailKind.SupportAnswer,
+        Category = null,
+        Subject = "Re: Cannot sign in",
+        Status = UserMailStatus.Sent,
+        Address = "dan@example.org",
+        QueuedAt = Queued.AddMinutes(3),
+        ChangedAt = Queued.AddMinutes(3),
+        RecipientName = "Dan Dahl",
+        FromAddress = "support@example.com",
+        FromName = "Example Support",
+        ReplyTo = "support+case-7@example.com",
+        SentByUserKey = "staff-1",
+        SentByName = "Stina Staff",
+        CaseId = "case-7",
+        CaseMessageSequence = 2
+    };
+
+    private static readonly UserMailHistoryItem Receipt = new()
+    {
+        Id = "m5",
+        Kind = UserMailKind.Receipt,
+        Category = null,
+        Subject = "We have your question",
+        Status = UserMailStatus.Sent,
+        Address = "eva@example.org",
+        QueuedAt = Queued.AddMinutes(4),
+        ChangedAt = Queued.AddMinutes(4),
+        FromAddress = "hello@example.com",
+        CaseId = "case-8"
+    };
+
     private readonly Mock<IUserMailHistoryService> _history = new();
     private readonly List<(UserMailFilter Filter, string Cursor, int Size)> _asked = [];
 
-    private IRenderedComponent<UserMailLogView> RenderLog(UserMailHistoryPage first = null, UserMailHistoryPage second = null, bool permitted = true, bool framed = true, IThargaTextProvider texts = null)
+    private IRenderedComponent<UserMailLogView> RenderLog(UserMailHistoryPage first = null, UserMailHistoryPage second = null, bool permitted = true, bool framed = true, IThargaTextProvider texts = null, Func<UserMailHistoryItem, string> caseHref = null)
     {
         first ??= new UserMailHistoryPage { Items = [Newsletter, Invitation, Welcome] };
 
@@ -86,7 +120,7 @@ public class UserMailLogViewRenderTests : BunitContext
         Services.AddRadzenComponents();
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        return Render<UserMailLogView>(p => p.Add(x => x.Framed, framed));
+        return Render<UserMailLogView>(p => p.Add(x => x.Framed, framed).Add(x => x.CaseHref, caseHref));
     }
 
     private static string[] Subjects(IRenderedComponent<UserMailLogView> view)
@@ -238,6 +272,102 @@ public class UserMailLogViewRenderTests : BunitContext
         Assert.Contains("Mejllogg", view.Markup);
         Assert.Equal("Kontakt", view.Find("[data-kind='Contact']").TextContent.Trim());
         Assert.Equal("Nyheter", view.FindAll("[data-category='news']")[0].TextContent.Trim());
+    }
+
+    [Fact]
+    public void AMail_ShowsTheFromItWasSentWith_NameOverAddress_AndItsReplyTo_AndWhoSentIt()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Answer] });
+
+        Assert.Equal("Example Support", view.Find("[data-from='m4'] [data-from-name]").TextContent.Trim());
+        Assert.Equal("support@example.com", view.Find("[data-from='m4'] [data-from-address]").TextContent.Trim());
+        Assert.Equal("Reply-To: support+case-7@example.com", view.Find("[data-from='m4'] [data-reply-to]").TextContent.Trim());
+        Assert.Equal("Stina Staff", view.Find("[data-sent-by='m4']").TextContent.Trim());
+    }
+
+    [Fact]
+    public void AFromWithoutAName_ShowsTheAddressAlone_AndNoReplyTo_WhenRepliesGoToIt()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Receipt] });
+
+        Assert.Empty(view.FindAll("[data-from='m5'] [data-from-name]"));
+        Assert.Equal("hello@example.com", view.Find("[data-from='m5'] [data-from-address]").TextContent.Trim());
+        Assert.Empty(view.FindAll("[data-from='m5'] [data-reply-to]"));
+        Assert.Equal(string.Empty, view.Find("[data-sent-by='m5']").TextContent.Trim());
+    }
+
+    [Fact]
+    public void AMailLoggedBeforeFromAndSenderWereRecorded_ShowsThoseCellsEmpty()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Welcome] });
+
+        Assert.Equal(string.Empty, view.Find("[data-from='m1']").TextContent.Trim());
+        Assert.Equal(string.Empty, view.Find("[data-sent-by='m1']").TextContent.Trim());
+        Assert.Equal(["Welcome"], Subjects(view));
+    }
+
+    [Fact]
+    public void SupportAnswersAndReceipts_HaveTheirOwnKindBadges()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Receipt, Answer] });
+
+        Assert.Equal("Support answer", view.Find("[data-kind='SupportAnswer']").TextContent.Trim());
+        Assert.Equal("Receipt", view.Find("[data-kind='Receipt']").TextContent.Trim());
+    }
+
+    [Fact]
+    public void TheKindFilter_OffersSupportAnswersAndReceipts()
+    {
+        var view = RenderLog();
+
+        var kind = view.FindComponents<RadzenDropDown<UserMailKind?>>().Single();
+        var offered = ((IEnumerable<object>)kind.Instance.Data).Select(x => (UserMailKind)x.GetType().GetProperty("Value")!.GetValue(x)!).ToArray();
+        Assert.Contains(UserMailKind.SupportAnswer, offered);
+        Assert.Contains(UserMailKind.Receipt, offered);
+    }
+
+    [Fact]
+    public void AMailWithACase_LinksToTheCase_WhereTheHostSaysCasesLive()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Answer, Welcome] }, caseHref: x => $"/support/{x.CaseId}");
+
+        var link = Assert.Single(view.FindAll("[data-case]"));
+        Assert.Equal("case-7", link.GetAttribute("data-case"));
+        Assert.Equal("/support/case-7", link.GetAttribute("href"));
+        Assert.Equal(UserMailLogViewText.OpenCase.Default, link.TextContent.Trim());
+    }
+
+    [Fact]
+    public void WithoutWhereCasesLive_NoCaseIsLinked()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Answer, Receipt] });
+
+        Assert.Empty(view.FindAll("[data-case]"));
+    }
+
+    [Fact]
+    public void ACaseTheHostGivesNoAddress_IsNotLinked()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Answer, Receipt] }, caseHref: x => x.CaseId == "case-7" ? null : "");
+
+        Assert.Empty(view.FindAll("[data-case]"));
+    }
+
+    [Fact]
+    public void TheNewTexts_AreTranslatedThroughTheTextProvider()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [Answer] }, texts: new Translating(new Dictionary<string, string>
+        {
+            [UserMailLogViewText.ReplyTo.Key] = "Svar till: {0}",
+            [UserMailHistoryViewText.KindSupportAnswer.Key] = "Supportsvar",
+            [UserMailLogViewText.ColumnFrom.Key] = "Avsändare",
+            [UserMailLogViewText.ColumnSentBy.Key] = "Skickat av"
+        }));
+
+        Assert.Equal("Svar till: support+case-7@example.com", view.Find("[data-reply-to]").TextContent.Trim());
+        Assert.Equal("Supportsvar", view.Find("[data-kind='SupportAnswer']").TextContent.Trim());
+        Assert.Contains("Avsändare", view.Markup);
+        Assert.Contains("Skickat av", view.Markup);
     }
 
     private sealed class Translating(Dictionary<string, string> texts) : IThargaTextProvider

@@ -39,6 +39,14 @@ public static class UserMailLogViewText
     public static readonly TextKey ColumnSubject = new("team.userMail.log.column.subject", "Subject");
     public static readonly TextKey ColumnResult = new("team.userMail.log.column.result", "Result");
     public static readonly TextKey ColumnTeam = new("team.userMail.log.column.team", "Team");
+    public static readonly TextKey ColumnFrom = new("team.userMail.log.column.from", "From");
+    public static readonly TextKey ColumnSentBy = new("team.userMail.log.column.sentBy", "Sent by");
+
+    /// <summary>The Reply-To a mail was sent with, under its From; <c>{0}</c> is the address.</summary>
+    public static readonly TextKey ReplyTo = new("team.userMail.log.replyTo", "Reply-To: {0}");
+
+    /// <summary>The link from a support answer or receipt to its case, when the host says where cases live.</summary>
+    public static readonly TextKey OpenCase = new("team.userMail.log.openCase", "Open case");
 
     /// <summary>The row action that shows all the mail sent to one user; <c>{0}</c> identifies the user.</summary>
     public static readonly TextKey UserMail = new("team.userMail.log.userMail", "Mail sent to {0}");
@@ -51,6 +59,6 @@ public static class UserMailLogViewText
     [
         Title, Explanation, Empty, ShowMore, NotPermitted, Search, Clear, FilterKind, FilterStatus, FilterCategory, FilterFrom,
         FilterTo, FilterRecipient, FilterTeam, ColumnWhen, ColumnRecipient, ColumnKind, ColumnCategory, ColumnSubject,
-        ColumnResult, ColumnTeam, UserMail, UserMailTitle
+        ColumnResult, ColumnTeam, ColumnFrom, ColumnSentBy, ReplyTo, OpenCase, UserMail, UserMailTitle
     ];
 }
