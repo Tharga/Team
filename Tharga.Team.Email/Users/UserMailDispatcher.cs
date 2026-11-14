@@ -33,7 +33,8 @@ internal sealed class UserMailDispatcher(
     TimeProvider timeProvider,
     ILogger<UserMailDispatcher> logger = null,
     MailTemplate template = null,
-    ContactMailSending contacts = null)
+    ContactMailSending contacts = null,
+    MailOutcomeNotifier notifier = null)
 {
     internal const string OptedOutReason = "The recipient does not receive this category.";
     internal const string WithheldReason = "Withheld by the non-production mail policy: set Email:Override to receive it.";
@@ -181,7 +182,7 @@ internal sealed class UserMailDispatcher(
         var result = await client.SendAsync(outbound, cancellationToken);
         if (!result.Success) return await RetryAsync(item, claimant, result.Error, retry, cancellationToken);
 
-        await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, UserMailAddresses.Normalize(address), Now(), cancellationToken), item);
+        await RecordAsync(outbox.MarkSentAsync(item.Id, claimant, result.MessageId, UserMailAddresses.Normalize(address), RouteOf(client, outbound), Now(), cancellationToken), item);
         return UserMailStatus.Sent;
     }
 
@@ -231,11 +232,28 @@ internal sealed class UserMailDispatcher(
         return UserMailStatus.Queued;
     }
 
+    /// <remarks>The sinks are told only when this sender recorded the failure, so another instance giving up first, or a mail taken from this one, tells them once.</remarks>
     private async Task<UserMailStatus> FailAsync(UserMailItem item, string claimant, string reason, CancellationToken cancellationToken)
     {
-        await RecordAsync(outbox.MarkFailedAsync(item.Id, claimant, reason, Now(), cancellationToken), item);
+        var at = Now();
+        var recorded = await outbox.MarkFailedAsync(item.Id, claimant, reason, at, cancellationToken);
+
+        if (!recorded) logger?.LogWarning("User mail {Id} was taken by another sender before its outcome was recorded here; the other sender's outcome stands.", item.Id);
+        else if (notifier != null) await notifier.NotifyAsync(MailOutcomes.Of(item, MailOutcomeKind.GivenUp, reason, at), cancellationToken);
+
         return UserMailStatus.Failed;
     }
+
+    /// <summary>The sender and reply address the mail went with: what it named, or the client's own default From; an address with its display name is recorded as the address.</summary>
+    private static UserMailRoute RouteOf(IMailClient client, OutboundMail outbound)
+    {
+        var from = outbound.From ?? client.DefaultFrom;
+
+        return new UserMailRoute(AddressOf(from), string.IsNullOrWhiteSpace(outbound.ReplyTo) ? null : AddressOf(outbound.ReplyTo));
+    }
+
+    internal static string AddressOf(string value)
+        => string.IsNullOrWhiteSpace(value) ? null : MailboxAddress.TryParse(value, out var parsed) ? parsed.Address : value.Trim();
 
     private async Task RecordAsync(Task<bool> write, UserMailItem item)
     {

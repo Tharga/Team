@@ -92,6 +92,37 @@ public class UserMailLogViewRenderTests : BunitContext
     private static string[] Subjects(IRenderedComponent<UserMailLogView> view)
         => [.. view.FindAll("[data-subject]").Select(x => x.TextContent.Trim())];
 
+    private static readonly UserMailHistoryItem SupportAnswer = new()
+    {
+        Id = "m4",
+        Kind = UserMailKind.SupportAnswer,
+        Category = "support",
+        Subject = "Re: Export is empty",
+        Status = UserMailStatus.Sent,
+        Address = "user@customer.example",
+        QueuedAt = Queued.AddMinutes(3),
+        ChangedAt = Queued.AddMinutes(3),
+        FromAddress = "support@example.net",
+        ReplyTo = "support+tag@example.net",
+        SentByUserKey = "staff-1",
+        SentByName = "Anna Andersson",
+        CaseId = "case-1"
+    };
+
+    [Fact]
+    public void TheLog_ShowsWhatEachMailWasSentAs_WhoSentIt_AndTheCaseItBelongsTo()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [SupportAnswer, Welcome] });
+
+        Assert.Equal(["support@example.net", string.Empty], view.FindAll("[data-from]").Select(x => x.TextContent));
+        Assert.Equal("support+tag@example.net", view.FindAll("[data-reply-to]")[0].TextContent);
+        Assert.Equal("Anna Andersson", view.FindAll("[data-sent-by]")[0].TextContent);
+        Assert.Single(view.FindAll("[data-case]"));
+        Assert.Contains("case-1", view.Find("[data-case]").TextContent);
+        Assert.Equal("SupportAnswer", view.FindAll("[data-kind]")[0].GetAttribute("data-kind"));
+        Assert.Equal(UserMailHistoryViewText.KindSupportAnswer.Default, view.FindAll("[data-kind]")[0].TextContent.Trim());
+    }
+
     [Fact]
     public void EveryMail_IsListed_WithWhoItWasFor_ItsKindCategoryAndResult_AndTheTeam()
     {

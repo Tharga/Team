@@ -99,6 +99,22 @@ public record UserMailEntity : EntityBase
     /// <summary>When the report that it bounced was read, in UTC.</summary>
     [BsonIgnoreIfNull]
     public DateTime? BouncedAt { get; init; }
+
+    /// <summary>The key of the user who sent the mail, or null when the application did.</summary>
+    [BsonIgnoreIfNull]
+    public string SentByUserKey { get; init; }
+
+    /// <summary>The address the mail was sent from, as the mail client stamped it, or null until it is sent.</summary>
+    [BsonIgnoreIfNull]
+    public string FromAddress { get; init; }
+
+    /// <summary>The reply address the mail went with when it was sent, which is the queued one or the configured one; null when there was none.</summary>
+    [BsonIgnoreIfNull]
+    public string EffectiveReplyTo { get; init; }
+
+    /// <summary>The support case the mail is part of, or null.</summary>
+    [BsonIgnoreIfNull]
+    public string CaseId { get; init; }
 }
 
 /// <summary>A file kept with a queued mail; its content is removed once the mail is done.</summary>

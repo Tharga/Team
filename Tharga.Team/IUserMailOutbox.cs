@@ -21,6 +21,11 @@ public interface IUserMailOutbox
     /// <summary>Records a claimed mail as sent with its <c>Message-ID</c> and the address it was addressed to; false when the claimant no longer holds it.</summary>
     Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, DateTime at, CancellationToken cancellationToken = default);
 
+    /// <summary>Records a claimed mail as sent with its <c>Message-ID</c>, the address it was addressed to and the sender and reply address it went with; false when the claimant no longer holds it.</summary>
+    /// <remarks>The default drops the route and records the send as before, so an outbox written earlier keeps working; the mail log then shows no From or Reply-To for it.</remarks>
+    Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, UserMailRoute route, DateTime at, CancellationToken cancellationToken = default)
+        => MarkSentAsync(id, claimant, messageId, address, at, cancellationToken);
+
     /// <summary>Records a claimed mail as skipped for the reason given; false when the claimant no longer holds it.</summary>
     Task<bool> MarkSkippedAsync(string id, string claimant, string reason, DateTime at, CancellationToken cancellationToken = default);
 
@@ -70,6 +75,15 @@ public interface IUserMailOutbox
     Task<bool> AddRefusedAsync(UserMail mail, string reason, string deduplicationKey, DateTime at, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddRefusedAsync)}. Implement it to record mail the queue refused.");
 
+    /// <summary>Stores a mail that has already been handled elsewhere, as one row in the log: sent, or given up, with the sender and reply address it went with, so it shows beside the mail this queue sent. Returns its id.</summary>
+    /// <remarks>For mail the queue did not send, such as support's answers and receipts. The row is never claimed, and expires like any mail that is done; a <see cref="UserMailStatus.Sent"/> row with a <c>Message-ID</c> is marked bounced by a bounce naming it, as any other.</remarks>
+    Task<string> AddCompletedAsync(UserMail mail, UserMailStatus status, string reason, string messageId, string address, UserMailRoute route, DateTime at, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddCompletedAsync)}. Implement it to list support's mail in the mail log.");
+
+    /// <summary>Records that a mail already in the log has a new outcome, by its id: used to keep a row in step with the support case it belongs to when the answer is sent again. False when there is no such mail.</summary>
+    Task<bool> SetOutcomeAsync(string id, UserMailStatus status, string reason, string messageId, UserMailRoute route, DateTime at, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SetOutcomeAsync)}.");
+
     /// <summary>Stores a mail already claimed by <paramref name="claimant"/> for <paramref name="lease"/>, its first attempt counted, so it is sent at once by the caller and by nobody else unless the lease runs out.</summary>
     /// <exception cref="ArgumentException">The mail carries a deduplication key, which a mail sent at once does not take.</exception>
     Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
@@ -93,6 +107,11 @@ public interface IUserMailOutbox
     /// <summary>How long a mail is kept once it is done, which bounds how far back <see cref="CountSentByCategoryAsync"/> can count; null when it is kept for good.</summary>
     TimeSpan? Retention => null;
 }
+
+/// <summary>The sender and reply address a mail went with.</summary>
+/// <param name="From">The address it was sent from, as the mail client stamped it, or null when that is not known.</param>
+/// <param name="ReplyTo">The address replies were asked to go to, or null when there was none.</param>
+public sealed record UserMailRoute(string From, string ReplyTo);
 
 /// <summary>What a bounce report did to the mail it names.</summary>
 /// <param name="Outcome">Whether a mail was found, and whether this report changed it.</param>
@@ -169,4 +188,10 @@ public sealed record UserMailItem
 
     /// <summary>When the report that it bounced was read, in UTC; null unless it bounced.</summary>
     public DateTime? BouncedAt { get; init; }
+
+    /// <summary>The address it was sent from, as the mail client stamped it; null until it is sent.</summary>
+    public string FromAddress { get; init; }
+
+    /// <summary>The address replies were asked to go to: the mail's own, or the configured one; null when there was none, or until it is sent.</summary>
+    public string EffectiveReplyTo { get; init; }
 }

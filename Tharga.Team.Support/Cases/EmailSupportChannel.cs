@@ -45,7 +45,10 @@ internal sealed class EmailSupportChannel(
     IOutboundMailPolicy policy = null,
     MailTemplate template = null,
     SupportAnswerOptions answers = null,
-    ITextResolver texts = null) : ISupportChannel, ISupportAnswerMail
+    ITextResolver texts = null,
+    IUserMailOutbox mailLog = null,
+    IUserService userService = null,
+    TimeProvider timeProvider = null) : ISupportChannel, ISupportAnswerMail
 {
     private readonly SupportMailboxes _mailboxes = mailboxes ?? new SupportMailboxes(options.Value);
     private readonly MailTemplate _template = (template ?? MailTemplate.None).Support;
@@ -97,7 +100,10 @@ internal sealed class EmailSupportChannel(
         var (files, missing) = await FilesOfAsync(supportCase, message, cancellationToken);
         if (missing != null) return SupportChannelPostResult.Failed(missing);
 
-        var result = await sender.SendAsync(await ComposeAsync(supportCase, binding, message, option, files, cancellationToken), cancellationToken);
+        var outbound = await ComposeAsync(supportCase, binding, message, option, files, cancellationToken);
+        var result = await sender.SendAsync(outbound, cancellationToken);
+
+        await LogAsync(supportCase, binding, message, option, outbound, result, cancellationToken);
 
         // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case,
         // and a bounce naming it finds the very entry that did not arrive.
@@ -118,6 +124,43 @@ internal sealed class EmailSupportChannel(
             return SupportChannelPostResult.Failed($"The mail server refused to send as {option.Address}. Answer again from another address, or ask whoever runs the mail server to allow sending as it.");
 
         return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
+    }
+
+    /// <summary>
+    /// Records the answer in the mail log, as sent or as failed, with the address it went from and the reply address it carried, who sent it and
+    /// the case it belongs to, so staff looking for a sent answer find it beside every other mail. One row per answer: sending it again updates
+    /// the row, so the log says what the case says. <b>A mail log that cannot be written never costs the answer</b>: it is logged and the answer stands.
+    /// </summary>
+    private async Task LogAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, SupportSenderOption option, OutboundMail outbound, MailSendResult result, CancellationToken cancellationToken)
+    {
+        if (mailLog == null || supportCase == null) return;
+
+        try
+        {
+            var now = (timeProvider ?? TimeProvider.System).GetUtcNow().UtcDateTime;
+            var user = userService == null ? null : await userService.GetCurrentUserAsync();
+            var mail = new UserMail
+            {
+                RecipientAddress = binding.Address,
+                Category = SupportMailLog.Category,
+                Subject = outbound.Subject ?? string.Empty,
+                Kind = UserMailKind.SupportAnswer,
+                TeamKey = supportCase.TeamKey,
+                SentByUserKey = user?.Key,
+                FromAddress = option.Address,
+                CaseId = supportCase.Id,
+                ReplyTo = outbound.ReplyTo,
+                DeduplicationKey = SupportMailLog.AnswerKey(supportCase.Id, message.Sequence)
+            };
+
+            var reason = result.SenderRefused ? $"The mail server refused to send as {option.Address}." : result.Error;
+            await mailLog.AddCompletedAsync(mail, result.Success ? UserMailStatus.Sent : UserMailStatus.Failed, result.Success ? null : reason, result.MessageId, binding.Address,
+                new UserMailRoute(option.Address, outbound.ReplyTo), now, cancellationToken);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger?.LogWarning(e, "The answer on support case {CaseId} could not be recorded in the mail log; it was still sent.", supportCase.Id);
+        }
     }
 
     public SupportAnswerRoute RouteOf(SupportCase supportCase, SupportChannelBinding binding, SupportStaffSender staff = null)

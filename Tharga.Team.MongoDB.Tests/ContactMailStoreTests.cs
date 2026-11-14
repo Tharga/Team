@@ -79,7 +79,7 @@ public class ContactMailStoreTests
     {
         var rendered = Render(MongoUserMailOutbox.ForRecipient("user-1", "kim@customer.example"));
 
-        Assert.Contains("\"RecipientUserKey\" : null, \"RecipientAddress\" : \"kim@customer.example\", \"Kind\" : { \"$ne\" : \"Contact\" }", rendered);
+        Assert.Contains("\"RecipientUserKey\" : null, \"RecipientAddress\" : \"kim@customer.example\", \"Kind\" : { \"$nin\" : [\"Contact\", \"SupportAnswer\", \"SupportReceipt\"] }", rendered);
         Assert.Contains("{ \"RecipientUserKey\" : \"user-1\" }", rendered);
     }
 

@@ -54,7 +54,12 @@ internal sealed class UserMailFixture
 
     public UserMailPreferences Preferences => new(Categories, Store, new CompositeAuditLogger([Audit], Microsoft.Extensions.Options.Options.Create(new AuditOptions())), new AuditEntryFactory(null));
 
-    public UserMailQueue Queue => new(Categories, Outbox, Wrapped, Time);
+    public UserMailQueue Queue => new(Categories, Outbox, Wrapped, Time, notifier: Notifier);
+
+    /// <summary>Records every outcome the sinks were told, so a test can see how often.</summary>
+    public RecordingOutcomeSink Sink { get; } = new();
+
+    public MailOutcomeNotifier Notifier => new([Sink]);
 
     public UserMailFrequencyCache FrequencyCache { get; } = new();
 
@@ -71,7 +76,7 @@ internal sealed class UserMailFixture
     };
 
     public UserMailDispatcher Dispatcher(ITextResolver texts = null)
-        => new(Outbox, Categories, Preferences, Recipients, Mail, Policy, Footer(texts), Wrapped, Time, null, Template);
+        => new(Outbox, Categories, Preferences, Recipients, Mail, Policy, Footer(texts), Wrapped, Time, null, Template, null, Notifier);
 
     public Task<UserMailQueued> QueueAsync(string category = News, string dedup = null, UserMailAttachment[] attachments = null)
         => Queue.QueueAsync(new UserMail
@@ -117,7 +122,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
                 _items.Add(new UserMailItem
                 {
                     Id = Guid.NewGuid().ToString("N"),
-                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey },
+                    Mail = new UserMail { RecipientUserKey = recipient, Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey, SentByUserKey = batch.SentByUserKey },
                     BatchId = id,
                     Status = UserMailStatus.Queued,
                     QueuedAt = queuedAt,
@@ -318,7 +323,7 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         lock (_gate)
         {
             var mine = _items
-                .Where(x => !x.Refused && ((userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address && x.Mail.Kind != UserMailKind.Contact)))
+                .Where(x => !x.Refused && ((userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address && x.Mail.Kind is not (UserMailKind.Contact or UserMailKind.SupportAnswer or UserMailKind.SupportReceipt))))
                 .Reverse()
                 .ToList();
 
@@ -381,6 +386,9 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
 
     public Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, DateTime at, CancellationToken cancellationToken = default)
         => Write(id, claimant, x => Done(x, UserMailStatus.Sent, at) with { MessageId = messageId, RecipientAddress = address ?? x.RecipientAddress });
+
+    public Task<bool> MarkSentAsync(string id, string claimant, string messageId, string address, UserMailRoute route, DateTime at, CancellationToken cancellationToken = default)
+        => Write(id, claimant, x => Done(x, UserMailStatus.Sent, at) with { MessageId = messageId, RecipientAddress = address ?? x.RecipientAddress, FromAddress = route?.From, EffectiveReplyTo = route?.ReplyTo });
 
     public Task<bool> MarkSkippedAsync(string id, string claimant, string reason, DateTime at, CancellationToken cancellationToken = default)
         => Write(id, claimant, x => Done(x, UserMailStatus.Skipped, at) with { Reason = reason });
@@ -456,6 +464,9 @@ internal sealed class InMemoryUserMailRecipients : IUserMailRecipientDirectory
 
     public Task<UserMailRecipient> FindAsync(string userKey, CancellationToken cancellationToken = default)
         => Task.FromResult(_recipients.GetValueOrDefault(userKey));
+
+    public Task<UserMailRecipient[]> FindManyAsync(IReadOnlyCollection<string> userKeys, CancellationToken cancellationToken = default)
+        => Task.FromResult(userKeys.Select(x => _recipients.GetValueOrDefault(x)).Where(x => x != null).ToArray());
 }
 
 internal sealed class RecordingMailClient : IMailClient
@@ -474,6 +485,8 @@ internal sealed class RecordingMailClient : IMailClient
 
     public bool CanRead => false;
 
+    public string DefaultFrom => "hello@example.com";
+
     public Task<MailSendResult> SendAsync(OutboundMail mail, CancellationToken cancellationToken = default)
     {
         lock (_sent) _sent.Add(mail);
@@ -491,6 +504,23 @@ internal sealed class RecordingAuditLogger : IAuditLogger
     public void Log(AuditEntry entry) => Entries.Add(entry);
 
     public Task<AuditQueryResult> QueryAsync(AuditQuery query) => Task.FromResult(new AuditQueryResult());
+}
+
+internal sealed class RecordingOutcomeSink : IMailOutcomeSink
+{
+    private readonly List<MailOutcome> _told = [];
+
+    public IReadOnlyList<MailOutcome> Told
+    {
+        get { lock (_told) return [.. _told]; }
+    }
+
+    public Task OnMailOutcomeAsync(MailOutcome outcome, CancellationToken cancellationToken = default)
+    {
+        lock (_told) _told.Add(outcome);
+
+        return Task.CompletedTask;
+    }
 }
 
 internal sealed class DictionaryTextResolver(Dictionary<string, string> texts) : ITextResolver

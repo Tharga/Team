@@ -39,6 +39,8 @@ internal sealed class MailClient(IOptions<MailOptions> options, ILogger<MailClie
 
     public bool CanRead => _options.Imap.IsConfigured;
 
+    public string DefaultFrom => string.IsNullOrWhiteSpace(_options.FromAddress) ? null : _options.FromAddress.Trim();
+
     public async Task<MailSendResult> SendAsync(OutboundMail mail, CancellationToken cancellationToken = default)
     {
         if (!CanSend) return MailSendResult.Failed("Email is not configured for sending.");

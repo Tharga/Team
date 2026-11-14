@@ -419,6 +419,55 @@ part given narrows the list and none lists everything:
   to none. Set `UserMail.TeamKey` or `UserMailBatch.TeamKey` on mail you queue yourself. Mail queued before this
   version records no team.
 
+### What a mail was sent as, and by whom
+
+Every row says **what the mail was sent from and the reply address it carried**, and **who sent it** when a person did:
+
+- **From and Reply-To** are recorded when the mail is sent: the address the mail client stamped, and the reply address of the mail,
+  or the configured one. A mail sent before this version, or by a client that does not know its own sender (`IMailClient.DefaultFrom`),
+  shows no From.
+- **Sent by** is the user who wrote it. A staff message, a contact message and a support answer fill it from the signed-in user; mail the
+  application sends on its own has none. Set `UserMail.SentByUserKey` or `UserMailBatch.SentByUserKey` on mail you queue yourself.
+- **Support's mail is in the log**, as two kinds of its own. A *support answer* is each answer the mail channel sends on a case, and a
+  *support receipt* is the receipt a contact form mails. Each row points back to the **case** (`CaseId`, shown as "Case ...") and the team,
+  and is never part of a user's own history. They are written already done, so the dispatcher never claims them.
+- **The log says what the case says.** One answer is one row: sending it again updates the row (failed, then sent), and a bounce of an
+  answer marks the row bounced as it marks the case. A mail log that cannot be written is logged and never costs the answer.
+
+The new fields are on `UserMail`, `UserMailItem`, `UserMailDelivery` and `UserMailHistoryItem`; all are additive, and an `IUserMailOutbox`
+written before keeps working through default members (the new members throw `NotSupportedException` until it implements them).
+
+### Telling the host when a mail fails
+
+When a mail ends badly nothing used to tell the host. Register an `IMailOutcomeSink`:
+
+```csharp
+public sealed class NotifySender(INotifications notifications) : IMailOutcomeSink
+{
+    public Task OnMailOutcomeAsync(MailOutcome outcome, CancellationToken cancellationToken = default)
+        => outcome.SentByUserKey == null
+            ? Task.CompletedTask
+            : notifications.TellAsync(outcome.SentByUserKey, $"A mail to {outcome.Subject} did not arrive.", outcome.MailId);
+}
+
+builder.Services.AddScoped<IMailOutcomeSink, NotifySender>();
+```
+
+- **Called once, on the transition**: when a mail is **given up** after its retries, **refused** when it is handed to the queue, or **bounced**.
+  A bounce read again, another instance, or the same cause refused again the same day tells nobody twice.
+- **Every registered sink is told.** One that throws is logged and the others still run; it never changes what is recorded for the mail.
+- The outcome names the mail by id, who sent it, the team, the case and the reason, **and carries no address**: the reason often quotes it.
+
+To show the sender what failed without granting them the whole log, read the mail by its id:
+
+```csharp
+var mail = await history.GetMailAsync(outcome.MailId);   // subject, status, reason, From, Reply-To, who sent it; no body or files
+```
+
+Allowed for the user who sent it, or for a holder of `users:manage`; anybody else, and any id when the caller is not staff, is refused with
+`UnauthorizedAccessException`, so the refusal tells nothing about whether an id is real. Staff reading a mail they did not send is audited
+(`usermail`, action `log`, `usermail.mail`).
+
 A host exposing it over REST calls the service and nothing else:
 
 ```csharp

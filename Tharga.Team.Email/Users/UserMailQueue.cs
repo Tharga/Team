@@ -23,7 +23,8 @@ internal sealed partial class UserMailQueue(
     IOptions<UserMailOptions> options,
     TimeProvider timeProvider,
     UserMailDispatcher dispatcher = null,
-    ILogger<UserMailQueue> logger = null) : IUserMailQueue
+    ILogger<UserMailQueue> logger = null,
+    MailOutcomeNotifier notifier = null) : IUserMailQueue
 {
     private const string OctetStream = "application/octet-stream";
     private const int MaxDeduplicationKeyLength = 200;
@@ -113,7 +114,11 @@ internal sealed partial class UserMailQueue(
         CompletedAt = item.CompletedAt,
         Reason = item.Reason,
         MessageId = item.MessageId,
-        BouncedAt = item.BouncedAt
+        BouncedAt = item.BouncedAt,
+        SentByUserKey = item.Mail.SentByUserKey,
+        FromAddress = item.FromAddress ?? item.Mail.FromAddress,
+        ReplyTo = item.EffectiveReplyTo,
+        CaseId = item.Mail.CaseId
     };
 
     private static UserMailDeliveryPage ToPage(UserMailItemPage page) => new()
@@ -133,7 +138,7 @@ internal sealed partial class UserMailQueue(
         }
         catch (ArgumentException e) when (batch != null && e is not ArgumentNullException)
         {
-            await RecordRefusalAsync(new UserMail { Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey }, e, cancellationToken);
+            await RecordRefusalAsync(new UserMail { Category = batch.Category, Subject = batch.Subject, Kind = batch.Kind, TeamKey = batch.TeamKey, SentByUserKey = batch.SentByUserKey }, e, cancellationToken);
             throw;
         }
 
@@ -167,7 +172,23 @@ internal sealed partial class UserMailQueue(
             var refused = Refused(mail);
             var reason = Truncated(ParameterSuffix().Replace(refusal.Message, string.Empty).Trim(), MaxRecordedReasonLength);
 
-            await outbox.AddRefusedAsync(refused, reason, RefusalKey(refused, reason), Now(), cancellationToken);
+            var at = Now();
+
+            // Told only when this refusal was recorded: the same cause again the same day is one record, and one outcome.
+            if (await outbox.AddRefusedAsync(refused, reason, RefusalKey(refused, reason), at, cancellationToken) && notifier != null)
+            {
+                await notifier.NotifyAsync(new MailOutcome
+                {
+                    Outcome = MailOutcomeKind.Refused,
+                    Kind = refused.Kind,
+                    Subject = refused.Subject,
+                    Reason = reason,
+                    SentByUserKey = refused.SentByUserKey,
+                    RecipientUserKey = refused.RecipientUserKey,
+                    TeamKey = refused.TeamKey,
+                    At = at
+                }, cancellationToken);
+            }
         }
         catch (NotSupportedException)
         {
@@ -192,7 +213,8 @@ internal sealed partial class UserMailQueue(
             Category = Truncated(mail.Category?.Trim(), MaxRecordedTextLength) ?? string.Empty,
             Subject = Truncated(OneLine(mail.Subject), MaxRecordedTextLength) ?? string.Empty,
             Kind = mail.Kind,
-            TeamKey = Truncated(Team(mail.TeamKey), MaxRecordedTextLength)
+            TeamKey = Truncated(Team(mail.TeamKey), MaxRecordedTextLength),
+            SentByUserKey = Truncated(mail.SentByUserKey?.Trim(), MaxRecordedTextLength)
         };
     }
 
@@ -247,7 +269,10 @@ internal sealed partial class UserMailQueue(
             ReplyTo = replyTo,
             DeduplicationKey = deduplicationKey,
             Kind = mail.Kind,
-            TeamKey = Team(mail.TeamKey)
+            TeamKey = Team(mail.TeamKey),
+            SentByUserKey = Team(mail.SentByUserKey),
+            FromAddress = Team(mail.FromAddress),
+            CaseId = Team(mail.CaseId)
         };
     }
 
@@ -264,7 +289,7 @@ internal sealed partial class UserMailQueue(
 
         var content = AcceptContent(batch.Category, batch.Subject, batch.BodyHtml, batch.Body, batch.Attachments, nameof(batch));
 
-        return content with { RecipientUserKeys = recipients, Kind = batch.Kind, TeamKey = Team(batch.TeamKey) };
+        return content with { RecipientUserKeys = recipients, Kind = batch.Kind, TeamKey = Team(batch.TeamKey), SentByUserKey = Team(batch.SentByUserKey) };
     }
 
     private UserMailBatch AcceptContent(string categoryKey, string subjectLine, string bodyHtml, string bodyText, UserMailAttachment[] attachments, string parameterName)

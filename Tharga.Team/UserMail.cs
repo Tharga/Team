@@ -44,6 +44,15 @@ public sealed record UserMail
 
     /// <summary>The key of the team the mail is about, such as the one an invitation is to, so the mail log can be filtered by organisation; null when it belongs to none or to several.</summary>
     public string TeamKey { get; init; }
+
+    /// <summary>The key of the user who sent it, such as the staff member who wrote a message; null for mail the application sends on its own. Shown in the mail log.</summary>
+    public string SentByUserKey { get; init; }
+
+    /// <summary>The address the mail is sent from, when the caller knows it, as a support answer does; null for the configured sender, which is recorded when the mail is sent.</summary>
+    public string FromAddress { get; init; }
+
+    /// <summary>The support case the mail is about, so the log can point back to it; null for mail that is not part of a case.</summary>
+    public string CaseId { get; init; }
 }
 
 /// <summary>A file sent with a <see cref="UserMail"/>.</summary>
