@@ -398,6 +398,14 @@ that opens that user's own history. `UserMailLogView` takes `PageSize` (50), `Ti
 history view does, and filters on kind, result, category, a day or a range of days (each day is the reader's own),
 a user key or an address, and a team key.
 
+A mail that belongs to a support case shows the case under its subject. Give the view `CaseHref` and that case becomes
+a link to wherever the host opens cases; without it, or when the function returns no address, the case is shown as
+plain text:
+
+```razor
+<UserMailLogView CaseHref="@(item => $"/support/{item.CaseId}")" />
+```
+
 Behind it is `IUserMailHistoryService.ListAllAsync(filter, cursor, pageSize)`, which takes a `UserMailFilter`; every
 part given narrows the list and none lists everything:
 
