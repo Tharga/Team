@@ -1,0 +1,84 @@
+@using Microsoft.JSInterop
+@using Tharga.Team.Blazor.Framework
+@inject IThargaTextProvider TextProvider
+@inject Microsoft.JSInterop.IJSRuntime Js
+@inject NotificationService NotificationService
+
+@* Who wrote through the host's contact form, as a table of label and value: what they typed, unverified. Rows with nothing in them
+   are left out. The address and the phone number each have a button that copies them, so nobody selects them by hand. *@
+
+@if (Contact != null)
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-contact="@CaseId">
+        <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[SupportContactText.Title]</RadzenText>
+        <table class="rz-m-0" data-contact-table>
+            <tbody>
+                @foreach (var row in Rows())
+                {
+                    <tr data-contact-row="@row.Key">
+                        <th scope="row" style="text-align: left; font-weight: normal; color: var(--rz-text-secondary-color); padding: 0.125rem 1rem 0.125rem 0;">@row.Label</th>
+                        <td style="padding: 0.125rem 0;">
+                            <span data-contact-value="@row.Key">@row.Value</span>
+                            @if (row.Copyable)
+                            {
+                                <RadzenButton Icon="content_copy" Size="ButtonSize.ExtraSmall" Variant="Variant.Text" ButtonStyle="ButtonStyle.Base"
+                                              title="@_text[SupportContactText.Copy]" aria-label="@_text[SupportContactText.Copy]"
+                                              Click="@(() => CopyAsync(row.Value))" data-copy="@row.Key" />
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>Who wrote. Nothing is rendered without one.</summary>
+    [Parameter] public ExternalSupportContact Contact { get; set; }
+
+    /// <summary>The case the contact belongs to; only to tell the tables of several open cases apart.</summary>
+    [Parameter] public string CaseId { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+
+    private sealed record Row(string Key, string Label, string Value, bool Copyable = false);
+
+    protected override async Task OnInitializedAsync() => _text = await TextProvider.ResolveAsync(SupportContactText.All);
+
+    /// <summary>Name, address, phone, organisation, the form's own fields in the order the host gave them, and when consent was given; empty ones left out.</summary>
+    private IEnumerable<Row> Rows()
+    {
+        if (Present(Contact.Name)) yield return new Row("name", _text[SupportContactText.Name], Contact.Name);
+        if (Present(Contact.Email)) yield return new Row("email", _text[SupportContactText.Email], Contact.Email, Copyable: true);
+        if (Present(Contact.Phone)) yield return new Row("phone", _text[SupportContactText.Phone], Contact.Phone, Copyable: true);
+        if (Present(Contact.Organisation)) yield return new Row("organisation", _text[SupportContactText.Organisation], Contact.Organisation);
+
+        foreach (var field in Contact.Fields ?? new Dictionary<string, string>())
+        {
+            if (Present(field.Key) && Present(field.Value)) yield return new Row("field:" + field.Key, field.Key, field.Value);
+        }
+
+        // Always shown: that nobody recorded consent is something staff should see, not infer from a missing row.
+        yield return new Row("consent", _text[SupportContactText.Consent], Contact.ConsentGivenAt is { } consent
+            ? consent.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture)
+            : _text[SupportContactText.NoConsent]);
+    }
+
+    private static bool Present(string value) => !string.IsNullOrWhiteSpace(value);
+
+    /// <remarks>The browser may refuse the clipboard, for instance outside a secure page; nothing is claimed as copied then.</remarks>
+    private async Task CopyAsync(string value)
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("clipboard.copyText", value);
+        }
+        catch (Exception exception) when (exception is Microsoft.JSInterop.JSException or InvalidOperationException)
+        {
+            return;
+        }
+
+        NotificationService.Notify(NotificationSeverity.Success, _text[SupportContactText.Copied]);
+    }
+}

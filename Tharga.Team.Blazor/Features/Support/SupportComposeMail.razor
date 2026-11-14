@@ -1,0 +1,213 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@inject ISupportCaseService SupportCases
+@inject IThargaTextProvider TextProvider
+
+@* Support staff writing first: to somebody who filled in a contact form days ago, or to a prospect. The mail goes out as an
+   answer does and opens a case, so the reply lands in it. A host places this where it has the recipient to hand and is
+   given the new case back, to connect it to its own records. Opened as a dialog by the "New message" button on the support
+   boards. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (_problem != null)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter" data-compose-problem>
+        @_problem
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-compose-mail>
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" Wrap="FlexWrap.Wrap">
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.125rem" Style="flex: 1 1 14rem;">
+                <RadzenLabel Text="@_text[SupportComposeMailText.To]" Component="composeTo" />
+                <RadzenTextBox Name="composeTo" Value="@_to" Disabled="_busy" MaxLength="@SupportCaseLimits.MaxExternalEmailLength"
+                               @oninput="@(e => _to = e.Value?.ToString() ?? string.Empty)" @onchange="RouteAsync" data-compose-to />
+            </RadzenStack>
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.125rem" Style="flex: 1 1 14rem;">
+                <RadzenLabel Text="@_text[SupportComposeMailText.Name]" Component="composeName" />
+                <RadzenTextBox Name="composeName" Value="@_name" Disabled="_busy" MaxLength="@SupportCaseLimits.MaxExternalNameLength"
+                               @oninput="@(e => _name = e.Value?.ToString() ?? string.Empty)" data-compose-name />
+            </RadzenStack>
+        </RadzenStack>
+
+        @* Offered when the reader can list teams; leaving it empty opens the case in the unassigned queue. *@
+        @if (Teams is { Length: > 0 })
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.125rem">
+                <RadzenLabel Text="@_text[SupportComposeMailText.Team]" Component="composeTeam" />
+                <RadzenDropDown Name="composeTeam" Data="Teams" TextProperty="Name" ValueProperty="Key" TValue="string" AllowClear="true"
+                                AllowFiltering="true" Value="@_teamKey" ValueChanged="@((string v) => _teamKey = v)" Disabled="_busy"
+                                Style="min-width: 16rem;" data-compose-team />
+            </RadzenStack>
+        }
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.125rem">
+            <RadzenLabel Text="@_text[SupportComposeMailText.Subject]" Component="composeSubject" />
+            <RadzenTextBox Name="composeSubject" Value="@_subject" Disabled="_busy" MaxLength="@SupportCaseLimits.MaxExternalSubjectLength"
+                           @oninput="@(e => _subject = e.Value?.ToString() ?? string.Empty)" data-compose-subject />
+        </RadzenStack>
+
+        <SupportAnswerRouteLine Route="_route" @bind-Choice="_choice" />
+
+        <RichTextEditor @bind-Value="_message" Label="@_text[SupportComposeMailText.Message]" Disabled="_busy" Height="10rem" />
+        <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
+
+        @if (_error != null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter" AllowClose="false" data-compose-error>
+                @_error
+            </RadzenAlert>
+        }
+
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenButton Text="@_text[SupportComposeMailText.Send]" Icon="send" Click="SendAsync" Disabled="@(!CanSend || _busy)" data-compose-send />
+            <RadzenButton Text="@_text[SupportComposeMailText.Cancel]" ButtonStyle="ButtonStyle.Light" Click="CancelAsync" Disabled="_busy" data-compose-cancel />
+        </RadzenStack>
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>The address to write to; the reader can change it.</summary>
+    [Parameter] public string To { get; set; }
+
+    /// <summary>The recipient's name, when the host knows it.</summary>
+    [Parameter] public string ToName { get; set; }
+
+    /// <summary>The subject to start from.</summary>
+    [Parameter] public string Subject { get; set; }
+
+    /// <summary>Anything else the host knows about the recipient, kept on the case as its contact.</summary>
+    [Parameter] public ExternalSupportContact Contact { get; set; }
+
+    /// <summary>The team the case belongs to; none opens it in the unassigned queue.</summary>
+    [Parameter] public string TeamKey { get; set; }
+
+    /// <summary>The teams the reader may choose between, in the order to offer them; when empty no choice is offered and <see cref="TeamKey"/> stands.</summary>
+    [Parameter] public SupportCaseTeam[] Teams { get; set; } = [];
+
+    /// <summary>
+    /// Raised with the new case once the mail is written, so the host can connect the case to its own records. The case
+    /// stands even when the mail could not be sent; its first message then says it was not delivered.
+    /// </summary>
+    [Parameter] public EventCallback<SupportCase> Started { get; set; }
+
+    /// <summary>Raised when the reader gives up.</summary>
+    [Parameter] public EventCallback Cancelled { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _busy;
+    private string _problem;
+    private string _error;
+
+    private string _to;
+    private string _name;
+    private string _subject;
+    private string _teamKey;
+    private string _message;
+    private IReadOnlyList<SupportAttachmentUpload> _files = [];
+    private SupportAnswerChoice _choice = new();
+    private SupportAnswerRoute _route;
+
+    private bool CanSend => !string.IsNullOrWhiteSpace(_to) && !RichTextEditor.IsEmpty(_message);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportComposeMailText.All);
+
+        _to = To;
+        _name = ToName ?? Contact?.Name;
+        _subject = Subject;
+        _teamKey = TeamKey;
+
+        await RouteAsync();
+        _ready = true;
+    }
+
+    /// <remarks>
+    /// Read again when the address changes, so a non-production redirect or withhold is shown for the address that is about
+    /// to be written to. Nobody who may not start a case sees the form, and nobody is shown one for mail that is not set up.
+    /// </remarks>
+    private async Task RouteAsync()
+    {
+        try
+        {
+            _route = await SupportCases.GetStartMailRouteAsync(_to);
+            _problem = null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _problem = _text[SupportComposeMailText.NotPermitted];
+        }
+        catch (InvalidOperationException)
+        {
+            _problem = _text[SupportComposeMailText.NoMail];
+        }
+    }
+
+    /// <remarks>The editor's HTML goes as it is; the service sanitizes it and derives the text.</remarks>
+    private async Task SendAsync()
+    {
+        if (!CanSend) return;
+
+        _busy = true;
+        _error = null;
+        try
+        {
+            var started = await SupportCases.StartMailCaseAsync(new StartMailCaseRequest
+            {
+                To = _to.Trim(),
+                ToName = _name,
+                Contact = Contact,
+                TeamKey = _teamKey,
+                Subject = _subject,
+                BodyHtml = _message ?? string.Empty,
+                Attachments = SupportAttachmentPicker.Rewound(_files),
+                Choice = _choice
+            });
+
+            _message = null;
+            _files = [];
+            await Started.InvokeAsync(started);
+        }
+        catch (ArgumentException exception)
+        {
+            _error = exception.ParamName == "contact" ? _text[SupportComposeMailText.BadAddress] : exception.Message;
+        }
+        catch (InvalidOperationException exception)
+        {
+            _error = exception.Message;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _error = _text[SupportComposeMailText.NotPermitted];
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task CancelAsync() => Cancelled.InvokeAsync();
+
+    /// <summary>
+    /// Opens the form as a dialog and returns the new case, or null when the reader gave up. What the support boards'
+    /// "New message" buttons do.
+    /// </summary>
+    internal static async Task<SupportCase> OpenAsync(DialogService dialogs, string title, SupportCaseTeam[] teams = null)
+    {
+        var started = new EventCallback<SupportCase>(null, (Action<SupportCase>)(supportCase => dialogs.Close(supportCase)));
+        var cancelled = new EventCallback(null, (Action)(() => dialogs.Close(null)));
+
+        return await dialogs.OpenAsync<SupportComposeMail>(title, new Dictionary<string, object>
+        {
+            [nameof(Teams)] = teams ?? [],
+            [nameof(Started)] = started,
+            [nameof(Cancelled)] = cancelled
+        }, new DialogOptions { Width = "48rem" }) as SupportCase;
+    }
+}

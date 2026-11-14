@@ -5,6 +5,7 @@
 @inject ISupportCaseService SupportCases
 @inject ISupportCaseNotifier Notifier
 @inject IServiceProvider Services
+@inject DialogService DialogService
 
 @* Support cases that belong to no team: answer them, and give one a team when you know which it is.
 
@@ -40,6 +41,8 @@ else
             {
                 <RadzenBadge Text="@($"{_awaiting} {_text[SupportUnassignedViewText.Awaiting]}")" BadgeStyle="BadgeStyle.Danger" data-awaiting="@_awaiting" />
             }
+            <RadzenButton Text="@_compose[SupportComposeMailText.NewMessage]" Icon="edit" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary"
+                          Click="NewMessageAsync" data-new-message />
         </RadzenStack>
 
         @if (_message != null)
@@ -63,7 +66,7 @@ else
             foreach (var item in Shown())
             {
                 <div @key="item.Id" data-case="@item.Id">
-                    <ExpandableCard Text="@CaseTitle(item)" Icon="@ChannelIcon(item)" AllowSaveState="false">
+                    <ExpandableCard Text="@CaseTitle(item)" Icon="@ChannelIcon(item)" AllowSaveState="false" Selected="@(item.Id == _opened)">
                         <TopMenu>
                             <RadzenBadge Text="@StatusText(item)" BadgeStyle="@StatusStyle(item)" data-status="@item.Id" />
                             @if (item.AwaitingSupport)
@@ -79,7 +82,7 @@ else
                             </RadzenText>
                         </TopMenu>
                         <ChildContent>
-                            <SupportUnassignedConversation Case="item" Teams="_teams" TimeTemplate="TimeTemplate"
+                            <SupportUnassignedConversation Case="item" Teams="_teams" Extras="CaseExtras" TimeTemplate="TimeTemplate"
                                                            Changed="OnChangedAsync" Assigned="OnAssignedAsync" />
                         </ChildContent>
                     </ExpandableCard>
@@ -93,12 +96,19 @@ else
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
 
+    /// <summary>The host's own content in each opened case, below the contact; the case is its context. For linking a message to a record the package knows nothing about.</summary>
+    [Parameter] public RenderFragment<SupportCase> CaseExtras { get; set; }
+
+    /// <summary>A case to open when the view loads, for a host that links straight to one. An id that names nothing in the list opens nothing.</summary>
+    [Parameter] public string CaseId { get; set; }
+
     /// <summary>Where the list filter is remembered in the browser.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Unassigned.Filter";
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
+    private TextSet _compose = TextSet.Empty;
     private bool _ready;
     private bool _permitted = true;
 
@@ -107,21 +117,48 @@ else
 
     private SupportCaseFilter _filter;
     private SupportCase[] _cases = [];
+    private string _opened;
     private SupportCaseTeam[] _teams = [];
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(SupportUnassignedViewText.All);
+        _compose = await TextProvider.ResolveAsync(SupportComposeMailText.All);
 
         Notifier.CaseUpdated += OnCaseUpdated;
 
         await ReloadAsync();
         await LoadTeamsAsync();
 
+        OpenRequested();
         _ready = true;
     }
 
+    protected override void OnParametersSet()
+    {
+        if (_ready) OpenRequested();
+    }
+
+    private string _openRequested;
+
+    /// <remarks>An id that names nothing this caller can list opens nothing and says nothing; a filter does not hide the case asked for.</remarks>
+    private void OpenRequested()
+    {
+        if (CaseId == _openRequested) return;
+
+        _openRequested = CaseId;
+        if (!string.IsNullOrWhiteSpace(CaseId) && _cases.Any(x => x.Id == CaseId)) _opened = CaseId;
+    }
+
     public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <remarks>The case is announced as it is written, so the board shows it without a reload; this only reads again in case that notice came from elsewhere.</remarks>
+    private async Task NewMessageAsync()
+    {
+        if (await SupportComposeMail.OpenAsync(DialogService, _compose[SupportComposeMailText.NewMessage], _teams) == null) return;
+
+        await ReloadAsync();
+    }
 
     /// <summary>
     /// Re-reads the queue, and with it every open conversation. For a host that hears of a change the
@@ -166,7 +203,7 @@ else
     /// <summary>The cases the filter lets through: waiting ones first, then the liveliest conversation.</summary>
     private IEnumerable<SupportCase> Shown()
         => _cases
-            .Where(x => _filter?.Shows(x) ?? SupportCaseFilter.ShowsByDefault(x))
+            .Where(x => (_filter?.Shows(x) ?? SupportCaseFilter.ShowsByDefault(x)) || x.Id == _opened)
             .OrderByDescending(x => x.AwaitingSupport)
             .ThenByDescending(x => x.LastMessageAt ?? x.CreatedAt);
 

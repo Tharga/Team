@@ -108,7 +108,7 @@ internal sealed class ExternalSupportCaseService(
     /// Nothing was mailed with it unless a receipt goes out, and then the receipt's own id joins the thread. Either way an
     /// answer threads on the ids the case holds, and a reply names one of them.
     /// </remarks>
-    private static string ThreadRootId(string caseId, string fromAddress)
+    internal static string ThreadRootId(string caseId, string fromAddress)
     {
         var at = fromAddress?.LastIndexOf('@') ?? -1;
         var domain = at >= 0 && at < fromAddress.Length - 1 ? fromAddress[(at + 1)..] : "support.invalid";
@@ -181,7 +181,7 @@ internal sealed class ExternalSupportCaseService(
     }
 
     /// <summary>Every refusal, before anything is written; returns what to keep, trimmed.</summary>
-    private static (ExternalSupportContact Contact, string Subject, string Body) Check(ExternalSupportContact contact, string subject, string body)
+    internal static (ExternalSupportContact Contact, string Subject, string Body) Check(ExternalSupportContact contact, string subject, string body)
     {
         ArgumentNullException.ThrowIfNull(contact);
 

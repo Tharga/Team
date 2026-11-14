@@ -8,33 +8,11 @@
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-conversation="@Case.Id">
 
-    @* A visitor who wrote through the host's public form: what they typed, unverified, with whether they consented. *@
-    @if (Case.ExternalContact is { } contact)
-    {
-        <RadzenStack Orientation="Orientation.Vertical" Gap="0.125rem" data-contact="@Case.Id">
-            <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[SupportUnassignedViewText.ContactTitle]</RadzenText>
-            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
-                @string.Join(" · ", new[] { contact.Name, contact.Email }.Where(x => !string.IsNullOrWhiteSpace(x)))
-            </RadzenText>
-            @if (!string.IsNullOrWhiteSpace(contact.Phone))
-            {
-                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportUnassignedViewText.ContactPhone]: @contact.Phone</RadzenText>
-            }
-            @if (!string.IsNullOrWhiteSpace(contact.Organisation))
-            {
-                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportUnassignedViewText.ContactOrganisation]: @contact.Organisation</RadzenText>
-            }
-            @foreach (var field in contact.Fields ?? new Dictionary<string, string>())
-            {
-                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@field.Key: @field.Value</RadzenText>
-            }
-            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
-                @(contact.ConsentGivenAt is { } consent
-                    ? _text.Format(SupportUnassignedViewText.ContactConsent, consent.ToLocalTime().ToString("g", System.Globalization.CultureInfo.CurrentCulture))
-                    : _text[SupportUnassignedViewText.ContactNoConsent])
-            </RadzenText>
-        </RadzenStack>
-    }
+    @* A visitor who wrote through the host's public form: what they typed, unverified, as a table. *@
+    <SupportContactTable Contact="Case.ExternalContact" CaseId="@Case.Id" />
+
+    @* Whatever the host adds to an opened case, below the contact: linking the message to its own records, for one. *@
+    @Extras?.Invoke(Case)
 
     <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" TimeTemplate="TimeTemplate"
                        ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync"
@@ -96,6 +74,7 @@
             <RadzenDropDown Data="Teams" TextProperty="Name" ValueProperty="Key"
                             Value="@_assignTo" ValueChanged="@((string v) => _assignTo = v)"
                             TValue="string" AllowClear="true"
+                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" FilterOperator="StringFilterOperator.Contains"
                             Placeholder="@_text[SupportUnassignedViewText.AssignLabel]"
                             Style="min-width: 16rem;" aria-label="@_text[SupportUnassignedViewText.AssignLabel]" />
             <RadzenButton Text="@_text[SupportUnassignedViewText.AssignAction]" Click="AssignAsync"
@@ -119,6 +98,9 @@
 
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>The host's own content for the case, rendered below the contact; the case is its context.</summary>
+    [Parameter] public RenderFragment<SupportCase> Extras { get; set; }
 
     /// <summary>Raised with the case id after this conversation changed the case, so the list around it can read it again.</summary>
     [Parameter] public EventCallback<string> Changed { get; set; }

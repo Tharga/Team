@@ -382,6 +382,38 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => inner.GetCaseAsync(teamKey, caseId, cancellationToken);
 
+    public Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+        => inner.GetCaseByIdAsync(caseId, cancellationToken);
+
+    /// <remarks>Not audited: it reads configuration and the caller's own addresses, and changes nothing.</remarks>
+    public Task<SupportAnswerRoute> GetStartMailRouteAsync(string to = null, CancellationToken cancellationToken = default)
+        => inner.GetStartMailRouteAsync(to, cancellationToken);
+
+    /// <remarks>
+    /// Audited as the outward act it is: staff wrote to somebody who had not written first. The entry names the case, the
+    /// team and how many files went, never the recipient's address or what was said, which are a person's.
+    /// </remarks>
+    public async Task<SupportCase> StartMailCaseAsync(StartMailCaseRequest request, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var teamKey = string.IsNullOrWhiteSpace(request?.TeamKey) ? null : request.TeamKey;
+        try
+        {
+            var started = await inner.StartMailCaseAsync(request, cancellationToken);
+
+            Log("start-mail", nameof(StartMailCaseAsync), sw.ElapsedMilliseconds, true, started?.TeamKey ?? teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, started?.Id), (SupportAuditMetadataKeys.AttachmentCount, CountOf(request?.Attachments))));
+
+            return started;
+        }
+        catch (Exception ex)
+        {
+            Log("start-mail", nameof(StartMailCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.AttachmentCount, CountOf(request?.Attachments))));
+            throw;
+        }
+    }
+
     /// <remarks>Audited, as the verdict it is: who rated which answer how is what the people building the assistant go back to.</remarks>
     public async Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default)
     {
