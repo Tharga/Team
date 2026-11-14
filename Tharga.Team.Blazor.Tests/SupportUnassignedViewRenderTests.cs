@@ -566,7 +566,7 @@ public class SupportUnassignedViewRenderTests : BunitContext
         Assert.Contains("vera@visitor.example", shown.TextContent);
         Assert.Contains("070-1234567", shown.TextContent);
         Assert.Contains("Visitor AB", shown.TextContent);
-        Assert.Contains("Consent given", shown.TextContent);
+        Assert.Contains(Morning.ToLocalTime().ToString("g"), shown.TextContent);
         Assert.Contains("Product", shown.TextContent);
         Assert.Contains("Export", shown.TextContent);
     }

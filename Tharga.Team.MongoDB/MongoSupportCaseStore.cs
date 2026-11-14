@@ -85,8 +85,8 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             ExternalContact = supportCase.ExternalContact == null ? null : ToEntity(supportCase.ExternalContact),
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
-            // exists.
-            LastMessageFromAuthor = true,
+            // exists. Unless support wrote it: a case started by mail opens with support's own message, and waits on the reply.
+            LastMessageFromAuthor = !firstMessage.AsSupport,
             LastMessageAt = firstMessage.SentAt
         });
     }

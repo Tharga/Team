@@ -34,7 +34,8 @@ internal sealed class SupportCaseService(
     SupportDeskPresence deskPresence = null,
     IEnumerable<ISupportAssistantUsageSink> usageSinks = null,
     ILogger<SupportCaseService> logger = null,
-    SupportAnswerOptions answerOptions = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportAnswerOptions answerOptions = null,
+    SupportMailboxes mailboxes = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
@@ -770,6 +771,128 @@ internal sealed class SupportCaseService(
 
     public Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
         => store.GetCaseAsync(teamKey, caseId, cancellationToken);
+
+    public Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+        => string.IsNullOrWhiteSpace(caseId) ? Task.FromResult<SupportCase>(null) : store.GetCaseByIdAsync(caseId.Trim(), cancellationToken);
+
+    public async Task<SupportAnswerRoute> GetStartMailRouteAsync(string to = null, CancellationToken cancellationToken = default)
+    {
+        var mailbox = mailboxes?.Primary;
+        if (AnswerMail == null || mailbox == null)
+            throw new InvalidOperationException("A case cannot be started by mail: no mail is set up for support.");
+
+        var fromAddress = string.IsNullOrWhiteSpace(mailbox.Options.FromAddress) ? null : mailbox.Options.FromAddress.Trim();
+        var binding = new SupportChannelBinding
+        {
+            ChannelType = SupportChannelType.Email,
+            ExternalId = "route-only",
+            Address = to?.Trim() ?? string.Empty,
+            Mailbox = mailbox.Name,
+            MailboxAddress = fromAddress
+        };
+
+        var route = AnswerMail.RouteOf(new SupportCase { Id = "route-only", AuthorIdentity = null, AuthorName = string.Empty, Subject = string.Empty, Status = SupportCaseStatus.Open, CreatedAt = timeProvider.GetUtcNow().UtcDateTime, MessageCount = 0 }, binding, await StaffSenderAsync());
+
+        return route with { SignWithName = answerOptions?.NameTheAnswerer ?? false };
+    }
+
+    /// <remarks>
+    /// <b>The case is written first and stands whatever happens to the mail</b>, as a raised case does: a mail server that
+    /// is down leaves the message marked as not delivered, where it can be sent again. Everything that can be refused is
+    /// refused before anything is written: the address, the message, the files and the sender.
+    /// <para>
+    /// It goes out as an answer does, by the mail channel, so the sender rules, the signature, the quoting and the tracker in
+    /// Reply-To are the ones an answer gets, and the reply threads into this case. The subject is sent as written, not as
+    /// "Re:", since nothing is being answered.
+    /// </para>
+    /// </remarks>
+    public async Task<SupportCase> StartMailCaseAsync(StartMailCaseRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var mailbox = mailboxes?.Primary;
+        if (AnswerMail == null || mailbox == null)
+            throw new InvalidOperationException("A case cannot be started by mail: no mail is set up for support.");
+
+        var (text, html) = Content(request.Body, request.BodyHtml);
+        var contact = (request.Contact ?? new ExternalSupportContact { Email = request.To }) with
+        {
+            Email = request.To,
+            Name = string.IsNullOrWhiteSpace(request.ToName) ? request.Contact?.Name : request.ToName
+        };
+        var (checkedContact, checkedSubject, checkedBody) = ExternalSupportCaseService.Check(contact, request.Subject, text);
+
+        var uploads = (request.Attachments ?? []).Where(x => x != null).ToArray();
+        RequireAttachable(uploads);
+
+        var teamKey = string.IsNullOrWhiteSpace(request.TeamKey) ? null : request.TeamKey.Trim();
+        var caseId = Guid.NewGuid().ToString();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var fromAddress = string.IsNullOrWhiteSpace(mailbox.Options.FromAddress) ? null : mailbox.Options.FromAddress.Trim();
+        var binding = new SupportChannelBinding
+        {
+            ChannelType = SupportChannelType.Email,
+            ExternalId = ExternalSupportCaseService.ThreadRootId(caseId, fromAddress),
+            Address = checkedContact.Email,
+            Mailbox = mailbox.Name,
+            MailboxAddress = fromAddress
+        };
+
+        var supportCase = new SupportCase
+        {
+            Id = caseId,
+            TeamKey = teamKey,
+            TeamName = await TeamNameAsync(teamKey),
+            AuthorIdentity = null,
+            AuthorName = checkedContact.Name ?? checkedContact.Email,
+            Subject = checkedSubject ?? SubjectFromMessage.Derive(checkedBody),
+            Status = SupportCaseStatus.Open,
+            CreatedAt = now,
+            MessageCount = 1,
+            ExternalContact = checkedContact,
+            Bindings = [binding]
+        };
+
+        // A sender the person may not use is refused here, before the case or any file exists.
+        var (sentFrom, signed) = await SenderOfAnswerAsync(supportCase, binding, request.Choice);
+
+        var stored = await StoreAttachmentsAsync(caseId, uploads, cancellationToken);
+        var identity = await authorizer.GetSubjectAsync();
+        var message = new SupportMessage
+        {
+            Sequence = 1,
+            Kind = SupportMessageKind.User,
+            AuthorIdentity = identity,
+            AuthorName = await DisplayNameAsync(),
+            Body = checkedBody,
+            BodyHtml = html,
+            SentAt = now,
+            AsSupport = true,
+            SentFrom = sentFrom,
+            SignedWithName = signed,
+            Attachments = stored,
+            Delivery = SupportMessageDelivery.Pending
+        };
+
+        try
+        {
+            await store.AddCaseAsync(supportCase, message, cancellationToken);
+        }
+        catch
+        {
+            await DiscardAsync(caseId, stored);
+            throw;
+        }
+
+        deskPresence?.Acted(identity);
+        Notify(teamKey, caseId, SupportCaseChange.Raised);
+
+        await DeliverAsync(teamKey, caseId, supportCase, message, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.Replied);
+
+        return await store.GetCaseAsync(teamKey, caseId, cancellationToken) ?? supportCase;
+    }
 
     public Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => store.GetCasesAsync(teamKey, cursor, pageSize, cancellationToken);

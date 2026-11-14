@@ -226,7 +226,7 @@ internal sealed class EmailSupportChannel(
         var thread = ThreadOf(supportCase, binding);
         var earlier = supportCase == null ? [] : await EarlierAsync(supportCase, message, cancellationToken);
         var frame = await SupportAnswerFrame.CreateAsync(answers, texts);
-        var subject = Subject(supportCase);
+        var subject = message.Sequence == 1 && !string.IsNullOrWhiteSpace(supportCase?.Subject) ? supportCase.Subject : Subject(supportCase);
         var body = Body(message, earlier, frame);
         var mailOptions = sender.Mailbox.Options;
 

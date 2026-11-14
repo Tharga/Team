@@ -228,6 +228,43 @@ public interface ISupportCaseService
     /// <summary>One case, or <c>null</c> when the team has no such case.</summary>
     Task<SupportCase> GetCaseAsync(string teamKey, string caseId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// One case by its id, whichever team it belongs to, or <c>null</c> when there is none. For the product's own support
+    /// staff, who often hold an id and not the team it is in.
+    /// </summary>
+    /// <remarks>
+    /// Authorized as reading across teams is: <see cref="SystemSupportScopes.AllRead"/>, or <see cref="SystemSupportScopes.Read"/> for a
+    /// case no team owns. The case's own <see cref="SupportCase.TeamKey"/> is then the key to read its messages with.
+    /// The default throws, so a host's own implementation keeps compiling.
+    /// </remarks>
+    Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetCaseByIdAsync)}.");
+
+    /// <summary>
+    /// Starts a case by sending a mail to somebody who has not written first, and returns it.
+    /// </summary>
+    /// <remarks>
+    /// For support staff. The recipient becomes the case's <see cref="SupportCase.ExternalContact"/>, the message its first
+    /// entry, and the mail goes out from the address chosen with the tracker in Reply-To, so the answer lands on this case.
+    /// Authorized as answering is: <see cref="SystemSupportScopes.Manage"/> for a case with no team, and for a team's
+    /// <see cref="SystemSupportScopes.AllManage"/>. When the mail cannot be sent the case stands, with the message marked as not delivered,
+    /// and can be sent again. The default throws, so a host's own implementation keeps compiling.
+    /// </remarks>
+    /// <exception cref="ArgumentException">The address, subject or message is missing, too long or not valid.</exception>
+    /// <exception cref="InvalidOperationException">No mail is set up to send with, or the sender is not one the caller may send from.</exception>
+    Task<SupportCase> StartMailCaseAsync(StartMailCaseRequest request, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(StartMailCaseAsync)}.");
+
+    /// <summary>
+    /// Where a mail that starts a case would go from, before there is a case to ask about: the addresses the caller may send
+    /// from and the one it goes from unless they pick another, for a send-from picker beside the message.
+    /// </summary>
+    /// <param name="to">The address it will go to, so a non-production redirect or withhold is shown; null when not known yet.</param>
+    /// <remarks>Authorized as starting a case is: support staff only. The default throws, so a host's own implementation keeps compiling.</remarks>
+    /// <exception cref="InvalidOperationException">No mail is set up for support.</exception>
+    Task<SupportAnswerRoute> GetStartMailRouteAsync(string to = null, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetStartMailRouteAsync)}.");
+
     /// <summary>Every case in a team, newest first.</summary>
     Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default);
 

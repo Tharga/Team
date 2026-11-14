@@ -313,6 +313,63 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.GetCaseAsync(teamKey, caseId, cancellationToken);
     }
 
+    /// <remarks>
+    /// <b>Staff only, by whichever grant covers the case.</b> The id alone says nothing about whose case it is, so the case is
+    /// read first and the grant checked against the team it reports: <see cref="SystemSupportScopes.Read"/> for the
+    /// unassigned queue, the cross-team read grant for a team's case. A caller holding neither learns nothing, not even that
+    /// an id is unknown.
+    /// </remarks>
+    public async Task<SupportCase> GetCaseByIdAsync(string caseId, CancellationToken cancellationToken = default)
+    {
+        var crossTeam = await HasCrossTeamAccessAsync(CaseAccessKind.Read);
+        var unassigned = await authorizer.HasSystemScopeAsync(SystemSupportScopes.Read);
+
+        if (!crossTeam && !unassigned)
+            throw new UnauthorizedAccessException(
+                $"Reading a support case by its id requires {SystemSupportScopes.Read} for a case with no team, or {CrossTeamScopesFor(CaseAccessKind.Read)} for a team's.");
+
+        var supportCase = await inner.GetCaseByIdAsync(caseId, cancellationToken);
+        if (supportCase == null) return null;
+
+        if (string.IsNullOrEmpty(supportCase.TeamKey) ? unassigned : crossTeam) return supportCase;
+
+        throw new UnauthorizedAccessException(string.IsNullOrEmpty(supportCase.TeamKey)
+            ? $"Reading a support case with no team requires {SystemSupportScopes.Read}."
+            : $"Reading a team's support case by its id requires {CrossTeamScopesFor(CaseAccessKind.Read)}.");
+    }
+
+    /// <remarks>
+    /// <b>Support staff, never a member.</b> Writing first to somebody speaks for the product, so it takes the grant that
+    /// answers: <see cref="SystemSupportScopes.Manage"/> for a case with no team, the cross-team write grant for a case
+    /// placed in one. Neither is reachable through membership or authorship, because there is no author yet.
+    /// </remarks>
+    public async Task<SupportCase> StartMailCaseAsync(StartMailCaseRequest request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (string.IsNullOrEmpty(request.TeamKey))
+        {
+            await RequireSystemScopeAsync(SystemSupportScopes.Manage, "start a case by mail in");
+        }
+        else if (!await HasCrossTeamAccessAsync(CaseAccessKind.Write))
+        {
+            throw new UnauthorizedAccessException(
+                $"Starting a support case by mail in a team requires {CrossTeamScopesFor(CaseAccessKind.Write)}.");
+        }
+
+        return await inner.StartMailCaseAsync(request, cancellationToken);
+    }
+
+    /// <remarks>Authorized as starting a case is, for either placement: it shows where a mail would go from, to whoever may send one.</remarks>
+    public async Task<SupportAnswerRoute> GetStartMailRouteAsync(string to = null, CancellationToken cancellationToken = default)
+    {
+        if (!await authorizer.HasSystemScopeAsync(SystemSupportScopes.Manage) && !await HasCrossTeamAccessAsync(CaseAccessKind.Write))
+            throw new UnauthorizedAccessException(
+                $"Only a caller holding '{SystemSupportScopes.Manage}' or {CrossTeamScopesFor(CaseAccessKind.Write)} may see where a mail starting a support case goes from.");
+
+        return await inner.GetStartMailRouteAsync(to, cancellationToken);
+    }
+
     public async Task<SupportCasePage> GetCasesAsync(string teamKey, string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
     {
         if (await ReadsOnlySharedCasesAsync(teamKey))
