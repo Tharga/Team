@@ -13,7 +13,7 @@ A suite of NuGet packages for building multi-tenant Blazor applications with tea
 | [Tharga.Team.Service](https://www.nuget.org/packages/Tharga.Team.Service) | Server-side API key auth, Swagger, audit logging | No |
 | [Tharga.Team.Entra](https://www.nuget.org/packages/Tharga.Team.Entra) | Microsoft Entra ID user directory (verify / list / delete users via Graph) | No |
 | [Tharga.Team.Images](https://www.nuget.org/packages/Tharga.Team.Images) | Automatic squaring and downscaling of uploaded team/user icons (SkiaSharp) | No |
-| [Tharga.Team.Email](https://www.nuget.org/packages/Tharga.Team.Email) | E-mail — IMAP reading, SMTP sending and MIME (MailKit), team mailboxes, and mail to users: categories, unsubscribe links, a persisted queue, staff messages and automatic notices | No |
+| [Tharga.Team.Email](https://www.nuget.org/packages/Tharga.Team.Email) | E-mail — IMAP reading, SMTP sending and MIME (MailKit), team mailboxes, and mail to users: categories, unsubscribe links, a persisted queue, staff messages, automatic notices and a log of every outgoing mail | No |
 | [Tharga.Team.Support](https://www.nuget.org/packages/Tharga.Team.Support) | Support module — Slack notifications for audited events, and support cases on the site, by mail and in Slack | No |
 | [Tharga.Team.Support.Anthropic](https://www.nuget.org/packages/Tharga.Team.Support.Anthropic) | Lets a team connect the support assistant to its own Neurolito or Anthropic key, over the Anthropic Messages API (Anthropic SDK) | No |
 | [Tharga.Team.Support.OpenAI](https://www.nuget.org/packages/Tharga.Team.Support.OpenAI) | Lets a team connect the support assistant to its own OpenAI key, or its own Ollama or llama.cpp server, over the OpenAI-compatible API (OpenAI SDK) | No |
@@ -458,6 +458,7 @@ whether support is online, and a message nobody answers within a minute is told 
 the one it came in through; a sender whose DKIM-verified address belongs to one account in one team lands in that
 team, anything less waits unassigned with suggested teams; files and formatting survive both ways through one
 sanitizer; and every answer says whether it was delivered, with a bounce marking it and a button to send it again.
+Answers and receipts are listed in the staff [mail log](#mail-to-users) beside every other outgoing mail.
 
 Full article: [Support cases](docs/articles/support-cases.md).
 
@@ -485,6 +486,12 @@ summary, chosen per user over each team's default (`AddThargaUserNotices`), a **
 marked **bounced** when it comes back, and **invitations** recorded and sent through the same outbox. And mail to
 **contacts** — people who are not users, listed from your own records — in categories of its own, with an opt-out per
 address that holds for good (`AddThargaContactMessages`, the `contacts:send` system scope).
+
+**One mail log for staff.** `<UserMailLogView />` lists every mail the application sent or tried to send — to users
+and contacts, and support answers and contact-form receipts too — with the From and Reply-To each went out with, who
+sent it, what became of it and, given a `CaseHref`, a link to the support case it belongs to. Register an
+`IMailOutcomeSink` to be told once when a mail is given up or bounces, so the person who sent it can be told;
+`IUserMailHistoryService.GetSentAsync(id)` lets that person read the mail back.
 
 Full articles: [Mail to users](docs/articles/user-mail.md), [Messages to users](docs/articles/user-messages.md),
 [Messages to contacts](docs/articles/contact-messages.md), [Automatic notices](docs/articles/user-notices.md).

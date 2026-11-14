@@ -1214,6 +1214,21 @@ never opens a case. A bounce that names no support answer is handed to every reg
 one recognises it — that is how [mail to users](user-mail.md#bounces) sent from a support address is marked
 bounced. One that nobody recognises is logged at Debug, without addresses.
 
+### Answers and receipts in the mail log
+
+With [mail to users](user-mail.md) registered, every answer mailed from a case and every
+[receipt](#a-public-contact-form) is listed in the staff **[mail log](user-mail.md#support-answers-and-receipts)**
+beside mail to users, as *Support answer* or *Receipt*: with the From and Reply-To it went out with, who wrote it, the
+case (and for an answer, the entry) it belongs to, and whether it was sent. A resend updates its row, a bounce marks
+it not delivered, and neither kind ever appears in a user's own mail history. Give `UserMailLogView` a `CaseHref` and
+each row links to its case. The record is written whenever an `IUserMailOutbox` is registered (`AddThargaTeamRepository`
+registers one), and writing it never stops or changes the answer.
+
+**Failures and bounces reach `IMailOutcomeSink`.** An answer or receipt recorded as not sent, and one that bounces, are
+reported to every registered sink — once for each failed attempt, and once for a bounce however often it is read —
+with the case id and, for an answer, its entry and the staff member who sent it, so the host can tell that person. See
+[When a mail does not get there](user-mail.md#when-a-mail-does-not-get-there).
+
 ### Invitation mail is separate, deliberately
 
 `ThargaTeamOptions.Email` configures invitation delivery and nothing else. It is not a fallback for support
@@ -1265,7 +1280,8 @@ user-only; nothing in it is loosened for this. Registering `AddThargaSupportCase
   quoting their message, with the thread started so their reply reaches the case. `o.External.ReceiptText` sets what it
   says, for your site's language. **It is off by default**: a form that mails whoever types an address into it can be
   used to mail other people, so turn it on only behind the defences below. A receipt that cannot be sent is logged and
-  never stops the case being opened.
+  never stops the case being opened. Each receipt is recorded in the
+  [mail log](#answers-and-receipts-in-the-mail-log), sent or not.
 
 ### Whose job is what
 

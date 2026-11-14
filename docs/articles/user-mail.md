@@ -11,8 +11,10 @@ instance claims a mail sends. Three things are built on it:
   queue, with categories and opt-outs of their own.
 
 Every one of them is recorded, so a user's **mail history** shows what was sent to them and what became of it,
-and a mail the receiving server returns is marked **bounced**. Every one of them can be framed in the host's own
-**[mail template](#the-mail-template)**, as support answers are.
+and a mail the receiving server returns is marked **bounced**. Staff see all of it in one **[mail log](#the-mail-log)**,
+support answers and contact-form receipts included, with the From and Reply-To each mail went out with and who sent
+it, and the host can be **[told when a mail does not get there](#when-a-mail-does-not-get-there)**. Every one of them
+can be framed in the host's own **[mail template](#the-mail-template)**, as support answers are.
 
 The services are in `Tharga.Team.Email` (namespace `Tharga.Team.Email.Users`), the contracts in `Tharga.Team`,
 storage in `Tharga.Team.MongoDB` and the views in `Tharga.Team.Blazor`. New in 4.2.
@@ -352,12 +354,14 @@ card and title to the host). Behind it is `IUserMailHistoryService`:
 | `GetForUserAsync(userKey, cursor, pageSize)` | That user, or staff holding `users:manage` |
 
 Each `UserMailHistoryItem` carries the id, `Kind` (`Mail`, `Message`, `Notice`, `Invitation`), category, subject,
-status, reason, the address it went to, when it was queued and when it last changed.
+status, reason, the address it went to, when it was queued and when it last changed, and the From and Reply-To it
+was sent with (`FromAddress`, `FromName`, `ReplyTo`; see [From, Reply-To and who sent it](#from-reply-to-and-who-sent-it)).
 
 - **What a history holds:** every mail queued for the user's key, and every mail queued to their **current**
   address alone — such as the invitation that brought them in. Another user's mail is never added. An
   invitation sent to an address the user has since changed away from is no longer in it. Mail to
-  [contacts](contact-messages.md) is never in it, even when the user holds the address it went to.
+  [contacts](contact-messages.md) is never in it, even when the user holds the address it went to, and neither are
+  [support answers and receipts](#support-answers-and-receipts): the case is where those are read.
 - **How far back:** as long as the queue keeps mail, `UserMailRetention`.
 - **Staff reading somebody else's history is audited** under `usermail`, action `history`, with `usermail.user`
   and `usermail.count` — how many mails were read, never an address. A refusal is audited too.
@@ -391,12 +395,14 @@ application sent or tried to send, to users and to contacts, for staff holding `
 <UserMailLogView PageSize="50" />
 ```
 
-It lists newest first, with when it was queued, who it was for (the user's name, or the invited person's or
-contact's name, and the address it went to), its kind, category, subject, **result** with the reason, and the team
-it is about. **The mail itself is never shown or returned**: no body and no files. A row for a user has a button
-that opens that user's own history. `UserMailLogView` takes `PageSize` (50), `TimeTemplate` and `Framed`, as the
-history view does, and filters on kind, result, category, a day or a range of days (each day is the reader's own),
-a user key or an address, and a team key.
+It lists newest first, with when it was queued, who it was **from** (the From name in bold over the address, and
+"Reply-To: …" beneath when replies go somewhere else), who it was for (the user's name, or the invited person's or
+contact's name, and the address it went to), its kind, category, subject, **result** with the reason, **who sent
+it**, and the team it is about. **The mail itself is never shown or returned**: no body and no files. A row for a user
+has a button that opens that user's own history, and a support answer or receipt can link to its case (see
+[`CaseHref`](#linking-a-row-to-its-case)). `UserMailLogView` takes `PageSize` (50), `TimeTemplate` and `Framed`, as
+the history view does, and `CaseHref`; it filters on kind, result, category, a day or a range of days (each day is
+the reader's own), a user key or an address, and a team key.
 
 Behind it is `IUserMailHistoryService.ListAllAsync(filter, cursor, pageSize)`, which takes a `UserMailFilter`; every
 part given narrows the list and none lists everything:
@@ -439,13 +445,88 @@ address alone, an address a mail cannot go to, or a mail of kind `Contact` queue
 - **It is not in the user's own history**, only in the log: the reason is for staff, not for the person it was meant for.
 - It expires like any mail that is done. **Failing to record it never changes what the caller hears.**
 
-**Support answers are not in the log.** An answer goes out through the support mailbox's own channel rather than
-this queue, and its delivery is recorded on the case message it belongs to, so that is where to look for it.
+### Support answers and receipts
+
+With [support cases](support-cases.md) answering by mail, **every support answer and every contact-form receipt is
+in the log too**, as kinds of their own: *Support answer* (`UserMailKind.SupportAnswer`) and *Receipt*
+(`UserMailKind.Receipt`). They go out through the support mailbox rather than this queue, so each attempt is
+recorded when it is made, already sent or given up, and nothing ever sends it again from here.
+
+- **Each names its case**: `CaseId`, and for an answer `CaseMessageSequence`, the entry of the case it mailed. They
+  belong to no category, and the team is the case's.
+- **Who sent it**: an answer records the name of the staff member who wrote it, and their user key when they are the
+  one who sent it. An answer the assistant wrote, and every receipt, is sent by nobody but the application.
+- **A resend updates the same row** rather than adding a second: the row shows the latest attempt's result, and its
+  sender stays as first recorded.
+- **A bounce marks it *Not delivered*** by the `Message-ID` it was sent with, as for any mail in the log, and the case
+  entry is marked not delivered as before. A receipt's bounce reaches it through the
+  [bounce handler](#bounces) `AddThargaUserMail` registers.
+- **Never in a user's own history**, even when it went to a user's address.
+- **Recorded whenever an `IUserMailOutbox` is registered** (`AddThargaTeamRepository` registers the MongoDB one), and
+  read through the log that `AddThargaUserMail` provides. Recording never stops or changes the mail: with no outbox
+  nothing is recorded, and a write that fails is logged and goes no further. Like any mail that is done, a record
+  expires after `UserMailRetention`.
+
+### Linking a row to its case
+
+Tell the view where cases live and a row with a case shows an *Open case* link under its subject:
+
+```razor
+<UserMailLogView CaseHref="@(mail => $"/support/{mail.CaseId}")" />
+```
+
+`CaseHref` is asked for each row whose mail names a case; a null or empty answer leaves that row without a link, and
+without `CaseHref` no row is linked. Point it at a page that opens one case, such as one passing the route's case id to
+`SupportCasesView`'s `CaseId`.
+
+### From, Reply-To and who sent it
+
+Every mail in the log records **the From and Reply-To it went out with**: the values in effect for that attempt, after
+the mail's own Reply-To and the configured one, written with each attempt's outcome. A mail that was given up or
+turned off shows what it would have been sent with, and a mail tried again shows the latest attempt's. Reply-To is
+empty when replies go to the From address. `UserMailHistoryItem`, `UserMailDelivery` and `UserMailItem` carry them as
+`FromAddress`, `FromName` and `ReplyTo`.
+
+**Who sent it** is `SentByUserKey` and `SentByName`:
+
+- [Messages to users](user-messages.md) and [to contacts](contact-messages.md) record the staff member who wrote them.
+- Mail you queue yourself records whoever you name in `UserMail.SentByUserKey` and `SentByName`, or the same on a
+  `UserMailBatch`, recorded on each of its mails. The name is kept as it was when the mail was queued.
+- Notices, invitations and anything else the application sends on its own record nobody.
+
+The sender is shown in the log and by `GetSentAsync`, never in a user's own history. **Mail logged before this
+version** has no From, Reply-To or sender, and shows those cells empty.
+
+### Reading one mail back
+
+`IUserMailHistoryService.GetSentAsync(id)` returns one mail as the log shows it:
+
+| Caller | Gets |
+|---|---|
+| The user who sent it (its `SentByUserKey` is theirs) | The mail; not audited |
+| Staff holding `users:manage` | The mail; audited as a read of the log, with a count of one |
+| Anyone else, or an id nobody knows | `null` — the caller learns nothing, not even that the mail exists |
+
+That lets a host show staff what became of a mail they wrote — after an [outcome](#when-a-mail-does-not-get-there)
+names it, say — without giving them the whole log. The id is the one `IUserMailQueue` returned and `MailOutcome.Id`
+carries. A host's own `IUserMailHistoryService` that does not implement it returns `null`.
+
+### A host with its own outbox
 
 A host with its own `IUserMailOutbox` implements `ListAsync(filter, cursor, pageSize)` to support the log; until it
 does, `ListAllAsync` throws `NotSupportedException`. It implements `AddRefusedAsync(mail, reason, deduplicationKey, at)`
 to keep refusals, and without it they are simply not recorded. The built-in MongoDB outbox adds the index `TeamKey_Id`,
 created at start-up like the others.
+
+- **From and Reply-To:** implement the overloads of `MarkSentAsync`, `MarkSkippedAsync`, `MarkFailedAsync` and
+  `PostponeAsync` that take `UserMailHeaders`, store them, and return them on `UserMailItem`. The defaults forward to
+  the overloads without them, so an outbox that does not keeps working and shows those cells empty. Store
+  `UserMail.SentByUserKey` and `SentByName` as you store the rest of the mail.
+- **Support answers and receipts:** implement `RecordAsync(UserMailRecord)` — store the record as a mail already done,
+  never claimed, and return its id. A record naming the same kind, case and entry as one already stored replaces its
+  result rather than adding a row, keeping the first sender. Return `CaseId` and `CaseMessageSequence` on
+  `UserMailItem`, and leave both kinds out of `ListForRecipientAsync`. The default stores nothing and returns `null`, so
+  support mail is simply not listed. The built-in MongoDB outbox adds the sparse index `CaseId_CaseMessageSequence`.
 
 ## Bounces
 
@@ -480,6 +561,48 @@ builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailBounceHandler, R
 
 Return `true` when the bounce names a mail you know, whether or not anything changed, so the next handler is not
 asked. Make it idempotent, and keep the reason out of your log: it often quotes the recipient's address.
+
+## When a mail does not get there
+
+Register an `IMailOutcomeSink` to be told when a logged mail ends badly — to let the staff member who wrote it know,
+for example:
+
+```csharp
+public sealed class TellTheSender(IMyNotifications notifications) : IMailOutcomeSink
+{
+    public Task OnMailOutcomeAsync(MailOutcome outcome, CancellationToken cancellationToken)
+        => outcome.SentByUserKey == null
+            ? Task.CompletedTask
+            : notifications.PublishAsync(outcome.SentByUserKey, outcome.Id, cancellationToken);
+}
+
+builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IMailOutcomeSink, TellTheSender>());
+```
+
+Every registered sink is told:
+
+- when a queued mail is **given up**: after its last attempt, or at once for a failure that would happen every time,
+  such as a user with no address;
+- when a mail in the log **bounces**: mail to users and contacts, support answers and receipts alike;
+- when a **support answer or receipt is recorded as not sent**. That is each failed attempt, so a resend that fails
+  again tells the sinks again, and one that succeeds tells them nothing.
+
+Mail that was sent, turned off or put back to be tried again is not reported, and neither is a send the queue
+refused, whose caller already got the exception.
+
+- **Once per transition.** Only the write that changed the mail tells the sinks, so a bounce read twice, or by two
+  instances, is reported once.
+- **On the instance that saw it.** The sink runs where the mail was given up or the bounce was read, which in a host on
+  several instances is seldom the one the sender is looking at. Relaying it — to the other instances, or to a screen —
+  is the host's job.
+- **Thin by design.** `MailOutcome` carries the mail's `Id`, `Kind`, `Status` (`Failed` or `Bounced`), `Reason`,
+  `SentByUserKey`, `TeamKey`, `CaseId`, `CaseMessageSequence` and `At`; read the rest with
+  [`GetSentAsync(id)`](#reading-one-mail-back). `Id` is null when the log kept no row for the mail.
+- **It cannot hurt the mail.** Each sink is told in turn; one that throws is logged, the others are still told, and the
+  mail is unaffected. With none registered nothing happens. Keep `Reason` out of your own log: a bounce's reason often
+  quotes the recipient's address.
+- **Only mail that is logged.** Support mail is reported only when it is recorded, so only with an `IUserMailOutbox`
+  registered. `AddThargaUserMail` and `AddThargaSupportCases` each make sure the sinks are called.
 
 ## Invitations
 
@@ -554,6 +677,8 @@ mail adds `team.contactMail.*` (`ContactMailText.All`); see [Text](contact-messa
 - **A deleted user's choices and queued mail are not purged.** A mail still queued for them fails as having no
   user.
 - **A bounce is only seen when the mail went out from a mailbox support reads**, as described above.
+- **`UserMailKind` has `SupportAnswer` and `Receipt`** for the support mail in the log, so a switch over kinds
+  handles them.
 - **How often a category is sent is what was kept**: with the default 90-day retention, the past 90 days scaled to
   a year, and a category sent quarterly may read as none sent recently.
 
