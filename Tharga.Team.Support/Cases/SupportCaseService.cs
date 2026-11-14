@@ -35,7 +35,8 @@ internal sealed class SupportCaseService(
     IEnumerable<ISupportAssistantUsageSink> usageSinks = null,
     ILogger<SupportCaseService> logger = null,
     SupportAnswerOptions answerOptions = null,
-    SupportMailboxes mailboxes = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportMailboxes mailboxes = null,
+    ISupportCaseContactResolver contactResolver = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
@@ -51,9 +52,26 @@ internal sealed class SupportCaseService(
     /// <summary>The mail channel's own composition of an answer, so the route and preview shown are what posting sends.</summary>
     private ISupportAnswerMail AnswerMail => _channels.OfType<ISupportAnswerMail>().FirstOrDefault();
 
-    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
+    public Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
+        => RaiseAsync(teamKey, subject, body, assistance, null, null, cancellationToken);
+
+    /// <remarks>
+    /// An address binds the case to the mail channel at once, with the mailbox answers go from, so the answer route is mail from the first answer and the
+    /// case threads like one that arrived by mail. Refused before anything is written when the address is not one plain address or no mail is set up.
+    /// </remarks>
+    public Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportRaiseOptions options, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        return RaiseAsync(teamKey, subject, body, options.Assistance, options.MailAddress, options.Mailbox, cancellationToken);
+    }
+
+    private async Task<SupportCase> RaiseAsync(string teamKey, string subject, string body, SupportAssistance assistance, string mailAddress, string mailboxName, CancellationToken cancellationToken)
     {
         RequireWithinLength(body);
+
+        var caseId = Guid.NewGuid().ToString();
+        var mailBinding = mailAddress == null ? null : NewMailBinding(caseId, mailAddress, mailboxName, null);
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
@@ -64,7 +82,7 @@ internal sealed class SupportCaseService(
 
         var supportCase = new SupportCase
         {
-            Id = Guid.NewGuid().ToString(),
+            Id = caseId,
             TeamKey = teamKey,
             TeamName = await TeamNameAsync(teamKey),
             AuthorIdentity = subjectIdentity,
@@ -76,7 +94,8 @@ internal sealed class SupportCaseService(
             AssistantState = withAssistant ? SupportAssistantState.Active : SupportAssistantState.None,
             Visibility = visibilityMode == SupportCaseVisibilityMode.PerCase
                 ? withAssistant ? assistantDefaultVisibility ?? defaultVisibility : defaultVisibility
-                : null
+                : null,
+            Bindings = mailBinding == null ? [] : [mailBinding]
         };
 
         var firstMessage = new SupportMessage
@@ -315,6 +334,60 @@ internal sealed class SupportCaseService(
         return status;
     }
 
+    /// <summary>
+    /// The binding that makes a case a mail thread to <paramref name="address"/>, from the mailbox that sends as <paramref name="sendFrom"/> (the primary one when
+    /// none is named): the first id of the thread, in the form a mail client sends, so later answers and the customer's replies find the case like any other.
+    /// </summary>
+    /// <exception cref="ArgumentException">The address is not one plain address.</exception>
+    /// <exception cref="InvalidOperationException">No mail is set up for support, or the mailbox is not one that is configured.</exception>
+    private SupportChannelBinding NewMailBinding(string caseId, string address, string mailboxName, string sendFrom)
+    {
+        if (AnswerMail == null || mailboxes == null) throw new InvalidOperationException("The case cannot be answered by mail: no mail is set up for support.");
+        if (!ExternalSupportCaseService.IsPlainAddress(address?.Trim() ?? string.Empty)) throw new ArgumentException("The address to answer by mail is not a single, plain address.", nameof(address));
+
+        var mailbox = !string.IsNullOrWhiteSpace(sendFrom)
+            ? mailboxes.All.FirstOrDefault(x => SupportMailboxes.SameAddress(x.Options.FromAddress, sendFrom) || SupportAnswerSenders.Covers(x.Options, sendFrom))
+            : null;
+        mailbox ??= mailboxes.Find(mailboxName) ?? throw new InvalidOperationException($"The case cannot be answered by mail: there is no mailbox named '{mailboxName}'.");
+
+        var fromAddress = string.IsNullOrWhiteSpace(mailbox.Options.FromAddress) ? null : mailbox.Options.FromAddress.Trim();
+
+        // The address the case "came in on", which answers go from by default: the support address chosen when it is the mailbox's own or one it may
+        // send as. A staff member's personal address is never it: replies go to support, not to a person.
+        var cameInOn = !string.IsNullOrWhiteSpace(sendFrom)
+                       && (SupportMailboxes.SameAddress(fromAddress, sendFrom) || (mailbox.Options.SendAs ?? []).Any(x => SupportMailboxes.SameAddress(x?.Address, sendFrom)))
+            ? sendFrom.Trim()
+            : fromAddress;
+
+        return new SupportChannelBinding
+        {
+            ChannelType = SupportChannelType.Email,
+            ExternalId = ExternalSupportCaseService.ThreadRootId(caseId, fromAddress),
+            Address = address.Trim(),
+            Mailbox = mailbox.Name,
+            MailboxAddress = cameInOn
+        };
+    }
+
+    /// <summary>The address the host resolves for a case with no mail thread, or null when there is none, nothing to resolve with, or the resolver fails (logged, and treated as none).</summary>
+    private async Task<string> MailAddressOfferedAsync(SupportCase supportCase, CancellationToken cancellationToken)
+    {
+        if (contactResolver == null || AnswerMail == null || mailboxes == null || MailBindingOf(supportCase) != null) return null;
+
+        try
+        {
+            var address = (await contactResolver.GetMailAddressAsync(supportCase, cancellationToken))?.Trim();
+
+            return !string.IsNullOrEmpty(address) && ExternalSupportCaseService.IsPlainAddress(address) ? address : null;
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger?.LogWarning(e, "The contact resolver failed for support case {CaseId}, so no mail answer is offered for it.", supportCase.Id);
+
+            return null;
+        }
+    }
+
     /// <remarks>The binding an answer is posted into is the first mail binding, as delivering takes it; a case with none, or a host that mails nothing, is answered on the site. A mail channel of the host's own is described by the address alone.</remarks>
     public async Task<SupportAnswerRoute> GetAnswerRouteAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
@@ -323,7 +396,17 @@ internal sealed class SupportCaseService(
 
         var binding = MailBindingOf(supportCase);
 
-        if (binding == null) return SupportAnswerRoute.Site;
+        if (binding == null)
+        {
+            // A site-only case the host can write to: say where an answer would go if it were mailed, so the option can be offered.
+            var offered = await MailAddressOfferedAsync(supportCase, cancellationToken);
+            if (offered == null) return SupportAnswerRoute.Site;
+
+            var staff = await StaffSenderAsync();
+            var offer = AnswerMail.RouteOf(supportCase, NewMailBinding(supportCase.Id, offered, null, null), staff);
+
+            return SupportAnswerRoute.Site with { MailOffer = offer with { SignWithName = answerOptions?.NameTheAnswerer ?? false } };
+        }
 
         var route = AnswerMail?.RouteOf(supportCase, binding, await StaffSenderAsync()) ?? new SupportAnswerRoute { ByMail = true, To = binding.Address };
 
@@ -338,6 +421,11 @@ internal sealed class SupportCaseService(
     {
         var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
         var binding = supportCase == null || AnswerMail == null ? null : MailBindingOf(supportCase);
+
+        // A preview of an answer that would switch the case to mail shows the mail it would send, and binds nothing.
+        if (binding == null && supportCase != null && AnswerMail != null && choice?.ByMail == true && await MailAddressOfferedAsync(supportCase, cancellationToken) is { } offered)
+            binding = NewMailBinding(supportCase.Id, offered, null, choice.SendFrom);
+
         if (binding == null) return null;
 
         (body, bodyHtml) = Content(body, bodyHtml);
@@ -432,6 +520,23 @@ internal sealed class SupportCaseService(
         if (existing?.Status == SupportCaseStatus.Closed)
         {
             await ReopenCaseAsync(teamKey, caseId, cancellationToken);
+            existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
+        }
+
+        // The first mail answer to a case with no mail thread binds it to the mail channel, to the address the host resolves for it and never one the
+        // answerer typed, so the case continues as an ordinary mail thread: per-case reply address, threading and later answers included.
+        if (asSupport && choice?.ByMail == true && existing != null && MailBindingOf(existing) == null)
+        {
+            var address = await MailAddressOfferedAsync(existing, cancellationToken)
+                ?? throw new InvalidOperationException($"Support case '{caseId}' cannot be answered by mail: there is no address to write to for it.");
+
+            // Refused before the case is switched: an address the answerer may not send from must not leave a case bound to mail with nothing sent.
+            var switchTo = NewMailBinding(caseId, address, null, choice.SendFrom);
+            var offered = AnswerMail.RouteOf(existing, switchTo, await StaffSenderAsync());
+            if (!string.IsNullOrWhiteSpace(choice.SendFrom) && !offered.Senders.Any(x => SupportMailboxes.SameAddress(x.Address, choice.SendFrom)))
+                throw new InvalidOperationException("The answer cannot be sent from that address: it is not one the person answering may send from.");
+
+            await store.AddBindingAsync(teamKey, caseId, switchTo, cancellationToken);
             existing = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
         }
 

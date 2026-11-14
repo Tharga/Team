@@ -45,6 +45,14 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.RaiseCaseAsync(teamKey, subject, body, assistance, cancellationToken);
     }
 
+    /// <remarks>Authorized exactly as raising a case is: membership of the team. The address to answer by mail to is the host's to give, so it is never taken from the one answering.</remarks>
+    public async Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportRaiseOptions options, CancellationToken cancellationToken = default)
+    {
+        await RequireMembershipAsync(teamKey);
+
+        return await inner.RaiseCaseAsync(teamKey, subject, body, options, cancellationToken);
+    }
+
     /// <remarks>Authorized as replying is — the answer lands in the transcript exactly as a reply does — and run only for the person who raised the case.</remarks>
     public async Task<bool> RunAssistantAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {

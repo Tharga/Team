@@ -40,6 +40,12 @@ public static class SupportAuditMetadataKeys
     public const string WebFormSource = "web-form";
 
     /// <summary>How an answer was rated: Up, Down, or None when a rating was taken back.</summary>
+    /// <summary>The address a case was switched to mail answers for, or raised with.</summary>
+    public const string MailAddress = "support.mail.address";
+
+    /// <summary>The name of the support mailbox those answers are sent from.</summary>
+    public const string Mailbox = "support.mail.mailbox";
+
     public const string Rating = "support.message.rating";
 
     /// <summary>

@@ -207,6 +207,91 @@ public class SupportAnswerRouteRenderTests : BunitContext
         _cases.Verify(x => x.AnswerCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<SupportAttachmentUpload>>(), It.IsAny<SupportAnswerChoice>(), default), Times.Never);
     }
 
+    private static readonly SupportAnswerRoute SiteWithOffer = SupportAnswerRoute.Site with
+    {
+        MailOffer = new SupportAnswerRoute
+        {
+            ByMail = true,
+            To = "owner@acme.example",
+            From = "support@example.net",
+            Mailbox = "primary",
+            Senders = [new SupportAnswerSender { Address = "support@example.net" }, new SupportAnswerSender { Address = "help@example.net" }]
+        }
+    };
+
+    private static readonly SupportCase SiteCase = Case with { Bindings = [] };
+
+    [Fact]
+    public void ASiteCaseTheHostCanWriteTo_OffersToAnswerByMail_AndShowsTheAddress()
+    {
+        Register(SiteWithOffer);
+
+        var view = Render<SupportCaseConversation>(p => p.Add(x => x.Case, SiteCase).Add(x => x.AsStaff, true));
+
+        Assert.Contains("Answer by mail to owner@acme.example", view.Find("[data-answer-by-mail-offer]").TextContent);
+        Assert.Contains("shown on the site", view.Find("[data-answer-route]").TextContent);
+        Assert.Empty(view.FindAll("[data-preview-answer]"));
+    }
+
+    [Fact]
+    public void ASiteCaseWithNothingToOffer_ShowsNoOption_AsBefore()
+    {
+        Register(SupportAnswerRoute.Site);
+
+        var view = Render<SupportCaseConversation>(p => p.Add(x => x.Case, SiteCase).Add(x => x.AsStaff, true));
+
+        Assert.Empty(view.FindAll("[data-answer-by-mail-offer]"));
+    }
+
+    [Fact]
+    public void ACaseThatAlreadyIsAMailThread_OffersNoSwitch()
+    {
+        Register(Mailed);
+
+        var view = Render<SupportCaseConversation>(p => p.Add(x => x.Case, Case).Add(x => x.AsStaff, true));
+
+        Assert.Empty(view.FindAll("[data-answer-by-mail-offer]"));
+    }
+
+    [Fact]
+    public void TheMembersOwnView_NeverOffersIt()
+    {
+        Register(SiteWithOffer);
+
+        var view = Render<SupportCaseConversation>(p => p.Add(x => x.Case, SiteCase));
+
+        Assert.Empty(view.FindAll("[data-answer-by-mail-offer]"));
+    }
+
+    [Fact]
+    public async Task TickingIt_ShowsWhereTheMailWouldGoFrom_WithThePreview_AndAnswersByMail()
+    {
+        Register(SiteWithOffer);
+        var view = Render<SupportCaseConversation>(p => p.Add(x => x.Case, SiteCase).Add(x => x.AsStaff, true));
+
+        await view.InvokeAsync(() => view.Find("[data-answer-by-mail] input").Change(true));
+
+        Assert.Contains("owner@acme.example", view.Find("[data-answer-to]").TextContent);
+        Assert.NotEmpty(view.FindAll("[data-preview-answer]"));
+
+        await view.InvokeAsync(() => view.FindComponent<RichTextEditor>().Instance.ValueChanged.InvokeAsync("<p>Added.</p>"));
+        await view.InvokeAsync(() => view.FindAll("button").Single(x => x.TextContent.Contains("Answer") && !x.TextContent.Contains("mail to")).Click());
+
+        _cases.Verify(x => x.AnswerCaseAsync(TeamKey, Case.Id, string.Empty, "<p>Added.</p>", It.IsAny<IReadOnlyList<SupportAttachmentUpload>>(), It.Is<SupportAnswerChoice>(c => c.ByMail), default), Times.Once);
+    }
+
+    [Fact]
+    public async Task LeftUnticked_TheAnswerStaysOnTheSite()
+    {
+        Register(SiteWithOffer);
+        var view = Render<SupportCaseConversation>(p => p.Add(x => x.Case, SiteCase).Add(x => x.AsStaff, true));
+
+        await view.InvokeAsync(() => view.FindComponent<RichTextEditor>().Instance.ValueChanged.InvokeAsync("<p>Added.</p>"));
+        await view.InvokeAsync(() => view.FindAll("button").Single(x => x.TextContent.Contains("Answer")).Click());
+
+        _cases.Verify(x => x.AnswerCaseAsync(TeamKey, Case.Id, string.Empty, "<p>Added.</p>", It.IsAny<IReadOnlyList<SupportAttachmentUpload>>(), It.Is<SupportAnswerChoice>(c => !c.ByMail), default), Times.Once);
+    }
+
     [Fact]
     public void AnAnswerShownOnTheSite_OffersNoPreview()
     {

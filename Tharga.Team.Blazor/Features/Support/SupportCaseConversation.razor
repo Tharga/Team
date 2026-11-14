@@ -38,7 +38,17 @@
     @* Always offered: writing to a closed case opens it again, so a problem that came back continues where it is explained. *@
     @if (AsStaff)
     {
-        <SupportAnswerRouteLine Route="_route" @bind-Choice="_answerChoice" />
+        @* A case raised on the site has no mail thread. When the host can write to its author, support may answer by mail: the first mail answer binds the
+           case to the mail channel, and it continues as an ordinary mail thread. *@
+        @if (_route is { ByMail: false, MailOffer: { } offer })
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" data-answer-by-mail-offer>
+                <RadzenCheckBox TValue="bool" Value="_byMail" ValueChanged="ByMailChanged" Name="answerByMail" Disabled="_busy" data-answer-by-mail />
+                <RadzenLabel Text="@_routeText.Format(SupportAnswerRouteText.AnswerByMail, offer.To)" Component="answerByMail" />
+            </RadzenStack>
+        }
+
+        <SupportAnswerRouteLine Route="EffectiveRoute" @bind-Choice="_answerChoice" />
     }
     <RichTextEditor Value="@_reply" ValueChanged="ReplyChanged" Label="@ReplyText" Disabled="_busy" Height="8rem" />
 
@@ -47,7 +57,7 @@
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
         <RadzenButton Text="@ReplyText" Icon="send" Click="ReplyAsync" Disabled="@(NothingToSend || _busy)" />
 
-        @if (AsStaff && _route?.ByMail == true)
+        @if (AsStaff && EffectiveRoute?.ByMail == true)
         {
             <RadzenButton Text="@_mail[MailPreviewText.Open]" Icon="preview" ButtonStyle="ButtonStyle.Light" Click="PreviewAsync"
                           Disabled="_busy" data-preview-answer="@Case.Id" />
@@ -133,10 +143,12 @@
     private TextSet _member = TextSet.Empty;
     private TextSet _staff = TextSet.Empty;
     private TextSet _mail = TextSet.Empty;
+    private TextSet _routeText = TextSet.Empty;
     private TextSet _transcript = TextSet.Empty;
 
     private SupportCase _shown;
     private SupportAnswerRoute _route;
+    private bool _byMail;
     private SupportAnswerChoice _answerChoice = new();
     private SupportAttention _attention;
     private SupportCaseVisibilityChoice _choice = SupportCaseVisibilityChoice.None;
@@ -163,6 +175,17 @@
 
             return _transcript[presence == SupportPresenceState.Away ? SupportTranscriptText.NoAnswerAway : SupportTranscriptText.NoAnswerYet];
         }
+    }
+
+    /// <summary>The route the answer would take: the mail offer while the box is ticked, otherwise the case's own.</summary>
+    private SupportAnswerRoute EffectiveRoute => _byMail && _route?.MailOffer != null ? _route.MailOffer : _route;
+
+    private Task ByMailChanged(bool value)
+    {
+        _byMail = value;
+        _answerChoice = (_answerChoice ?? new SupportAnswerChoice()) with { ByMail = value, SendFrom = null };
+
+        return Task.CompletedTask;
     }
 
     private bool NothingToSend => RichTextEditor.IsEmpty(_reply) && _files.Count == 0;
@@ -196,6 +219,7 @@
         _member = await TextProvider.ResolveAsync(SupportCasesViewText.All);
         _staff = await TextProvider.ResolveAsync(SupportAcrossTeamsViewText.All);
         _mail = await TextProvider.ResolveAsync(MailPreviewText.All);
+        _routeText = await TextProvider.ResolveAsync(SupportAnswerRouteText.All);
 
         var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
         _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, () => InvokeAsync(StateHasChanged));
@@ -221,6 +245,7 @@
         _choice = AsStaff ? SupportCaseVisibilityChoice.None : await SupportCases.GetVisibilityChoiceAsync(Case.TeamKey, Case.Id) ?? SupportCaseVisibilityChoice.None;
         _route = AsStaff ? await SupportAnswerPreview.RouteAsync(SupportCases, Case) : null;
         _answerChoice = new SupportAnswerChoice();
+        _byMail = false;
 
         // Read again because the case changed, and a message arriving ends the dots that announced it.
         _typing?.Follow(Case.TeamKey, Case.Id, Case.AuthorIdentity, authorOnRight: !AsStaff);

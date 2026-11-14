@@ -1151,6 +1151,51 @@ framework, `Preview`, `FileNames`), which renders the mail in an `iframe` given 
 with no permissions, so the template's styles stay inside it and nothing in it runs. A reader who may not answer
 is shown no route and no preview. Their texts are `team.support.answerRoute.*` and `team.mailPreview.*`.
 
+### A case raised in the app, answered by mail
+
+A case raised in the app has no mail thread, so its answers are shown on the site only. That is a dead end when the person who raised it
+cannot open support there, such as an organisation without access to the support panel. Support can answer such a case by mail, after which
+it continues as an ordinary mail thread.
+
+**The host says which address to write to**, because the package knows an author only by identity and name:
+
+```csharp
+public sealed class OrganisationContactResolver(IOrganisations organisations) : ISupportCaseContactResolver
+{
+    public async Task<string> GetMailAddressAsync(SupportCase supportCase, CancellationToken cancellationToken = default)
+        => (await organisations.FindOwnerAsync(supportCase.TeamKey, cancellationToken))?.Email;   // null when there is none
+}
+
+builder.Services.AddScoped<ISupportCaseContactResolver, OrganisationContactResolver>();
+```
+
+- **Without a resolver, or for a case it returns nothing for, nothing changes.** The address must be one plain address and is never anything
+  the person answering typed, so staff cannot send a case's answers somewhere of their own choosing. A resolver that throws is logged and read
+  as no address.
+- **In `SupportCaseConversation`**, when the route is the site and an address resolves, staff are offered **Answer by mail to <address>**.
+  Ticking it shows where the mail would go from, with the send-from picker and the preview, and the outbound mail policy (redirect, withhold)
+  shows in the route line as for any answer.
+- **Through the service**, the same: `GetAnswerRouteAsync` returns the site route with `MailOffer`, the route the answer would take if mailed,
+  and `AnswerCaseAsync(..., new SupportAnswerChoice { ByMail = true, SendFrom = "help@example.net" })` sends the first mail answer.
+- **The first mail answer binds the case to the mail channel**, with that address and the mailbox that sends from the chosen address. From then on
+  `GetAnswerRouteAsync` returns `ByMail = true` with that `To`, `From` and `Mailbox`, the per-case reply address and the threading headers
+  work as for a case that arrived by mail, and the customer's replies land on the case. A `ByMail` for a case that already has a thread does
+  nothing more. An address the answerer may not send from is refused **before** the case is switched, and so is `ByMail` for a case the host
+  resolves no address for.
+- **The answer is still shown on the site**; nothing about visibility changes.
+- **Audited** as `switch-to-mail` — who, the case, the address and the mailbox.
+
+**Or bind it when it is raised**, when the host already knows the address:
+
+```csharp
+var raised = await support.RaiseCaseAsync(teamKey, "Please add system X", body,
+    new SupportRaiseOptions { MailAddress = owner.Email });   // Mailbox: the name of one of the configured mailboxes, null for the primary
+```
+
+The case is then a mail thread from its first answer and staff need not switch. This overload is for **host code**: whatever address it is given is
+where answers go, so do not pass one the author typed without checking it belongs to them. It refuses an address that is not one plain address, an
+unknown mailbox, and a host with no mail set up, before anything is written, and is audited with the address and mailbox it bound.
+
 ### Several mailboxes
 
 `o.Email` is the **primary** mailbox. Add more with `AddMailbox`, each with a whole `MailOptions` of its own — its

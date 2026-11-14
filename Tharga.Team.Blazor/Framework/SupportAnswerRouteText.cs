@@ -24,6 +24,9 @@ public static class SupportAnswerRouteText
     /// <summary>The label of the choice to sign the answer with the answerer's own name.</summary>
     public static readonly TextKey SignWithName = new("team.support.answerRoute.signWithName", "Sign with my name");
 
+    /// <summary>Offered on a case with no mail thread whose author support can write to; <c>{0}</c> is the address the host resolved.</summary>
+    public static readonly TextKey AnswerByMail = new("team.support.answerRoute.answerByMail", "Answer by mail to {0}");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Mailed, MailedTo, Site, Redirected, Withheld, SendFrom, SignWithName];
+    public static readonly TextKey[] All = [Mailed, MailedTo, Site, Redirected, Withheld, SendFrom, SignWithName, AnswerByMail];
 }
