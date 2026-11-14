@@ -1,0 +1,146 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@implements IDisposable
+@inject ISupportCaseService SupportCases
+@inject ISupportCaseNotifier Notifier
+
+@* The conversation of one support case, both directions, with its files and the answer box, by the case's id alone: for a
+   host that shows it somewhere other than the support boards, such as on a sales prospect's card. Guarded as the boards
+   are: the reader needs the grant for the case's team, or for the unassigned queue, and sees nothing else. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (_denied)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter" data-case-denied>
+        @_text[SupportCaseByIdText.NotPermitted]
+    </RadzenAlert>
+}
+else if (_case == null)
+{
+    @if (NotFound != null)
+    {
+        @NotFound
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2" data-case-not-found>@_text[SupportCaseByIdText.NotFound]</RadzenText>
+    }
+}
+else if (string.IsNullOrEmpty(_case.TeamKey))
+{
+    <SupportUnassignedConversation @key="_case.Id" Case="_case" Teams="_teams" TimeTemplate="TimeTemplate" Changed="ReloadAsync" Assigned="OnAssignedAsync" />
+}
+else
+{
+    <SupportCaseConversation @key="_case.Id" Case="_case" AsStaff="true" TimeTemplate="TimeTemplate" Changed="ReloadAsync" />
+}
+
+@code {
+    /// <summary>The case to show. A different id shows that case.</summary>
+    [Parameter, EditorRequired] public string CaseId { get; set; }
+
+    /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>Shown when there is no such case, in place of the default notice.</summary>
+    [Parameter] public RenderFragment NotFound { get; set; }
+
+    /// <summary>Raised with the case after it was read, and again each time the conversation changed it, so the host can follow it.</summary>
+    [Parameter] public EventCallback<SupportCase> Loaded { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+    [Inject] private IServiceProvider Services { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private bool _ready;
+    private bool _denied;
+    private string _shownId;
+    private SupportCase _case;
+    private SupportCaseTeam[] _teams = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportCaseByIdText.All);
+        Notifier.CaseUpdated += OnCaseUpdated;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_ready && _shownId == CaseId) return;
+
+        _shownId = CaseId;
+        await LoadAsync();
+        _ready = true;
+    }
+
+    public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
+
+    /// <summary>Reads the case again, for a host that hears of a change the in-process notifier cannot carry.</summary>
+    public Task RefreshAsync() => InvokeAsync(async () =>
+    {
+        await LoadAsync();
+        StateHasChanged();
+    });
+
+    private Task ReloadAsync(string caseId) => LoadAsync();
+
+    /// <remarks>Given a team, the case now belongs to the team's conversation rather than the unassigned one, so it is read again.</remarks>
+    private Task OnAssignedAsync(bool assigned) => LoadAsync();
+
+    private void OnCaseUpdated(object sender, SupportCaseUpdatedEventArgs e)
+    {
+        if (e.CaseId != _shownId || e.Change == SupportCaseChange.Read) return;
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    /// <remarks>
+    /// <b>A refusal is shown rather than left to take the circuit down</b>, as on the boards: this is a panel on a page whose
+    /// other content the reader can see. Nothing is said about whether the id exists to somebody who may not read it.
+    /// </remarks>
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _case = string.IsNullOrWhiteSpace(_shownId) ? null : await SupportCases.GetCaseByIdAsync(_shownId);
+            _denied = false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _case = null;
+            _denied = true;
+        }
+
+        if (_case != null && string.IsNullOrEmpty(_case.TeamKey)) await LoadTeamsAsync();
+        if (_case != null) await Loaded.InvokeAsync(_case);
+    }
+
+    /// <summary>Only teams that exist can be offered, so a case cannot be given to one that does not; none when the reader cannot list teams.</summary>
+    private async Task LoadTeamsAsync()
+    {
+        if (_teams.Length > 0 || Services.GetService(typeof(ITeamOversightService)) is not ITeamOversightService oversight) return;
+
+        try
+        {
+            var found = new List<SupportCaseTeam>();
+
+            await foreach (var team in oversight.GetAllTeamsAsync())
+            {
+                found.Add(new SupportCaseTeam { Key = team.Key, Name = string.IsNullOrWhiteSpace(team.Name) ? team.Key : team.Name });
+            }
+
+            _teams = [.. found.OrderBy(x => x.Name)];
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _teams = [];
+        }
+    }
+}

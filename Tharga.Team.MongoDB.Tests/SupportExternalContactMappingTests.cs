@@ -102,6 +102,19 @@ public class SupportExternalContactMappingTests
         Assert.Equal("dollar", read.Fields["$odd"]);
     }
 
+    /// <summary>A case support starts by mail waits on the reply, not on support: it must not be listed as needing an answer.</summary>
+    [Fact]
+    public async Task ACaseOpenedWithSupportsOwnMessage_IsNotWaitingOnSupport()
+    {
+        SupportCaseEntity added = null;
+        await _collection.AddAsync(Arg.Do<SupportCaseEntity>(x => added = x));
+
+        await new MongoSupportCaseStore(_collection).AddCaseAsync(Case(Contact()), First with { AsSupport = true, Source = null, AuthorName = "Anna" }, TestContext.Current.CancellationToken);
+
+        Assert.False(added.LastMessageFromAuthor);
+        Assert.True((await StoredAsync(Case(Contact()))).LastMessageFromAuthor);
+    }
+
     [Fact]
     public async Task ACaseStoredBeforeContactsExisted_ReadsAsHavingNone()
     {

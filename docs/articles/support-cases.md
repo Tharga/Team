@@ -1281,6 +1281,70 @@ user-only; nothing in it is loosened for this. Registering `AddThargaSupportCase
 A support mailbox that accepts mail from anyone turns some of it into cases already; a public form is the same door
 with a form on it. The limits above bound each message, not how many arrive.
 
+## Writing first
+
+Support staff sometimes have to start the conversation: to somebody who filled in the contact form days ago, or to a
+prospect. A mail sent from outside the toolkit loses the reply, because nothing ties the answer back to a case. Starting
+the case from here does:
+
+```csharp
+var started = await SupportCases.StartMailCaseAsync(new StartMailCaseRequest
+{
+    To = "lead@acme.example",
+    ToName = "A Prospect",
+    Subject = "Our offer",
+    BodyHtml = "<p>Hello, here is our offer.</p>",
+    Attachments = files,                                   // optional
+    Choice = new SupportAnswerChoice { SendFrom = "help@example.net", SignWithName = true }   // optional
+});
+```
+
+It opens a case with the recipient as its `ExternalContact` and the message as its first entry, and sends the mail as an
+answer is sent: from the chosen address or the mailbox's, signed and quoted as answers are, with the case's tracker in
+Reply-To when the mailbox uses per-case reply addresses. **The reply lands on the same case.** The subject goes as written,
+not as "Re:", since nothing is being answered. The case is returned.
+
+- **Unassigned or in a team.** Leave `TeamKey` empty for the unassigned queue (needs `support:manage` as a system scope), or give a
+  team (needs `support:all:manage`, as answering across teams does). A member of a team cannot start one; there is no author yet.
+- **The case stands whatever the mail does.** When the mail server is down the case is kept and its first message is marked as not
+  delivered, where **Send again** reaches it. Everything that can be refused is refused before anything is written: a bad address,
+  an empty message, files over the limits, and a sender the person may not use.
+- **Audited** as `start-mail`, with the case and how many files went, never the address or the text.
+- A case that support started waits on the reply, so it is not listed as needing an answer.
+- The overload is a default interface member, so a host's own `ISupportCaseService` keeps compiling and throws `NotSupportedException`
+  from it. `GetStartMailRouteAsync(to)` gives the addresses the caller may send from, for a picker.
+
+### On the support boards
+
+`SupportUnassignedView` and `SupportAcrossTeamsView` have a **New message** button. It opens the compose form: to and name, subject,
+message, the send-from picker and the signature option as when answering, and attachments. In the across-teams view the case can be
+placed in a team; the new case appears on the board without a reload. The texts are in `SupportComposeMailText`.
+
+### Elsewhere in your app
+
+```razor
+<SupportComposeMail To="@prospect.Email" ToName="@prospect.Name" Subject="Our offer" Started="OnStarted" />
+
+@code {
+    private Task OnStarted(SupportCase started) => Link(prospect, started.Id);   // connect the case to your own records
+}
+```
+
+`SupportComposeMail` prefills what it is given and hands the new case back through `Started`; `Contact` keeps more than the address
+and name on the case (phone, organisation, your own fields), and `TeamKey` places it. To show the conversation on a card, put
+`<SupportCaseById CaseId="@caseId" />` there:
+
+```razor
+<SupportCaseById CaseId="@prospect.CaseId" Loaded="OnLoaded">
+    <NotFound><p>No conversation yet.</p></NotFound>
+</SupportCaseById>
+```
+
+It shows the thread in both directions with its files and the answer box, whichever team the case belongs to, and follows changes
+to it live. It is guarded as the boards are, with `ISupportCaseService.GetCaseByIdAsync(caseId)`: `support:read` for a case with no
+team, `support:all:read` for a team's; a reader with neither is told so and shown nothing, and an unknown id is no case rather
+than an error.
+
 ## Attachments
 
 A support message carries files both ways: what a customer's mail brought, and what support or the customer
