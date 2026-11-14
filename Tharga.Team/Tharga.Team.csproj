@@ -57,6 +57,7 @@
     <InternalsVisibleTo Include="Tharga.Team.MongoDB.Tests" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Held on the 10.x line: no .NET 11 until spring 2027 (shared instructions, standing hold). -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.15" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.15" />
     <PackageReference Include="Tharga.Toolkit" Version="1.17.0" />

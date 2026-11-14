@@ -62,7 +62,7 @@ public class UserMailLogViewRenderTests : BunitContext
     private readonly Mock<IUserMailHistoryService> _history = new();
     private readonly List<(UserMailFilter Filter, string Cursor, int Size)> _asked = [];
 
-    private IRenderedComponent<UserMailLogView> RenderLog(UserMailHistoryPage first = null, UserMailHistoryPage second = null, bool permitted = true, bool framed = true, IThargaTextProvider texts = null)
+    private IRenderedComponent<UserMailLogView> RenderLog(UserMailHistoryPage first = null, UserMailHistoryPage second = null, bool permitted = true, bool framed = true, IThargaTextProvider texts = null, Func<UserMailHistoryItem, string> caseHref = null)
     {
         first ??= new UserMailHistoryPage { Items = [Newsletter, Invitation, Welcome] };
 
@@ -86,7 +86,7 @@ public class UserMailLogViewRenderTests : BunitContext
         Services.AddRadzenComponents();
         JSInterop.Mode = JSRuntimeMode.Loose;
 
-        return Render<UserMailLogView>(p => p.Add(x => x.Framed, framed));
+        return Render<UserMailLogView>(p => p.Add(x => x.Framed, framed).Add(x => x.CaseHref, caseHref));
     }
 
     private static string[] Subjects(IRenderedComponent<UserMailLogView> view)
@@ -121,6 +121,35 @@ public class UserMailLogViewRenderTests : BunitContext
         Assert.Contains("case-1", view.Find("[data-case]").TextContent);
         Assert.Equal("SupportAnswer", view.FindAll("[data-kind]")[0].GetAttribute("data-kind"));
         Assert.Equal(UserMailHistoryViewText.KindSupportAnswer.Default, view.FindAll("[data-kind]")[0].TextContent.Trim());
+    }
+
+    [Fact]
+    public void TheCase_LinksToWhereTheHostKeepsIt_WhenTheHostSaysWhere()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [SupportAnswer, Welcome] }, caseHref: item => $"/support/{item.CaseId}");
+
+        var link = view.Find("[data-case] a");
+        Assert.Equal("/support/case-1", link.GetAttribute("href"));
+        Assert.Contains("case-1", link.TextContent);
+        Assert.Single(view.FindAll("[data-case] a"));
+    }
+
+    [Fact]
+    public void TheCase_IsShownWithoutALink_WhenTheHostSaysNothing()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [SupportAnswer] });
+
+        Assert.Contains("case-1", view.Find("[data-case]").TextContent);
+        Assert.Empty(view.FindAll("[data-case] a"));
+    }
+
+    [Fact]
+    public void TheCase_IsShownWithoutALink_WhenTheHostHasNoAddressForIt()
+    {
+        var view = RenderLog(new UserMailHistoryPage { Items = [SupportAnswer] }, caseHref: _ => null);
+
+        Assert.Contains("case-1", view.Find("[data-case]").TextContent);
+        Assert.Empty(view.FindAll("[data-case] a"));
     }
 
     [Fact]

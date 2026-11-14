@@ -34,6 +34,7 @@
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Anthropic" Version="13.8.0" />
+    <!-- Held on the 10.x line: no .NET 11 until spring 2027 (shared instructions, standing hold). -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.15" />
   </ItemGroup>
   <ItemGroup>

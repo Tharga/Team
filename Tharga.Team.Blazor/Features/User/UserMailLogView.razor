@@ -91,7 +91,17 @@ else
                                     <span data-subject>@item.Subject</span>
                                     @if (!string.IsNullOrWhiteSpace(item.CaseId))
                                     {
-                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-case="@item.CaseId">@_text.Format(UserMailLogViewText.CaseLabel, item.CaseId)</RadzenText>
+                                        var caseHref = CaseHref?.Invoke(item);
+                                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-case="@item.CaseId">
+                                            @if (string.IsNullOrWhiteSpace(caseHref))
+                                            {
+                                                @_text.Format(UserMailLogViewText.CaseLabel, item.CaseId)
+                                            }
+                                            else
+                                            {
+                                                <a href="@caseHref">@_text.Format(UserMailLogViewText.CaseLabel, item.CaseId)</a>
+                                            }
+                                        </RadzenText>
                                     }
                                 </Template>
                             </RadzenDataGridColumn>
@@ -150,6 +160,9 @@ else
 
     /// <summary>How many mails one page reads.</summary>
     [Parameter] public int PageSize { get; set; } = 50;
+
+    /// <summary>Where the support case of a mail is opened, such as <c>item =&gt; $"/support/{item.CaseId}"</c>; without it, or when it gives no address, the case is shown without a link.</summary>
+    [Parameter] public Func<UserMailHistoryItem, string> CaseHref { get; set; }
 
     private sealed record Choice<T>(T Value, string Text);
 
