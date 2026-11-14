@@ -16,5 +16,11 @@ public enum UserMailKind
     Invitation,
 
     /// <summary>A message staff wrote to contacts, people who are not users; never part of a user's history.</summary>
-    Contact
+    Contact,
+
+    /// <summary>An answer to a support case, mailed by the support channel rather than queued; in the mail log only, never in a user's history.</summary>
+    SupportAnswer,
+
+    /// <summary>A receipt mailed to someone who raised a support case through a public form; in the mail log only, never in a user's history.</summary>
+    Receipt
 }

@@ -118,7 +118,9 @@ internal sealed partial class UserMailQueue(
         SentByName = item.Mail.SentByName,
         FromAddress = item.FromAddress,
         FromName = item.FromName,
-        ReplyTo = item.ReplyTo
+        ReplyTo = item.ReplyTo,
+        CaseId = item.CaseId,
+        CaseMessageSequence = item.CaseMessageSequence
     };
 
     private static UserMailDeliveryPage ToPage(UserMailItemPage page) => new()

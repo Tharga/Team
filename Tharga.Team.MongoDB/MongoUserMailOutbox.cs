@@ -22,6 +22,9 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
 
     private static readonly FilterDefinitionBuilder<UserMailEntity> Filter = Builders<UserMailEntity>.Filter;
 
+    /// <summary>The kinds of mail sent outside the queue, which the mail log shows and a user's own history does not.</summary>
+    private static readonly UserMailKind?[] RecordedOnlyInTheLog = [UserMailKind.SupportAnswer, UserMailKind.Receipt];
+
     public async Task<UserMailQueued> AddAsync(UserMail mail, DateTime queuedAt, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(mail);
@@ -62,6 +65,77 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
 
         return false;
     }
+
+    /// <remarks>
+    /// Stored done, with its completion time, so it is never claimed and expires like any mail that is done. A second record
+    /// of the same case entry is found by the case and written over the first in place; this is a read and then a write, which
+    /// is enough because the entry is resent by one person at a time.
+    /// </remarks>
+    public async Task<string> RecordAsync(UserMailRecord record, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        if (record.Status is not (UserMailStatus.Sent or UserMailStatus.Failed))
+            throw new ArgumentException($"A mail sent outside the queue is recorded as sent or failed, not as {record.Status}.", nameof(record));
+
+        if (!string.IsNullOrEmpty(record.CaseId))
+        {
+            var found = await collection.GetManyAsync(OfCaseEntry(record.Kind, record.CaseId, record.CaseMessageSequence), new Options<UserMailEntity> { Limit = 1 }, cancellationToken);
+            if ((found?.Items ?? []).FirstOrDefault() is { } existing)
+            {
+                await collection.UpdateOneAsync(Filter.Eq(x => x.Id, existing.Id), RecordedAgain(record), OneOption<UserMailEntity>.FirstOrDefault);
+                return existing.Id.ToString();
+            }
+        }
+
+        var entity = ToRecordedEntity(record);
+        await collection.AddAsync(entity);
+
+        return entity.Id.ToString();
+    }
+
+    /// <summary>The recorded mail of this kind for this case entry; an entry of null matches a mail that names none.</summary>
+    internal static FilterDefinition<UserMailEntity> OfCaseEntry(UserMailKind kind, string caseId, int? sequence)
+        => Filter.Eq(x => x.CaseId, caseId) & Filter.Eq(x => x.CaseMessageSequence, sequence) & Filter.Eq(x => x.Kind, kind);
+
+    /// <summary>The outcome of another attempt written over the one recorded, its sender left as it was.</summary>
+    internal static UpdateDefinition<UserMailEntity> RecordedAgain(UserMailRecord record)
+    {
+        var update = Builders<UserMailEntity>.Update
+            .Set(x => x.Status, record.Status)
+            .Set(x => x.CompletedAt, record.At)
+            .Inc(x => x.Attempts, 1)
+            .Unset(x => x.BouncedAt);
+
+        update = record.MessageId == null ? update.Unset(x => x.MessageId) : update.Set(x => x.MessageId, record.MessageId);
+        update = record.Reason == null ? update.Unset(x => x.Reason) : update.Set(x => x.Reason, record.Reason);
+
+        return SentWith(update, record.Headers);
+    }
+
+    internal static UserMailEntity ToRecordedEntity(UserMailRecord record) => new()
+    {
+        Id = ObjectId.GenerateNewId(),
+        RecipientAddress = string.IsNullOrWhiteSpace(record.RecipientAddress) ? null : record.RecipientAddress.Trim().ToLowerInvariant(),
+        RecipientName = record.RecipientName,
+        Category = record.Category,
+        Subject = record.Subject ?? string.Empty,
+        Kind = record.Kind,
+        TeamKey = record.TeamKey,
+        SentByUserKey = record.SentByUserKey,
+        SentByName = record.SentByName,
+        FromAddress = record.Headers?.FromAddress,
+        FromName = record.Headers?.FromName,
+        EffectiveReplyTo = record.Headers?.ReplyTo,
+        Status = record.Status,
+        Attempts = 1,
+        QueuedAt = record.At,
+        NextAttemptAt = record.At,
+        CompletedAt = record.At,
+        Reason = record.Reason,
+        MessageId = record.MessageId,
+        CaseId = record.CaseId,
+        CaseMessageSequence = record.CaseMessageSequence
+    };
 
     /// <remarks>Inserted already held, so no sender on any instance can claim it between the insert and the caller's attempt.</remarks>
     public async Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
@@ -317,14 +391,16 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         };
     }
 
-    /// <summary>The mails queued for this user's key, and those queued to this address with no user key other than contact mail; nothing when both are missing.</summary>
+    /// <summary>The mails queued for this user's key, and those queued to this address with no user key other than contact mail; never support answers or receipts; nothing when both are missing.</summary>
     internal static FilterDefinition<UserMailEntity> ForRecipient(string userKey, string address)
     {
         var parts = new List<FilterDefinition<UserMailEntity>>();
         if (!string.IsNullOrEmpty(userKey)) parts.Add(Filter.Eq(x => x.RecipientUserKey, userKey));
         if (!string.IsNullOrEmpty(address)) parts.Add(Filter.Eq(x => x.RecipientUserKey, null) & Filter.Eq(x => x.RecipientAddress, address) & Filter.Ne(x => x.Kind, UserMailKind.Contact));
 
-        return parts.Count == 0 ? Filter.Eq(x => x.Id, ObjectId.Empty) : Filter.Or(parts) & Filter.Ne(x => x.Refused, true);
+        return parts.Count == 0
+            ? Filter.Eq(x => x.Id, ObjectId.Empty)
+            : Filter.Or(parts) & Filter.Ne(x => x.Refused, true) & Filter.Nin(x => x.Kind, RecordedOnlyInTheLog);
     }
 
     /// <exception cref="ArgumentException">The cursor was not issued by this outbox.</exception>
@@ -574,7 +650,9 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         BouncedAt = entity.BouncedAt,
         FromAddress = entity.FromAddress,
         FromName = entity.FromName,
-        ReplyTo = entity.EffectiveReplyTo
+        ReplyTo = entity.EffectiveReplyTo,
+        CaseId = entity.CaseId,
+        CaseMessageSequence = entity.CaseMessageSequence
     };
 
     private static UserMailAttachmentEntity ToAttachmentEntity(UserMailAttachment x) => new()

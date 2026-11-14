@@ -119,6 +119,14 @@ public record UserMailEntity : EntityBase
     /// <summary>The Reply-To the last attempt sent it with, or would have, unlike <see cref="ReplyTo"/>, which is the mail's own override; null when replies went to the From address or until an attempt resolved it.</summary>
     [BsonIgnoreIfNull]
     public string EffectiveReplyTo { get; init; }
+
+    /// <summary>The support case a recorded support answer or receipt belongs to; null for any other mail.</summary>
+    [BsonIgnoreIfNull]
+    public string CaseId { get; init; }
+
+    /// <summary>The entry of the case a recorded support answer mailed; null for a receipt and for any other mail.</summary>
+    [BsonIgnoreIfNull]
+    public int? CaseMessageSequence { get; init; }
 }
 
 /// <summary>A file kept with a queued mail; its content is removed once the mail is done.</summary>
@@ -164,7 +172,7 @@ public interface IUserMailCollection : IDiskRepositoryCollection<UserMailEntity>
 /// the rest of the global log being read newest first by id; a sent mail by the <c>Message-ID</c> a bounce
 /// report names; how often each category was sent by status, completion, category and recipient, read from the index
 /// alone, and how often each contact category was by kind, status, completion, category and address, read from an index
-/// of its own; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never
+/// of its own; a recorded support answer or receipt by its case and entry; and a mail that is done expires after <see cref="ThargaTeamOptions.UserMailRetention"/>, while a queued one never
 /// does.
 /// </remarks>
 public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, IUserMailCollection
@@ -207,7 +215,9 @@ public class UserMailCollection : DiskRepositoryCollectionBase<UserMailEntity>, 
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.Status).Ascending(x => x.CompletedAt).Ascending(x => x.Category).Ascending(x => x.RecipientUserKey),
             new CreateIndexOptions { Name = "Status_CompletedAt_Category_RecipientUserKey" }),
         new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.Kind).Ascending(x => x.Status).Ascending(x => x.CompletedAt).Ascending(x => x.Category).Ascending(x => x.RecipientAddress),
-            new CreateIndexOptions { Name = "Kind_Status_CompletedAt_Category_RecipientAddress" })
+            new CreateIndexOptions { Name = "Kind_Status_CompletedAt_Category_RecipientAddress" }),
+        new(Builders<UserMailEntity>.IndexKeys.Ascending(x => x.CaseId).Ascending(x => x.CaseMessageSequence),
+            new CreateIndexOptions { Sparse = true, Name = "CaseId_CaseMessageSequence" })
     ];
 
     /// <inheritdoc />

@@ -157,4 +157,10 @@ public sealed record UserMailDelivery
 
     /// <summary>The Reply-To it was sent with, or would have been when it was not; null when replies go to the From address or until an attempt resolved it.</summary>
     public string ReplyTo { get; init; }
+
+    /// <summary>The support case a support answer or receipt belongs to; null for any other mail.</summary>
+    public string CaseId { get; init; }
+
+    /// <summary>The entry of the case a support answer mailed; null for a receipt and for any other mail.</summary>
+    public int? CaseMessageSequence { get; init; }
 }

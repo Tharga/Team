@@ -35,7 +35,8 @@ internal sealed class EmailEventHandler(
     IOptions<SupportCaseOptions> caseOptions = null,
     ISupportAttachmentStore attachmentStore = null,
     SupportMailboxes mailboxes = null,
-    IEnumerable<IMailBounceHandler> bounceHandlers = null)
+    IEnumerable<IMailBounceHandler> bounceHandlers = null,
+    IUserMailOutbox userMailOutbox = null)
 {
     /// <summary>Ledger source, so an id from a mailbox cannot collide with one from Slack.</summary>
     /// <remarks>One source for every mailbox, so a mail that reached two of them is applied once.</remarks>
@@ -168,7 +169,8 @@ internal sealed class EmailEventHandler(
     /// site sharing the mailbox, mail to users sent from this address, or mail sent before ids were recorded —
     /// and opening a case from it would put a mail server's complaint in the queue as if a customer had
     /// written. Such a bounce is handed to the registered <see cref="IMailBounceHandler"/>s. The reason is kept
-    /// on the entry rather than logged, because it often quotes the recipient's address.
+    /// on the entry rather than logged, because it often quotes the recipient's address. The answer's row in the mail
+    /// log is marked bounced too, by the answer's <c>Message-ID</c>.
     /// </remarks>
     private async Task<EmailHandlingOutcome> BounceAsync(InboundMail mail, CancellationToken cancellationToken)
     {
@@ -186,9 +188,10 @@ internal sealed class EmailEventHandler(
 
         if (!await ledger.TryRecordAsync(Source, mail.MessageId, cancellationToken)) return EmailHandlingOutcome.Ignored("already handled");
 
-        await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence.Value, SupportMessageDelivery.Failed,
-            string.IsNullOrWhiteSpace(mail.BounceReason) ? "The receiving mail server returned the answer as undeliverable." : mail.BounceReason,
-            cancellationToken);
+        var reason = string.IsNullOrWhiteSpace(mail.BounceReason) ? "The receiving mail server returned the answer as undeliverable." : mail.BounceReason;
+
+        await store.SetMessageDeliveryAsync(supportCase.TeamKey, supportCase.Id, sequence.Value, SupportMessageDelivery.Failed, reason, cancellationToken);
+        await SupportMailLog.MarkBouncedAsync(userMailOutbox, mail.BouncedMessageId, reason, timeProvider.GetUtcNow().UtcDateTime, logger, supportCase.Id, cancellationToken);
 
         notifier?.Notify(new SupportCaseUpdatedEventArgs
         {

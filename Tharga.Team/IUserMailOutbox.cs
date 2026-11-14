@@ -108,6 +108,12 @@ public interface IUserMailOutbox
 
     /// <summary>How long a mail is kept once it is done, which bounds how far back <see cref="CountSentByCategoryAsync"/> can count; null when it is kept for good.</summary>
     TimeSpan? Retention => null;
+
+    /// <summary>Records a mail sent outside the queue, already sent or given up so it is never claimed, and returns its id; an outbox that does not record such mail keeps nothing and returns null.</summary>
+    /// <remarks>A record naming a case replaces the outcome of one already recorded for the same kind, case and entry — a resend — rather than adding a second; its sender is kept as first recorded.</remarks>
+    /// <exception cref="ArgumentException">The record's status is neither sent nor failed.</exception>
+    Task<string> RecordAsync(UserMailRecord record, CancellationToken cancellationToken = default)
+        => Task.FromResult<string>(null);
 }
 
 /// <summary>What a bounce report did to the mail it names.</summary>
@@ -194,4 +200,10 @@ public sealed record UserMailItem
 
     /// <summary>The Reply-To it was sent with, or would have been when it was not, whether the mail's own or the configured one; null when replies go to the From address or until an attempt resolved it.</summary>
     public string ReplyTo { get; init; }
+
+    /// <summary>The support case a recorded support answer or receipt belongs to; null for any other mail.</summary>
+    public string CaseId { get; init; }
+
+    /// <summary>The entry of the case a recorded support answer mailed; null for a receipt and for any other mail.</summary>
+    public int? CaseMessageSequence { get; init; }
 }

@@ -390,7 +390,8 @@ public static class SupportRegistration
                 sp.GetService<ISupportSenderDirectory>(),
                 sp.GetService<IMailClient>(),
                 sp.GetRequiredService<SupportExternalCaseOptions>(),
-                sp.GetService<ILogger<ExternalSupportCaseService>>()),
+                sp.GetService<ILogger<ExternalSupportCaseService>>(),
+                sp.GetService<IUserMailOutbox>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));
 

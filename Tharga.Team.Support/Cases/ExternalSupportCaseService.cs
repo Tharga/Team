@@ -32,7 +32,8 @@ internal sealed class ExternalSupportCaseService(
     ISupportSenderDirectory senderDirectory = null,
     IMailClient mailClient = null,
     SupportExternalCaseOptions options = null,
-    ILogger<ExternalSupportCaseService> logger = null) : IExternalSupportCaseService
+    ILogger<ExternalSupportCaseService> logger = null,
+    IUserMailOutbox userMailOutbox = null) : IExternalSupportCaseService
 {
     private readonly SupportExternalCaseOptions _options = options ?? new SupportExternalCaseOptions();
 
@@ -119,7 +120,8 @@ internal sealed class ExternalSupportCaseService(
     /// <remarks>
     /// <b>A receipt never costs the visitor their case.</b> The case is written first; a mail server that is down, not
     /// configured or refusing is logged, and staff still see the message. Off by default, because a public form that
-    /// mails whoever types an address into it is how it ends up used to mail other people.
+    /// mails whoever types an address into it is how it ends up used to mail other people. Each attempt is recorded in
+    /// the mail log, sent or not.
     /// </remarks>
     private async Task SendReceiptAsync(SupportCase supportCase, SupportMailbox mailbox, string body, CancellationToken cancellationToken)
     {
@@ -129,16 +131,23 @@ internal sealed class ExternalSupportCaseService(
             return;
         }
 
+        var subject = $"Re: {supportCase.Subject}";
+        string replyTo = null;
+        var recorded = false;
+
         try
         {
             var text = string.IsNullOrWhiteSpace(_options.ReceiptText) ? SupportExternalCaseOptions.DefaultReceiptText : _options.ReceiptText;
-            var replyTo = await CaseReplyAddress.ForAsync(store, mailbox.Options, supportCase, logger, cancellationToken);
+            replyTo = await CaseReplyAddress.ForAsync(store, mailbox.Options, supportCase, logger, cancellationToken);
 
             var result = await mailClient.SendAsync(new OutboundMail(
                 To: supportCase.ExternalContact.Email,
-                Subject: $"Re: {supportCase.Subject}",
+                Subject: subject,
                 Body: $"{text}\n\n> {body.ReplaceLineEndings("\n> ")}",
                 ReplyTo: replyTo), cancellationToken);
+
+            await RecordReceiptAsync(supportCase, mailbox, subject, replyTo, result.Success, result.MessageId, result.Error, cancellationToken);
+            recorded = true;
 
             // The receipt's own id joins the thread, so the visitor's reply to it finds the case.
             if (result.Success && !string.IsNullOrWhiteSpace(result.MessageId))
@@ -160,8 +169,26 @@ internal sealed class ExternalSupportCaseService(
         catch (Exception e) when (e is not OperationCanceledException)
         {
             logger?.LogWarning(e, "The receipt for support case {CaseId} could not be sent; the case stands.", supportCase.Id);
+            if (!recorded) await RecordReceiptAsync(supportCase, mailbox, subject, replyTo, false, null, e.Message, cancellationToken);
         }
     }
+
+    /// <summary>The receipt in the mail log, sent by nobody but the application: sent with its <c>Message-ID</c>, or failed for the reason given.</summary>
+    private Task RecordReceiptAsync(SupportCase supportCase, SupportMailbox mailbox, string subject, string replyTo, bool sent, string messageId, string error, CancellationToken cancellationToken)
+        => SupportMailLog.RecordAsync(userMailOutbox, () => Task.FromResult(new UserMailRecord
+        {
+            Kind = UserMailKind.Receipt,
+            RecipientAddress = supportCase.ExternalContact.Email,
+            RecipientName = supportCase.ExternalContact.Name,
+            Subject = subject,
+            TeamKey = supportCase.TeamKey,
+            Headers = new UserMailHeaders(mailbox.Options.FromAddress?.Trim(), string.IsNullOrWhiteSpace(mailbox.Options.FromName) ? null : mailbox.Options.FromName, replyTo),
+            Status = sent ? UserMailStatus.Sent : UserMailStatus.Failed,
+            MessageId = sent ? messageId : null,
+            Reason = sent ? null : error,
+            At = timeProvider.GetUtcNow().UtcDateTime,
+            CaseId = supportCase.Id
+        }), logger, supportCase.Id, cancellationToken);
 
     /// <summary>The accounts holding the address, or none when there is no directory or it fails; only ever for suggestions.</summary>
     private async Task<SupportSender[]> SendersAsync(string address, CancellationToken cancellationToken)

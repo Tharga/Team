@@ -78,7 +78,9 @@ internal sealed class UserMailHistoryService(
                 RecipientName = x.RecipientUserKey != null ? names.GetValueOrDefault(x.RecipientUserKey) : x.RecipientName,
                 TeamKey = x.TeamKey,
                 SentByUserKey = x.SentByUserKey,
-                SentByName = x.SentByName
+                SentByName = x.SentByName,
+                CaseId = x.CaseId,
+                CaseMessageSequence = x.CaseMessageSequence
             })],
             NextCursor = page.NextCursor
         };

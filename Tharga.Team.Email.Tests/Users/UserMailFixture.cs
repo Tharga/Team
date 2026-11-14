@@ -318,7 +318,8 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
         lock (_gate)
         {
             var mine = _items
-                .Where(x => !x.Refused && ((userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address && x.Mail.Kind != UserMailKind.Contact)))
+                .Where(x => !x.Refused && x.Mail.Kind is not (UserMailKind.SupportAnswer or UserMailKind.Receipt))
+                .Where(x => (userKey != null && x.Mail.RecipientUserKey == userKey) || (address != null && x.Mail.RecipientUserKey == null && x.RecipientAddress == address && x.Mail.Kind != UserMailKind.Contact))
                 .Reverse()
                 .ToList();
 
@@ -407,6 +408,40 @@ internal sealed class InMemoryUserMailOutbox : IUserMailOutbox
 
     public Task<bool> PostponeAsync(string id, string claimant, string reason, UserMailHeaders headers, DateTime nextAttemptAt, CancellationToken cancellationToken = default)
         => Write(id, claimant, x => SentWith(x with { NextAttemptAt = nextAttemptAt, Reason = reason, ClaimedBy = null, ClaimedUntil = null }, headers));
+
+    public Task<string> RecordAsync(UserMailRecord record, CancellationToken cancellationToken = default)
+    {
+        if (record.Status is not (UserMailStatus.Sent or UserMailStatus.Failed)) throw new ArgumentException("Only sent or failed mail is recorded.", nameof(record));
+
+        lock (_gate)
+        {
+            var existing = record.CaseId == null ? null : _items.FirstOrDefault(x => x.CaseId == record.CaseId && x.CaseMessageSequence == record.CaseMessageSequence && x.Mail.Kind == record.Kind);
+            if (existing != null)
+            {
+                Replace(existing, SentWith(existing with { Status = record.Status, CompletedAt = record.At, Attempts = existing.Attempts + 1, MessageId = record.MessageId, Reason = record.Reason, BouncedAt = null }, record.Headers));
+                return Task.FromResult(existing.Id);
+            }
+
+            var item = SentWith(new UserMailItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Mail = new UserMail { RecipientAddress = record.RecipientAddress, RecipientName = record.RecipientName, Category = record.Category, Subject = record.Subject, Kind = record.Kind, TeamKey = record.TeamKey, SentByUserKey = record.SentByUserKey, SentByName = record.SentByName },
+                RecipientAddress = record.RecipientAddress,
+                Status = record.Status,
+                Attempts = 1,
+                QueuedAt = record.At,
+                NextAttemptAt = record.At,
+                CompletedAt = record.At,
+                MessageId = record.MessageId,
+                Reason = record.Reason,
+                CaseId = record.CaseId,
+                CaseMessageSequence = record.CaseMessageSequence
+            }, record.Headers);
+            _items.Add(item);
+
+            return Task.FromResult(item.Id);
+        }
+    }
 
     private static UserMailItem SentWith(UserMailItem item, UserMailHeaders headers)
         => headers == null ? item : item with { FromAddress = headers.FromAddress, FromName = headers.FromName, ReplyTo = headers.ReplyTo };

@@ -45,10 +45,14 @@ internal sealed class EmailSupportChannel(
     IOutboundMailPolicy policy = null,
     MailTemplate template = null,
     SupportAnswerOptions answers = null,
-    ITextResolver texts = null) : ISupportChannel, ISupportAnswerMail
+    ITextResolver texts = null,
+    IUserMailOutbox userMailOutbox = null,
+    IUserService userService = null,
+    TimeProvider timeProvider = null) : ISupportChannel, ISupportAnswerMail
 {
     private readonly SupportMailboxes _mailboxes = mailboxes ?? new SupportMailboxes(options.Value);
     private readonly MailTemplate _template = (template ?? MailTemplate.None).Support;
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
 
     public SupportChannelType ChannelType => SupportChannelType.Email;
 
@@ -76,7 +80,8 @@ internal sealed class EmailSupportChannel(
 
     /// <remarks>
     /// The reason is the mail client's own, so a mail withheld by the non-production policy says so rather than
-    /// reading as a transport failure.
+    /// reading as a transport failure. Every attempt that reaches the case is recorded in the mail log, sent or not, with
+    /// the From and Reply-To it went with; recording never changes the result.
     /// </remarks>
     public async Task<SupportChannelPostResult> PostWithResultAsync(SupportChannelBinding binding, SupportMessage message, CancellationToken cancellationToken = default)
     {
@@ -95,9 +100,23 @@ internal sealed class EmailSupportChannel(
         var supportCase = await store.GetCaseByBindingAsync(SupportChannelType.Email, binding.ExternalId, cancellationToken);
 
         var (files, missing) = await FilesOfAsync(supportCase, message, cancellationToken);
-        if (missing != null) return SupportChannelPostResult.Failed(missing);
+        if (missing != null)
+        {
+            await RecordAsync(supportCase, binding, message, new UserMailHeaders(option.Address, option.Name, null), false, null, missing, cancellationToken);
+            return SupportChannelPostResult.Failed(missing);
+        }
 
-        var result = await sender.SendAsync(await ComposeAsync(supportCase, binding, message, option, files, cancellationToken), cancellationToken);
+        var answer = await ComposeAsync(supportCase, binding, message, option, files, cancellationToken);
+        var outcome = await SendAsync(sender, answer, supportCase, binding, message, option, cancellationToken);
+
+        await RecordAsync(supportCase, binding, message, new UserMailHeaders(option.Address, option.Name, answer.ReplyTo), outcome.Result.Delivered, outcome.MessageId, outcome.Result.Error, cancellationToken);
+
+        return outcome.Result;
+    }
+
+    private async Task<(SupportChannelPostResult Result, string MessageId)> SendAsync(IMailClient sender, OutboundMail answer, SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, SupportSenderOption option, CancellationToken cancellationToken)
+    {
+        var result = await sender.SendAsync(answer, cancellationToken);
 
         // The answer's own id joins the thread, so a reply naming only it in In-Reply-To still finds the case,
         // and a bounce naming it finds the very entry that did not arrive.
@@ -115,9 +134,47 @@ internal sealed class EmailSupportChannel(
         }
 
         if (result.SenderRefused)
-            return SupportChannelPostResult.Failed($"The mail server refused to send as {option.Address}. Answer again from another address, or ask whoever runs the mail server to allow sending as it.");
+            return (SupportChannelPostResult.Failed($"The mail server refused to send as {option.Address}. Answer again from another address, or ask whoever runs the mail server to allow sending as it."), null);
 
-        return result.Success ? SupportChannelPostResult.Ok() : SupportChannelPostResult.Failed(result.Error);
+        return result.Success ? (SupportChannelPostResult.Ok(), result.MessageId) : (SupportChannelPostResult.Failed(result.Error), null);
+    }
+
+    /// <summary>The attempt in the mail log as a support answer to the case entry: sent with its <c>Message-ID</c>, or failed for the reason given.</summary>
+    private Task RecordAsync(SupportCase supportCase, SupportChannelBinding binding, SupportMessage message, UserMailHeaders headers, bool sent, string messageId, string error, CancellationToken cancellationToken)
+        => SupportMailLog.RecordAsync(userMailOutbox, async () =>
+        {
+            var (senderKey, senderName) = await AuthorOfAsync(message);
+
+            return new UserMailRecord
+            {
+                Kind = UserMailKind.SupportAnswer,
+                RecipientAddress = binding.Address,
+                RecipientName = supportCase?.ExternalContact?.Name,
+                Subject = Subject(supportCase),
+                TeamKey = supportCase?.TeamKey,
+                SentByUserKey = senderKey,
+                SentByName = senderName,
+                Headers = headers,
+                Status = sent ? UserMailStatus.Sent : UserMailStatus.Failed,
+                MessageId = sent ? messageId : null,
+                Reason = sent ? null : error,
+                At = _time.GetUtcNow().UtcDateTime,
+                CaseId = supportCase?.Id,
+                CaseMessageSequence = supportCase == null ? null : message.Sequence
+            };
+        }, logger, supportCase?.Id, cancellationToken);
+
+    /// <summary>The person who wrote the entry: their name as the entry keeps it, and their user key when they are the one signed in now; nobody for an entry the toolkit or the assistant wrote.</summary>
+    private async Task<(string Key, string Name)> AuthorOfAsync(SupportMessage message)
+    {
+        if (message.Kind != SupportMessageKind.User) return (null, null);
+
+        var name = string.IsNullOrWhiteSpace(message.AuthorName) ? null : message.AuthorName.Trim();
+        if (userService == null || string.IsNullOrWhiteSpace(message.AuthorIdentity)) return (null, name);
+
+        var current = await userService.GetCurrentUserAsync();
+
+        return (current != null && string.Equals(current.Identity, message.AuthorIdentity, StringComparison.Ordinal) ? current.Key : null, name);
     }
 
     public SupportAnswerRoute RouteOf(SupportCase supportCase, SupportChannelBinding binding, SupportStaffSender staff = null)
