@@ -1,3 +1,3 @@
 # Feature: support-start-mail-case
 
-Support staff start a case by sending a mail, from a "New message" button on the boards, a compose component a host can place, and a conversation component by case id. Issue #483 (and #482 item 7, `GetCaseByIdAsync`).
+Support staff start a case by sending a mail (#483), and the support boards get working a contact-form message (#482): a contact table with copy buttons, a searchable organisation list, the contact kept after assignment, a host slot per case, and opening a case by id. One PR closes both issues.

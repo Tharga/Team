@@ -66,7 +66,7 @@ else
             foreach (var item in Shown())
             {
                 <div @key="item.Id" data-case="@item.Id">
-                    <ExpandableCard Text="@CaseTitle(item)" Icon="@ChannelIcon(item)" AllowSaveState="false">
+                    <ExpandableCard Text="@CaseTitle(item)" Icon="@ChannelIcon(item)" AllowSaveState="false" Selected="@(item.Id == _opened)">
                         <TopMenu>
                             <RadzenBadge Text="@StatusText(item)" BadgeStyle="@StatusStyle(item)" data-status="@item.Id" />
                             @if (item.AwaitingSupport)
@@ -82,7 +82,7 @@ else
                             </RadzenText>
                         </TopMenu>
                         <ChildContent>
-                            <SupportUnassignedConversation Case="item" Teams="_teams" TimeTemplate="TimeTemplate"
+                            <SupportUnassignedConversation Case="item" Teams="_teams" Extras="CaseExtras" TimeTemplate="TimeTemplate"
                                                            Changed="OnChangedAsync" Assigned="OnAssignedAsync" />
                         </ChildContent>
                     </ExpandableCard>
@@ -95,6 +95,12 @@ else
 @code {
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>The host's own content in each opened case, below the contact; the case is its context. For linking a message to a record the package knows nothing about.</summary>
+    [Parameter] public RenderFragment<SupportCase> CaseExtras { get; set; }
+
+    /// <summary>A case to open when the view loads, for a host that links straight to one. An id that names nothing in the list opens nothing.</summary>
+    [Parameter] public string CaseId { get; set; }
 
     /// <summary>Where the list filter is remembered in the browser.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.Unassigned.Filter";
@@ -111,6 +117,7 @@ else
 
     private SupportCaseFilter _filter;
     private SupportCase[] _cases = [];
+    private string _opened;
     private SupportCaseTeam[] _teams = [];
 
     protected override async Task OnInitializedAsync()
@@ -123,7 +130,24 @@ else
         await ReloadAsync();
         await LoadTeamsAsync();
 
+        OpenRequested();
         _ready = true;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_ready) OpenRequested();
+    }
+
+    private string _openRequested;
+
+    /// <remarks>An id that names nothing this caller can list opens nothing and says nothing; a filter does not hide the case asked for.</remarks>
+    private void OpenRequested()
+    {
+        if (CaseId == _openRequested) return;
+
+        _openRequested = CaseId;
+        if (!string.IsNullOrWhiteSpace(CaseId) && _cases.Any(x => x.Id == CaseId)) _opened = CaseId;
     }
 
     public void Dispose() => Notifier.CaseUpdated -= OnCaseUpdated;
@@ -179,7 +203,7 @@ else
     /// <summary>The cases the filter lets through: waiting ones first, then the liveliest conversation.</summary>
     private IEnumerable<SupportCase> Shown()
         => _cases
-            .Where(x => _filter?.Shows(x) ?? SupportCaseFilter.ShowsByDefault(x))
+            .Where(x => (_filter?.Shows(x) ?? SupportCaseFilter.ShowsByDefault(x)) || x.Id == _opened)
             .OrderByDescending(x => x.AwaitingSupport)
             .ThenByDescending(x => x.LastMessageAt ?? x.CreatedAt);
 

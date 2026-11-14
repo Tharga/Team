@@ -9,6 +9,13 @@
    only while the card is open, so a closed card reads no messages. *@
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-conversation="@Case.Id">
+    @* Support reads who wrote and may add its own content, for as long as the case is open to them: also once it has a team. *@
+    @if (AsStaff)
+    {
+        <SupportContactTable Contact="Case.ExternalContact" CaseId="@Case.Id" />
+        @Extras?.Invoke(Case)
+    }
+
     @* Whether an answer reached the customer is support's concern, and sending it again speaks for support. *@
     @if (AsStaff)
     {
@@ -104,6 +111,9 @@
     [Parameter] public bool Declined { get; set; }
 
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    /// <summary>The host's own content for the case, rendered below the contact when answering as staff; the case is its context.</summary>
+    [Parameter] public RenderFragment<SupportCase> Extras { get; set; }
 
     /// <summary>Raised after this conversation changed the case, so the list around it can read it again.</summary>
     [Parameter] public EventCallback<string> Changed { get; set; }

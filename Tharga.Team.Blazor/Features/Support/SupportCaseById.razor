@@ -31,11 +31,11 @@ else if (_case == null)
 }
 else if (string.IsNullOrEmpty(_case.TeamKey))
 {
-    <SupportUnassignedConversation @key="_case.Id" Case="_case" Teams="_teams" TimeTemplate="TimeTemplate" Changed="ReloadAsync" Assigned="OnAssignedAsync" />
+    <SupportUnassignedConversation @key="_case.Id" Case="_case" Teams="_teams" Extras="CaseExtras" TimeTemplate="TimeTemplate" Changed="ReloadAsync" Assigned="OnAssignedAsync" />
 }
 else
 {
-    <SupportCaseConversation @key="_case.Id" Case="_case" AsStaff="true" TimeTemplate="TimeTemplate" Changed="ReloadAsync" />
+    <SupportCaseConversation @key="_case.Id" Case="_case" AsStaff="true" Extras="CaseExtras" TimeTemplate="TimeTemplate" Changed="ReloadAsync" />
 }
 
 @code {
@@ -47,6 +47,9 @@ else
 
     /// <summary>Shown when there is no such case, in place of the default notice.</summary>
     [Parameter] public RenderFragment NotFound { get; set; }
+
+    /// <summary>The host's own content for the case, rendered below the contact; the case is its context.</summary>
+    [Parameter] public RenderFragment<SupportCase> CaseExtras { get; set; }
 
     /// <summary>Raised with the case after it was read, and again each time the conversation changed it, so the host can follow it.</summary>
     [Parameter] public EventCallback<SupportCase> Loaded { get; set; }

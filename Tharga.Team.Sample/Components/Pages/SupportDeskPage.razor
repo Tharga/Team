@@ -26,12 +26,12 @@
 
     <RadzenCard>
         <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Every team</RadzenText>
-        <SupportAcrossTeamsView />
+        <SupportAcrossTeamsView CaseId="@CaseId" CaseExtras="HostSlot" />
     </RadzenCard>
 
     <RadzenCard>
         <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Without a team</RadzenText>
-        <SupportUnassignedView />
+        <SupportUnassignedView CaseId="@CaseId" CaseExtras="HostSlot" />
     </RadzenCard>
 
     @* The two components a host places outside the boards, for instance on a sales prospect's card: the form that
@@ -70,6 +70,19 @@
 </RadzenStack>
 
 @code {
+    /// <summary>Opens that case on the boards: <c>/support-desk?case=ID</c>, as a host links to one from elsewhere in its app.</summary>
+    [SupplyParameterFromQuery(Name = "case")] public string CaseId { get; set; }
+
+    // The host's own content in each opened case, below the contact: where a real host links the message to its own record.
+    private static RenderFragment HostSlotFor(SupportCase supportCase) => builder =>
+    {
+        builder.OpenElement(0, "small");
+        builder.AddContent(1, $"Host slot: your own content for case {supportCase.Id} goes here.");
+        builder.CloseElement();
+    };
+
+    private readonly RenderFragment<SupportCase> HostSlot = HostSlotFor;
+
     private string _caseId;
     private string _startedId;
 

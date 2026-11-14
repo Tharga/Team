@@ -484,6 +484,30 @@ differ per page, which reading the options could not express.
 — they are best placed to say the problem is solved, and a case closed while somebody is still typing reads
 as a dismissal. It is advisory: support can still close a case that is finished.
 
+### Working a contact-form message
+
+A message raised through `RaiseExternalCaseAsync` shows who wrote as a **table of label and value** (`SupportContactTable`): name,
+e-mail, phone, organisation, each of the form's own fields in the order the host gave them, and when consent was given, or
+that none was recorded. Rows with nothing in them are left out. The labels go through `IThargaTextProvider`
+(`SupportContactText`), so a host can translate them.
+
+- **Copy buttons** beside the e-mail address and the phone number put the value on the clipboard and show a short "Copied" notice.
+- **The contact stays** after the case is given a team: the same table shows on the case in `SupportAcrossTeamsView`.
+- **"Connect to organisation" can be searched**, case-insensitively, matching anywhere in the name.
+- **A slot for your own content.** Both boards take `CaseExtras`, a `RenderFragment<SupportCase>` rendered inside each opened case below the
+  contact, with the case as its context. It is how a host links a message to something the package knows nothing about, such as a
+  sales prospect, without the package ever holding the host's concept:
+
+  ```razor
+  <SupportUnassignedView CaseExtras="@(c => @<ProspectLink CaseId="@c.Id" />)" />
+  ```
+
+- **Open one case on load.** `CaseId` on either board opens that case, so a host can link straight to it, for instance from a query
+  value: `<SupportUnassignedView CaseId="@Case" />` with `[SupplyParameterFromQuery(Name = "case")]`. An id that names nothing the
+  reader can list opens nothing and does not throw; a filter does not hide the case asked for.
+- **One case by id, for staff.** `ISupportCaseService.GetCaseByIdAsync(caseId)` returns a case whichever team it belongs to, or `null`;
+  read its messages with the team the case reports. It takes `support:read` for a case with no team and `support:all:read` for a team's.
+
 ### Who is writing
 
 While somebody on the other side is writing an answer, the open conversation shows three flashing dots where
