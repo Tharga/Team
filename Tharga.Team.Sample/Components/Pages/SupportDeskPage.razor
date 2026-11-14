@@ -34,6 +34,26 @@
         <SupportUnassignedView />
     </RadzenCard>
 
+    @* The two components a host places outside the boards, for instance on a sales prospect's card: the form that
+       starts a case by mail, prefilled and handing the new case back, and the conversation of a case by its id. *@
+    <RadzenCard>
+        <RadzenText TextStyle="TextStyle.Subtitle1" class="rz-mb-3">Write first, and show a case by its id</RadzenText>
+        <RadzenStack Orientation="Orientation.Vertical" Gap="1rem">
+            <SupportComposeMail To="prospect@acme.example" ToName="A Prospect" Subject="Our offer" Started="OnStarted" />
+
+            @if (_startedId != null)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">Started case <code>@_startedId</code>; its conversation:</RadzenText>
+            }
+
+            <RadzenTextBox @bind-Value="_caseId" Placeholder="A case id" Style="max-width: 32rem;" />
+            @if (!string.IsNullOrWhiteSpace(_caseId))
+            {
+                <SupportCaseById CaseId="@_caseId" />
+            }
+        </RadzenStack>
+    </RadzenCard>
+
     @* What members asked the assistant for that it had no tool to do, and how they rated its answers: the list to
        build the next tools from. *@
     <RadzenCard>
@@ -48,3 +68,15 @@
         <SupportAssistantUsageView />
     </RadzenCard>
 </RadzenStack>
+
+@code {
+    private string _caseId;
+    private string _startedId;
+
+    // What a host does with the new case: connect it to its own records. Here it only shows the conversation.
+    private void OnStarted(SupportCase started)
+    {
+        _startedId = started.Id;
+        _caseId = started.Id;
+    }
+}
