@@ -1342,7 +1342,8 @@ builder.Services.AddScoped<ITeamEntryGuard, RequireBankId>();
   your site that the library made; your step-up endpoint must still redirect to **local paths only**.
 - **When the answer changes**, tell the library: `ITeamEntryGuardState.InvalidateAsync(userKey, teamKey)`. Cached answers are forgotten and every open
   circuit of that user **on this instance** re-evaluates at once, instead of at the next interval. On several instances call it on each over whatever you
-  already use between them, or accept that another instance catches up when its cached answer expires.
+  already use between them, or accept that another instance catches up when its cached answer expires. A **step-up is never answered from the
+  cache**, so one completed on another instance counts on the next request wherever it lands: only an allow or a deny can be out of date.
 - **Audited**: a refusal is recorded (`team` / `entry-denied`, the team, the outcome and the reason), once per cache window per session and team, so a
   refused caller reloading the page leaves one entry and not one per request.
 - **API keys and MCP are not sessions** and stay governed by the team context middleware; a host that wants the same rule there calls its guard from its own
@@ -1361,10 +1362,11 @@ builder.AddThargaTeam(o =>
 |--------|---------|--------|
 | `TeamEntry.Enabled` | `true` | Whether a registered guard is asked. `false` is a switch for a guard that misbehaves; with no guard registered nothing here runs. |
 | `TeamEntry.OnError` | `Deny` | What happens when the guard throws or returns nothing. `Deny` refuses with a neutral message (the exception stays in the log and the audit entry); `Allow` lets entry through. |
-| `TeamEntry.CacheDuration` | 30 seconds | How long an answer is remembered per user, **session** and team on this instance. A person with two browsers never shares an answer. |
+| `TeamEntry.CacheDuration` | 30 seconds | How long an allow or a deny is remembered per user, **session** and team on this instance. A person with two browsers never shares an answer. A step-up is asked again every time (and audited once per window). |
 
 **Cost.** The guard is asked wherever claims are built: once per authenticated request that carries the team cookie, and once per circuit per revalidation
-interval. Within the cache window a repeat is a dictionary lookup, so the cost is the guard's own, once per user, session and team per window. With no guard
+interval. Within the cache window a repeat is a dictionary lookup, so the cost is the guard's own, once per user, session and team per window, except
+for a caller the guard is sending to step up, who is asked about on each of those until they have. With no guard
 registered the only added work is a null check. The sample's `SampleTeamEntryGuard` shows each answer: rename a team to contain *Locked* or *BankID*.
 
 #### Session limits

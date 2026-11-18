@@ -12,7 +12,8 @@ namespace Tharga.Team.Blazor.Framework;
 /// one browser must not carry that to another that has not. The session is told apart by the library's own session claim when sessions are on, else by
 /// the claims the sign-in left on the principal (<c>sid</c>, else <c>auth_time</c>, <c>idp</c> and <c>amr</c>), which a host's guard reads too.
 /// <para>
-/// Per instance, so <see cref="InvalidateAsync"/> reaches this instance's circuits at once and another instance when its answer expires.
+/// Per instance, so <see cref="InvalidateAsync"/> reaches this instance's circuits at once and another instance when its answer expires. That is why the
+/// evaluator never answers a step-up from here: the caller completes it on whichever instance takes the callback.
 /// </para>
 /// </remarks>
 internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuardState

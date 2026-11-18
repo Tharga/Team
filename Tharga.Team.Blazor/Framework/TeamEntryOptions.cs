@@ -17,8 +17,9 @@ public sealed class TeamEntryOptions
     public TeamEntryErrorBehavior OnError { get; set; } = TeamEntryErrorBehavior.Deny;
 
     /// <summary>
-    /// How long an answer is remembered per user, session and team on this instance. Default 30 seconds. <see cref="TimeSpan.Zero"/> asks the guard every
-    /// time. A longer time is cheaper and means another instance learns of a change later; <see cref="ITeamEntryGuardState.InvalidateAsync"/> shortens that.
+    /// How long an allow or a deny is remembered per user, session and team on this instance. Default 30 seconds. <see cref="TimeSpan.Zero"/> asks the guard
+    /// every time. A longer time is cheaper and means another instance learns of a change later; <see cref="ITeamEntryGuardState.InvalidateAsync"/> shortens
+    /// that. A step-up is never answered from here, since the caller may complete it on another instance; it is only kept to audit it once per window.
     /// </summary>
     public TimeSpan CacheDuration { get; set; } = TimeSpan.FromSeconds(30);
 }

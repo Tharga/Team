@@ -182,10 +182,49 @@ public class TeamEntryGuardTests
     // ---- telling the library an answer changed
 
     [Fact]
-    public async Task AnAnswerThatChanged_IsAskedAgain_OnceTheHostSaysSo()
+    public async Task AStepUp_IsNeverAnsweredFromTheCache_SoOneTakenOnAnotherInstanceCountsAtOnce()
     {
         var evaluator = Evaluator();
         GuardSays(TeamEntryDecision.StepUp("https://id.example/step-up"));
+        Assert.Equal(TeamEntryOutcome.StepUp, (await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey)).Outcome);
+
+        GuardSays(TeamEntryDecision.Allow);
+
+        Assert.True((await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey)).Allowed);
+        _guard.Verify(x => x.CheckAsync(It.IsAny<ClaimsPrincipal>(), TeamKey, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task AnAllowAfterAStepUp_IsRememberedAsUsual()
+    {
+        var evaluator = Evaluator();
+        GuardSays(TeamEntryDecision.StepUp("https://id.example/step-up"));
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+        GuardSays(TeamEntryDecision.Allow);
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+
+        _guard.Verify(x => x.CheckAsync(It.IsAny<ClaimsPrincipal>(), TeamKey, It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task ADeny_IsStillRemembered_ForTheCacheDuration()
+    {
+        var evaluator = Evaluator();
+        GuardSays(TeamEntryDecision.Deny("Contract ended."));
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+        GuardSays(TeamEntryDecision.Allow);
+
+        Assert.False((await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey)).Allowed);
+        _guard.Verify(x => x.CheckAsync(It.IsAny<ClaimsPrincipal>(), TeamKey, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task AnAnswerThatChanged_IsAskedAgain_OnceTheHostSaysSo()
+    {
+        var evaluator = Evaluator();
+        GuardSays(TeamEntryDecision.Deny("Contract ended."));
         Assert.False((await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey)).Allowed);
 
         GuardSays(TeamEntryDecision.Allow);
@@ -245,6 +284,40 @@ public class TeamEntryGuardTests
         Assert.Equal(TeamKey, entry.TeamKey);
         Assert.Equal("Contract ended.", entry.Metadata["team.entry.reason"]);
         Assert.Equal("Deny", entry.Metadata["team.entry.outcome"]);
+    }
+
+    [Fact]
+    public async Task AStepUp_IsAudited_OncePerCacheWindow_ThoughTheGuardIsAskedEachTime()
+    {
+        GuardSays(TeamEntryDecision.StepUp("https://id.example/step-up", "Sign in with BankID."));
+        var evaluator = Evaluator();
+
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+        _time.Advance(_entryOptions.CacheDuration - TimeSpan.FromSeconds(1));
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+
+        var entry = Assert.Single(_audit);
+        Assert.Equal("StepUp", entry.Metadata["team.entry.outcome"]);
+        _guard.Verify(x => x.CheckAsync(It.IsAny<ClaimsPrincipal>(), TeamKey, It.IsAny<CancellationToken>()), Times.Exactly(3));
+
+        _time.Advance(TimeSpan.FromSeconds(2));
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+
+        Assert.Equal(2, _audit.Count);
+    }
+
+    [Fact]
+    public async Task ADifferentStepUp_IsAuditedAtOnce()
+    {
+        var evaluator = Evaluator();
+        GuardSays(TeamEntryDecision.StepUp("https://id.example/connect", "Connect BankID."));
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+
+        GuardSays(TeamEntryDecision.StepUp("https://id.example/sign", "Sign in with BankID."));
+        await evaluator.EvaluateAsync(Principal(), UserKey, TeamKey);
+
+        Assert.Equal(["Connect BankID.", "Sign in with BankID."], _audit.Select(x => x.Metadata["team.entry.reason"]));
     }
 
     [Fact]

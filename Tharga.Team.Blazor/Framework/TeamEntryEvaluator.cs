@@ -14,6 +14,11 @@ namespace Tharga.Team.Blazor.Framework;
 /// <b>Nothing registered, or switched off, is the old behaviour exactly:</b> allowed, with no lookup and no audit. A guard that throws is
 /// handled as <see cref="TeamEntryOptions.OnError"/> says. The answer is cached per user, session and team, and a refusal is audited when it is
 /// decided, so a refused caller who reloads the page every second leaves one entry per cache window and not one per request.
+/// <para>
+/// <b>A step-up is never answered from the cache.</b> It asks the caller to do something, and they may do it on another instance, whose
+/// <see cref="ITeamEntryGuardState.InvalidateAsync"/> does not reach this one; a remembered step-up would send them to do it again. It is still
+/// remembered, so the same step-up is audited once per window.
+/// </para>
 /// </remarks>
 internal sealed class TeamEntryEvaluator(
     TeamEntryCache cache,
@@ -36,10 +41,15 @@ internal sealed class TeamEntryEvaluator(
 
         var user = userKey ?? principal?.Identity?.Name ?? string.Empty;
         var session = TeamEntryCache.SessionOf(principal);
-        if (cache.TryGet(user, session, teamKey, out var cached)) return cached;
+        var remembered = cache.TryGet(user, session, teamKey, out var cached);
+        if (remembered && cached.Outcome != TeamEntryOutcome.StepUp) return cached;
 
         var sw = Stopwatch.StartNew();
         var decision = await AskAsync(principal, teamKey, cancellationToken);
+
+        // The same step-up again within the window: answered afresh, but neither remembered anew nor audited again.
+        if (remembered && decision == cached) return decision;
+
         cache.Set(user, session, teamKey, decision, _options.CacheDuration);
 
         if (!decision.Allowed) Audit(teamKey, decision, sw.ElapsedMilliseconds, null);
