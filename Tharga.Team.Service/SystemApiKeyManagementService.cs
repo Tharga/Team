@@ -26,13 +26,15 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly IUserService _userService;
     private readonly ApiKeyOwnership _ownership;
+    private readonly SystemGrantCeiling _ceiling;
 
-    public SystemApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null, IUserService userService = null)
+    public SystemApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null, IUserService userService = null, ISystemScopeRegistry systemScopeRegistry = null)
     {
         _inner = inner;
         _httpContextAccessor = httpContextAccessor;
         _userService = userService;
         _ownership = options?.Value?.SystemKeys ?? ApiKeyOwnership.Both;
+        _ceiling = new SystemGrantCeiling(systemScopeRegistry);
     }
 
     public async IAsyncEnumerable<IApiKey> GetSystemKeysAsync(PrivateKeyScope personalKeys = PrivateKeyScope.None)
@@ -58,12 +60,30 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     public async Task<IApiKey> CreateSystemKeyAsync(string name, string[] scopes, DateTime? expiryDate = null, bool personal = false)
     {
         personal = ApiKeyManagementService.ApplyOwnership(_ownership, personal, "system");
+        _ceiling.EnsureCanGrant(Caller, scopes);
+
         if (!personal) return await _inner.CreateSystemKeyAsync(name, scopes, expiryDate, GetCurrentUserIdentity());
 
         // Anti-spoof: a caller can only ever create a key owned by themselves.
         var owner = await GetCallerUserKeyAsync()
                     ?? throw new InvalidOperationException("Cannot create a personal system API key: the caller is not a signed-in user.");
         return await _inner.CreatePersonalSystemKeyAsync(name, scopes, owner, expiryDate, GetCurrentUserIdentity());
+    }
+
+    /// <remarks>
+    /// <b>Both halves of the ceiling, and the key is looked up first</b>: who may touch a personal key is decided before anything about its scopes is
+    /// said, so a refusal does not reveal what another person's key holds. The new set must be registered and held by the caller, and the key's present
+    /// set must be too, so somebody holding little cannot lower a key that holds more.
+    /// </remarks>
+    public async Task SetSystemKeyScopesAsync(string key, string[] scopes)
+    {
+        var target = await FindAsync(key);
+        await EnsureCanMutateAsync(target);
+
+        _ceiling.EnsureCanGrant(Caller, scopes);
+        if (target != null) _ceiling.EnsureCanChange(Caller, target.SystemScopes);
+
+        await _inner.SetSystemKeyScopesAsync(key, scopes);
     }
 
     public async Task<IApiKey> RefreshSystemKeyAsync(string key)
@@ -94,14 +114,20 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     /// Guards mutation of a personal system key: only its owner, or a caller with oversight, may refresh,
     /// lock, disable or delete it. Shared keys (and unknown keys) pass through.
     /// </summary>
-    private async Task EnsureCanMutateAsync(string key)
+    private async Task EnsureCanMutateAsync(string key) => await EnsureCanMutateAsync(await FindAsync(key));
+
+    private async Task<IApiKey> FindAsync(string key)
     {
-        IApiKey target = null;
         await foreach (var k in _inner.GetSystemKeysAsync())
         {
-            if (k.Key == key) { target = k; break; }
+            if (k.Key == key) return k;
         }
 
+        return null;
+    }
+
+    private async Task EnsureCanMutateAsync(IApiKey target)
+    {
         if (target == null || string.IsNullOrEmpty(target.OwnerMemberKey)) return; // shared — inner handles validity
         if (CanOversee()) return;
 
@@ -110,6 +136,8 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
 
         throw new UnauthorizedAccessException("This system API key is personal to another user and can only be managed by its owner.");
     }
+
+    private ClaimsPrincipal Caller => _httpContextAccessor?.HttpContext?.User;
 
     /// <summary>The signed-in caller's user key, or null when the caller is not a person.</summary>
     /// <remarks>

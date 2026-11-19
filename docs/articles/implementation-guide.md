@@ -1666,6 +1666,29 @@ Administrator, or to a role or an override, and relied on those holders raising 
 their own access, they will now see refusals. Grant the scopes the holder should be able to hand out, or
 leave the raising to an Administrator.
 
+### System API keys: the same limit, and editing their scopes
+
+**Since 4.8 a system key is held to the same rule** (Tharga/Team#522). `apikeys:system:manage` says a caller may
+administer system keys, not how much they may give, so creating a system key, or changing the scopes of one, refuses:
+
+| What | Rule |
+|---|---|
+| A scope that is not a registered system scope | Refused for everybody, `apikeys:oversee` holders included |
+| A scope the caller does not hold as a system scope | Refused, naming the scopes the caller lacks. Holders of `apikeys:oversee` may grant any registered scope |
+| Changing a key that holds a scope the caller does not | Refused, even to a smaller set or to none: a key above you is not yours to lower |
+| Changing a personal key | Its owner, or an `apikeys:oversee` holder, as for refresh, lock, disable and delete |
+
+**A key's scopes can be changed after it is created**, which used to mean deleting it and creating another, changing its value and breaking
+every client that used it. `ISystemApiKeyManagementService.SetSystemKeyScopesAsync(key, scopes)` replaces the scope set and leaves the key's value,
+name, expiry and owner as they are. `SystemApiKeyView` offers it as **Edit scopes** in a row's menu while `ShowScopeOverrides` is on, in the picker the
+create card uses, filled with what the key holds. It is audited as `set-scopes` with the key (`apikey.id`) and the scopes added
+(`apikey.scopes.added`) and removed (`apikey.scopes.removed`). A host with its own key store implements
+`IApiKeyAdministrationService.SetSystemKeyScopesAsync`; until it does, the call throws `NotSupportedException`.
+
+**Behavior change for hosts.** If your key managers create system keys carrying scopes they do not hold themselves, for example an administrator minting
+MCP keys, they will now see refusals. Either grant them the scopes they hand out, or map `apikeys:oversee` to the role that should be able to hand out any
+registered scope. The picker still lists every registered scope; the service is what refuses.
+
 ### Verification
 
 Create an API key via the UI, then call your API with `X-API-KEY: <key>` header. The request should authenticate successfully.
@@ -2978,7 +3001,7 @@ o.ConfigureSystemRoles = r =>
 };
 ```
 
-- **System API keys** are minted with an explicit system-scope list (`SystemApiKeyView` picker reads `ConfigureSystemScopes`).
+- **System API keys** are minted with an explicit system-scope list (`SystemApiKeyView` picker reads `ConfigureSystemScopes`), and the caller can hand out only the scopes they hold themselves; see [System API keys: the same limit, and editing their scopes](#system-api-keys-the-same-limit-and-editing-their-scopes).
 - **Users** with a mapped app role (e.g. `Developer`) receive the mapped scopes as claims via `TeamServerClaimsTransformation` — even with no team selected. Map `apikey:manage` / `audit:read` to a role to grant that role cross-team key/audit management.
 - Map external IdP role claims to internal role names with an `ITeamClaimsEnricher` (runs first), e.g. `Dev → Developer`.
 

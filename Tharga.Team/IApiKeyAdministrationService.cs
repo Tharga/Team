@@ -92,6 +92,22 @@ public interface IApiKeyAdministrationService
     Task<IApiKey> CreatePersonalSystemKeyAsync(string name, string[] scopes, string ownerUserKey, DateTime? expiryDate = null, string createdBy = null)
         => throw new NotSupportedException("This API key store does not support personal system keys. Implement IApiKeyAdministrationService.CreatePersonalSystemKeyAsync, or set ApiKeyOptions.SystemKeys to ApiKeyOwnership.Shared.");
 
+    /// <summary>
+    /// Replaces the explicit scope set of an existing system key, leaving its value, name, expiry and owner as they are.
+    /// </summary>
+    /// <param name="key">The key's id.</param>
+    /// <param name="scopes">The scopes the key holds from now on; <c>null</c> or empty leaves it with none. Duplicates are dropped.</param>
+    /// <remarks>
+    /// Verifies that the key is a system key. <b>Checks nothing about who may grant what</b>: that is the first-level
+    /// <see cref="ISystemApiKeyManagementService.SetSystemKeyScopesAsync"/>'s job, and this is the store behind it.
+    /// <para>
+    /// <b>A default implementation that throws, so a host's own key store keeps compiling.</b> Such a store supports every other
+    /// operation as before; implement this to support changing a system key's scopes.
+    /// </para>
+    /// </remarks>
+    Task SetSystemKeyScopesAsync(string key, string[] scopes)
+        => throw new NotSupportedException("This API key store does not support changing a system key's scopes. Implement IApiKeyAdministrationService.SetSystemKeyScopesAsync.");
+
     /// <summary>Regenerates a system key's raw value. Returns the entity with the raw key visible once.</summary>
     Task<IApiKey> RefreshSystemKeyAsync(string key);
 

@@ -29,9 +29,33 @@ public interface ISystemApiKeyManagementService
     /// <see cref="ApiKeyOptions.SystemKeys"/> decides what is allowed: <see cref="ApiKeyOwnership.Shared"/>
     /// refuses <paramref name="personal"/> with an <see cref="InvalidOperationException"/>, and
     /// <see cref="ApiKeyOwnership.Personal"/> makes every key personal whatever <paramref name="personal"/> says.
+    /// <para>
+    /// <b>The caller may hand out only what they hold</b> (Tharga/Team#522, as #409 did for team keys): every scope must be registered with
+    /// <see cref="ISystemScopeRegistry"/> (<see cref="InvalidOperationException"/>), and one the caller does not hold themselves is refused with an
+    /// <see cref="UnauthorizedAccessException"/>. A caller holding <see cref="SystemApiKeyScopes.Oversee"/> may grant any registered scope.
+    /// </para>
     /// </remarks>
     [RequireScope(ApiKeyScopes.SystemManage)]
     Task<IApiKey> CreateSystemKeyAsync(string name, string[] scopes, DateTime? expiryDate = null, bool personal = false);
+
+    /// <summary>
+    /// Replaces the scopes of a system key, keeping its value, so a client using the key goes on working with the new scopes.
+    /// </summary>
+    /// <param name="key">The key's id.</param>
+    /// <param name="scopes">The scopes the key holds from now on; empty leaves it with none.</param>
+    /// <remarks>
+    /// The same rules creating a key applies, and refused here rather than only hidden by a picker: every scope must be registered with
+    /// <see cref="ISystemScopeRegistry"/> (<see cref="InvalidOperationException"/>), and the caller may grant only scopes they hold themselves
+    /// (<see cref="UnauthorizedAccessException"/>). A caller holding <see cref="SystemApiKeyScopes.Oversee"/> may grant any registered scope. A key
+    /// that holds a scope the caller does not is not theirs to change either.
+    /// <para>
+    /// A personal key can be changed only by its owner or an <see cref="SystemApiKeyScopes.Oversee"/> holder. Audited with the scopes added and
+    /// removed. The default throws, so a host's own implementation keeps compiling.
+    /// </para>
+    /// </remarks>
+    [RequireScope(ApiKeyScopes.SystemManage)]
+    Task SetSystemKeyScopesAsync(string key, string[] scopes)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SetSystemKeyScopesAsync)}.");
 
     /// <remarks>A personal key can be refreshed only by its owner or an <see cref="SystemApiKeyScopes.Oversee"/> holder; the same goes for lock, disable and delete.</remarks>
     [RequireScope(ApiKeyScopes.SystemManage)]

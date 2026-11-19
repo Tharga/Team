@@ -37,7 +37,7 @@ public class SystemApiKeyPersonalKeysTests
     {
         _inner.GetSystemKeysAsync().Returns(_ => ToAsyncEnumerable(keys));
 
-        var claims = new List<Claim> { new(ClaimTypes.Name, "alice") };
+        var claims = new List<Claim> { new(ClaimTypes.Name, "alice"), new(TeamClaimTypes.SystemScope, "sys:read") };
         if (memberKey != null) claims.Add(new Claim(TeamClaimTypes.MemberKey, memberKey));
         if (overseer) claims.Add(new Claim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee));
         if (isApiKey) claims.Add(new Claim(TeamClaimTypes.ApiKeyId, "calling-key"));

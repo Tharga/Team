@@ -251,6 +251,43 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         }
     }
 
+    /// <remarks>
+    /// Records which scopes were added and removed, read from the key before the change, so the audit trail says what a key could do and when it
+    /// started or stopped. Not recorded against a key's own audit log (what the key did) but as an action on it, carrying its id.
+    /// </remarks>
+    public async Task SetSystemKeyScopesAsync(string key, string[] scopes)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var before = await ScopesOfAsync(key);
+            await _inner.SetSystemKeyScopesAsync(key, scopes);
+            sw.Stop();
+
+            var after = (scopes ?? []).Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct(StringComparer.Ordinal).ToArray();
+            LogSystem("set-scopes", nameof(SetSystemKeyScopesAsync), sw.ElapsedMilliseconds, true, null,
+                (AuditMetadataKeys.ApiKeyId, key),
+                (AuditMetadataKeys.ApiKeyScopesAdded, string.Join(",", after.Except(before, StringComparer.Ordinal).Order(StringComparer.Ordinal))),
+                (AuditMetadataKeys.ApiKeyScopesRemoved, string.Join(",", before.Except(after, StringComparer.Ordinal).Order(StringComparer.Ordinal))));
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            LogSystem("set-scopes", nameof(SetSystemKeyScopesAsync), sw.ElapsedMilliseconds, false, ex.Message, (AuditMetadataKeys.ApiKeyId, key));
+            throw;
+        }
+    }
+
+    private async Task<string[]> ScopesOfAsync(string key)
+    {
+        await foreach (var k in _inner.GetSystemKeysAsync())
+        {
+            if (k.Key == key) return k.SystemScopes ?? [];
+        }
+
+        return [];
+    }
+
     public async Task DeleteSystemKeyAsync(string key)
     {
         var sw = Stopwatch.StartNew();
@@ -274,13 +311,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         _auditLogger.Log(entry);
     }
 
-    private void LogSystem(string action, string methodName, long durationMs, bool success, string errorMessage = null)
+    private void LogSystem(string action, string methodName, long durationMs, bool success, string errorMessage = null, params (string Key, string Value)[] metadata)
     {
         var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey: null);
-        entry = entry with
-        {
-            Metadata = new Dictionary<string, string> { { "ApiKeyType", "System" } }
-        };
-        _auditLogger.Log(entry);
+        var values = new Dictionary<string, string> { { "ApiKeyType", "System" } };
+        foreach (var (name, value) in metadata) values[name] = value;
+
+        _auditLogger.Log(entry with { Metadata = values });
     }
 }
