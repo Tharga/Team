@@ -76,7 +76,11 @@ public class SupportContactBoardRenderTests : BunitContext
 
         SetRendererInfo(new RendererInfo("Server", true));
 
-        return Render<SupportUnassignedView>(p => set?.Invoke(p));
+        return Render<SupportUnassignedView>(p =>
+        {
+            p.Add(x => x.ShowAssignee, false);
+            set?.Invoke(p);
+        });
     }
 
     private IRenderedComponent<SupportAcrossTeamsView> AcrossTeams(SupportCase[] items, Action<ComponentParameterCollectionBuilder<SupportAcrossTeamsView>> set = null)

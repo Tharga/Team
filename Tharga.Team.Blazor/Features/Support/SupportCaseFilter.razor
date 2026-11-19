@@ -26,6 +26,13 @@
         </RadzenSelectBar>
     }
 
+    @if (ShowAssignee)
+    {
+        <RadzenDropDown Data="AssigneeOptions()" TextProperty="Text" ValueProperty="Value" TValue="string"
+                        Value="@Assignee" ValueChanged="@((string v) => SetAssigneeAsync(v))"
+                        Style="min-width: 12rem;" aria-label="@_text[SupportCaseFilterText.AssigneeLabel]" data-assignee-filter="true" />
+    }
+
     @if (ShowSearch)
     {
         <RadzenTextBox Value="@Search" @oninput="@(e => SearchAsync(e.Value?.ToString()))"
@@ -53,6 +60,19 @@
     /// </summary>
     [Parameter] public bool ShowSearch { get; set; }
 
+    /// <summary>
+    /// Whether the cases can be filtered by who they are assigned to: anyone, nobody, or one person of <see cref="Assignees"/>. Off by default,
+    /// since only a list of the support staff's cases has an assignee; the choice then lets every case through.
+    /// </summary>
+    [Parameter] public bool ShowAssignee { get; set; }
+
+    /// <summary>The people offered besides anyone and nobody, in the order to offer them; the choice remembered last is kept even when it is no longer among them.</summary>
+    [Parameter] public SupportCaseAssignee[] Assignees { get; set; } = [];
+
+    private const string AnyValue = "any";
+    private const string NobodyValue = "none";
+    private const string PersonPrefix = "key:";
+
     private static readonly SupportCaseStatus[] DefaultStatuses = [SupportCaseStatus.Open];
     private static readonly SupportAssistance[] DefaultKinds = [SupportAssistance.None];
 
@@ -64,6 +84,9 @@
 
     /// <summary>What was searched for; every word must appear somewhere in the case. Empty shows every case.</summary>
     public string Search { get; private set; }
+
+    /// <summary>Who the shown cases are assigned to: <c>any</c> (the default), <c>none</c> for nobody, or <c>key:</c> and the person's key.</summary>
+    public string Assignee { get; private set; } = AnyValue;
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
@@ -96,6 +119,7 @@
 
             Statuses = choice.Statuses ?? [];
             Kinds = choice.Kinds ?? [];
+            Assignee = string.IsNullOrWhiteSpace(choice.Assignee) ? AnyValue : choice.Assignee;
             return true;
         }
         catch (Exception exception) when (exception is JSException or JsonException or InvalidOperationException)
@@ -106,7 +130,28 @@
     }
 
     /// <summary>Whether a case passes the choice.</summary>
-    public bool Shows(SupportCase item) => Shows(item, Statuses, ShowKinds ? Kinds : []) && Matches(item, Search);
+    public bool Shows(SupportCase item) => Shows(item, Statuses, ShowKinds ? Kinds : []) && (!ShowAssignee || AssigneeShows(item, Assignee)) && Matches(item, Search);
+
+    private static bool AssigneeShows(SupportCase item, string choice)
+        => choice switch
+        {
+            NobodyValue => item.Assignee == null,
+            _ when choice.StartsWith(PersonPrefix, StringComparison.Ordinal) => item.Assignee?.Key == choice[PersonPrefix.Length..],
+            _ => true
+        };
+
+    private sealed record AssigneeOption(string Value, string Text);
+
+    /// <remarks>The remembered person is offered even when they are no longer in the list, so the choice that is filtering is never one the box cannot show.</remarks>
+    private AssigneeOption[] AssigneeOptions()
+    {
+        var people = (Assignees ?? []).Select(x => new AssigneeOption(PersonPrefix + x.Key, x.Name)).ToList();
+
+        if (Assignee.StartsWith(PersonPrefix, StringComparison.Ordinal) && people.All(x => x.Value != Assignee))
+            people.Add(new AssigneeOption(Assignee, Assignee[PersonPrefix.Length..]));
+
+        return [new AssigneeOption(AnyValue, _text[SupportCaseFilterText.AnyAssignee]), new AssigneeOption(NobodyValue, _text[SupportCaseFilterText.NoAssignee]), .. people];
+    }
 
     /// <summary>Whether a case passes the default choice, for a list rendered before the filter is.</summary>
     public static bool ShowsByDefault(SupportCase item) => Shows(item, DefaultStatuses, DefaultKinds);
@@ -127,7 +172,7 @@
         var terms = (search ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (terms.Length == 0) return true;
 
-        var fields = new[] { item.Subject, item.AuthorName, item.Id, item.TeamName, item.TeamKey }
+        var fields = new[] { item.Subject, item.AuthorName, item.Id, item.TeamName, item.TeamKey, item.Assignee?.Name, item.Assignee?.Email }
             .Concat((item.Bindings ?? []).SelectMany(x => new[] { x.Address, x.MailboxAddress }))
             .Concat((item.SuggestedTeams ?? []).SelectMany(x => new[] { x.Name, x.Key }))
             .Where(x => !string.IsNullOrEmpty(x))
@@ -142,28 +187,41 @@
         await Changed.InvokeAsync();
     }
 
+    private async Task SetAssigneeAsync(string assignee)
+    {
+        Assignee = string.IsNullOrWhiteSpace(assignee) ? AnyValue : assignee;
+
+        await RememberAsync();
+        await Changed.InvokeAsync();
+    }
+
     private async Task SetAsync(IEnumerable<SupportCaseStatus> statuses, IEnumerable<SupportAssistance> kinds)
     {
         Statuses = [.. statuses ?? []];
         Kinds = [.. kinds ?? []];
 
+        await RememberAsync();
+        await Changed.InvokeAsync();
+    }
+
+    private async Task RememberAsync()
+    {
         if (!string.IsNullOrWhiteSpace(StorageKey))
         {
             try
             {
-                await JsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(new Choice(Statuses.ToArray(), Kinds.ToArray()), Json));
+                await JsRuntime.InvokeVoidAsync("localStorage.setItem", StorageKey, JsonSerializer.Serialize(new Choice(Statuses.ToArray(), Kinds.ToArray(), Assignee == AnyValue ? null : Assignee), Json));
             }
             catch (JSException)
             {
                 // Remembering is a convenience; the choice still applies to this page.
             }
         }
-
-        await Changed.InvokeAsync();
     }
 
     // By name, so a remembered choice survives the enums being reordered.
     private static readonly JsonSerializerOptions Json = new() { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 
-    private sealed record Choice(SupportCaseStatus[] Statuses, SupportAssistance[] Kinds);
+    /// <remarks>The assignee is optional, so a choice remembered before it existed still reads: it simply shows every case.</remarks>
+    private sealed record Choice(SupportCaseStatus[] Statuses, SupportAssistance[] Kinds, string Assignee = null);
 }

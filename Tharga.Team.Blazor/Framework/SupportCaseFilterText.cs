@@ -22,6 +22,15 @@ public static class SupportCaseFilterText
     /// <summary>The search box's placeholder, and its name for a screen reader.</summary>
     public static readonly TextKey Search = new("team.support.filter.search", "Search");
 
+    /// <summary>Names the choice of who a case is assigned to, for a screen reader.</summary>
+    public static readonly TextKey AssigneeLabel = new("team.support.filter.assignee", "Assigned to");
+
+    /// <summary>The choice that lets every case through, whoever it is assigned to.</summary>
+    public static readonly TextKey AnyAssignee = new("team.support.filter.assignee.any", "Anyone");
+
+    /// <summary>The choice that shows only the cases nobody is assigned to.</summary>
+    public static readonly TextKey NoAssignee = new("team.support.filter.assignee.none", "Nobody");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Open, Closed, Support, Assistant, StatusLabel, KindLabel, Search];
+    public static readonly TextKey[] All = [Open, Closed, Support, Assistant, StatusLabel, KindLabel, Search, AssigneeLabel, AnyAssignee, NoAssignee];
 }

@@ -720,11 +720,12 @@ public class SupportUnassignedViewRenderTests : BunitContext
         RenderFragment<DateTime> timeTemplate = null,
         string storageKey = null,
         Mock<ISupportCaseNotifier> notifier = null,
-        bool showAssignment = true)
+        bool showAssignment = true,
+        bool showAssignee = false)
     {
         cases = Cases(items ?? [Case], assignSucceeds, awaiting);
 
-        return Render(cases, withOversight, timeTemplate, storageKey, notifier, showAssignment);
+        return Render(cases, withOversight, timeTemplate, storageKey, notifier, showAssignment, showAssignee);
     }
 
     private IRenderedComponent<SupportUnassignedView> Render(
@@ -733,7 +734,8 @@ public class SupportUnassignedViewRenderTests : BunitContext
         RenderFragment<DateTime> timeTemplate = null,
         string storageKey = null,
         Mock<ISupportCaseNotifier> notifier = null,
-        bool showAssignment = true)
+        bool showAssignment = true,
+        bool showAssignee = false)
     {
         Services.AddSingleton(cases.Object);
         Services.AddSingleton((notifier ?? new Mock<ISupportCaseNotifier>()).Object);
@@ -752,6 +754,7 @@ public class SupportUnassignedViewRenderTests : BunitContext
             p.Add(x => x.TimeTemplate, timeTemplate);
             if (storageKey != null) p.Add(x => x.StorageKey, storageKey);
             p.Add(x => x.ShowAssignment, showAssignment);
+            p.Add(x => x.ShowAssignee, showAssignee);
         });
     }
 

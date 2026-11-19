@@ -36,7 +36,8 @@ else
 
         @* No kind of conversation to choose: an assistant answers only in a team, so every case here is support's. *@
         <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-            <SupportCaseFilter @ref="_filter" StorageKey="@StorageKey" ShowKinds="false" ShowSearch="true" Changed="StateHasChanged" />
+            <SupportCaseFilter @ref="_filter" StorageKey="@StorageKey" ShowKinds="false" ShowSearch="true" Changed="StateHasChanged"
+                               ShowAssignee="@(ShowAssignee && _canAssignStaff)" Assignees="@SupportAssigneeChoices.Of(_staff, _cases)" />
             @if (_awaiting > 0)
             {
                 <RadzenBadge Text="@($"{_awaiting} {_text[SupportUnassignedViewText.Awaiting]}")" BadgeStyle="BadgeStyle.Danger" data-awaiting="@_awaiting" />
@@ -76,6 +77,13 @@ else
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-sender="@item.Id">
                                 @_text[SupportUnassignedViewText.From] @item.AuthorName
                             </RadzenText>
+                            @if (ShowAssignee && item.Assignee != null)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-assignee="@item.Id" title="@item.Assignee.Email">
+                                    <RadzenIcon Icon="person" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@item.Assignee.Name</RadzenText>
+                                </RadzenStack>
+                            }
                             <SupportMailboxAddress Case="item" />
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-time="@item.Id">
                                 @Time(item.LastMessageAt ?? item.CreatedAt)
@@ -83,7 +91,7 @@ else
                         </TopMenu>
                         <ChildContent>
                             <SupportUnassignedConversation Case="item" Teams="_teams" Extras="CaseExtras" TimeTemplate="TimeTemplate" ShowAssignment="ShowAssignment"
-                                                           Changed="OnChangedAsync" Assigned="OnAssignedAsync" />
+                                                           ShowAssignee="ShowAssignee" Changed="OnChangedAsync" Assigned="OnAssignedAsync" />
                         </ChildContent>
                     </ExpandableCard>
                 </div>
@@ -105,6 +113,12 @@ else
     /// </summary>
     [Parameter] public bool ShowAssignment { get; set; } = true;
 
+    /// <summary>
+    /// Whether the view shows which member of support staff each case is assigned to, offers to change it in an opened case, and filters the list by it.
+    /// <c>false</c> leaves that to the host's own control. Not the same as <see cref="ShowAssignment"/>, which is about giving a case a team.
+    /// </summary>
+    [Parameter] public bool ShowAssignee { get; set; } = true;
+
     /// <summary>A case to open when the view loads, for a host that links straight to one. An id that names nothing in the list opens nothing.</summary>
     [Parameter] public string CaseId { get; set; }
 
@@ -125,6 +139,8 @@ else
     private SupportCase[] _cases = [];
     private string _opened;
     private SupportCaseTeam[] _teams = [];
+    private SupportCaseAssignee[] _staff = [];
+    private bool _canAssignStaff;
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,6 +151,7 @@ else
 
         await ReloadAsync();
         await LoadTeamsAsync();
+        if (ShowAssignee && _permitted) (_staff, _canAssignStaff) = await SupportAssigneeChoices.StaffAsync(SupportCases);
 
         OpenRequested();
         _ready = true;
