@@ -83,6 +83,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             SuggestedTeams = supportCase.SuggestedTeams is { Length: > 0 } suggested ? [.. suggested.Select(ToEntity)] : null,
             SuggestionReason = supportCase.SuggestedTeams is { Length: > 0 } ? supportCase.SuggestionReason : null,
             ExternalContact = supportCase.ExternalContact == null ? null : ToEntity(supportCase.ExternalContact),
+            Assignee = supportCase.Assignee == null ? null : ToEntity(supportCase.Assignee),
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists. Unless support wrote it: a case started by mail opens with support's own message, and waits on the reply.
@@ -319,6 +320,21 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         var result = await collection.UpdateOneAsync(filter, update);
 
         return result?.Before != null;
+    }
+
+    /// <remarks>
+    /// Keyed on the pair, so an id from another tenant misses, and written without a condition: the last assignment wins. Nothing else on the
+    /// case moves, so assigning does not reorder a list or touch what anybody has read.
+    /// </remarks>
+    public async Task SetAssigneeAsync(string teamKey, string caseId, SupportCaseAssignee assignee, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAsync(teamKey, caseId);
+
+        var update = assignee == null
+            ? Builders<SupportCaseEntity>.Update.Unset(x => x.Assignee)
+            : Builders<SupportCaseEntity>.Update.Set(x => x.Assignee, ToEntity(assignee));
+
+        await UpdateAsync(teamKey, caseId, update);
     }
 
     public async Task<SupportCase> GetCaseByBindingAsync(SupportChannelType channelType, string externalId, CancellationToken cancellationToken = default)
@@ -705,9 +721,17 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             : [.. entity.SuggestedTeams.Select(x => new SupportCaseTeam { Key = x.Key, Name = x.Name })],
         SuggestionReason = entity.SuggestionReason,
         ExternalContact = entity.ExternalContact == null ? null : ToContact(entity.ExternalContact),
+        Assignee = entity.Assignee == null ? null : new SupportCaseAssignee { Key = entity.Assignee.Key, Name = entity.Assignee.Name, Email = entity.Assignee.Email },
         AssistantGaps = entity.AssistantGaps ?? [],
         AnswersRatedUp = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Up),
         AnswersRatedDown = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Down)
+    };
+
+    private static SupportCaseAssigneeEntity ToEntity(SupportCaseAssignee assignee) => new()
+    {
+        Key = assignee.Key,
+        Name = assignee.Name,
+        Email = assignee.Email
     };
 
     private static SupportCaseTeamEntity ToEntity(SupportCaseTeam team) => new()

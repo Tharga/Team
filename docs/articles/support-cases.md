@@ -58,6 +58,7 @@ the same reason.
 | Reply to, close, reopen or **assign** a case with no team | `support:unassigned:manage` — a **system** scope |
 | Read or list cases in **any** team, without belonging to it | `support:all:read` — a **system** scope |
 | Reply to, close, reopen or hand over a case in **any** team | `support:all:manage` — a **system** scope |
+| **Assign** a case to a member of support staff, or take the assignee away | `support:unassigned:manage` for a case with no team, `support:all:manage` for a team's — **system** scopes. A team's own `support:manage` does not |
 | Read how much the assistant was used, per team | `support:usage:read` — a **system** scope |
 
 **Not everything is a scope, deliberately.** Raising a case about your own team is what an ordinary member
@@ -521,6 +522,44 @@ that none was recorded. Rows with nothing in them are left out. The labels go th
 - **One case by id, for staff.** `ISupportCaseService.GetCaseByIdAsync(caseId)` returns a case whichever team it belongs to, or `null`;
   read its messages with the team the case reports. It takes `support:read` for a case with no team and `support:all:read` for a team's.
 
+### Who has the case
+
+A case can be assigned to **one member of the product's own support staff**, or to nobody. On a desk with several people it answers "whose
+case is this" from the list, without a host having to build it on top.
+
+- **On the card.** `SupportAcrossTeamsView` and `SupportUnassignedView` show who has each case, and the opened case has a picker to change it
+  (clear it to take the assignee away). The list filter gains an **assigned to** choice, anyone, nobody or one person, remembered with the other
+  filter choices; the search box on the unassigned queue also finds a case by its assignee's name or address. `SupportCaseById` offers the
+  picker in the conversation it shows.
+- **Who can be chosen.** The toolkit cannot tell staff from users, because who holds a system support scope is decided by your own claims. So
+  you tell it. Register an `ISupportStaffDirectory`, which returns each person's authentication subject (`SupportCaseAssignee.Key`), name and
+  address, and those people are offered. **Without one a person can only assign a case to themselves**, which needs nothing registered.
+  Being listed grants nothing: reading and answering are still governed by the system support scopes.
+- **The service refuses anybody not offered**, so a hand-made call gains nothing over the picker. `GetAssignableStaffAsync` returns exactly
+  the people `SetCaseAssigneeAsync(teamKey, caseId, assigneeKey)` will accept, the caller always among them. A blank key takes the assignee
+  away; naming the person who already has the case changes nothing. Pass `null` for `teamKey` on a case with no team.
+- **A host with its own control** sets `ShowAssignee="false"` on the views (and on `SupportCaseById`), and nothing about assignees is shown,
+  picked or filtered. The conversation components themselves take the same parameter, off by default.
+- **Live.** An assignment is announced as `SupportCaseChange.AssigneeChanged`, so every open staff screen reads the case again, on every
+  instance when the host relays the notifier as described under [Knowing when something changed](#knowing-when-something-changed).
+- **It is staff's, not the customer's.** Nothing is written to the transcript, which the customer's own team reads. The audit log is the
+  history, and the case carries only the current assignee, with the name and address as they were when it was assigned.
+- **Independent of the team.** Giving an unassigned case a team keeps its assignee, and closing a case leaves it, so a reopened case is still
+  its owner's.
+
+```csharp
+builder.Services.AddSingleton<ISupportStaffDirectory, MySupportStaff>();
+
+internal sealed class MySupportStaff(IMyStaffStore staff) : ISupportStaffDirectory
+{
+    public async Task<SupportCaseAssignee[]> GetStaffAsync(CancellationToken cancellationToken = default)
+        => [.. (await staff.ListAsync(cancellationToken)).Select(x => new SupportCaseAssignee { Key = x.Subject, Name = x.Name, Email = x.Email })];
+}
+```
+
+A host with its own `ISupportCaseService` or `ISupportCaseStore` keeps compiling: the new members default to throwing `NotSupportedException`,
+and the picker and the filter leave themselves out when the service says so. A store of your own implements `SetAssigneeAsync` to support it.
+
 ### Who is writing
 
 While somebody on the other side is writing an answer, the open conversation shows three flashing dots where
@@ -582,7 +621,8 @@ reach another team's case is worth knowing about.
 **Message bodies are never recorded.** An audit entry has more readers, longer retention and easier export
 than the case itself. Neither are file names: a reply or an answer carrying files records how many
 (`support.message.attachments`). Sending an entry again is audited as `resend`, with where it stands afterwards
-(`support.message.delivery`).
+(`support.message.delivery`). Assigning a case to a member of staff is audited as `assign-to-staff`, with the case and the new assignee's
+subject (`support.case.assignee`, empty when the assignee was taken away); the previous assignee is the entry before it.
 
 ## Slack threads
 

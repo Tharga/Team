@@ -25,7 +25,8 @@ else
     <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
 
         <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-            <SupportCaseFilter @ref="_filter" StorageKey="@StorageKey" Changed="StateHasChanged" />
+            <SupportCaseFilter @ref="_filter" StorageKey="@StorageKey" Changed="StateHasChanged"
+                               ShowAssignee="@(ShowAssignee && _canAssignStaff)" Assignees="@SupportAssigneeChoices.Of(_staff, _cases)" />
             @if (_awaiting > 0)
             {
                 <RadzenBadge Text="@($"{_awaiting} {_text[SupportAcrossTeamsViewText.Awaiting]}")" BadgeStyle="BadgeStyle.Danger" data-awaiting="@_awaiting" />
@@ -84,13 +85,20 @@ else
                                     <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@TeamName(item)</RadzenText>
                                 </RadzenStack>
                             }
+                            @if (ShowAssignee && item.Assignee != null)
+                            {
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-assignee="@item.Id" title="@item.Assignee.Email">
+                                    <RadzenIcon Icon="person" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@item.Assignee.Name</RadzenText>
+                                </RadzenStack>
+                            }
                             <SupportMailboxAddress Case="item" />
                             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">
                                 @Time(item.LastMessageAt ?? item.CreatedAt)
                             </RadzenText>
                         </TopMenu>
                         <ChildContent>
-                            <SupportCaseConversation Case="item" AsStaff="true" Extras="CaseExtras" StaffCloseAfter="StaffCloseAfter"
+                            <SupportCaseConversation Case="item" AsStaff="true" Extras="CaseExtras" StaffCloseAfter="StaffCloseAfter" ShowAssignee="ShowAssignee"
                                                      TimeTemplate="TimeTemplate" Changed="OnChangedAsync" />
                         </ChildContent>
                     </ExpandableCard>
@@ -116,6 +124,12 @@ else
     /// </summary>
     [Parameter] public TimeSpan? StaffCloseAfter { get; set; }
 
+    /// <summary>
+    /// Whether the view shows which member of support staff each case is assigned to, offers to change it in an opened case, and filters the list by it.
+    /// <c>false</c> leaves that to the host's own control, for example one on the card it already shows in <see cref="CaseExtras"/>.
+    /// </summary>
+    [Parameter] public bool ShowAssignee { get; set; } = true;
+
     /// <summary>Where the list filter is remembered in the browser.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.AcrossTeams.Filter";
 
@@ -133,6 +147,8 @@ else
     private string _opened;
     private Dictionary<string, string> _teamNames = new();
     private Dictionary<string, string> _teamIcons = new();
+    private SupportCaseAssignee[] _staff = [];
+    private bool _canAssignStaff;
 
     protected override async Task OnInitializedAsync()
     {
@@ -143,6 +159,7 @@ else
 
         await ReloadAsync();
         if (_permitted) await LoadTeamsAsync();
+        if (ShowAssignee && _permitted) (_staff, _canAssignStaff) = await SupportAssigneeChoices.StaffAsync(SupportCases);
 
         OpenRequested();
         _ready = true;

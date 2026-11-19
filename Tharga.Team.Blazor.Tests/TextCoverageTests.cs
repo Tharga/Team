@@ -284,6 +284,7 @@ public class TextCoverageTests
         Assert.All(AuditLogViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportUnassignedViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportCaseFilterText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SupportAssigneeText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportAttachmentText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(RichTextEditorText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportMailboxText.All, key => Assert.Contains(all, k => k.Key == key.Key));

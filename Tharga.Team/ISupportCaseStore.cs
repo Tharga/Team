@@ -248,6 +248,18 @@ public interface ISupportCaseStore
         => Task.FromResult(0);
 
     /// <summary>
+    /// Sets the staff member a case is assigned to, or clears it when <paramref name="assignee"/> is <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not conditional</b>, unlike <see cref="TryAssignCaseAsync(string, string, SupportMessage, CancellationToken)"/>: the last write
+    /// wins, because this decides who works a case and not which tenant it belongs to. <b>Writes nothing to the transcript</b>, which the
+    /// customer's own team reads, since who staffs a case is not for them; the audit log is the history. The default throws, so a store
+    /// written before this keeps compiling; the toolkit's own stores override it.
+    /// </remarks>
+    Task SetAssigneeAsync(string teamKey, string caseId, SupportCaseAssignee assignee, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SetAssigneeAsync)}.");
+
+    /// <summary>
     /// Gives an unassigned case to a team, returning whether this call did it.
     /// </summary>
     /// <remarks>

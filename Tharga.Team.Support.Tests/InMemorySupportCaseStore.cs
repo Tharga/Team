@@ -149,6 +149,15 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.FromResult(true);
     }
 
+    public Task SetAssigneeAsync(string teamKey, string caseId, SupportCaseAssignee assignee, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+
+        Replace(found.Case with { Assignee = assignee }, found.Messages);
+
+        return Task.CompletedTask;
+    }
+
     public Task ReopenCaseAsync(string teamKey, string caseId, SupportMessage reopenMessage, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

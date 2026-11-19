@@ -130,6 +130,10 @@ public record SupportCaseEntity : EntityBase
     /// <summary>What the assistant was asked and could not do. Absent until it first could not.</summary>
     [BsonIgnoreIfNull]
     public string[] AssistantGaps { get; init; }
+
+    /// <summary>The member of support staff the case is assigned to. Absent while nobody is, and on every case written before this existed.</summary>
+    [BsonIgnoreIfNull]
+    public SupportCaseAssigneeEntity Assignee { get; init; }
 }
 
 /// <summary>How far one person has read a case's transcript.</summary>

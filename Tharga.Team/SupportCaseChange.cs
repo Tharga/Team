@@ -32,5 +32,8 @@ public enum SupportCaseChange
     DeliveryChanged,
 
     /// <summary>The person the assistant answered rated one of its answers, or took a rating back.</summary>
-    Rated
+    Rated,
+
+    /// <summary>The case was assigned to a member of support staff, or its assignee was taken away.</summary>
+    AssigneeChanged
 }

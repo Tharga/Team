@@ -38,7 +38,8 @@ internal sealed class SupportCaseService(
     SupportMailboxes mailboxes = null,
     ISupportCaseContactResolver contactResolver = null,
     ITeamOversightService teamOversight = null,
-    ISupportAssistantPricing pricing = null) : ISupportCaseService, ISupportCaseTeamQueries
+    ISupportAssistantPricing pricing = null,
+    ISupportStaffDirectory staffDirectory = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
@@ -919,6 +920,53 @@ internal sealed class SupportCaseService(
         return true;
     }
 
+    /// <remarks>
+    /// <b>Refuses anybody <see cref="GetAssignableStaffAsync"/> does not offer</b>, so the picker is never the only check. Writes nothing to
+    /// the transcript, which the customer's own team reads and for whom who staffs their case is not meant. Naming who already has the
+    /// case, or clearing one that has nobody, changes nothing and announces nothing.
+    /// </remarks>
+    public async Task SetCaseAssigneeAsync(string teamKey, string caseId, string assigneeKey, CancellationToken cancellationToken = default)
+    {
+        var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken)
+                          ?? throw new InvalidOperationException($"Support case '{caseId}' was not found.");
+
+        SupportCaseAssignee assignee = null;
+        if (!string.IsNullOrWhiteSpace(assigneeKey))
+        {
+            var key = assigneeKey.Trim();
+            assignee = (await GetAssignableStaffAsync(cancellationToken)).FirstOrDefault(x => x.Key == key)
+                       ?? throw new ArgumentException($"'{key}' is not somebody a support case may be assigned to.", nameof(assigneeKey));
+        }
+
+        if (supportCase.Assignee?.Key == assignee?.Key) return;
+
+        await store.SetAssigneeAsync(teamKey, caseId, assignee, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.AssigneeChanged);
+    }
+
+    /// <remarks>
+    /// The directory's people first, since the host knows their address, then the caller, who is always one of them: they passed the
+    /// staff check to get here, which is what a host with no directory relies on for "assign to me".
+    /// </remarks>
+    public async Task<SupportCaseAssignee[]> GetAssignableStaffAsync(CancellationToken cancellationToken = default)
+    {
+        var staff = new Dictionary<string, SupportCaseAssignee>(StringComparer.Ordinal);
+
+        foreach (var person in staffDirectory == null ? [] : await staffDirectory.GetStaffAsync(cancellationToken) ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(person?.Key)) continue;
+
+            staff.TryAdd(person.Key, string.IsNullOrWhiteSpace(person.Name) ? person with { Name = person.Key } : person);
+        }
+
+        var callerKey = await authorizer.GetSubjectAsync();
+        if (!string.IsNullOrWhiteSpace(callerKey))
+            staff.TryAdd(callerKey, new SupportCaseAssignee { Key = callerKey, Name = await DisplayNameAsync(), Email = await EmailAsync() });
+
+        return [.. staff.Values.OrderBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase)];
+    }
+
     public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => store.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
 
@@ -1282,6 +1330,23 @@ internal sealed class SupportCaseService(
         }
 
         return await authorizer.GetDisplayNameAsync();
+    }
+
+    /// <summary>The caller's address from their user record, or <c>null</c> when there is none to read.</summary>
+    private async Task<string> EmailAsync()
+    {
+        if (userService == null) return null;
+
+        try
+        {
+            var email = (await userService.GetCurrentUserAsync())?.EMail;
+            return string.IsNullOrWhiteSpace(email) ? null : email;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // An address is a convenience on the assignee, never a reason to refuse the assignment.
+            return null;
+        }
     }
 
     private static void RequireWithinLength(string body)

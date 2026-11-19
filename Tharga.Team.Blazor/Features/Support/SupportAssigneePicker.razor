@@ -1,0 +1,76 @@
+@using Tharga.Team.Support.Cases
+@using Tharga.Team.Blazor.Framework
+@inject ISupportCaseService SupportCases
+
+@* Who on the support staff a case is assigned to, and a way to change it. Offered only where the service can say who may be chosen: a host
+   whose own case service does not support assigning, or a reader without a staff grant, sees nothing rather than a control that fails. *@
+
+@if (_available)
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-assignee-picker="@Case.Id">
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportAssigneeText.AssignedTo]</RadzenText>
+            <RadzenDropDown Data="AssigneeChoices()" TextProperty="Name" ValueProperty="Key" TValue="string"
+                            Value="@Case.Assignee?.Key" ValueChanged="@((string v) => SetAsync(v))" AllowClear="true"
+                            Placeholder="@_text[SupportAssigneeText.Nobody]" Disabled="_busy"
+                            Style="min-width: 14rem;" aria-label="@_text[SupportAssigneeText.AssignedTo]" />
+        </RadzenStack>
+        @if (_failed)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" data-assignee-failed="@Case.Id">@_text[SupportAssigneeText.Failed]</RadzenText>
+        }
+    </RadzenStack>
+}
+
+@code {
+    /// <summary>The case shown. Its assignee is what the picker displays.</summary>
+    [Parameter, EditorRequired] public SupportCase Case { get; set; }
+
+    /// <summary>Raised with the case id after the assignee changed, so the list around it can read the case again.</summary>
+    [Parameter] public EventCallback<string> Changed { get; set; }
+
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private SupportCaseAssignee[] _staff = [];
+    private bool _available;
+    private bool _busy;
+    private bool _failed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportAssigneeText.All);
+        await LoadStaffAsync();
+    }
+
+    /// <remarks>The current assignee is always among the choices, so a person who is no longer offered is still shown as who the case has.</remarks>
+    private SupportCaseAssignee[] AssigneeChoices()
+        => Case.Assignee == null || _staff.Any(x => x.Key == Case.Assignee.Key) ? _staff : [.. _staff, Case.Assignee];
+
+    private async Task LoadStaffAsync()
+    {
+        (_staff, _available) = await SupportAssigneeChoices.StaffAsync(SupportCases);
+    }
+
+    private async Task SetAsync(string key)
+    {
+        _busy = true;
+        _failed = false;
+        try
+        {
+            await SupportCases.SetCaseAssigneeAsync(Case.TeamKey, Case.Id, key);
+        }
+        catch (Exception exception) when (exception is ArgumentException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            // Somebody no longer offered, or a case that moved on: say so and read the case again rather than leave a picker showing what is not true.
+            _failed = true;
+            await LoadStaffAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+
+        await Changed.InvokeAsync(Case.Id);
+    }
+}

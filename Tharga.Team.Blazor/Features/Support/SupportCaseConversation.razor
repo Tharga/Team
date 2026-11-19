@@ -15,6 +15,12 @@
         <SupportContactTable Contact="Case.ExternalContact" CaseId="@Case.Id" TimeTemplate="TimeTemplate" />
         @Extras?.Invoke(Case)
 
+        @* Which of the support staff has the case, for the boards that show it; the picker leaves itself out where assigning is not possible. *@
+        @if (ShowAssignee)
+        {
+            <SupportAssigneePicker Case="Case" Changed="Changed" />
+        }
+
         @* What support holds on the team, and asking for more. Only once the case has a team: before that there is nobody to ask. *@
         @if (Case.TeamKey != null)
         {
@@ -110,6 +116,12 @@
 
     /// <summary>Answering as the product's support staff rather than as a member of the case's team.</summary>
     [Parameter] public bool AsStaff { get; set; }
+
+    /// <summary>
+    /// Whether the conversation offers to assign the case to a member of support staff. Only answering as staff shows it, and it is off here so a board that
+    /// has no use for it is not given one; the staff boards turn it on.
+    /// </summary>
+    [Parameter] public bool ShowAssignee { get; set; }
 
     /// <summary>
     /// How long after support's last answer staff may close the case; <c>null</c> lets them close at any time.
