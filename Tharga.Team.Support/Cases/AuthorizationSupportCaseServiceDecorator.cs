@@ -294,6 +294,31 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         return await inner.AssignCaseAsync(caseId, teamKey, cancellationToken);
     }
 
+    /// <remarks>
+    /// <b>Staff only, by the grant that covers the case, and never by a team scope.</b> The people named are the product's own, so a
+    /// customer's <c>support:manage</c> confers nothing here. Each grant covers its own queue only, as they do for answering.
+    /// </remarks>
+    public async Task SetCaseAssigneeAsync(string teamKey, string caseId, string assigneeKey, CancellationToken cancellationToken = default)
+    {
+        var scope = string.IsNullOrWhiteSpace(teamKey) ? SystemSupportScopes.Manage : SystemSupportScopes.AllManage;
+
+        if (!await authorizer.HasSystemScopeAsync(scope))
+            throw new UnauthorizedAccessException(
+                $"Only a caller holding the system scope '{scope}' may assign a support case {(string.IsNullOrWhiteSpace(teamKey) ? "that belongs to no team" : "in a team")} to a member of support staff.");
+
+        await inner.SetCaseAssigneeAsync(teamKey, caseId, assigneeKey, cancellationToken);
+    }
+
+    /// <remarks>Whoever may assign in either queue, since the picker is shown to them and offers the same people.</remarks>
+    public async Task<SupportCaseAssignee[]> GetAssignableStaffAsync(CancellationToken cancellationToken = default)
+    {
+        if (!await authorizer.HasSystemScopeAsync(SystemSupportScopes.Manage) && !await authorizer.HasSystemScopeAsync(SystemSupportScopes.AllManage))
+            throw new UnauthorizedAccessException(
+                $"Only a caller holding '{SystemSupportScopes.Manage}' or '{SystemSupportScopes.AllManage}' may list who a support case can be assigned to.");
+
+        return await inner.GetAssignableStaffAsync(cancellationToken);
+    }
+
     public async Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
     {
         await RequireSystemScopeAsync(SystemSupportScopes.Read, "list unassigned support cases for");

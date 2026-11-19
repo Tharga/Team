@@ -173,4 +173,14 @@ public record SupportCase
     /// given. A case raised before this existed reads <c>null</c>.
     /// </remarks>
     public ExternalSupportContact ExternalContact { get; init; }
+
+    /// <summary>
+    /// The member of support staff the case is assigned to, or <c>null</c> when nobody is.
+    /// </summary>
+    /// <remarks>
+    /// <b>Independent of <see cref="TeamKey"/>.</b> Which tenant a case belongs to and which of the product's own staff works it
+    /// are separate facts, so assigning a team never changes the assignee and the reverse. Closing a case leaves the assignee, so
+    /// a case reopened is still its owner's. A case written before this existed reads <c>null</c>.
+    /// </remarks>
+    public SupportCaseAssignee Assignee { get; init; }
 }

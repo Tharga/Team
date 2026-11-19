@@ -18,6 +18,9 @@ public static class SupportAuditMetadataKeys
 
     public const string CaseVisibility = "support.case.visibility";
 
+    /// <summary>The authentication subject a case was assigned to, or empty when its assignee was taken away.</summary>
+    public const string AssigneeKey = "support.case.assignee";
+
     /// <summary>Where an entry sent again stands afterwards — Sent, Failed or Pending.</summary>
     public const string Delivery = "support.message.delivery";
 

@@ -411,6 +411,31 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>
+    /// The new assignee is recorded, empty when the case was handed back. The previous one is not read first to be recorded: that would
+    /// be a second read for every assignment, and the audit trail of one case already shows it as the entry before this.
+    /// </remarks>
+    public async Task SetCaseAssigneeAsync(string teamKey, string caseId, string assigneeKey, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.SetCaseAssigneeAsync(teamKey, caseId, assigneeKey, cancellationToken);
+
+            Log("assign-to-staff", nameof(SetCaseAssigneeAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AssigneeKey, assigneeKey?.Trim() ?? string.Empty)));
+        }
+        catch (Exception ex)
+        {
+            Log("assign-to-staff", nameof(SetCaseAssigneeAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId)));
+            throw;
+        }
+    }
+
+    public Task<SupportCaseAssignee[]> GetAssignableStaffAsync(CancellationToken cancellationToken = default)
+        => inner.GetAssignableStaffAsync(cancellationToken);
+
     public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor = null, int pageSize = 20, CancellationToken cancellationToken = default)
         => inner.GetUnassignedCasesAsync(cursor, pageSize, cancellationToken);
 

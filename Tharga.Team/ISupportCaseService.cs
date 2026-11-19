@@ -207,6 +207,39 @@ public interface ISupportCaseService
     Task<bool> AssignCaseAsync(string caseId, string teamKey, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Assigns a case to a member of support staff, or takes the assignee away when <paramref name="assigneeKey"/> is blank.
+    /// </summary>
+    /// <remarks>
+    /// <b>Staff only, by the grant that covers the case</b>: <see cref="SystemSupportScopes.Manage"/> for a case with no team (pass
+    /// <c>null</c> for <paramref name="teamKey"/>), <see cref="SystemSupportScopes.AllManage"/> for a case in a team. A team's own
+    /// <c>support:manage</c> confers nothing here, since the people it names are the product's, not the customer's.
+    /// <para>
+    /// <b>Only somebody <see cref="GetAssignableStaffAsync"/> offers may be chosen</b>; anybody else is refused with an
+    /// <see cref="ArgumentException"/>, so a picker that offers more than the service accepts cannot widen it. Assigning is allowed on a
+    /// closed case. Naming the person it already has changes nothing and is not an error.
+    /// </para>
+    /// <para>
+    /// Announced as <see cref="SupportCaseChange.AssigneeChanged"/> and audited. <b>Nothing is written to the transcript</b>, because the
+    /// customer's own team reads it and who staffs a case is not for them. The default throws, so a host's own implementation keeps
+    /// compiling.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">The person is not one the case may be assigned to.</exception>
+    Task SetCaseAssigneeAsync(string teamKey, string caseId, string assigneeKey, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(SetCaseAssigneeAsync)}.");
+
+    /// <summary>
+    /// The people a case may be assigned to: whoever the host's <see cref="ISupportStaffDirectory"/> lists, and the caller.
+    /// </summary>
+    /// <remarks>
+    /// Authorized as assigning is: a caller holding <see cref="SystemSupportScopes.Manage"/> or <see cref="SystemSupportScopes.AllManage"/>.
+    /// The caller is always among them, so a host with no directory still offers "assign to me". Ordered by name. The default throws,
+    /// so a host's own implementation keeps compiling.
+    /// </remarks>
+    Task<SupportCaseAssignee[]> GetAssignableStaffAsync(CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetAssignableStaffAsync)}.");
+
+    /// <summary>
     /// Cases belonging to no team, for whoever triages them.
     /// </summary>
     /// <remarks>
