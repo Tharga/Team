@@ -302,6 +302,15 @@ public class ApiKeyAdministrationService : IApiKeyAdministrationService
         return created;
     }
 
+    /// <remarks>Replaces only the scopes: the key's value, name, expiry, owner and disabled state are the stored ones, so a client using the key goes on working.</remarks>
+    public async Task SetSystemKeyScopesAsync(string key, string[] scopes)
+    {
+        var item = await _repository.GetAsync(key);
+        VerifySystemKey(item);
+        var normalised = (scopes ?? []).Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct(StringComparer.Ordinal).ToArray();
+        await _repository.UpdateAsync(key, item with { SystemScopes = normalised });
+    }
+
     /// <inheritdoc />
     public async Task<IApiKey> RefreshSystemKeyAsync(string key)
     {

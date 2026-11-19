@@ -57,6 +57,15 @@ public static class AuditMetadataKeys
     /// <summary>Per-member scope overrides, comma-separated.</summary>
     public const string MemberScopeOverrides = "member.scopeoverrides";
 
+    /// <summary>The id of the API key an operation acted on.</summary>
+    public const string ApiKeyId = "apikey.id";
+
+    /// <summary>Scopes an API key gained in a change, comma-separated; empty when it gained none.</summary>
+    public const string ApiKeyScopesAdded = "apikey.scopes.added";
+
+    /// <summary>Scopes an API key lost in a change, comma-separated; empty when it lost none.</summary>
+    public const string ApiKeyScopesRemoved = "apikey.scopes.removed";
+
     /// <summary>Consented access level before a change. Absent value means "no consent".</summary>
     public const string ConsentAccessLevelOld = "consent.accesslevel.old";
 

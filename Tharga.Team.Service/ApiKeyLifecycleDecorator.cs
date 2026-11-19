@@ -33,6 +33,7 @@ public class ApiKeyLifecycleDecorator : IApiKeyAdministrationService
 
     public Task LockKeyAsync(string teamKey, string key) => _inner.LockKeyAsync(teamKey, key);
     public Task LockSystemKeyAsync(string key) => _inner.LockSystemKeyAsync(key);
+    public Task SetSystemKeyScopesAsync(string key, string[] scopes) => _inner.SetSystemKeyScopesAsync(key, scopes);
 
     // No lifecycle signal: disabling neither mints nor destroys a secret, so a handler capturing tokens
     // has nothing to capture and a handler cleaning up after deletion has nothing to clean up.
