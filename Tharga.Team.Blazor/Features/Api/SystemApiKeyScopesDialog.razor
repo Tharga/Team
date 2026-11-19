@@ -1,0 +1,57 @@
+@using Tharga.Team.Blazor.Framework
+@inject DialogService DialogService
+@inject IThargaTextProvider TextProvider
+
+@* The scopes of one system key, in the picker the create card uses and filled with what the key holds. Closes with the chosen set, or with nothing
+   when cancelled; saving is the view's job, since what the caller may grant is decided by the service and the view reports its refusal. *@
+
+<RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.SpaceBetween" Gap="1rem" Style="height: 100%;" data-edit-scopes>
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+        <RadzenLabel Text="@_text[ApiKeyViewText.Scopes]" />
+        <RadzenDropDown TValue="IEnumerable<string>"
+                        @bind-Value="_selected"
+                        Data="@AllScopes"
+                        Multiple="true"
+                        AllowClear="true"
+                        AllowFiltering="true"
+                        FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                        Placeholder="@_text[SystemApiKeyViewText.SelectScopes]"
+                        Style="min-width: 360px; width: 100%;">
+            <Template>
+                <span title="@(Descriptions != null && Descriptions.TryGetValue((string)context, out var description) ? description : null)">@context</span>
+            </Template>
+        </RadzenDropDown>
+    </RadzenStack>
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="@_text[ApiKeyViewText.Save]" ButtonStyle="ButtonStyle.Primary" Click="Save" data-save-scopes />
+        <CancelButton Click="Cancel" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    /// <summary>The scopes the key holds now, shown as chosen.</summary>
+    [Parameter] public string[] Scopes { get; set; } = [];
+
+    /// <summary>Every scope the picker offers.</summary>
+    [Parameter] public string[] AllScopes { get; set; } = [];
+
+    /// <summary>What each scope grants, shown as a tooltip beside it.</summary>
+    [Parameter] public IReadOnlyDictionary<string, string> Descriptions { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private IEnumerable<string> _selected = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync([.. ApiKeyViewText.All, .. SystemApiKeyViewText.All]);
+        _selected = [.. Scopes ?? []];
+    }
+
+    private void Save() => DialogService.Close(_selected?.ToArray() ?? []);
+
+    private Task Cancel()
+    {
+        DialogService.Close(null);
+        return Task.CompletedTask;
+    }
+}

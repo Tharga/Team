@@ -294,6 +294,7 @@
         if (hasValue && context.VisibleKey == _apiKeyMask) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.ShowValue], Icon = "visibility", Value = "show" });
         if (hasValue && context.VisibleKey != _apiKeyMask) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.HideValue], Icon = "visibility_off", Value = "hide" });
         if (ShowAuditLogButton) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.AuditLog], Icon = "manage_search", Value = "audit" });
+        if (ShowScopeOverrides) items.Add(new ContextMenuItem { Text = _text[SystemApiKeyViewText.EditScopes], Icon = "tune", Value = "edit-scopes" });
         if (hasValue) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Lock], Icon = "lock", Value = "lock" });
         items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Refresh], Icon = "refresh", Value = "refresh" });
         items.Add(context.IsDisabled
@@ -316,6 +317,7 @@
             case "hide": context.VisibleKey = _apiKeyMask; break;
             case "copy": await CopyToClipboard(context); break;
             case "audit": await OpenAuditLogAsync(context); break;
+            case "edit-scopes": await EditScopesAsync(context); break;
             case "lock": await LockKeyAsync(context); break;
             case "refresh": await RefreshAsync(context); break;
             case "disable": await SetDisabledAsync(context, true); break;
@@ -357,6 +359,36 @@
         return string.IsNullOrEmpty(context.DisabledBy)
             ? _text.Format(ApiKeyViewText.DisabledAt, when)
             : _text.Format(ApiKeyViewText.DisabledAtBy, when, context.DisabledBy);
+    }
+
+    /// <remarks>
+    /// The key's value is not touched, so a client using it goes on working with the new scopes. What the caller may grant is the service's to say,
+    /// not this picker's: a refusal is shown as the reason it gave rather than left as a dialog that closed and did nothing.
+    /// </remarks>
+    private async Task EditScopesAsync(SystemApiKeyModel context)
+    {
+        var chosen = await DialogService.OpenAsync<SystemApiKeyScopesDialog>(
+            _text.Format(ApiKeyViewText.EditTitle, context.Name),
+            new Dictionary<string, object>
+            {
+                [nameof(SystemApiKeyScopesDialog.Scopes)] = context.SystemScopes ?? [],
+                [nameof(SystemApiKeyScopesDialog.AllScopes)] = _allScopes,
+                [nameof(SystemApiKeyScopesDialog.Descriptions)] = _scopeDescriptions
+            },
+            new DialogOptions { Width = "520px", ShowClose = false });
+
+        if (chosen is not string[] scopes) return;
+
+        try
+        {
+            await _apiKeyManagementService.SetSystemKeyScopesAsync(context.Key, scopes);
+            await ReloadData();
+            NotificationService.Notify(NotificationSeverity.Success, _text[ApiKeyViewText.Updated]);
+        }
+        catch (Exception ex)
+        {
+            NotificationService.Notify(NotificationSeverity.Error, _text[ApiKeyViewText.UpdateFailed], ex.Message);
+        }
     }
 
     private async Task LockKeyAsync(SystemApiKeyModel context)

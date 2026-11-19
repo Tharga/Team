@@ -13,6 +13,9 @@ public static class SystemApiKeyViewText
 
     public static readonly TextKey Created = new("team.systemApiKeys.created", "System API key created");
 
+    /// <summary>The row-menu item that changes a system key's scopes without changing its value.</summary>
+    public static readonly TextKey EditScopes = new("team.systemApiKeys.editScopes", "Edit scopes");
+
     /// <summary>Title of the dialog revealing a new or regenerated key. <c>{0}</c> is the key's name.</summary>
     public static readonly TextKey RevealTitle = new("team.systemApiKeys.revealTitle", "System API key — {0}");
 
@@ -27,6 +30,6 @@ public static class SystemApiKeyViewText
     /// <summary>Every key here, for the component building its <see cref="TextSet"/> together with <see cref="ApiKeyViewText.All"/>.</summary>
     public static readonly TextKey[] All =
     [
-        AccessDenied, SelectScopes, Created, RevealTitle, ConfirmDisable, ConfirmDelete, Deleted
+        AccessDenied, SelectScopes, Created, EditScopes, RevealTitle, ConfirmDisable, ConfirmDelete, Deleted
     ];
 }
