@@ -45,7 +45,7 @@
       Microsoft.AspNetCore.OpenApi moves to Microsoft.OpenApi 3.
     -->
     <PackageReference Include="Swashbuckle.AspNetCore" Version="$(SwashbuckleVersion)" />
-    <PackageReference Include="Tharga.MongoDB" Version="2.19.2" />
+    <PackageReference Include="Tharga.MongoDB" Version="2.21.1" />
     <!--
       The one HTML sanitizer: formatted text is kept and shown only as its allow-listed output, on every way in
       and at every render. A maintained library rather than hand-rolled parsing, because a sanitizer is only as

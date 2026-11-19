@@ -55,7 +55,7 @@
       an HTML body names. Referenced here rather than taken through the sanitizer's dependency, because the
       transport uses it on its own account and has to keep doing so if it is lifted out.
     -->
-    <PackageReference Include="AngleSharp" Version="1.10.3" />
+    <PackageReference Include="AngleSharp" Version="1.10.5" />
     <!-- 10.x on net10.0, 11.x on net11.0: see Directory.Build.props. -->
     <PackageReference Include="System.Security.Cryptography.Pkcs" Version="$(MsRuntimeVersion)" />
     <!-- Mail to users protects its unsubscribe links with Data Protection and answers them on an ASP.NET route.
