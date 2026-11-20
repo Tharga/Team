@@ -789,7 +789,11 @@ else
             {
                 var row = _allUsers.FirstOrDefault(x => x.Key == item.UserKey);
                 if (row != null) ApplyVerification(row, item.Result);
+
+                // Needed: each result shows as it arrives. The render at the end of the handler comes only after every user is verified, which the analyzer cannot see.
+#pragma warning disable BL0012
                 StateHasChanged();
+#pragma warning restore BL0012
             }
         }
         catch (Exception ex)

@@ -18,20 +18,35 @@ internal sealed class SupportAttachmentFiles(IJSRuntime jsRuntime) : IAsyncDispo
     private IJSObjectReference _module;
 
     /// <summary>Opens the file in a new tab when its type may open in the browser, otherwise saves it.</summary>
-    public async Task OpenOrSaveAsync(SupportAttachmentContent content)
+    /// <returns><c>true</c> when the browser took the file; <c>false</c> when it could not (the script failed, or the circuit's browser is gone), so the caller can tell the reader.</returns>
+    /// <remarks>Run from a click, so a failure is the browser refusing or the connection dropping. It must not end the circuit.</remarks>
+    public async Task<bool> OpenOrSaveAsync(SupportAttachmentContent content)
     {
         var attachment = content.Attachment;
-        var module = await ModuleAsync();
-        using var reference = new DotNetStreamReference(content.Content, leaveOpen: true);
 
-        if (SupportAttachmentContentTypes.OpensInBrowser(attachment.ContentType))
-            await module.InvokeAsync<bool>("open", reference, SupportAttachmentContentTypes.ServedAs(attachment.ContentType), attachment.FileName);
-        else
-            await module.InvokeVoidAsync("save", reference, attachment.FileName);
+        try
+        {
+            var module = await ModuleAsync();
+            using var reference = new DotNetStreamReference(content.Content, leaveOpen: true);
+
+            if (SupportAttachmentContentTypes.OpensInBrowser(attachment.ContentType))
+                await module.InvokeAsync<bool>("open", reference, SupportAttachmentContentTypes.ServedAs(attachment.ContentType), attachment.FileName);
+            else
+                await module.InvokeVoidAsync("save", reference, attachment.FileName);
+
+            return true;
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+            return false;
+        }
     }
 
+    // The only caller, OpenOrSaveAsync, guards the call; the analyzer does not follow a call into another method.
+#pragma warning disable BL0016
     private async Task<IJSObjectReference> ModuleAsync()
         => _module ??= await jsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+#pragma warning restore BL0016
 
     public async ValueTask DisposeAsync()
     {

@@ -425,7 +425,11 @@ else
         _thinking = caseId;
         _progress = null;
         _declined = null;
+
+        // Needed: shows "thinking" while the assistant runs. The render at the end of the handler comes only after it is done, which the analyzer cannot see.
+#pragma warning disable BL0012
         StateHasChanged();
+#pragma warning restore BL0012
 
         var relay = new SupportAssistantRelay(InvokeAsync, progress =>
         {

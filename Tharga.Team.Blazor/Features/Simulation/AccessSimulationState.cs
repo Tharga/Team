@@ -370,7 +370,11 @@ public sealed class AccessSimulationState
             ? $"{AccessSimulationCookie.Name}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
             : $"{AccessSimulationCookie.Name}={value}; path=/";
 
+        // Unguarded on purpose: setting a cookie through eval can only fail when the circuit is already gone, and then
+        // there is no page left to reload or to tell. The caller is a click that ends in a reload either way.
+#pragma warning disable BL0016
         await _jsRuntime.InvokeVoidAsync("eval", $"document.cookie = '{cookie}'");
+#pragma warning restore BL0016
         _navigationManager.NavigateTo(_navigationManager.Uri, forceLoad: true);
     }
 

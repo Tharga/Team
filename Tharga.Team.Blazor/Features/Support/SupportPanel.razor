@@ -576,7 +576,11 @@
         _declined = false;
         _busy = true;
         _scrollOnRender = true;
+
+        // Needed: shows the sent message and the busy indicator while the reply is awaited. The render at the end of the handler comes only after the answer, which the analyzer cannot see.
+#pragma warning disable BL0012
         StateHasChanged();
+#pragma warning restore BL0012
 
         try
         {

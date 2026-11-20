@@ -83,7 +83,11 @@ else
                 if (loaded.Count % 25 == 0)
                 {
                     _users = [.. loaded];
+
+                    // Needed: rows appear as they arrive. The render at the end of the handler comes only after the whole directory is read, which the analyzer cannot see.
+#pragma warning disable BL0012
                     StateHasChanged();
+#pragma warning restore BL0012
                 }
             }
 

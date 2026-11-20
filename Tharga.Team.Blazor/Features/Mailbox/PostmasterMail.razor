@@ -227,9 +227,11 @@
                 return;
             }
 
-            _unavailable.Remove(attachment.Id);
             _browser ??= new SupportAttachmentFiles(JsRuntime);
-            await _browser.OpenOrSaveAsync(content);
+
+            // A file the browser would not take is shown as unavailable, the same as one that could not be read.
+            if (await _browser.OpenOrSaveAsync(content)) _unavailable.Remove(attachment.Id);
+            else _unavailable.Add(attachment.Id);
         }
         finally
         {
