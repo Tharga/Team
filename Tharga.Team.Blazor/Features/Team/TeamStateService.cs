@@ -166,7 +166,18 @@ internal class TeamStateService : ITeamStateService
 
             if (!NeedsResolution(visibleTeams)) return (_selectedTeam, false);
 
-            var rememberedTeamKey = await _localStorageService.GetItemAsStringAsync(Constants.SelectedTeamLocalStorageKey);
+            // While the page is statically rendered there is no browser to read the remembered team from, and nothing here may be settled without it: a
+            // fallback would be chosen for a caller who did pick a team. Left unresolved, the interactive render that follows does it (Tharga/Team#516).
+            string rememberedTeamKey;
+            try
+            {
+                rememberedTeamKey = await _localStorageService.GetItemAsStringAsync(Constants.SelectedTeamLocalStorageKey);
+            }
+            catch (Exception ex) when (PrerenderInterop.IsUnavailable(ex))
+            {
+                return (_selectedTeam, false);
+            }
+
             var team = TeamSelectionResolver.Resolve(currentTeamKey, rememberedTeamKey, visibleTeams, teams);
 
             if (team == null && !teams.Any() && _options.AutoCreateFirstTeam)
