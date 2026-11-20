@@ -84,6 +84,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             SuggestionReason = supportCase.SuggestedTeams is { Length: > 0 } ? supportCase.SuggestionReason : null,
             ExternalContact = supportCase.ExternalContact == null ? null : ToEntity(supportCase.ExternalContact),
             Assignee = supportCase.Assignee == null ? null : ToEntity(supportCase.Assignee),
+            InReplyToMailId = supportCase.InReplyToMailId,
 
             // A case opens with its author's own message, so it is waiting on support from the moment it
             // exists. Unless support wrote it: a case started by mail opens with support's own message, and waits on the reply.
@@ -722,6 +723,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         SuggestionReason = entity.SuggestionReason,
         ExternalContact = entity.ExternalContact == null ? null : ToContact(entity.ExternalContact),
         Assignee = entity.Assignee == null ? null : new SupportCaseAssignee { Key = entity.Assignee.Key, Name = entity.Assignee.Name, Email = entity.Assignee.Email },
+        InReplyToMailId = entity.InReplyToMailId,
         AssistantGaps = entity.AssistantGaps ?? [],
         AnswersRatedUp = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Up),
         AnswersRatedDown = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Down)

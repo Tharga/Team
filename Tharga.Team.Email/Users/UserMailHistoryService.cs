@@ -17,7 +17,8 @@ internal sealed class UserMailHistoryService(
     TeamAuthorizer authorizer,
     IUserService userService,
     CompositeAuditLogger auditLogger = null,
-    IAuditEntryFactory auditEntryFactory = null) : IUserMailHistoryService
+    IAuditEntryFactory auditEntryFactory = null,
+    IUserMailOutbox outbox = null) : IUserMailHistoryService
 {
     private const int MaxPageSize = 100;
 
@@ -116,6 +117,37 @@ internal sealed class UserMailHistoryService(
         return item;
     }
 
+    /// <remarks>
+    /// Staff only, whoever sent the mail: the text of a mail is read by the people who run the application, never offered to its sender through a case. The read
+    /// is audited like <see cref="GetMailAsync"/>, with the id and never an address.
+    /// </remarks>
+    public async Task<UserMailContent> GetMailContentAsync(string id, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+
+        var sw = Stopwatch.StartNew();
+
+        if (!await authorizer.HasSystemScopeAsync(SystemUserScopes.Manage))
+        {
+            var refusal = $"{nameof(GetMailContentAsync)} requires the '{SystemUserScopes.Manage}' system scope.";
+            AuditMail(id.Trim(), sw.ElapsedMilliseconds, false, refusal, nameof(IUserMailHistoryService.GetMailContentAsync));
+            throw new UnauthorizedAccessException(refusal);
+        }
+
+        var delivery = await queue.GetAsync(id.Trim(), cancellationToken);
+        var stored = delivery == null || outbox == null ? null : await outbox.GetAsync(delivery.Id, cancellationToken);
+        var content = delivery == null ? null : new UserMailContent
+        {
+            Mail = await ToMailAsync(delivery, cancellationToken),
+            Body = stored?.Mail.Body,
+            BodyHtml = stored?.Mail.BodyHtml
+        };
+
+        AuditMail(id.Trim(), sw.ElapsedMilliseconds, true, null, nameof(IUserMailHistoryService.GetMailContentAsync));
+
+        return content;
+    }
+
     private async Task<UserMailHistoryItem> ToMailAsync(UserMailDelivery delivery, CancellationToken cancellationToken)
     {
         var keys = new[] { delivery.RecipientUserKey, delivery.SentByUserKey }.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.Ordinal).ToArray();
@@ -130,11 +162,11 @@ internal sealed class UserMailHistoryService(
         };
     }
 
-    private void AuditMail(string id, long durationMs, bool success, string error)
+    private void AuditMail(string id, long durationMs, bool success, string error, string method = nameof(IUserMailHistoryService.GetMailAsync))
     {
         if (auditLogger == null || auditEntryFactory == null) return;
 
-        auditLogger.Log(auditEntryFactory.Create(AuditEventType.ServiceCall, UserMailAudit.Feature, UserMailAudit.LogAction, nameof(IUserMailHistoryService.GetMailAsync), durationMs, success, error,
+        auditLogger.Log(auditEntryFactory.Create(AuditEventType.ServiceCall, UserMailAudit.Feature, UserMailAudit.LogAction, method, durationMs, success, error,
             metadata: new Dictionary<string, string> { [UserMailAudit.MailId] = id }));
     }
 

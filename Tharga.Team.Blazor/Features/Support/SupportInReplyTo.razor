@@ -1,0 +1,101 @@
+@using Tharga.Team.Blazor.Framework
+@inject IServiceProvider Services
+@inject IThargaTextProvider TextProvider
+
+@* The mail the application sent that a case's first mail answered: its subject, when it was sent and to whom, and a way to read it. The quoted thread
+   is cut off the body of the reply, so without this the mail answered would appear nowhere. Read from the mail log under the log's own authorization:
+   a reader who may not see it is told the case is a reply and nothing more, and a mail that expired is said to be no longer kept. *@
+
+@if (_state != State.Hidden)
+{
+    <div data-in-reply-to="@MailId" data-state="@_state.ToString().ToLowerInvariant()" style="align-self: stretch; border-left: 3px solid var(--rz-primary); padding: 0.25rem 0.75rem;">
+        @switch (_state)
+        {
+            case State.Found:
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportInReplyToText.InReplyTo]</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-in-reply-subject><strong>@_content.Mail.Subject</strong></RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-in-reply-meta>
+                        @_text[SupportInReplyToText.Sent] @Time(_content.Mail.ChangedAt)
+                        @if (!string.IsNullOrWhiteSpace(_content.Mail.Address))
+                        {
+                            <span>@_text[SupportInReplyToText.To] @_content.Mail.Address</span>
+                        }
+                    </RadzenText>
+                    <RadzenButton Text="@(_open ? _text[SupportInReplyToText.Hide] : _text[SupportInReplyToText.Show])" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.ExtraSmall"
+                                  Click="Toggle" data-in-reply-toggle="@MailId" />
+                </RadzenStack>
+                @if (_open)
+                {
+                    <div data-in-reply-body style="margin-top: 0.5rem;">
+                        @if (!string.IsNullOrWhiteSpace(_content.BodyHtml))
+                        {
+                            <RichTextView Html="@_content.BodyHtml" Class="rz-text-body2" />
+                        }
+                        else
+                        {
+                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" Style="white-space: pre-wrap; overflow-wrap: anywhere;">@_content.Body</RadzenText>
+                        }
+                    </div>
+                }
+                break;
+            case State.Gone:
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-style: italic;">@_text[SupportInReplyToText.NoLongerKept]</RadzenText>
+                break;
+            case State.Denied:
+                <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="font-style: italic;">@_text[SupportInReplyToText.NotPermitted]</RadzenText>
+                break;
+        }
+    </div>
+}
+
+@code {
+    private enum State { Hidden, Found, Gone, Denied }
+
+    /// <summary>The id of the mail in the mail log that the case's first mail answered.</summary>
+    [Parameter, EditorRequired] public string MailId { get; set; }
+
+    /// <summary>How the time a mail was sent is shown, the same as the rest of the transcript. Defaults to the local time.</summary>
+    [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private UserMailContent _content;
+    private State _state = State.Hidden;
+    private bool _open;
+    private string _loaded;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == MailId) return;
+        _loaded = MailId;
+        _open = false;
+        _content = null;
+        _state = State.Hidden;
+
+        if (string.IsNullOrWhiteSpace(MailId)) return;
+
+        _text = await TextProvider.ResolveAsync(SupportInReplyToText.All);
+
+        // A host with no mail log registered has nothing to show; the case says nothing rather than offer a control that fails.
+        if (Services.GetService(typeof(IUserMailHistoryService)) is not IUserMailHistoryService history) return;
+
+        try
+        {
+            _content = await history.GetMailContentAsync(MailId);
+            _state = _content == null ? State.Gone : State.Found;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _state = State.Denied;
+        }
+        catch (NotSupportedException)
+        {
+            _state = State.Hidden;
+        }
+    }
+
+    private void Toggle() => _open = !_open;
+
+    private RenderFragment Time(DateTime value)
+        => TimeTemplate?.Invoke(value) ?? (builder => builder.AddContent(0, value.ToLocalTime().ToString("g")));
+}

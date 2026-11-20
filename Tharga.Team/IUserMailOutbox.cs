@@ -89,6 +89,11 @@ public interface IUserMailOutbox
     Task<UserMailItem> AddClaimedAsync(UserMail mail, DateTime queuedAt, string claimant, TimeSpan lease, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(AddClaimedAsync)}. Implement it to send invitations as mail to users.");
 
+    /// <summary>The mail sent with this <c>Message-ID</c>, bare or in angle brackets, or null when none was sent with it, or it has expired from the log.</summary>
+    /// <remarks>Only a mail that was actually sent counts: one still queued, skipped or given up has no <c>Message-ID</c> a reply could name. Used to tell what a reply answers.</remarks>
+    Task<UserMailItem> FindSentByMessageIdAsync(string messageId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(FindSentByMessageIdAsync)}. Implement it to show what a reply to a mail answers.");
+
     /// <summary>Records the sent mail with this <c>Message-ID</c> as bounced, with the receiving server's reason, in one conditional write, and keeps a done batch's counts true.</summary>
     /// <remarks>Only a sent mail becomes bounced, so a second report for the same mail changes nothing and says so.</remarks>
     Task<UserMailBounceResult> MarkBouncedAsync(string messageId, string reason, DateTime at, CancellationToken cancellationToken = default)

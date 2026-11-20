@@ -43,6 +43,29 @@ public interface IUserMailHistoryService
     /// <exception cref="UnauthorizedAccessException">The caller did not send the mail and does not hold <c>users:manage</c>.</exception>
     Task<UserMailHistoryItem> GetMailAsync(string id, CancellationToken cancellationToken = default)
         => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetMailAsync)}.");
+
+    /// <summary>One mail by its id with its text, as it was sent; null when there is no such mail, for instance because it has expired from the log.</summary>
+    /// <remarks>
+    /// Read by staff holding <see cref="SystemUserScopes.Manage"/> only, the same as the whole mail log, and never by the user the mail is for or the one who sent it: this
+    /// shows what was written, which the other reads do not. Every read is audited with the mail's id and never an address, and a refusal is audited too. Used to show
+    /// a support case the mail it answers (Tharga/Team#529).
+    /// </remarks>
+    /// <exception cref="UnauthorizedAccessException">The caller does not hold <c>users:manage</c>.</exception>
+    Task<UserMailContent> GetMailContentAsync(string id, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(GetMailContentAsync)}.");
+}
+
+/// <summary>A mail in the log together with what it said.</summary>
+public sealed record UserMailContent
+{
+    /// <summary>The mail as the log lists it: subject, status, addressee, when it was sent and who sent it.</summary>
+    public required UserMailHistoryItem Mail { get; init; }
+
+    /// <summary>The text of the mail, after sanitizing; null when it was sent as HTML alone.</summary>
+    public string Body { get; init; }
+
+    /// <summary>The HTML of the mail, after sanitizing; null when it was sent as text alone.</summary>
+    public string BodyHtml { get; init; }
 }
 
 /// <summary>One mail in a user's history.</summary>

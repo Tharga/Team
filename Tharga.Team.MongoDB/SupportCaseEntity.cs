@@ -131,6 +131,10 @@ public record SupportCaseEntity : EntityBase
     [BsonIgnoreIfNull]
     public string[] AssistantGaps { get; init; }
 
+    /// <summary>The mail in the mail log this case's first mail answered. Absent unless the application had mailed the sender first.</summary>
+    [BsonIgnoreIfNull]
+    public string InReplyToMailId { get; init; }
+
     /// <summary>The member of support staff the case is assigned to. Absent while nobody is, and on every case written before this existed.</summary>
     [BsonIgnoreIfNull]
     public SupportCaseAssigneeEntity Assignee { get; init; }

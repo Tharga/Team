@@ -10,6 +10,12 @@
 @* One case's conversation as a chat: the person who raised it on one side, everybody answering on the other. *@
 
 <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+    @* The mail the application sent that this case answers, above the first message; only where the board passes its id, which is for staff. *@
+    @if (!string.IsNullOrWhiteSpace(InReplyToMailId))
+    {
+        <SupportInReplyTo MailId="@InReplyToMailId" TimeTemplate="TimeTemplate" />
+    }
+
     @foreach (var message in Messages ?? [])
     {
         if (message.Kind == SupportMessageKind.System)
@@ -350,6 +356,12 @@
 
     /// <summary>Who is writing an answer right now, shown as flashing dots after the last entry.</summary>
     [Parameter] public SupportCaseTypingEventArgs[] Writing { get; set; } = [];
+
+    /// <summary>
+    /// The id of the mail in the mail log that the case's first mail answered, shown above the first message with a way to read it under the mail log's own
+    /// authorization (Tharga/Team#529). Pass it only where the reader is staff; left empty, nothing is shown.
+    /// </summary>
+    [Parameter] public string InReplyToMailId { get; set; }
 
     /// <summary>A word from support's side after the last entry, such as that nobody has answered yet; null for none.</summary>
     [Parameter] public string Notice { get; set; }

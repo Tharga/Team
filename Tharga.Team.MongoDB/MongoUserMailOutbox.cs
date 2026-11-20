@@ -244,6 +244,18 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
             : new UserMailBounceResult(UserMailBounceOutcome.Unknown);
     }
 
+    /// <remarks>The same message id forms a bounce is matched with, so a reply names a mail exactly as a bounce does.</remarks>
+    public async Task<UserMailItem> FindSentByMessageIdAsync(string messageId, CancellationToken cancellationToken = default)
+    {
+        var forms = MessageIdForms(messageId);
+        if (forms.Length == 0) return null;
+
+        var found = await collection.GetManyAsync(BouncedSent(forms), new Options<UserMailEntity> { Limit = 1 }, cancellationToken);
+        var entity = (found?.Items ?? []).FirstOrDefault();
+
+        return entity == null ? null : ToItem(entity);
+    }
+
     /// <remarks>One aggregation answered from the collection's statistics index, so no mail is read.</remarks>
     public async Task<IReadOnlyList<UserMailCategorySent>> CountSentByCategoryAsync(DateTime since, CancellationToken cancellationToken = default)
         => await collection.CountSentByCategoryAsync(since, cancellationToken) ?? [];

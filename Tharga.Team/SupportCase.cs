@@ -135,6 +135,12 @@ public record SupportCase
     /// </remarks>
     public string[] AssistantGaps { get; init; } = [];
 
+    /// <summary>
+    /// The id of the mail in the mail log this case's first mail was an answer to, when the application had mailed the sender first and they replied
+    /// (Tharga/Team#529). Null for every other case, and for one raised before this existed. The mail itself is read from the log under its own authorization.
+    /// </summary>
+    public string InReplyToMailId { get; init; }
+
     /// <summary>How many of the assistant's answers in this case the person it answered found helpful.</summary>
     public int AnswersRatedUp { get; init; }
 

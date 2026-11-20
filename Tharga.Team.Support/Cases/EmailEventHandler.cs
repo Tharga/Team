@@ -98,7 +98,7 @@ internal sealed class EmailEventHandler(
         // Mail that belongs to no existing case is somebody asking for help for the first time, so it opens
         // one rather than being dropped. Which team it opens in is RaiseAsync's to decide, and its answer is
         // usually none.
-        if (supportCase == null) return await RaiseAsync(mail, mailbox, cancellationToken);
+        if (supportCase == null) return await RaiseAsync(mail, mailbox, cancellationToken, answered: await FindAnsweredMailAsync(mail, cancellationToken));
 
         var binding = supportCase.Bindings.FirstOrDefault(x => x.ChannelType == SupportChannelType.Email);
 
@@ -300,6 +300,35 @@ internal sealed class EmailEventHandler(
     }
 
     /// <summary>
+    /// The mail the application sent that this one answers, by the thread ids it names, or null when it answers none the log still holds.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only asked once the mail matches no case</b>, so a reply that continues a case is handled exactly as before, and with the same message id forms a
+    /// bounce is matched with. <b>A failing log never loses the mail</b>: the ledger has recorded it already, so the case opens without the reference
+    /// and says so in the log rather than throwing (Tharga/Team#529).
+    /// </remarks>
+    private async Task<UserMailItem> FindAnsweredMailAsync(InboundMail mail, CancellationToken cancellationToken)
+    {
+        if (mailLog == null) return null;
+
+        try
+        {
+            foreach (var threadId in ThreadIds(mail))
+            {
+                var sent = await mailLog.FindSentByMessageIdAsync(threadId, cancellationToken);
+
+                if (sent != null) return sent;
+            }
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            logger?.LogWarning(e, "The mail log could not be searched for the mail a support mail answers, so its case opens without it.");
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Opens a case from a mail that matches nothing — in the sender's team when that is certain, otherwise
     /// unassigned.
     /// </summary>
@@ -327,11 +356,14 @@ internal sealed class EmailEventHandler(
     /// </para>
     /// </remarks>
     /// <remarks>
+    /// <paramref name="answered"/> is the mail the application sent that this one answers: the case records its id, and borrows its subject when the reply has none.
+    /// <para>
     /// <paramref name="closed"/> stores the case already closed, for a sender rule that keeps a record. It is
     /// unassigned and unattributed without looking the sender up, and it announces nothing: a case that was never
     /// open is not <see cref="SupportCaseChange.Raised"/>, which is the point of the rule.
+    /// </para>
     /// </remarks>
-    private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, SupportMailbox mailbox, CancellationToken cancellationToken, bool closed = false)
+    private async Task<EmailHandlingOutcome> RaiseAsync(InboundMail mail, SupportMailbox mailbox, CancellationToken cancellationToken, bool closed = false, UserMailItem answered = null)
     {
         var text = QuotedText.Trim(mail.Body, out var textCut);
 
@@ -360,7 +392,10 @@ internal sealed class EmailEventHandler(
             TeamName = team?.Name,
             AuthorIdentity = authorIdentity,
             AuthorName = authorName,
-            Subject = string.IsNullOrWhiteSpace(mail.Subject) ? SubjectFromMessage.Derive(SubjectSource(body, files.Stored)) : mail.Subject.Trim(),
+            Subject = !string.IsNullOrWhiteSpace(mail.Subject) ? mail.Subject.Trim()
+                : !string.IsNullOrWhiteSpace(answered?.Mail.Subject) ? answered.Mail.Subject.Trim()
+                : SubjectFromMessage.Derive(SubjectSource(body, files.Stored)),
+            InReplyToMailId = answered?.Id,
             Status = closed ? SupportCaseStatus.Closed : SupportCaseStatus.Open,
             CreatedAt = now,
             ClosedAt = closed ? now : null,

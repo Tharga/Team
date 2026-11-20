@@ -82,7 +82,8 @@ public static class UserMailRegistration
             sp.GetRequiredService<TeamAuthorizer>(),
             sp.GetRequiredService<IUserService>(),
             sp.GetService<CompositeAuditLogger>(),
-            sp.GetService<IAuditEntryFactory>()));
+            sp.GetService<IAuditEntryFactory>(),
+            sp.GetService<IUserMailOutbox>()));
 
         services.TryAddScoped(sp => new UserMailDispatcher(
             sp.GetRequiredService<IUserMailOutbox>(),
