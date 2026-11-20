@@ -56,7 +56,9 @@ public class AuditInitialFilterTests
             nameof(AuditPinnedFilter.CallerType),
             nameof(AuditPinnedFilter.TeamKey),
             nameof(AuditPinnedFilter.CallerIdentity),
-            nameof(AuditPinnedFilter.CallerUserIdentity)
+            nameof(AuditPinnedFilter.CallerUserIdentity),
+            nameof(AuditPinnedFilter.TargetKind),
+            nameof(AuditPinnedFilter.TargetKey)
         ];
 
         var offered = typeof(AuditInitialFilter)

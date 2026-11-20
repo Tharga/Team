@@ -185,6 +185,12 @@ public class MongoDbAuditLogger : BackgroundService, IAuditLogger
         if (query.CallerUserIdentity != null)
             filters.Add(builder.Eq(e => e.CallerUserIdentity, query.CallerUserIdentity));
 
+        if (query.TargetKind != null)
+            filters.Add(builder.Eq(e => e.TargetKind, query.TargetKind));
+
+        if (query.TargetKey != null)
+            filters.Add(builder.Eq(e => e.TargetKey, query.TargetKey));
+
         if (query.MethodName != null)
             filters.Add(builder.Regex(e => e.MethodName, new BsonRegularExpression(query.MethodName, "i")));
 
@@ -240,6 +246,8 @@ public class MongoDbAuditLogger : BackgroundService, IAuditLogger
             CallerIdentity = entry.CallerIdentity,
             CallerKeyId = entry.CallerKeyId,
             CallerUserIdentity = entry.CallerUserIdentity,
+            TargetKind = entry.TargetKind,
+            TargetKey = entry.TargetKey,
             TeamKey = entry.TeamKey,
             AccessLevel = entry.AccessLevel,
             CallerSource = entry.CallerSource,
@@ -266,6 +274,8 @@ public class MongoDbAuditLogger : BackgroundService, IAuditLogger
             CallerIdentity = entity.CallerIdentity,
             CallerKeyId = entity.CallerKeyId,
             CallerUserIdentity = entity.CallerUserIdentity,
+            TargetKind = entity.TargetKind,
+            TargetKey = entity.TargetKey,
             TeamKey = entity.TeamKey,
             AccessLevel = entity.AccessLevel,
             CallerSource = entity.CallerSource,

@@ -41,6 +41,25 @@ public record AuditEntry
     /// </remarks>
     public string CallerUserIdentity { get; init; }
 
+    /// <summary>
+    /// What kind of thing the operation was done to — one of <see cref="AuditTargetKinds"/> — or null when the
+    /// entry has no single target. Read together with <see cref="TargetKey"/>.
+    /// </summary>
+    /// <remarks>
+    /// The <b>target</b> is who or what was acted on, as opposed to the caller, who acted. It is what makes
+    /// "who deleted this user?" or "who changed this person's access?" a query instead of a scan of
+    /// <see cref="Metadata"/>. Entries written before this existed, and entries of operations with no single
+    /// target, have none, so a filter on a target never matches them.
+    /// </remarks>
+    public string TargetKind { get; init; }
+
+    /// <summary>
+    /// The key of the target: the user's key, the team's key or the API key's id, as named by <see cref="TargetKind"/>.
+    /// Exact-matchable. Not an authentication subject — for a user it is <see cref="IUser.Key"/>, the key the application
+    /// uses everywhere, which is not what <see cref="CallerUserIdentity"/> holds.
+    /// </summary>
+    public string TargetKey { get; init; }
+
     public string TeamKey { get; init; }
     public string AccessLevel { get; init; }
     public AuditCallerSource CallerSource { get; init; }

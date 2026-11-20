@@ -30,6 +30,15 @@ public sealed record AuditPinnedFilter
     /// <summary>Pin to the acting user's authentication subject. Exact match — prefer this over <see cref="CallerIdentity"/> where the subject is known.</summary>
     public string CallerUserIdentity { get; init; }
 
+    /// <summary>
+    /// Pin to what was done to something — one of <see cref="AuditTargetKinds"/> — rather than to who did it. Use with <see cref="TargetKey"/>
+    /// for "what has been done to this user". Entries written before targets were recorded have none and are not shown.
+    /// </summary>
+    public string TargetKind { get; init; }
+
+    /// <summary>Pin to the key of what was done to — the user's key, the team's key or the API key's id. Exact match.</summary>
+    public string TargetKey { get; init; }
+
     /// <summary>Pin to a single feature.</summary>
     public string Feature { get; init; }
 

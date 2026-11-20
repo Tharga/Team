@@ -746,7 +746,31 @@ public class AuditingTeamServiceDecorator : ITeamService
 
     private void Log(string action, string methodName, long durationMs, bool success, string errorMessage = null, string teamKey = null, IReadOnlyDictionary<string, string> metadata = null)
     {
-        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey, metadata);
+        var (targetKind, targetKey) = TargetOf(action, teamKey, metadata);
+        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey, metadata, targetKind: targetKind, targetKey: targetKey);
         _auditLogger.Log(entry);
+    }
+
+    /// <summary>The actions that are done to the team itself rather than to a member of it.</summary>
+    private static readonly HashSet<string> TeamActions = new(StringComparer.Ordinal)
+    {
+        "create", "rename", "delete", "restore", "purge", "icon-set", "icon-clear"
+    };
+
+    /// <summary>
+    /// Who or what the operation was done to. The user key the entry already records in its metadata is the target of a
+    /// member operation; a team operation's target is the team. An operation with neither — an invitation to an address not
+    /// yet a user, a member leaving — has no single target and records none.
+    /// </summary>
+    /// <remarks>Read from what the entry already names, so the target and the metadata cannot disagree.</remarks>
+    private static (string Kind, string Key) TargetOf(string action, string teamKey, IReadOnlyDictionary<string, string> metadata)
+    {
+        foreach (var name in new[] { AuditMetadataKeys.MemberKey, AuditMetadataKeys.NewOwnerKey, AuditMetadataKeys.AccessRequestRequesterKey })
+        {
+            if (metadata != null && metadata.TryGetValue(name, out var user) && !string.IsNullOrWhiteSpace(user))
+                return (AuditTargetKinds.User, user);
+        }
+
+        return TeamActions.Contains(action) && !string.IsNullOrWhiteSpace(teamKey) ? (AuditTargetKinds.Team, teamKey) : (null, null);
     }
 }
