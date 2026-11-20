@@ -71,7 +71,9 @@ internal static class AuditHelper
         string errorMessage = null,
         string teamKey = null,
         IReadOnlyDictionary<string, string> metadata = null,
-        AuditEventType eventType = AuditEventType.ServiceCall)
+        AuditEventType eventType = AuditEventType.ServiceCall,
+        string targetKind = null,
+        string targetKey = null)
     {
         var user = httpContextAccessor?.HttpContext?.User;
         var identity = user?.Identity;
@@ -106,6 +108,8 @@ internal static class AuditHelper
 
         // The level is the one held in the team the entry is about, from the identity issued for it: an entry naming a team
         // the caller is not acting as records no level rather than another team's.
+        var hasTarget = !string.IsNullOrWhiteSpace(targetKind) && !string.IsNullOrWhiteSpace(targetKey);
+
         var entryTeam = teamKey ?? user?.FindFirst(TeamClaimTypes.TeamKey)?.Value ?? ambient?.TeamKey;
 
         return new AuditEntry
@@ -129,6 +133,9 @@ internal static class AuditHelper
             // Deliberately no fallback chain: this is the subject or nothing, which is what makes it
             // exact-matchable. CallerIdentity stays the human-readable one.
             CallerUserIdentity = IdentityResolverFor(httpContextAccessor).GetSubject(user),
+            // Both or neither: a kind without a key (or the reverse) names nothing a filter could match.
+            TargetKind = hasTarget ? targetKind : null,
+            TargetKey = hasTarget ? targetKey : null,
             TeamKey = entryTeam,
             AccessLevel = TeamScopePolicy.AccessLevelClaimFor(user, entryTeam),
             CallerSource = callerSource,

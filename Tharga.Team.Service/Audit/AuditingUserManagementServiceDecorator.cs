@@ -243,7 +243,12 @@ public class AuditingUserManagementServiceDecorator : IUserManagementService
 
     private void Log(string action, string methodName, long durationMs, bool success, string errorMessage = null, IReadOnlyDictionary<string, string> metadata = null)
     {
-        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey: null, metadata);
+        // The user the operation was done to is the one the entry already names in its metadata. A link names two: the one
+        // that is kept is the target, the duplicate stays in the metadata.
+        string userKey = null;
+        metadata?.TryGetValue(AuditMetadataKeys.UserKey, out userKey);
+
+        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey: null, metadata, targetKind: AuditTargetKinds.User, targetKey: userKey);
         _auditLogger.Log(entry);
     }
 }

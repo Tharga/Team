@@ -34,6 +34,12 @@ public record AuditEntryEntity : EntityBase
 
     public string CallerUserIdentity { get; init; }
 
+    [BsonIgnoreIfNull]
+    public string TargetKind { get; init; }
+
+    [BsonIgnoreIfNull]
+    public string TargetKey { get; init; }
+
     public string TeamKey { get; init; }
     public string AccessLevel { get; init; }
 

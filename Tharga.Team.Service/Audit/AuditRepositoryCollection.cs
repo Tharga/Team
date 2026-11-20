@@ -173,6 +173,14 @@ internal class AuditRepositoryCollection : DiskRepositoryCollectionBase<AuditEnt
             indices.Add(new(Builders<AuditEntryEntity>.IndexKeys.Ascending(x => x.ScopeChecked),
                 new CreateIndexOptions { Name = "ScopeChecked" }));
 
+            // What was done to one user, team or key, newest first. Sparse: most entries have no target, and an entry written
+            // before targets were recorded has none, so they stay out of the index.
+            indices.Add(new(Builders<AuditEntryEntity>.IndexKeys
+                    .Ascending(x => x.TargetKind)
+                    .Ascending(x => x.TargetKey)
+                    .Descending(x => x.Timestamp),
+                new CreateIndexOptions { Name = "TargetKind_TargetKey_Timestamp", Sparse = true }));
+
             return indices;
         }
     }

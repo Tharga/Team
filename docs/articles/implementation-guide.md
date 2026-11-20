@@ -3395,6 +3395,23 @@ Three fields describe the actor, and they answer different questions:
 
 Use `CallerUserIdentity` to correlate rows to one person; `CallerIdentity` is for reading.
 
+### What an entry was done to
+
+The fields above say **who acted**. Two more say **what it was done to**, so "who deleted this user?" and "who changed this person's access?" are queries rather than a scan of `Metadata`:
+
+| Field | Holds | Match |
+|---|---|---|
+| `TargetKind` | `user`, `team` or `apikey` (`AuditTargetKinds`), or null | Exact |
+| `TargetKey` | The user's key (`IUser.Key`), the team's key, or the API key's id, or null | Exact |
+
+- **Filled by the toolkit** wherever it acts on one: a member added's access, roles or scope overrides changed, suspended, restored, removed or renamed, an owner transferred, a user deleted, disabled, renamed, re-addressed or linked, a team created, renamed, deleted, restored, purged or given an icon, and a team or system API key created, refreshed, locked, disabled, enabled, deleted or given new scopes. A failed attempt records its target too.
+- **No target** where there is no single one: an invitation to an address that is not yet a user (the address stays in `Metadata`), a member leaving, "verify all users". Naming a target in a query leaves such entries out.
+- **A user's key is not their sign-in subject.** `TargetKey` for a user is `IUser.Key`, the key the application uses everywhere. `CallerUserIdentity` is the authentication subject, which is a different value. A link of two users targets the one that is kept; the duplicate stays in `Metadata`.
+- **Entries written before this existed have no target**, and a target filter never matches them. Nothing is migrated; the filter only covers history from the version that introduced it. The `Metadata` of those entries still names the user.
+- **Query it** with `AuditQuery.TargetKind` and `AuditQuery.TargetKey` (exact match), or pin `AuditLogView` to one with `AuditPinnedFilter { TargetKind = AuditTargetKinds.User, TargetKey = user.Key }`. The CSV export gains `TargetKind` and `TargetKey` as its last two columns.
+- **Your own entries** carry a target with `entry with { TargetKind = AuditTargetKinds.User, TargetKey = userKey }`. A kind needs a key and a key needs a kind; one alone is dropped. A custom `IAuditLogger` that filters in its own store has to honour the two new query fields itself, or its answers will ignore them.
+- **Stored sparsely**, with an index on kind, key and time, so entries without a target cost nothing.
+
 `CallerType` and `CallerSource` say what kind of actor it was:
 
 | Situation | `CallerType` | `CallerSource` |

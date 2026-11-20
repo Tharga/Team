@@ -40,6 +40,18 @@ public record AuditQuery
     /// <summary>Filters entries by the acting user's authentication subject (matches <see cref="AuditEntry.CallerUserIdentity"/>). Exact match, unlike <see cref="CallerIdentity"/>.</summary>
     public string CallerUserIdentity { get; init; }
 
+    /// <summary>
+    /// Filters entries by what the operation was done to (matches <see cref="AuditEntry.TargetKind"/>, one of <see cref="AuditTargetKinds"/>). Exact match.
+    /// Entries written before targets were recorded have none, so naming a kind leaves them out.
+    /// </summary>
+    public string TargetKind { get; init; }
+
+    /// <summary>
+    /// Filters entries by the key of what the operation was done to (matches <see cref="AuditEntry.TargetKey"/>). Exact match. Name <see cref="TargetKind"/>
+    /// as well when keys of different kinds could coincide. Like the kind, it leaves out entries written before targets were recorded.
+    /// </summary>
+    public string TargetKey { get; init; }
+
     public string MethodName { get; init; }
     public string Feature { get; init; }
     public string Action { get; init; }

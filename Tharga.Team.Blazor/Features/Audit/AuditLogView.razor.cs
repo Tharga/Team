@@ -465,6 +465,8 @@ public partial class AuditLogView : ComponentBase
             TeamKey = PinnedFilter.TeamKey ?? query.TeamKey,
             CallerIdentity = PinnedFilter.CallerIdentity ?? query.CallerIdentity,
             CallerUserIdentity = PinnedFilter.CallerUserIdentity ?? query.CallerUserIdentity,
+            TargetKind = PinnedFilter.TargetKind ?? query.TargetKind,
+            TargetKey = PinnedFilter.TargetKey ?? query.TargetKey,
             Feature = PinnedFilter.Feature ?? query.Feature,
             Action = PinnedFilter.Action ?? query.Action,
         };
@@ -570,13 +572,13 @@ public partial class AuditLogView : ComponentBase
                 // resolved from. Both, because a reader correlating rows to one user needs the former and
                 // a reader skimming needs the latter.
                 sb.AppendLine(includeTeam
-                    ? "Timestamp,Team,Caller,CallerID,Subject,Source,Feature,Action,Method,Duration,Success,EventType,Scope,ScopeResult,ErrorMessage,Metadata"
-                    : "Timestamp,Caller,CallerID,Subject,Source,Feature,Action,Method,Duration,Success,EventType,Scope,ScopeResult,ErrorMessage,Metadata");
+                    ? "Timestamp,Team,Caller,CallerID,Subject,Source,Feature,Action,Method,Duration,Success,EventType,Scope,ScopeResult,ErrorMessage,Metadata,TargetKind,TargetKey"
+                    : "Timestamp,Caller,CallerID,Subject,Source,Feature,Action,Method,Duration,Success,EventType,Scope,ScopeResult,ErrorMessage,Metadata,TargetKind,TargetKey");
                 foreach (var e in exportEntries)
                 {
                     var team = includeTeam ? $"{Escape(e.TeamKey)}," : "";
                     var callerName = Escape(GetCallerDisplayName(e));
-                    sb.AppendLine($"{e.Timestamp:O},{team}{callerName},{Escape(e.CallerIdentity)},{Escape(e.CallerUserIdentity)},{e.CallerSource},{Escape(e.Feature)},{Escape(e.Action)},{Escape(e.MethodName)},{e.DurationMs},{e.Success},{e.EventType},{Escape(e.ScopeChecked)},{e.ScopeResult},{Escape(e.ErrorMessage)},{Escape(FormatMetadata(e.Metadata))}");
+                    sb.AppendLine($"{e.Timestamp:O},{team}{callerName},{Escape(e.CallerIdentity)},{Escape(e.CallerUserIdentity)},{e.CallerSource},{Escape(e.Feature)},{Escape(e.Action)},{Escape(e.MethodName)},{e.DurationMs},{e.Success},{e.EventType},{Escape(e.ScopeChecked)},{e.ScopeResult},{Escape(e.ErrorMessage)},{Escape(FormatMetadata(e.Metadata))},{Escape(e.TargetKind)},{Escape(e.TargetKey)}");
                 }
                 content = sb.ToString();
                 mimeType = "text/csv";

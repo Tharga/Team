@@ -37,7 +37,7 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             var result = await _inner.CreateKeyAsync(teamKey, name, accessLevel, roles, scopeOverrides, expiryDate, tags, createdBy, ownerMemberKey);
             sw.Stop();
-            Log("create", nameof(CreateKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("create", nameof(CreateKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, keyId: result?.Key);
             return result;
         }
         catch (Exception ex)
@@ -55,13 +55,13 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             var result = await _inner.RefreshKeyAsync(teamKey, key);
             sw.Stop();
-            Log("refresh", nameof(RefreshKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("refresh", nameof(RefreshKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, keyId: key);
             return result;
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("refresh", nameof(RefreshKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log("refresh", nameof(RefreshKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, keyId: key);
             throw;
         }
     }
@@ -73,12 +73,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.LockKeyAsync(teamKey, key);
             sw.Stop();
-            Log("lock", nameof(LockKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("lock", nameof(LockKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("lock", nameof(LockKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log("lock", nameof(LockKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, keyId: key);
             throw;
         }
     }
@@ -96,12 +96,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.SetKeyDisabledAsync(teamKey, key, disabled, actor);
             sw.Stop();
-            Log(action, nameof(SetKeyDisabledAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log(action, nameof(SetKeyDisabledAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log(action, nameof(SetKeyDisabledAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log(action, nameof(SetKeyDisabledAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, keyId: key);
             throw;
         }
     }
@@ -115,12 +115,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.SetSystemKeyDisabledAsync(key, disabled, actor);
             sw.Stop();
-            Log(action, nameof(SetSystemKeyDisabledAsync), sw.ElapsedMilliseconds, true);
+            Log(action, nameof(SetSystemKeyDisabledAsync), sw.ElapsedMilliseconds, true, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log(action, nameof(SetSystemKeyDisabledAsync), sw.ElapsedMilliseconds, false, ex.Message);
+            Log(action, nameof(SetSystemKeyDisabledAsync), sw.ElapsedMilliseconds, false, ex.Message, keyId: key);
             throw;
         }
     }
@@ -132,12 +132,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.DeleteKeyAsync(teamKey, key);
             sw.Stop();
-            Log("delete", nameof(DeleteKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("delete", nameof(DeleteKeyAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("delete", nameof(DeleteKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log("delete", nameof(DeleteKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, keyId: key);
             throw;
         }
     }
@@ -149,12 +149,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.SetScopeOverridesAsync(teamKey, key, scopes);
             sw.Stop();
-            Log("set-scope-overrides", nameof(SetScopeOverridesAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("set-scope-overrides", nameof(SetScopeOverridesAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("set-scope-overrides", nameof(SetScopeOverridesAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log("set-scope-overrides", nameof(SetScopeOverridesAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, keyId: key);
             throw;
         }
     }
@@ -166,12 +166,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.SetRolesAsync(teamKey, key, roles);
             sw.Stop();
-            Log("set-roles", nameof(SetRolesAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey);
+            Log("set-roles", nameof(SetRolesAsync), sw.ElapsedMilliseconds, true, teamKey: teamKey, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            Log("set-roles", nameof(SetRolesAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey);
+            Log("set-roles", nameof(SetRolesAsync), sw.ElapsedMilliseconds, false, ex.Message, teamKey, keyId: key);
             throw;
         }
     }
@@ -187,7 +187,7 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             var result = await _inner.CreateSystemKeyAsync(name, scopes, expiryDate, createdBy);
             sw.Stop();
-            LogSystem("create", nameof(CreateSystemKeyAsync), sw.ElapsedMilliseconds, true);
+            LogSystem("create", nameof(CreateSystemKeyAsync), sw.ElapsedMilliseconds, true, keyId: result?.Key);
             return result;
         }
         catch (Exception ex)
@@ -205,7 +205,7 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             var result = await _inner.CreatePersonalSystemKeyAsync(name, scopes, ownerUserKey, expiryDate, createdBy);
             sw.Stop();
-            LogSystem("create", nameof(CreatePersonalSystemKeyAsync), sw.ElapsedMilliseconds, true);
+            LogSystem("create", nameof(CreatePersonalSystemKeyAsync), sw.ElapsedMilliseconds, true, keyId: result?.Key);
             return result;
         }
         catch (Exception ex)
@@ -223,13 +223,13 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             var result = await _inner.RefreshSystemKeyAsync(key);
             sw.Stop();
-            LogSystem("refresh", nameof(RefreshSystemKeyAsync), sw.ElapsedMilliseconds, true);
+            LogSystem("refresh", nameof(RefreshSystemKeyAsync), sw.ElapsedMilliseconds, true, keyId: key);
             return result;
         }
         catch (Exception ex)
         {
             sw.Stop();
-            LogSystem("refresh", nameof(RefreshSystemKeyAsync), sw.ElapsedMilliseconds, false, ex.Message);
+            LogSystem("refresh", nameof(RefreshSystemKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, keyId: key);
             throw;
         }
     }
@@ -241,12 +241,12 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.LockSystemKeyAsync(key);
             sw.Stop();
-            LogSystem("lock", nameof(LockSystemKeyAsync), sw.ElapsedMilliseconds, true);
+            LogSystem("lock", nameof(LockSystemKeyAsync), sw.ElapsedMilliseconds, true, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            LogSystem("lock", nameof(LockSystemKeyAsync), sw.ElapsedMilliseconds, false, ex.Message);
+            LogSystem("lock", nameof(LockSystemKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, keyId: key);
             throw;
         }
     }
@@ -265,7 +265,7 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
             sw.Stop();
 
             var after = (scopes ?? []).Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s.Trim()).Distinct(StringComparer.Ordinal).ToArray();
-            LogSystem("set-scopes", nameof(SetSystemKeyScopesAsync), sw.ElapsedMilliseconds, true, null,
+            LogSystem("set-scopes", nameof(SetSystemKeyScopesAsync), sw.ElapsedMilliseconds, true, null, key,
                 (AuditMetadataKeys.ApiKeyId, key),
                 (AuditMetadataKeys.ApiKeyScopesAdded, string.Join(",", after.Except(before, StringComparer.Ordinal).Order(StringComparer.Ordinal))),
                 (AuditMetadataKeys.ApiKeyScopesRemoved, string.Join(",", before.Except(after, StringComparer.Ordinal).Order(StringComparer.Ordinal))));
@@ -273,7 +273,7 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         catch (Exception ex)
         {
             sw.Stop();
-            LogSystem("set-scopes", nameof(SetSystemKeyScopesAsync), sw.ElapsedMilliseconds, false, ex.Message, (AuditMetadataKeys.ApiKeyId, key));
+            LogSystem("set-scopes", nameof(SetSystemKeyScopesAsync), sw.ElapsedMilliseconds, false, ex.Message, key, (AuditMetadataKeys.ApiKeyId, key));
             throw;
         }
     }
@@ -295,27 +295,31 @@ public class AuditingApiKeyServiceDecorator : IApiKeyAdministrationService
         {
             await _inner.DeleteSystemKeyAsync(key);
             sw.Stop();
-            LogSystem("delete", nameof(DeleteSystemKeyAsync), sw.ElapsedMilliseconds, true);
+            LogSystem("delete", nameof(DeleteSystemKeyAsync), sw.ElapsedMilliseconds, true, keyId: key);
         }
         catch (Exception ex)
         {
             sw.Stop();
-            LogSystem("delete", nameof(DeleteSystemKeyAsync), sw.ElapsedMilliseconds, false, ex.Message);
+            LogSystem("delete", nameof(DeleteSystemKeyAsync), sw.ElapsedMilliseconds, false, ex.Message, keyId: key);
             throw;
         }
     }
 
-    private void Log(string action, string methodName, long durationMs, bool success, string errorMessage = null, string teamKey = null)
+    // keyId is the key the operation was done to, which is the entry's target. Null where the operation failed before there was one.
+    private void Log(string action, string methodName, long durationMs, bool success, string errorMessage = null, string teamKey = null, string keyId = null)
     {
-        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey);
+        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey, targetKind: AuditTargetKinds.ApiKey, targetKey: keyId);
         _auditLogger.Log(entry);
     }
 
-    private void LogSystem(string action, string methodName, long durationMs, bool success, string errorMessage = null, params (string Key, string Value)[] metadata)
+    // keyId is the key the operation was done to, which is the entry's target; read from the recorded key id when not given.
+    private void LogSystem(string action, string methodName, long durationMs, bool success, string errorMessage = null, string keyId = null, params (string Key, string Value)[] metadata)
     {
-        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey: null);
         var values = new Dictionary<string, string> { { "ApiKeyType", "System" } };
         foreach (var (name, value) in metadata) values[name] = value;
+
+        keyId ??= values.GetValueOrDefault(AuditMetadataKeys.ApiKeyId);
+        var entry = AuditHelper.BuildEntry(_httpContextAccessor, Feature, action, methodName, durationMs, success, errorMessage, teamKey: null, targetKind: AuditTargetKinds.ApiKey, targetKey: keyId);
 
         _auditLogger.Log(entry with { Metadata = values });
     }
