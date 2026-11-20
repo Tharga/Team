@@ -16,7 +16,7 @@
         @Extras?.Invoke(Case)
 
         @* Which of the support staff has the case, for the boards that show it; the picker leaves itself out where assigning is not possible. *@
-        @if (ShowAssignee)
+        @if (ShowAssignee && ShowAssigneePicker)
         {
             <SupportAssigneePicker Case="Case" Changed="Changed" />
         }
@@ -122,6 +122,13 @@
     /// has no use for it is not given one; the staff boards turn it on.
     /// </summary>
     [Parameter] public bool ShowAssignee { get; set; }
+
+    /// <summary>
+    /// Whether the opened case contains the assignee picker. <c>false</c> leaves only that out, for a host that places <see cref="SupportAssigneePicker"/>
+    /// itself, for example inside <see cref="Extras"/>; the filter and the card header's assignee are not affected. Needs <see cref="ShowAssignee"/>.
+    /// Raise the picker's <c>Changed</c> to have the surrounding list read the case again.
+    /// </summary>
+    [Parameter] public bool ShowAssigneePicker { get; set; } = true;
 
     /// <summary>
     /// How long after support's last answer staff may close the case; <c>null</c> lets them close at any time.

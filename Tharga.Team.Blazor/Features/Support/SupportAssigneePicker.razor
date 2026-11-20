@@ -7,8 +7,9 @@
 
 @if (_available)
 {
+    @* The caption is a form-field label on its own line above the dropdown. *@
     <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-assignee-picker="@Case.Id">
-        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportAssigneeText.AssignedTo]</RadzenText>
             <RadzenDropDown Data="AssigneeChoices()" TextProperty="Name" ValueProperty="Key" TValue="string"
                             Value="@Case.Assignee?.Key" ValueChanged="@((string v) => SetAsync(v))" AllowClear="true"

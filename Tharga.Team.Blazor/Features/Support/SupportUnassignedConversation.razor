@@ -15,7 +15,7 @@
     @Extras?.Invoke(Case)
 
     @* Which of the support staff has the case; the picker leaves itself out where assigning is not possible. *@
-    @if (ShowAssignee)
+    @if (ShowAssignee && ShowAssigneePicker)
     {
         <SupportAssigneePicker Case="Case" Changed="Changed" />
     }
@@ -119,6 +119,13 @@
     /// <c>SupportUnassignedView</c> turns it on. Not the same as <see cref="ShowAssignment"/>, which is about giving the case a team.
     /// </summary>
     [Parameter] public bool ShowAssignee { get; set; }
+
+    /// <summary>
+    /// Whether the opened case contains the assignee picker. <c>false</c> leaves only that out, for a host that places <see cref="SupportAssigneePicker"/>
+    /// itself, for example inside <see cref="Extras"/>; the filter and the card header's assignee are not affected. Needs <see cref="ShowAssignee"/>.
+    /// Raise the picker's <c>Changed</c> to have the surrounding list read the case again.
+    /// </summary>
+    [Parameter] public bool ShowAssigneePicker { get; set; } = true;
 
     /// <summary>How a time is shown; the host's own date setting. Defaults to the local short date and time.</summary>
     [Parameter] public RenderFragment<DateTime> TimeTemplate { get; set; }

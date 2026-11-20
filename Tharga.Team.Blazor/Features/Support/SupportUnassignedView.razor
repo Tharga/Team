@@ -1,3 +1,4 @@
+@using Tharga.Team.Blazor.Features.User
 @using Tharga.Team.Support.Cases
 @using Tharga.Team.Blazor.Framework
 @using Tharga.Blazor
@@ -80,7 +81,7 @@ else
                             @if (ShowAssignee && item.Assignee != null)
                             {
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-assignee="@item.Id" title="@item.Assignee.Email">
-                                    <RadzenIcon Icon="person" />
+                                    <UserAvatar Name="@item.Assignee.Name" EMail="@item.Assignee.Email" Size="24px" />
                                     <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@item.Assignee.Name</RadzenText>
                                 </RadzenStack>
                             }
@@ -91,7 +92,7 @@ else
                         </TopMenu>
                         <ChildContent>
                             <SupportUnassignedConversation Case="item" Teams="_teams" Extras="CaseExtras" TimeTemplate="TimeTemplate" ShowAssignment="ShowAssignment"
-                                                           ShowAssignee="ShowAssignee" Changed="OnChangedAsync" Assigned="OnAssignedAsync" />
+                                                           ShowAssignee="ShowAssignee" ShowAssigneePicker="ShowAssigneePicker" Changed="OnChangedAsync" Assigned="OnAssignedAsync" />
                         </ChildContent>
                     </ExpandableCard>
                 </div>
@@ -118,6 +119,13 @@ else
     /// <c>false</c> leaves that to the host's own control. Not the same as <see cref="ShowAssignment"/>, which is about giving a case a team.
     /// </summary>
     [Parameter] public bool ShowAssignee { get; set; } = true;
+
+    /// <summary>
+    /// Whether an opened case contains the assignee picker. <c>false</c> leaves only that out, for a host that places <see cref="SupportAssigneePicker"/>
+    /// itself, for example inside <see cref="Extras"/>; the filter and the card header's assignee are not affected. Needs <see cref="ShowAssignee"/>.
+    /// Raise the picker's <c>Changed</c> to have the surrounding list read the case again.
+    /// </summary>
+    [Parameter] public bool ShowAssigneePicker { get; set; } = true;
 
     /// <summary>A case to open when the view loads, for a host that links straight to one. An id that names nothing in the list opens nothing.</summary>
     [Parameter] public string CaseId { get; set; }

@@ -6,6 +6,7 @@ using Moq;
 using Radzen;
 using Radzen.Blazor;
 using Tharga.Team;
+using Tharga.Team.Blazor.Features.User;
 using Tharga.Team.Blazor.Features.Support;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Support.Cases;
@@ -60,6 +61,82 @@ public class SupportAssigneeRenderTests : BunitContext
         Assert.Contains("Sam Support", view.Find("[data-case='mine'] [data-assignee='mine']").TextContent);
         Assert.Equal("sam@example.com", view.Find("[data-assignee='mine']").GetAttribute("title"));
         Assert.Empty(view.FindAll("[data-case='nobodys'] [data-assignee]"));
+    }
+
+    /// <summary>The card header shows the assignee as a picture, so the list says who has each case at a glance (#526).</summary>
+    [Fact]
+    public void ACardShowsTheAssigneesAvatar_NotAGenericIcon()
+    {
+        var view = Across(out _, [Mine]);
+
+        var assignee = view.Find("[data-case='mine'] [data-assignee='mine']");
+
+        Assert.Single(view.FindComponents<UserAvatar>());
+        Assert.DoesNotContain("person", assignee.TextContent);
+    }
+
+    /// <summary>The caption sits on its own line above the dropdown, as a form field label (#526).</summary>
+    [Fact]
+    public void ThePickerCaption_IsAboveTheDropdown_NotBesideIt()
+    {
+        var view = Across(out _, [Mine]);
+        Open(view, "mine");
+
+        var picker = view.Find("[data-assignee-picker='mine']");
+        var rows = picker.QuerySelectorAll(".rz-stack").ToArray();
+
+        Assert.DoesNotContain(rows, x => x.ClassList.Contains("rz-flex-row") && x.QuerySelector(".rz-dropdown") != null);
+        Assert.True(picker.InnerHtml.IndexOf("Assigned to", StringComparison.Ordinal) < picker.InnerHtml.IndexOf("rz-dropdown", StringComparison.Ordinal));
+    }
+
+    /// <summary>A host that lays out the opened case places the picker itself: only the picker leaves, the filter and the card header still show who has the case (#526).</summary>
+    [Fact]
+    public void WithThePickerLeftOut_TheOpenedCaseHasNone_ButTheFilterAndTheHeaderStay()
+    {
+        var view = Across(out _, [Mine], showPicker: false);
+
+        Open(view, "mine");
+
+        Assert.Empty(view.FindAll("[data-assignee-picker]"));
+        Assert.NotEmpty(view.FindAll("[data-assignee='mine']"));
+        Assert.NotEmpty(view.FindAll("[data-assignee-filter]"));
+    }
+
+    [Fact]
+    public void WithThePickerLeftOut_TheHostCanRenderItItself_ShowingWhoHasTheCase()
+    {
+        var view = Across(out _, [Mine], showPicker: false, extras: c => b =>
+        {
+            b.OpenComponent<SupportAssigneePicker>(0);
+            b.AddAttribute(1, nameof(SupportAssigneePicker.Case), c);
+            b.CloseComponent();
+        });
+
+        Open(view, "mine");
+
+        var picker = view.FindComponent<SupportAssigneePicker>();
+        Assert.Equal("sam", picker.FindComponent<RadzenDropDown<string>>().Instance.Value);
+    }
+
+    [Fact]
+    public void ThePickerIsInTheOpenedCase_ByDefault()
+    {
+        var view = Across(out _, [Mine]);
+
+        Open(view, "mine");
+
+        Assert.Single(view.FindAll("[data-assignee-picker='mine']"));
+    }
+
+    [Fact]
+    public void TheUnassignedQueue_LeavesOnlyThePickerOut_WhenAskedTo()
+    {
+        var view = Unassigned(out _, [Case("loose", null, "Cannot sign in") with { Assignee = Sam }], showPicker: false);
+
+        Open(view, "loose");
+
+        Assert.Empty(view.FindAll("[data-assignee-picker]"));
+        Assert.NotEmpty(view.FindAll("[data-assignee='loose']"));
     }
 
     [Fact]
@@ -354,19 +431,24 @@ public class SupportAssigneeRenderTests : BunitContext
     }
 
     private IRenderedComponent<SupportAcrossTeamsView> Across(
-        out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true, Action<Mock<ISupportCaseService>> arrange = null)
+        out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true, Action<Mock<ISupportCaseService>> arrange = null,
+        bool showPicker = true, Func<SupportCase, Microsoft.AspNetCore.Components.RenderFragment> extras = null)
     {
         cases = Service(items, arrange);
         Register(cases);
 
-        return Render<SupportAcrossTeamsView>(p => p.Add(x => x.ShowAssignee, showAssignee));
+        return Render<SupportAcrossTeamsView>(p =>
+        {
+            p.Add(x => x.ShowAssignee, showAssignee).Add(x => x.ShowAssigneePicker, showPicker);
+            if (extras != null) p.Add(x => x.CaseExtras, c => extras(c));
+        });
     }
 
-    private IRenderedComponent<SupportUnassignedView> Unassigned(out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true)
+    private IRenderedComponent<SupportUnassignedView> Unassigned(out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true, bool showPicker = true)
     {
         cases = Service(items, null);
         Register(cases);
 
-        return Render<SupportUnassignedView>(p => p.Add(x => x.ShowAssignee, showAssignee));
+        return Render<SupportUnassignedView>(p => p.Add(x => x.ShowAssignee, showAssignee).Add(x => x.ShowAssigneePicker, showPicker));
     }
 }
