@@ -197,6 +197,68 @@ public class UserMailLogSenderTests
 
     private static Claim Manage => new(TeamClaimTypes.SystemScope, SystemUserScopes.Manage);
 
+    // ---- one mail with its text (Tharga/Team#529): what a support case shows of the mail it answers
+
+    private UserMailHistoryService ContentService(string currentUserKey, params Claim[] claims)
+    {
+        var users = Substitute.For<IUserService>();
+        users.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns(_ =>
+        {
+            var user = Substitute.For<IUser>();
+            user.Key.Returns(currentUserKey);
+            return Task.FromResult(user);
+        });
+
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "Sam"), .. claims], "Test"));
+
+        return new UserMailHistoryService(_mail.Queue, _mail.Recipients, new TeamAuthorizer(new FixedPrincipal(principal)), users,
+            new CompositeAuditLogger([_mail.Audit], Options.Create(new AuditOptions())), new AuditEntryFactory(null), _mail.Outbox);
+    }
+
+    [Fact]
+    public async Task Staff_ReadAMailWithItsText()
+    {
+        var sent = await SentByAsync(Staff);
+
+        var content = await ContentService(Stranger, Manage).GetMailContentAsync(sent.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal("Hello", content.Mail.Subject);
+        Assert.Equal(UserMailStatus.Sent, content.Mail.Status);
+        Assert.Contains("Hi.", content.Body);
+    }
+
+    /// <summary>What was written is read by the people who run the application, not offered to whoever sent the mail: the one who sent it is refused too.</summary>
+    [Fact]
+    public async Task TheSenderWhoIsNotStaff_IsRefused_AndTheRefusalIsAudited()
+    {
+        var sent = await SentByAsync(Staff);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => ContentService(Staff).GetMailContentAsync(sent.Id, TestContext.Current.CancellationToken));
+
+        Assert.Contains(_mail.Audit.Entries, x => x.Feature == UserMailAudit.Feature && !x.Success && x.MethodName == nameof(IUserMailHistoryService.GetMailContentAsync));
+    }
+
+    [Fact]
+    public async Task AReadOfTheText_IsAudited_WithTheIdAndNeverAnAddress()
+    {
+        var sent = await SentByAsync(Staff);
+
+        await ContentService(Stranger, Manage).GetMailContentAsync(sent.Id, TestContext.Current.CancellationToken);
+
+        var entry = Assert.Single(_mail.Audit.Entries, x => x.MethodName == nameof(IUserMailHistoryService.GetMailContentAsync));
+        Assert.True(entry.Success);
+        Assert.Equal(sent.Id, entry.Metadata[UserMailAudit.MailId]);
+        Assert.DoesNotContain(entry.Metadata.Values, x => x.Contains('@'));
+    }
+
+    [Fact]
+    public async Task AMailThatNoLongerExists_IsNull_ForStaff()
+    {
+        var content = await ContentService(Stranger, Manage).GetMailContentAsync("no-such-mail", TestContext.Current.CancellationToken);
+
+        Assert.Null(content);
+    }
+
     [Fact]
     public async Task TheUserWhoSentAMail_ReadsIt_WithWhatItWasSentAs_AndTheirName()
     {

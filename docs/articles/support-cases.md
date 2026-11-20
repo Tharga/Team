@@ -1336,6 +1336,32 @@ never opens a case. A bounce that names no support answer is handed to every reg
 one recognises it — that is how [mail to users](user-mail.md#bounces) sent from a support address is marked
 bounced. One that nobody recognises is logged at Debug, without addresses.
 
+### A reply to a mail the application sent
+
+When someone answers a mail the application sent on its own, such as an invitation or a notice sent through
+[mail to users](user-mail.md), the answer reaches the support mailbox as a new case. The quoted thread is cut off
+the body, which is right for the transcript, so the mail being answered would appear nowhere.
+
+A mail that matches no case is therefore looked up in the mail log by the thread ids it names (`In-Reply-To`, then
+`References`), with the same `Message-ID` forms a bounce is matched with. Only a mail that was actually sent counts.
+When one is found:
+
+- The case records it as `InReplyToMailId`.
+- When the reply has no subject of its own, the case takes the subject of the mail it answers.
+- Staff see **In reply to:** above the first message, with the subject, when it was sent and to whom, and a button to
+  read the mail.
+
+The mail is read under the mail log's own authorization: `IUserMailHistoryService.GetMailContentAsync` requires the
+`users:manage` system scope, whoever sent the mail, and every read is audited with the mail's id and never an address.
+A reader without it is told the case is a reply to a mail the application sent, and sees nothing of the mail.
+A mail that has expired from the log is shown as no longer kept. A reply that continues a case, a reply to a mail the
+log does not hold, and a reply to a mail this application never sent are handled exactly as before, and a mail log that
+fails never costs the case.
+
+Staff boards show this on their own. A host that renders `SupportTranscript` itself passes `InReplyToMailId` where the
+reader is staff. A host's own `IUserMailOutbox` that does not implement `FindSentByMessageIdAsync` simply opens cases as
+before.
+
 ### Invitation mail is separate, deliberately
 
 `ThargaTeamOptions.Email` configures invitation delivery and nothing else. It is not a fallback for support

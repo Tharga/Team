@@ -21,7 +21,7 @@
     }
 
     <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" TimeTemplate="TimeTemplate"
-                       ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync"
+                       ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync" InReplyToMailId="@Case.InReplyToMailId"
                        TeamKey="@Case.TeamKey" CaseId="@Case.Id" />
 
     @if (Case.Status == SupportCaseStatus.Open)
