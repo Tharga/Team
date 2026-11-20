@@ -479,6 +479,137 @@ public class SupportPanelTests : BunitContext
         _cases.Verify(x => x.RateAnswerAsync(TeamKey, raised.Id, 2, SupportAnswerRating.None, default), Times.Once);
     }
 
+    private IRenderedComponent<SupportPanel> AnsweredConversation(SupportCase raised, bool rateConversations = true)
+    {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.RateConversations = rateConversations);
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User), Message(2, "Check the date range.", SupportMessageKind.Assistant, author: null));
+        var view = Render(open: true);
+        Send(view, Question);
+        view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
+        return view;
+    }
+
+    [Fact]
+    public void ByDefault_TheConversationIsNotOfferedForRating()
+    {
+        var view = AnsweredConversation(Case("case-1"), rateConversations: false);
+
+        Assert.Empty(view.FindAll("[data-rate-conversation]"));
+    }
+
+    [Fact]
+    public void AConversationNobodyButAPersonAnswered_IsNotOfferedForRating()
+    {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.RateConversations = true);
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User), Message(2, "We are on it.", SupportMessageKind.User, author: "staff") with { AsSupport = true });
+        var view = Render(open: true, offered: [SupportAssistance.None]);
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.Equal(2, view.FindAll("[data-message]").Count));
+        Assert.Empty(view.FindAll("[data-rate-conversation]"));
+    }
+
+    [Fact]
+    public void ThumbsUp_RatesTheConversation_AndThanks()
+    {
+        var raised = Case("case-1");
+        var view = AnsweredConversation(raised);
+
+        view.Find("[data-rate-conversation-choice='Up']").Click();
+
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-rate-conversation-thanks]")));
+        Assert.Equal("true", view.Find("[data-rate-conversation-choice='Up']").GetAttribute("aria-pressed"));
+        Assert.Empty(view.FindAll("[data-rate-conversation-comment]"));
+        _cases.Verify(x => x.RateConversationAsync(TeamKey, raised.Id, SupportAnswerRating.Up, null, default), Times.Once);
+    }
+
+    [Fact]
+    public void ThumbsDown_AsksWhy_SaysWhatTheFeedbackIsFor_AndSendsTheComment()
+    {
+        var raised = Case("case-1");
+        var view = AnsweredConversation(raised);
+
+        view.Find("[data-rate-conversation-choice='Down']").Click();
+
+        Assert.Contains("improve how the assistant works", view.Find("[data-rate-conversation-notice]").TextContent);
+        _cases.Verify(x => x.RateConversationAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAnswerRating>(), It.IsAny<string>(), default), Times.Never);
+
+        view.Find("textarea[data-rate-conversation-comment]").Input("It never looked at my settings.");
+        view.Find("[data-rate-conversation-send]").Click();
+
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-rate-conversation-thanks]")));
+        Assert.Empty(view.FindAll("[data-rate-conversation-comment]"));
+        Assert.Equal("true", view.Find("[data-rate-conversation-choice='Down']").GetAttribute("aria-pressed"));
+        _cases.Verify(x => x.RateConversationAsync(TeamKey, raised.Id, SupportAnswerRating.Down, "It never looked at my settings.", default), Times.Once);
+    }
+
+    [Fact]
+    public void ThumbsDown_CanBeSentWithoutAComment()
+    {
+        var raised = Case("case-1");
+        var view = AnsweredConversation(raised);
+
+        view.Find("[data-rate-conversation-choice='Down']").Click();
+        view.Find("[data-rate-conversation-send]").Click();
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.RateConversationAsync(TeamKey, raised.Id, SupportAnswerRating.Down, null, default), Times.Once));
+    }
+
+    [Fact]
+    public void ThumbsUpAgain_TakesTheRatingBack()
+    {
+        var raised = Case("case-1");
+        var view = AnsweredConversation(raised);
+        view.Find("[data-rate-conversation-choice='Up']").Click();
+        view.WaitForAssertion(() => Assert.Equal("true", view.Find("[data-rate-conversation-choice='Up']").GetAttribute("aria-pressed")));
+
+        view.Find("[data-rate-conversation-choice='Up']").Click();
+
+        view.WaitForAssertion(() => Assert.Equal("false", view.Find("[data-rate-conversation-choice='Up']").GetAttribute("aria-pressed")));
+        _cases.Verify(x => x.RateConversationAsync(TeamKey, raised.Id, SupportAnswerRating.None, null, default), Times.Once);
+    }
+
+    [Fact]
+    public void AnEarlierRating_ShowsAsChosen()
+    {
+        var raised = Case("case-1") with { ConversationRating = new SupportConversationRating { Rating = SupportAnswerRating.Down, RatedAt = DateTime.UnixEpoch, RatedBy = "alice" } };
+
+        var view = AnsweredConversation(raised);
+
+        Assert.Equal("true", view.Find("[data-rate-conversation-choice='Down']").GetAttribute("aria-pressed"));
+        Assert.Empty(view.FindAll("[data-rate-conversation-thanks]"));
+    }
+
+    [Fact]
+    public void ARatingThatFails_KeepsTheComment_AndSaysSo()
+    {
+        var raised = Case("case-1");
+        _cases.Setup(x => x.RateConversationAsync(TeamKey, raised.Id, SupportAnswerRating.Down, It.IsAny<string>(), default)).ThrowsAsync(new InvalidOperationException("down"));
+        var view = AnsweredConversation(raised);
+        view.Find("[data-rate-conversation-choice='Down']").Click();
+        view.Find("textarea[data-rate-conversation-comment]").Input("Too slow.");
+
+        view.Find("[data-rate-conversation-send]").Click();
+
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-rate-conversation-failed]")));
+        Assert.Equal("Too slow.", view.Find("textarea[data-rate-conversation-comment]").GetAttribute("value"));
+        Assert.Empty(view.FindAll("[data-rate-conversation-thanks]"));
+    }
+
+    [Fact]
+    public void ANewConversation_StartsUnrated()
+    {
+        var view = AnsweredConversation(Case("case-1"));
+        view.Find("[data-rate-conversation-choice='Up']").Click();
+        view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-rate-conversation-thanks]")));
+
+        view.Find("[data-new]").Click();
+
+        Assert.Empty(view.FindAll("[data-rate-conversation]"));
+    }
+
     [Fact]
     public void BeforeTheFirstWord_ThePanelSaysItIsWorking()
     {
