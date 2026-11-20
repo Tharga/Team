@@ -138,6 +138,10 @@ public record SupportCaseEntity : EntityBase
     /// <summary>The member of support staff the case is assigned to. Absent while nobody is, and on every case written before this existed.</summary>
     [BsonIgnoreIfNull]
     public SupportCaseAssigneeEntity Assignee { get; init; }
+
+    /// <summary>How the conversation was rated as a whole. Absent until it is rated, and once the rating is taken back.</summary>
+    [BsonIgnoreIfNull]
+    public SupportConversationRatingEntity ConversationRating { get; init; }
 }
 
 /// <summary>How far one person has read a case's transcript.</summary>

@@ -107,6 +107,62 @@ public class SupportAssistantFeedbackViewTests : BunitContext
         Assert.Equal(2, view.FindAll("[data-none-rated]").Count);
     }
 
+    private static SupportConversationRating Rated(SupportAnswerRating rating, DateTime at, string comment = null)
+        => new() { Rating = rating, Comment = comment, RatedAt = at, RatedBy = "alice" };
+
+    [Fact]
+    public void RatedConversations_AreListed_NewestRatedFirst_WithHowTheyWereRated()
+    {
+        var view = Render(
+        [
+            Case("c1", "acme", Monday) with { ConversationRating = Rated(SupportAnswerRating.Down, Monday.AddDays(3)) },
+            Case("c2", "acme", Monday.AddDays(1)),
+            Case("c3", "globex", Monday.AddDays(2)) with { ConversationRating = Rated(SupportAnswerRating.Up, Monday.AddDays(4)) }
+        ]);
+
+        Assert.Equal(["c3", "c1"], view.FindAll("[data-feedback='conversations'] [data-feedback-case]").Select(x => x.GetAttribute("data-feedback-case")));
+        Assert.Equal("Down", view.Find("[data-feedback='conversations'] [data-feedback-case='c1'] [data-conversation-rating]").GetAttribute("data-conversation-rating"));
+        Assert.Equal(SupportAssistantFeedbackViewText.ConversationNotGood.Default, view.Find("[data-feedback='conversations'] [data-feedback-case='c1'] [data-conversation-rating]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void ARatedConversation_ShowsItsComment()
+    {
+        _cases.Setup(x => x.GetMessagesAsync("acme", "c1", null, It.IsAny<int>(), default)).ReturnsAsync(new SupportMessagePage { Items = [] });
+        var view = Render([Case("c1", "acme", Monday) with { ConversationRating = Rated(SupportAnswerRating.Down, Monday, "It never looked at my settings.") }]);
+        Assert.NotNull(view.Find("[data-feedback='conversations'] [data-feedback-case='c1'] [data-has-comment]"));
+
+        view.Find("[data-feedback='conversations'] [data-feedback-case='c1'] [style*='cursor: pointer']").Click();
+
+        Assert.Equal("It never looked at my settings.", view.Find("[data-conversation-comment]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void AConversationRatedWithoutAComment_CarriesNoCommentMark()
+    {
+        var view = Render([Case("c1", "acme", Monday) with { ConversationRating = Rated(SupportAnswerRating.Up, Monday) }]);
+
+        Assert.Empty(view.FindAll("[data-has-comment]"));
+    }
+
+    [Fact]
+    public void WithConversationRatingOn_AndNothingRated_TheListSaysSo()
+    {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.RateConversations = true);
+
+        var view = Render([Case("c1", "acme", Monday)]);
+
+        Assert.Single(view.FindAll("[data-no-conversations-rated]"));
+    }
+
+    [Fact]
+    public void WithConversationRatingOff_AndNothingRated_TheListIsLeftOut()
+    {
+        var view = Render([Case("c1", "acme", Monday)]);
+
+        Assert.Empty(view.FindAll("[data-feedback='conversations']"));
+    }
+
     [Fact]
     public void TheDesk_MarksACaseWithARatedAnswer()
     {

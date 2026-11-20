@@ -57,11 +57,33 @@ public static class SupportPanelText
     /// <summary>When no team is selected.</summary>
     public static readonly TextKey SelectTeam = new("team.support.panel.selectTeam", "Select a team to ask for help.");
 
+    /// <summary>Asks how the assistant did in the conversation as a whole.</summary>
+    public static readonly TextKey RateConversation = new("team.support.panel.rateConversation", "How did the assistant do in this conversation?");
+
+    /// <summary>The thumbs-up for the whole conversation.</summary>
+    public static readonly TextKey ConversationGood = new("team.support.panel.conversationGood", "Good");
+
+    /// <summary>The thumbs-down for the whole conversation, which asks why.</summary>
+    public static readonly TextKey ConversationNotGood = new("team.support.panel.conversationNotGood", "Not good");
+
+    /// <summary>The placeholder of the comment asked for on thumbs-down.</summary>
+    public static readonly TextKey ConversationComment = new("team.support.panel.conversationComment", "What could the assistant have done better? (optional)");
+
+    /// <summary>Beside the comment: what the feedback is used for. A host names itself here.</summary>
+    public static readonly TextKey ConversationNotice = new("team.support.panel.conversationNotice", "This information will be used to improve how the assistant works.");
+
+    /// <summary>Sends the thumbs-down and its comment.</summary>
+    public static readonly TextKey SendConversationRating = new("team.support.panel.sendConversationRating", "Send");
+
+    /// <summary>Once the conversation is rated.</summary>
+    public static readonly TextKey ConversationThanks = new("team.support.panel.conversationThanks", "Thank you for your feedback.");
+
     /// <summary>Every key the component renders, its own and the shared decline notice, for building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
         Assistant, Support, WhoToAsk, NewConversation, Earlier, NoEarlier, AllConversations, Close, Resize, AssistantGreeting,
-        SupportGreeting, Message, AskAQuestion, WriteToSupport, Send, Working, Failed, SelectTeam, SupportCasesViewText.AssistantDeclined,
+        SupportGreeting, Message, AskAQuestion, WriteToSupport, Send, Working, Failed, SelectTeam, RateConversation, ConversationGood,
+        ConversationNotGood, ConversationComment, ConversationNotice, SendConversationRating, ConversationThanks, SupportCasesViewText.AssistantDeclined,
         SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.Thinking, SupportTranscriptText.ThinkingLoop, SupportTranscriptText.Helpful,
         SupportTranscriptText.NotHelpful, SupportTranscriptText.NoAnswerYet, SupportTranscriptText.NoAnswerAway
     ];

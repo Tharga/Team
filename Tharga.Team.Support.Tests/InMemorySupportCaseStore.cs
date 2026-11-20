@@ -217,6 +217,14 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         return Task.CompletedTask;
     }
 
+    public Task SetConversationRatingAsync(string teamKey, string caseId, SupportConversationRating rating, CancellationToken cancellationToken = default)
+    {
+        var found = Require(teamKey, caseId);
+        Replace(found.Case with { ConversationRating = rating }, found.Messages);
+
+        return Task.CompletedTask;
+    }
+
     public Task MarkReadAsync(string teamKey, string caseId, string identity, int sequence, CancellationToken cancellationToken = default)
     {
         var found = Require(teamKey, caseId);

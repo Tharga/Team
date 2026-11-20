@@ -52,6 +52,21 @@ else
 
         @Rated(SupportAnswerRating.Down, _ratedDown)
         @Rated(SupportAnswerRating.Up, _ratedUp)
+
+        @if (_display.RateConversations || _ratedConversations.Length > 0)
+        {
+            <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-feedback="conversations">
+                <RadzenText TextStyle="TextStyle.Subtitle2" class="rz-m-0">@_text[SupportAssistantFeedbackViewText.ConversationsRated]</RadzenText>
+                @if (_ratedConversations.Length == 0)
+                {
+                    <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-conversations-rated>@_text[SupportAssistantFeedbackViewText.NoneRated]</RadzenText>
+                }
+                @foreach (var item in _ratedConversations)
+                {
+                    @ConversationCard(item)
+                }
+            </RadzenStack>
+        }
     </RadzenStack>
 }
 
@@ -61,15 +76,20 @@ else
 
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
+    [Inject] private IServiceProvider Services { get; set; }
+
     private TextSet _text = TextSet.Empty;
+    private SupportDisplayOptions _display = new();
     private bool _ready;
     private bool _permitted = true;
     private Gap[] _gaps = [];
     private SupportCase[] _ratedDown = [];
     private SupportCase[] _ratedUp = [];
+    private SupportCase[] _ratedConversations = [];
 
     protected override async Task OnInitializedAsync()
     {
+        _display = SupportDisplay.Of(Services);
         _text = await TextProvider.ResolveAsync(SupportAssistantFeedbackViewText.All);
         Notifier.CaseUpdated += OnCaseUpdated;
 
@@ -107,6 +127,7 @@ else
             _gaps = GapsOf(cases);
             _ratedDown = RatedOf(cases, SupportAnswerRating.Down);
             _ratedUp = RatedOf(cases, SupportAnswerRating.Up);
+            _ratedConversations = ConversationsRatedOf(cases);
             _permitted = true;
         }
         catch (UnauthorizedAccessException)
@@ -114,9 +135,14 @@ else
             _gaps = [];
             _ratedDown = [];
             _ratedUp = [];
+            _ratedConversations = [];
             _permitted = false;
         }
     }
+
+    /// <summary>The cases whose conversation was rated as a whole, the most recently rated first.</summary>
+    internal static SupportCase[] ConversationsRatedOf(IEnumerable<SupportCase> cases)
+        => [.. cases.Where(x => x.ConversationRating != null).OrderByDescending(x => x.ConversationRating.RatedAt)];
 
     /// <summary>One entry per thing asked, however it was capitalised, with its cases newest first; the most asked first.</summary>
     internal static Gap[] GapsOf(IEnumerable<SupportCase> cases)
@@ -171,6 +197,35 @@ else
                 </TopMenu>
                 <ChildContent>
                     <SupportCaseConversation Case="item" AsStaff="true" TimeTemplate="TimeTemplate" Changed="OnChangedAsync" />
+                </ChildContent>
+            </ExpandableCard>
+        </div>
+    };
+
+    private RenderFragment ConversationCard(SupportCase item) => __builder =>
+    {
+        var rating = item.ConversationRating;
+        var good = rating.Rating == SupportAnswerRating.Up;
+        <div @key="item.Id" data-feedback-case="@item.Id">
+            <ExpandableCard Text="@(string.IsNullOrWhiteSpace(item.Subject) ? item.Id : item.Subject)" Icon="@(good ? "thumb_up" : "thumb_down")" AllowSaveState="false">
+                <TopMenu>
+                    <RadzenBadge Text="@_text[good ? SupportAssistantFeedbackViewText.ConversationGood : SupportAssistantFeedbackViewText.ConversationNotGood]"
+                                 BadgeStyle="@(good ? BadgeStyle.Success : BadgeStyle.Danger)" data-conversation-rating="@rating.Rating" />
+                    @if (!string.IsNullOrWhiteSpace(rating.Comment))
+                    {
+                        <RadzenIcon Icon="comment" title="@_text[SupportAssistantFeedbackViewText.Commented]" aria-label="@_text[SupportAssistantFeedbackViewText.Commented]" data-has-comment />
+                    }
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@(item.TeamName ?? item.TeamKey)</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">@Time(rating.RatedAt)</RadzenText>
+                </TopMenu>
+                <ChildContent>
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem">
+                        @if (!string.IsNullOrWhiteSpace(rating.Comment))
+                        {
+                            <RadzenText TextStyle="TextStyle.Body1" class="rz-m-0" Style="white-space: pre-wrap; font-style: italic;" data-conversation-comment>@rating.Comment</RadzenText>
+                        }
+                        <SupportCaseConversation Case="item" AsStaff="true" TimeTemplate="TimeTemplate" Changed="OnChangedAsync" />
+                    </RadzenStack>
                 </ChildContent>
             </ExpandableCard>
         </div>

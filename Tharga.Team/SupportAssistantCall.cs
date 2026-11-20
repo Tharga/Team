@@ -15,4 +15,10 @@ public sealed record SupportAssistantCall
 
     /// <summary>What the tool was asked for, written out short, such as <c>text: "export"</c>; empty when it takes nothing.</summary>
     public string Arguments { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Whether the call returned without failing, or <c>null</c> when that is not known, as for an answer kept before this
+    /// was recorded or a responder that does not say.
+    /// </summary>
+    public bool? Succeeded { get; init; }
 }

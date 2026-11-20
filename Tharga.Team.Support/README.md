@@ -230,7 +230,12 @@ the platform's model, its own Neurolito or Anthropic key through `Tharga.Team.Su
 or Ollama or llama.cpp server through `Tharga.Team.Support.OpenAI`, or off, and the tokens each answer used are kept
 and shown under it. `MapThargaSupportAiConnection()` offers the same choice as REST endpoints. Every time the
 assistant is asked, a usage record (no text) goes to each `ISupportAssistantUsageSink`, and
-`ISupportAssistantUsageService` totals it per team, provider and model for staff holding `support:usage:read`. Planned: Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
+`ISupportAssistantUsageService` totals it per team, provider and model for staff holding `support:usage:read`. The
+person answered can rate the whole conversation, with a comment on thumbs-down (`RateConversationAsync`); each rating
+`SupportAssistantOptions.ConversationFeedbackRatings` lets through (thumbs-down by default) goes to each
+`ISupportConversationFeedbackSink` as a `SupportConversationFeedback`, the conversation with its tool names and whether
+each call succeeded but never their arguments or results, written by `SupportConversationFeedbackJson` in one shape for
+the host to deliver, for example to its support inbox. Planned: Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
 package rather than part of `Tharga.Team.Service`.
 
 ## Links

@@ -32,6 +32,18 @@ public static class SupportAssistantFeedbackViewText
     public static readonly TextKey NotPermitted = new("team.support.feedback.notPermitted",
         "Seeing how the assistant is doing needs access to support cases across every team.");
 
+    /// <summary>The heading over the conversations rated as a whole.</summary>
+    public static readonly TextKey ConversationsRated = new("team.support.feedback.conversationsRated", "Conversations rated");
+
+    /// <summary>The mark on a conversation rated thumbs-up.</summary>
+    public static readonly TextKey ConversationGood = new("team.support.feedback.conversationGood", "Good");
+
+    /// <summary>The mark on a conversation rated thumbs-down.</summary>
+    public static readonly TextKey ConversationNotGood = new("team.support.feedback.conversationNotGood", "Not good");
+
+    /// <summary>The hint on the mark of a rated conversation that came with a comment, which shows when it is opened.</summary>
+    public static readonly TextKey Commented = new("team.support.feedback.commented", "With a comment");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [CouldNotDo, NoGaps, Cases, RatedDown, RatedUp, NoneRated, Answers, NotPermitted];
+    public static readonly TextKey[] All = [CouldNotDo, NoGaps, Cases, RatedDown, RatedUp, NoneRated, Answers, NotPermitted, ConversationsRated, ConversationGood, ConversationNotGood, Commented];
 }

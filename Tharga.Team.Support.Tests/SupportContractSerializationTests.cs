@@ -74,6 +74,49 @@ public class SupportContractSerializationTests
     }
 
     [Fact]
+    public void AServiceCall_RoundTrips_WithWhetherItSucceeded()
+    {
+        SupportAssistantCall[] calls = [new() { Name = "get_my_cases", Succeeded = true }, new() { Name = "read_manual", Succeeded = false }, new() { Name = "older_call" }];
+
+        var restored = RoundTrip(calls);
+
+        Assert.Equal(calls, restored);
+        Assert.Null(restored[2].Succeeded);
+    }
+
+    [Fact]
+    public void SupportCase_RoundTrips_WithItsConversationRating()
+    {
+        var supportCase = new SupportCase
+        {
+            Id = "case-1",
+            AuthorIdentity = "sub-1",
+            AuthorName = "Alice",
+            Subject = "Export is empty",
+            Status = SupportCaseStatus.Open,
+            CreatedAt = new DateTime(2026, 11, 20, 9, 0, 0, DateTimeKind.Utc),
+            MessageCount = 2,
+            ConversationRating = new SupportConversationRating
+            {
+                Rating = SupportAnswerRating.Down,
+                Comment = "It never looked at my settings.",
+                RatedAt = new DateTime(2026, 11, 20, 9, 5, 0, DateTimeKind.Utc),
+                RatedBy = "sub-1"
+            }
+        };
+
+        Assert.Equal(supportCase.ConversationRating, RoundTrip(supportCase).ConversationRating);
+    }
+
+    [Fact]
+    public void SupportCase_RoundTrips_Unrated()
+    {
+        var supportCase = new SupportCase { Id = "case-1", AuthorIdentity = "sub-1", AuthorName = "Alice", Subject = "S", Status = SupportCaseStatus.Open, CreatedAt = DateTime.UnixEpoch, MessageCount = 1 };
+
+        Assert.Null(RoundTrip(supportCase).ConversationRating);
+    }
+
+    [Fact]
     public void SupportAttachmentLimits_RoundTrip()
     {
         Assert.Equal(SupportAttachmentLimits.Default, RoundTrip(SupportAttachmentLimits.Default));

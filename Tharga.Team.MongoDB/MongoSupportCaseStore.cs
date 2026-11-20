@@ -422,6 +422,19 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     internal static UpdateDefinition<SupportCaseEntity> RateAnswer(int index, SupportAnswerRating rating)
         => Builders<SupportCaseEntity>.Update.Set(x => x.Messages[index].Rating, rating);
 
+    public async Task SetConversationRatingAsync(string teamKey, string caseId, SupportConversationRating rating, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAsync(teamKey, caseId);
+
+        await UpdateAsync(teamKey, caseId, RateConversation(rating));
+    }
+
+    /// <summary>Replaces the case's rating in one update, or removes it, so a case taken back reads as never rated.</summary>
+    internal static UpdateDefinition<SupportCaseEntity> RateConversation(SupportConversationRating rating)
+        => rating == null
+            ? Builders<SupportCaseEntity>.Update.Unset(x => x.ConversationRating)
+            : Builders<SupportCaseEntity>.Update.Set(x => x.ConversationRating, ToEntity(rating));
+
     public async Task SetAssistantStateAsync(string teamKey, string caseId, SupportAssistantState state, CancellationToken cancellationToken = default)
     {
         await RequireCaseAsync(teamKey, caseId);
@@ -696,7 +709,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
     private static int ParseSequence(string cursor) =>
         int.TryParse(cursor, out var value) ? value : 0;
 
-    private static SupportCase ToCase(SupportCaseEntity entity) => new()
+    internal static SupportCase ToCase(SupportCaseEntity entity) => new()
     {
         Id = entity.CaseId,
         TeamKey = entity.TeamKey,
@@ -726,7 +739,24 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         InReplyToMailId = entity.InReplyToMailId,
         AssistantGaps = entity.AssistantGaps ?? [],
         AnswersRatedUp = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Up),
-        AnswersRatedDown = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Down)
+        AnswersRatedDown = entity.Messages.Count(x => x.Rating == SupportAnswerRating.Down),
+        ConversationRating = entity.ConversationRating == null ? null : ToRating(entity.ConversationRating)
+    };
+
+    internal static SupportConversationRatingEntity ToEntity(SupportConversationRating rating) => new()
+    {
+        Rating = rating.Rating,
+        Comment = string.IsNullOrEmpty(rating.Comment) ? null : rating.Comment,
+        RatedAt = rating.RatedAt,
+        RatedBy = rating.RatedBy
+    };
+
+    private static SupportConversationRating ToRating(SupportConversationRatingEntity entity) => new()
+    {
+        Rating = entity.Rating,
+        Comment = entity.Comment,
+        RatedAt = entity.RatedAt,
+        RatedBy = entity.RatedBy
     };
 
     private static SupportCaseAssigneeEntity ToEntity(SupportCaseAssignee assignee) => new()
@@ -801,7 +831,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         OriginalId = entity.OriginalId,
         Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)],
         Rating = entity.Rating,
-        AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty })],
+        AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty, Succeeded = x.Succeeded })],
         AssistantUsage = entity.AssistantUsage is { } usage
             ? new SupportAssistantUsage { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, Provider = usage.Provider, Model = usage.Model, Elapsed = usage.ElapsedMs is { } ms ? TimeSpan.FromMilliseconds(ms) : null }
             : null
@@ -827,7 +857,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null,
         Rating = message.Rating,
         AssistantCalls = message.AssistantCalls is { Length: > 0 } calls
-            ? [.. calls.Select(x => new SupportAssistantCallEntity { Name = x.Name, Arguments = string.IsNullOrEmpty(x.Arguments) ? null : x.Arguments })]
+            ? [.. calls.Select(x => new SupportAssistantCallEntity { Name = x.Name, Arguments = string.IsNullOrEmpty(x.Arguments) ? null : x.Arguments, Succeeded = x.Succeeded })]
             : null,
         AssistantUsage = message.AssistantUsage is { } usage
             ? new SupportAssistantUsageEntity { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, Provider = usage.Provider, Model = usage.Model, ElapsedMs = usage.Elapsed is { } elapsed ? (long)elapsed.TotalMilliseconds : null }

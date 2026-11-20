@@ -142,6 +142,42 @@
                         <div class="support-panel__msg support-panel__msg--them" data-declined>@_text[SupportCasesViewText.AssistantDeclined]</div>
                     }
 
+                    @if (ConversationRatable)
+                    {
+                        <div class="support-panel__feedback" data-rate-conversation>
+                            <div class="support-panel__feedback-row">
+                                <span class="support-panel__feedback-ask">@_text[SupportPanelText.RateConversation]</span>
+                                @foreach (var choice in Ratings)
+                                {
+                                    var label = _text[choice == SupportAnswerRating.Up ? SupportPanelText.ConversationGood : SupportPanelText.ConversationNotGood];
+                                    <button type="button" class="support-panel__rate-pick" title="@label" aria-label="@label"
+                                            aria-pressed="@(ConversationChoicePressed(choice) ? "true" : "false")" @onclick="@(() => PickConversationRatingAsync(choice))"
+                                            data-rate-conversation-choice="@choice">
+                                        <RadzenIcon Icon="@(choice == SupportAnswerRating.Up ? "thumb_up" : "thumb_down")" />
+                                    </button>
+                                }
+                            </div>
+                            @if (_commenting)
+                            {
+                                <textarea class="support-panel__feedback-comment" rows="3" @bind="_comment" @bind:event="oninput"
+                                          placeholder="@_text[SupportPanelText.ConversationComment]" aria-label="@_text[SupportPanelText.ConversationComment]"
+                                          maxlength="@SupportCaseLimits.MaxMessageLength" data-rate-conversation-comment></textarea>
+                                <span class="support-panel__feedback-notice" data-rate-conversation-notice>@_text[SupportPanelText.ConversationNotice]</span>
+                                <button type="button" class="support-panel__feedback-send" disabled="@_ratingConversation" @onclick="SendConversationRatingAsync" data-rate-conversation-send>
+                                    @_text[SupportPanelText.SendConversationRating]
+                                </button>
+                            }
+                            else if (_thanked)
+                            {
+                                <span class="support-panel__feedback-thanks" role="status" data-rate-conversation-thanks>@_text[SupportPanelText.ConversationThanks]</span>
+                            }
+                            @if (_ratingFailed)
+                            {
+                                <span class="support-panel__feedback-failed" role="alert" data-rate-conversation-failed>@_text[SupportPanelText.Failed]</span>
+                            }
+                        </div>
+                    }
+
                     @if (_busy && !string.IsNullOrEmpty(_progress?.AnswerSoFar))
                     {
                         <div class="support-panel__msg support-panel__msg--them" aria-busy="true" data-answer-so-far>
@@ -266,6 +302,13 @@
     private string _draft;
     private bool _busy;
 
+    private SupportAnswerRating _conversationRating;
+    private bool _commenting;
+    private string _comment;
+    private bool _thanked;
+    private bool _ratingFailed;
+    private bool _ratingConversation;
+
     private bool Drawer => NarrowScreen == SupportPanelNarrowScreen.Drawer;
 
     private string SidebarClass => $"support-panel-sidebar {(_expanded ? "support-panel-sidebar--open" : "support-panel-sidebar--rail")}{(Drawer ? " support-panel-sidebar--drawer" : null)}";
@@ -288,6 +331,13 @@
         : @<span class="support-panel__step" data-step><SupportAssistantStatus Text="_text" Progress="_progress" Step="true" /></span>;
 
     private string WhoClass(bool support) => support == _support ? "support-panel__who-pick support-panel__who-pick--on" : "support-panel__who-pick";
+
+    // Once the assistant has answered at least once, and not while it is answering again.
+    private bool ConversationRatable => _display.RateConversations && _caseId != null && !_busy && _messages.Any(x => x.ByAssistant);
+
+    private bool ConversationChoicePressed(SupportAnswerRating choice) => choice == SupportAnswerRating.Down
+        ? _commenting || _conversationRating == SupportAnswerRating.Down
+        : !_commenting && _conversationRating == SupportAnswerRating.Up;
 
     // Not while somebody from support is writing: an answer is on its way.
     private bool NoAnswerShows => _caseId != null && !_withAssistant && !_busy && (_typing?.Writing.Length ?? 0) == 0
@@ -455,7 +505,17 @@
         _declined = false;
         _earlierOpen = false;
         _messages.Clear();
+        ForgetConversationRating();
         return Task.CompletedTask;
+    }
+
+    private void ForgetConversationRating()
+    {
+        _conversationRating = SupportAnswerRating.None;
+        _commenting = false;
+        _comment = null;
+        _thanked = false;
+        _ratingFailed = false;
     }
 
     private async Task ToggleEarlierAsync()
@@ -480,6 +540,7 @@
         _caseId = caseId;
         _declined = false;
         _scrollOnRender = true;
+        ForgetConversationRating();
         await ReadConversationAsync(adoptWhoAnswers: true);
     }
 
@@ -510,6 +571,7 @@
                 x.Sequence, x.Kind == SupportMessageKind.Assistant, x.Rating, x.AssistantCalls, x.AssistantUsage)));
 
         _withAssistant = supportCase.AssistantState == SupportAssistantState.Active;
+        _conversationRating = supportCase.ConversationRating?.Rating ?? SupportAnswerRating.None;
         if (adoptWhoAnswers) _support = !_withAssistant;
         _noAnswer?.Follow(page?.Items, supportCase.AuthorIdentity);
 
@@ -558,6 +620,48 @@
         }
         catch (Exception)
         {
+        }
+    }
+
+    /// <remarks>Thumbs-down asks why before anything is sent; thumbs-up is sent at once, and the same again takes it back.</remarks>
+    private async Task PickConversationRatingAsync(SupportAnswerRating choice)
+    {
+        _ratingFailed = false;
+
+        if (choice == SupportAnswerRating.Down)
+        {
+            _commenting = !_commenting;
+            _thanked = false;
+            return;
+        }
+
+        _commenting = false;
+        await RateConversationAsync(_conversationRating == SupportAnswerRating.Up ? SupportAnswerRating.None : SupportAnswerRating.Up, null);
+    }
+
+    private Task SendConversationRatingAsync()
+        => RateConversationAsync(SupportAnswerRating.Down, string.IsNullOrWhiteSpace(_comment) ? null : _comment.Trim());
+
+    /// <remarks>A rating the service refuses keeps what was written, so nothing typed is lost, and says it did not go.</remarks>
+    private async Task RateConversationAsync(SupportAnswerRating rating, string comment)
+    {
+        _ratingConversation = true;
+        try
+        {
+            await SupportCases.RateConversationAsync(_teamKey, _caseId, rating, comment);
+
+            _conversationRating = rating;
+            _commenting = false;
+            _comment = null;
+            _thanked = rating != SupportAnswerRating.None;
+        }
+        catch (Exception)
+        {
+            _ratingFailed = true;
+        }
+        finally
+        {
+            _ratingConversation = false;
         }
     }
 

@@ -16,6 +16,13 @@ public sealed class SupportDisplayOptions
     public bool RateAnswers { get; set; }
 
     /// <summary>
+    /// Whether the person the assistant answered is asked, under the conversation, how the assistant did in it as a whole,
+    /// with a comment on thumbs-down, and the feedback view lists the conversations rated. Default <c>false</c>: a host
+    /// turns it on.
+    /// </summary>
+    public bool RateConversations { get; set; }
+
+    /// <summary>
     /// Who sees what an answer took, folded under it: the service calls the assistant made and the tokens the model
     /// reported. Default <see cref="SupportAnswerDetailsAudience.Everyone"/>.
     /// </summary>
