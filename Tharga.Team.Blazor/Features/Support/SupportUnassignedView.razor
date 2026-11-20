@@ -1,3 +1,4 @@
+@using Tharga.Team.Blazor.Features.User
 @using Tharga.Team.Support.Cases
 @using Tharga.Team.Blazor.Framework
 @using Tharga.Blazor
@@ -80,7 +81,7 @@ else
                             @if (ShowAssignee && item.Assignee != null)
                             {
                                 <RadzenStack Orientation="Orientation.Horizontal" Gap="0.25rem" AlignItems="AlignItems.Center" data-assignee="@item.Id" title="@item.Assignee.Email">
-                                    <RadzenIcon Icon="person" />
+                                    <UserAvatar Name="@item.Assignee.Name" EMail="@item.Assignee.Email" Size="24px" />
                                     <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@item.Assignee.Name</RadzenText>
                                 </RadzenStack>
                             }

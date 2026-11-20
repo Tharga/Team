@@ -7,8 +7,10 @@
 
 @if (_available)
 {
-    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-assignee-picker="@Case.Id">
-        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+    @* The caption is a form-field label on its own line above the dropdown. The picker pushes itself to the end of the line when it sits in a
+       column, which is how the opened case places it in its top-right corner. *@
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-assignee-picker="@Case.Id" Style="align-self: flex-end;">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
             <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@_text[SupportAssigneeText.AssignedTo]</RadzenText>
             <RadzenDropDown Data="AssigneeChoices()" TextProperty="Name" ValueProperty="Key" TValue="string"
                             Value="@Case.Assignee?.Key" ValueChanged="@((string v) => SetAsync(v))" AllowClear="true"

@@ -10,16 +10,17 @@
 
 <RadzenStack Orientation="Orientation.Vertical" Gap="0.75rem" data-conversation="@Case.Id">
     @* Support reads who wrote and may add its own content, for as long as the case is open to them: also once it has a team. *@
+    @* Which of the support staff has the case, in the top-right corner so it is seen first and does not move when the host's extras change height;
+       the picker leaves itself out where assigning is not possible. *@
+    @if (AsStaff && ShowAssignee)
+    {
+        <SupportAssigneePicker Case="Case" Changed="Changed" />
+    }
+
     @if (AsStaff)
     {
         <SupportContactTable Contact="Case.ExternalContact" CaseId="@Case.Id" TimeTemplate="TimeTemplate" />
         @Extras?.Invoke(Case)
-
-        @* Which of the support staff has the case, for the boards that show it; the picker leaves itself out where assigning is not possible. *@
-        @if (ShowAssignee)
-        {
-            <SupportAssigneePicker Case="Case" Changed="Changed" />
-        }
 
         @* What support holds on the team, and asking for more. Only once the case has a team: before that there is nobody to ask. *@
         @if (Case.TeamKey != null)

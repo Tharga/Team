@@ -6,6 +6,7 @@ using Moq;
 using Radzen;
 using Radzen.Blazor;
 using Tharga.Team;
+using Tharga.Team.Blazor.Features.User;
 using Tharga.Team.Blazor.Features.Support;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Support.Cases;
@@ -60,6 +61,59 @@ public class SupportAssigneeRenderTests : BunitContext
         Assert.Contains("Sam Support", view.Find("[data-case='mine'] [data-assignee='mine']").TextContent);
         Assert.Equal("sam@example.com", view.Find("[data-assignee='mine']").GetAttribute("title"));
         Assert.Empty(view.FindAll("[data-case='nobodys'] [data-assignee]"));
+    }
+
+    /// <summary>The card header shows the assignee as a picture, so the list says who has each case at a glance (#526).</summary>
+    [Fact]
+    public void ACardShowsTheAssigneesAvatar_NotAGenericIcon()
+    {
+        var view = Across(out _, [Mine]);
+
+        var assignee = view.Find("[data-case='mine'] [data-assignee='mine']");
+
+        Assert.Single(view.FindComponents<UserAvatar>());
+        Assert.DoesNotContain("person", assignee.TextContent);
+    }
+
+    /// <summary>The caption sits on its own line above the dropdown, as a form field label (#526).</summary>
+    [Fact]
+    public void ThePickerCaption_IsAboveTheDropdown_NotBesideIt()
+    {
+        var view = Across(out _, [Mine]);
+        Open(view, "mine");
+
+        var picker = view.Find("[data-assignee-picker='mine']");
+        var rows = picker.QuerySelectorAll(".rz-stack").ToArray();
+
+        Assert.DoesNotContain(rows, x => x.ClassList.Contains("rz-flex-row") && x.QuerySelector(".rz-dropdown") != null);
+        Assert.True(picker.InnerHtml.IndexOf("Assigned to", StringComparison.Ordinal) < picker.InnerHtml.IndexOf("rz-dropdown", StringComparison.Ordinal));
+    }
+
+    /// <summary>In the opened case the picker is the first thing and sits at the end of the line, so it does not move when the host's extras change height (#526).</summary>
+    [Fact]
+    public void TheOpenedCase_PlacesThePickerFirst_AtTheEnd()
+    {
+        var view = Across(out _, [Mine]);
+        Open(view, "mine");
+
+        var conversation = view.Find("[data-conversation='mine']");
+        var picker = conversation.QuerySelector("[data-assignee-picker='mine']");
+
+        Assert.Same(conversation.FirstElementChild, picker);
+        Assert.Contains("align-self: flex-end", picker.GetAttribute("style"));
+    }
+
+    [Fact]
+    public void TheUnassignedQueue_PlacesThePickerFirst_AtTheEnd()
+    {
+        var view = Unassigned(out _, [Case("loose", null, "Cannot sign in") with { Assignee = Sam }]);
+        Open(view, "loose");
+
+        var conversation = view.Find("[data-conversation='loose']");
+        var picker = conversation.QuerySelector("[data-assignee-picker='loose']");
+
+        Assert.Same(conversation.FirstElementChild, picker);
+        Assert.Contains("align-self: flex-end", picker.GetAttribute("style"));
     }
 
     [Fact]
