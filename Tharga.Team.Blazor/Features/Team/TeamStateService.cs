@@ -274,7 +274,11 @@ internal class TeamStateService : ITeamStateService
 
     private async Task SetTeamCookieAsync(string teamKey)
     {
+        // Unguarded on purpose: setting a cookie through eval can only fail when the circuit is already gone, and then
+        // there is no page left that the choice could apply to.
+#pragma warning disable BL0016
         await _jSRuntime.InvokeVoidAsync("eval", $"document.cookie = '{Constants.SelectedTeamKeyCookie}={teamKey}; path=/'");
+#pragma warning restore BL0016
     }
 
     public Task SetSelectedTeamAsync(ITeam selectedTeam) => SetSelectedTeamAsync(selectedTeam, true);

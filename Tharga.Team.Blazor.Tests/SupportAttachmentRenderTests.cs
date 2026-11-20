@@ -126,6 +126,21 @@ public class SupportAttachmentRenderTests : BunitContext
         Assert.Contains(SupportAttachmentText.NotAvailable.Default.Replace("{0}", "gone.pdf"), view.Find("[data-attachment-unavailable]").TextContent);
     }
 
+    /// <summary>A click that the browser refuses must tell the reader, not end the circuit (Tharga/Team#505).</summary>
+    [Fact]
+    public async Task AFileTheBrowserWillNotTake_SaysSo_InsteadOfFailingTheClick()
+    {
+        var module = JSInterop.SetupModule(ModulePath);
+        module.Setup<bool>("open", _ => true).SetException(new Microsoft.JSInterop.JSException("The browser blocked the window."));
+        var attachment = File("a1", "report.pdf", "application/pdf");
+        OpensTo(attachment, 3);
+        var view = RenderTranscript(MessageWith(attachment));
+
+        await view.Find("[data-attachment='a1']").ClickAsync(new());
+
+        Assert.Contains(SupportAttachmentText.NotAvailable.Default.Replace("{0}", "report.pdf"), view.Find("[data-attachment-unavailable]").TextContent);
+    }
+
     [Fact]
     public void WithoutACase_FilesAreListedButCannotBeOpened()
     {

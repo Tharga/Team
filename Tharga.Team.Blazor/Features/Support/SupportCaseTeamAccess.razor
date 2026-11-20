@@ -81,6 +81,7 @@
 
         // A member cannot ask, and the highest level that can be requested leaves nothing to ask for. Anything lower, or no access at all, can.
         _canAsk = _access == null || (!_access.IsMember && _access.AccessLevel != AccessLevel.Administrator);
-        StateHasChanged();
+
+        // No StateHasChanged: both callers render afterwards, OnParametersSetAsync as part of the parameter pass and the button's Changed callback through the event.
     }
 }

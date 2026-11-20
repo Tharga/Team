@@ -80,8 +80,12 @@ public sealed class SupportAttention(IJSRuntime jsRuntime) : IAsyncDisposable
         if (then != null) await then();
     }
 
+    // Both callers, IsAttendedAsync and WhenAttendedAsync (through IsAttendedAsync), guard the call and treat a failure as
+    // "looked at"; the analyzer does not follow a call into another method.
+#pragma warning disable BL0016
     private async Task<IJSObjectReference> ModuleAsync()
         => _module ??= await jsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+#pragma warning restore BL0016
 
     public async ValueTask DisposeAsync()
     {
