@@ -99,7 +99,7 @@ else
                             </RadzenText>
                         </TopMenu>
                         <ChildContent>
-                            <SupportCaseConversation Case="item" AsStaff="true" Extras="CaseExtras" StaffCloseAfter="StaffCloseAfter" ShowAssignee="ShowAssignee"
+                            <SupportCaseConversation Case="item" AsStaff="true" Extras="CaseExtras" StaffCloseAfter="StaffCloseAfter" ShowAssignee="ShowAssignee" ShowAssigneePicker="ShowAssigneePicker"
                                                      TimeTemplate="TimeTemplate" Changed="OnChangedAsync" />
                         </ChildContent>
                     </ExpandableCard>
@@ -130,6 +130,13 @@ else
     /// <c>false</c> leaves that to the host's own control, for example one on the card it already shows in <see cref="CaseExtras"/>.
     /// </summary>
     [Parameter] public bool ShowAssignee { get; set; } = true;
+
+    /// <summary>
+    /// Whether an opened case contains the assignee picker. <c>false</c> leaves only that out, for a host that places <see cref="SupportAssigneePicker"/>
+    /// itself, for example inside <see cref="Extras"/>; the filter and the card header's assignee are not affected. Needs <see cref="ShowAssignee"/>.
+    /// Raise the picker's <c>Changed</c> to have the surrounding list read the case again.
+    /// </summary>
+    [Parameter] public bool ShowAssigneePicker { get; set; } = true;
 
     /// <summary>Where the list filter is remembered in the browser.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.AcrossTeams.Filter";

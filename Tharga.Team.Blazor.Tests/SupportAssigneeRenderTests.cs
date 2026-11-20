@@ -89,31 +89,54 @@ public class SupportAssigneeRenderTests : BunitContext
         Assert.True(picker.InnerHtml.IndexOf("Assigned to", StringComparison.Ordinal) < picker.InnerHtml.IndexOf("rz-dropdown", StringComparison.Ordinal));
     }
 
-    /// <summary>In the opened case the picker is the first thing and sits at the end of the line, so it does not move when the host's extras change height (#526).</summary>
+    /// <summary>A host that lays out the opened case places the picker itself: only the picker leaves, the filter and the card header still show who has the case (#526).</summary>
     [Fact]
-    public void TheOpenedCase_PlacesThePickerFirst_AtTheEnd()
+    public void WithThePickerLeftOut_TheOpenedCaseHasNone_ButTheFilterAndTheHeaderStay()
     {
-        var view = Across(out _, [Mine]);
+        var view = Across(out _, [Mine], showPicker: false);
+
         Open(view, "mine");
 
-        var conversation = view.Find("[data-conversation='mine']");
-        var picker = conversation.QuerySelector("[data-assignee-picker='mine']");
-
-        Assert.Same(conversation.FirstElementChild, picker);
-        Assert.Contains("align-self: flex-end", picker.GetAttribute("style"));
+        Assert.Empty(view.FindAll("[data-assignee-picker]"));
+        Assert.NotEmpty(view.FindAll("[data-assignee='mine']"));
+        Assert.NotEmpty(view.FindAll("[data-assignee-filter]"));
     }
 
     [Fact]
-    public void TheUnassignedQueue_PlacesThePickerFirst_AtTheEnd()
+    public void WithThePickerLeftOut_TheHostCanRenderItItself_ShowingWhoHasTheCase()
     {
-        var view = Unassigned(out _, [Case("loose", null, "Cannot sign in") with { Assignee = Sam }]);
+        var view = Across(out _, [Mine], showPicker: false, extras: c => b =>
+        {
+            b.OpenComponent<SupportAssigneePicker>(0);
+            b.AddAttribute(1, nameof(SupportAssigneePicker.Case), c);
+            b.CloseComponent();
+        });
+
+        Open(view, "mine");
+
+        var picker = view.FindComponent<SupportAssigneePicker>();
+        Assert.Equal("sam", picker.FindComponent<RadzenDropDown<string>>().Instance.Value);
+    }
+
+    [Fact]
+    public void ThePickerIsInTheOpenedCase_ByDefault()
+    {
+        var view = Across(out _, [Mine]);
+
+        Open(view, "mine");
+
+        Assert.Single(view.FindAll("[data-assignee-picker='mine']"));
+    }
+
+    [Fact]
+    public void TheUnassignedQueue_LeavesOnlyThePickerOut_WhenAskedTo()
+    {
+        var view = Unassigned(out _, [Case("loose", null, "Cannot sign in") with { Assignee = Sam }], showPicker: false);
+
         Open(view, "loose");
 
-        var conversation = view.Find("[data-conversation='loose']");
-        var picker = conversation.QuerySelector("[data-assignee-picker='loose']");
-
-        Assert.Same(conversation.FirstElementChild, picker);
-        Assert.Contains("align-self: flex-end", picker.GetAttribute("style"));
+        Assert.Empty(view.FindAll("[data-assignee-picker]"));
+        Assert.NotEmpty(view.FindAll("[data-assignee='loose']"));
     }
 
     [Fact]
@@ -408,19 +431,24 @@ public class SupportAssigneeRenderTests : BunitContext
     }
 
     private IRenderedComponent<SupportAcrossTeamsView> Across(
-        out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true, Action<Mock<ISupportCaseService>> arrange = null)
+        out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true, Action<Mock<ISupportCaseService>> arrange = null,
+        bool showPicker = true, Func<SupportCase, Microsoft.AspNetCore.Components.RenderFragment> extras = null)
     {
         cases = Service(items, arrange);
         Register(cases);
 
-        return Render<SupportAcrossTeamsView>(p => p.Add(x => x.ShowAssignee, showAssignee));
+        return Render<SupportAcrossTeamsView>(p =>
+        {
+            p.Add(x => x.ShowAssignee, showAssignee).Add(x => x.ShowAssigneePicker, showPicker);
+            if (extras != null) p.Add(x => x.CaseExtras, c => extras(c));
+        });
     }
 
-    private IRenderedComponent<SupportUnassignedView> Unassigned(out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true)
+    private IRenderedComponent<SupportUnassignedView> Unassigned(out Mock<ISupportCaseService> cases, SupportCase[] items, bool showAssignee = true, bool showPicker = true)
     {
         cases = Service(items, null);
         Register(cases);
 
-        return Render<SupportUnassignedView>(p => p.Add(x => x.ShowAssignee, showAssignee));
+        return Render<SupportUnassignedView>(p => p.Add(x => x.ShowAssignee, showAssignee).Add(x => x.ShowAssigneePicker, showPicker));
     }
 }

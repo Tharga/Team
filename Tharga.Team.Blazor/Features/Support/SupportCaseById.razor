@@ -31,11 +31,11 @@ else if (_case == null)
 }
 else if (string.IsNullOrEmpty(_case.TeamKey))
 {
-    <SupportUnassignedConversation @key="_case.Id" Case="_case" Teams="_teams" Extras="CaseExtras" TimeTemplate="TimeTemplate" ShowAssignee="ShowAssignee" Changed="ReloadAsync" Assigned="OnAssignedAsync" />
+    <SupportUnassignedConversation @key="_case.Id" Case="_case" Teams="_teams" Extras="CaseExtras" TimeTemplate="TimeTemplate" ShowAssignee="ShowAssignee" ShowAssigneePicker="ShowAssigneePicker" Changed="ReloadAsync" Assigned="OnAssignedAsync" />
 }
 else
 {
-    <SupportCaseConversation @key="_case.Id" Case="_case" AsStaff="true" Extras="CaseExtras" TimeTemplate="TimeTemplate" ShowAssignee="ShowAssignee" Changed="ReloadAsync" />
+    <SupportCaseConversation @key="_case.Id" Case="_case" AsStaff="true" Extras="CaseExtras" TimeTemplate="TimeTemplate" ShowAssignee="ShowAssignee" ShowAssigneePicker="ShowAssigneePicker" Changed="ReloadAsync" />
 }
 
 @code {
@@ -56,6 +56,13 @@ else
     /// already shows in <see cref="CaseExtras"/>.
     /// </summary>
     [Parameter] public bool ShowAssignee { get; set; } = true;
+
+    /// <summary>
+    /// Whether an opened case contains the assignee picker. <c>false</c> leaves only that out, for a host that places <see cref="SupportAssigneePicker"/>
+    /// itself, for example inside <see cref="Extras"/>; the filter and the card header's assignee are not affected. Needs <see cref="ShowAssignee"/>.
+    /// Raise the picker's <c>Changed</c> to have the surrounding list read the case again.
+    /// </summary>
+    [Parameter] public bool ShowAssigneePicker { get; set; } = true;
 
     /// <summary>Raised with the case after it was read, and again each time the conversation changed it, so the host can follow it.</summary>
     [Parameter] public EventCallback<SupportCase> Loaded { get; set; }
