@@ -1844,6 +1844,59 @@ shows on hover), **Rated not helpful** or **Rated helpful**. A store of your own
 `ISupportCaseStore.AddAssistantGapsAsync`, whose default keeps nothing, and `SetAnswerRatingAsync`, whose default
 throws.
 
+### How the whole conversation was rated
+
+**The person answered can also rate the conversation as a whole**, because a conversation can let somebody down even
+when each answer in it looked right on its own. Once the assistant has answered, the panel asks under the conversation
+how it did, with a thumb up and a thumb down. Thumbs-up is sent at once, and the same again takes it back. Thumbs-down
+asks what the assistant could have done better, which is optional, says what the feedback is used for, and is sent with
+**Send**; a short thank-you follows either way.
+
+`RateConversationAsync(teamKey, caseId, rating, comment)` does it, with `SupportAnswerRating.None` to take a rating back.
+Only the person who raised the case may rate, and only a conversation the assistant answered at least once; rating
+again replaces the earlier rating. A comment is trimmed, a blank one is none, and one longer than a message is refused.
+The rating is kept on the case as `SupportCase.ConversationRating` (the rating, the comment, when, and by whom), audited
+as `support:rate-conversation` with the verdict but never the comment, and announced as
+`SupportCaseChange.ConversationRated`. **It is off by default**: `o.Blazor.Support.RateConversations = true` puts the
+question in the panel and the rated conversations in `SupportAssistantFeedbackView`, newest rated first, each with its
+mark and, when it is opened, its comment above the conversation.
+
+Every string is a key in `SupportPanelText` with an English default: `team.support.panel.rateConversation`,
+`conversationGood`, `conversationNotGood`, `conversationComment`, `conversationNotice`, `sendConversationRating` and
+`conversationThanks`. Give `team.support.panel.conversationNotice` your own wording through `IThargaTextProvider`, so the
+person reads who will use what they send, in their own language.
+
+**Handing a rated conversation to you.** Register an `ISupportConversationFeedbackSink` and every rating the options let
+through reaches it once it is kept: thumbs-down only by default.
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Assistant.ConversationFeedbackRatings = [SupportAnswerRating.Down];
+});
+builder.Services.AddScoped<ISupportConversationFeedbackSink, MailFeedbackToSupport>();
+
+internal sealed class MailFeedbackToSupport(IMySupportMail mail) : ISupportConversationFeedbackSink
+{
+    public Task HandleAsync(SupportConversationFeedback feedback, CancellationToken cancellationToken = default)
+        => mail.SendAsync($"The assistant was rated {feedback.Rating}", SupportConversationFeedbackJson.Serialize(feedback), cancellationToken);
+}
+```
+
+`SupportConversationFeedback` carries the case id, the team key, the rating, the comment, when it was rated, the culture
+the person was using, and the conversation: each entry's sequence, kind, whether it was written from the support side,
+time and text, and for the assistant's answers each tool it called, by name, and whether the call succeeded. **It never
+carries what a tool was asked for or what it returned**, which can hold data the person did not choose to send, nor
+anything written for support's eyes only. `SupportConversationFeedbackJson.Serialize` writes it in the one shape every
+host sends: indented, camelCase, enums by name, letters of every script as they are.
+
+- **Every sink is told.** One that throws is logged and never fails the rating; the others are still told.
+- **Whether a call succeeded** is `SupportAssistantCall.Succeeded`. The built-in assistant records it from the tool
+  loop: a call whose result came back without an exception succeeded. A responder of your own sets it on
+  `SupportAnswer.Calls`; left unset, and on every answer kept before it existed, it reads as unknown.
+- **A store of your own** keeps the rating by implementing `ISupportCaseStore.SetConversationRatingAsync`, whose default
+  throws, for the same reason as `SetAnswerRatingAsync`.
+
 ### Running it
 
 Raising and replying stay fast; asking for the answer is a separate call, because a model can take tens of

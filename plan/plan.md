@@ -23,8 +23,9 @@ Branch `feature/support-conversation-rating` from `master` (cf8cd0d).
 - [x] 5. Feedback view: rated conversations with rating and comment, newest rated first. Listed when
       `RateConversations` is on or anything is rated, so a host without it sees no empty section; a comment is marked
       on the card and shown above the conversation when it is opened.
-- [~] 6. Docs: `docs/articles/support-cases.md`, Support README, Blazor README.
-- [ ] 7. Close-out: NuGet re-check, full suite, archive and remove `plan/`, ask to push and open the PR.
+- [x] 6. Docs: `docs/articles/support-cases.md` (new section *How the whole conversation was rated*, with a sink
+      example), Support README, Blazor README.
+- [~] 7. Close-out: NuGet re-check, full suite, archive and remove `plan/`, ask to push and open the PR.
 
 ## Decisions
 
