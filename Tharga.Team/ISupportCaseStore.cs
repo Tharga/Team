@@ -391,6 +391,13 @@ public interface ISupportCaseStore
         => throw new NotSupportedException($"This store does not implement {nameof(SetAnswerRatingAsync)}, so answers cannot be rated.");
 
     /// <summary>
+    /// Sets how the conversation in the case was rated as a whole, or clears it with <c>null</c>.
+    /// </summary>
+    /// <remarks><b>The default throws rather than no-opping</b>, for the same reason as <see cref="SetAnswerRatingAsync"/>.</remarks>
+    Task SetConversationRatingAsync(string teamKey, string caseId, SupportConversationRating rating, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"This store does not implement {nameof(SetConversationRatingAsync)}, so conversations cannot be rated.");
+
+    /// <summary>
     /// Records that someone has read a case up to <paramref name="sequence"/>.
     /// </summary>
     /// <remarks>

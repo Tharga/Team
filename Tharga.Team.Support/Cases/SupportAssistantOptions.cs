@@ -69,4 +69,16 @@ public class SupportAssistantOptions
     /// </para>
     /// </remarks>
     public ReasoningEffort? Reasoning { get; set; }
+
+    /// <summary>
+    /// Which conversation ratings are handed to every registered <see cref="ISupportConversationFeedbackSink"/>. Default
+    /// thumbs-down only.
+    /// </summary>
+    /// <remarks>
+    /// Every rating is kept on the case and counted whatever this says; it only decides which ones the host delivers. A
+    /// disappointed person is what the people building the assistant most need to hear about.
+    /// </remarks>
+    public SupportAnswerRating[] ConversationFeedbackRatings { get; set; } = DefaultConversationFeedbackRatings;
+
+    internal static SupportAnswerRating[] DefaultConversationFeedbackRatings => [SupportAnswerRating.Down];
 }

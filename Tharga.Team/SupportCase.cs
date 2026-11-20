@@ -189,4 +189,10 @@ public record SupportCase
     /// a case reopened is still its owner's. A case written before this existed reads <c>null</c>.
     /// </remarks>
     public SupportCaseAssignee Assignee { get; init; }
+
+    /// <summary>
+    /// How the person the assistant answered rated the conversation as a whole, or <c>null</c> when it is not rated.
+    /// </summary>
+    /// <remarks>Set through <see cref="Support.Cases.ISupportCaseService.RateConversationAsync"/>. A case written before this existed reads <c>null</c>.</remarks>
+    public SupportConversationRating ConversationRating { get; init; }
 }

@@ -335,6 +335,18 @@ public interface ISupportCaseService
     Task RateAnswerAsync(string teamKey, string caseId, int sequence, SupportAnswerRating rating, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Rates the conversation in this case as a whole, with an optional comment saying why, or takes the rating back with
+    /// <see cref="SupportAnswerRating.None"/>.
+    /// </summary>
+    /// <remarks>
+    /// Only the person who raised the case rates, and only a conversation the assistant answered at least once; anybody
+    /// else, and any other case, is refused. Rating again replaces the earlier rating. Once it is kept, every registered
+    /// <see cref="ISupportConversationFeedbackSink"/> is handed the conversation when the host lets that rating through,
+    /// thumbs-down only by default.
+    /// </remarks>
+    Task RateConversationAsync(string teamKey, string caseId, SupportAnswerRating rating, string comment = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Says the caller is writing in this case right now, so whoever is reading it on the other side sees an answer coming.
     /// </summary>
     /// <remarks>

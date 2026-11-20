@@ -39,10 +39,14 @@ internal sealed class SupportCaseService(
     ISupportCaseContactResolver contactResolver = null,
     ITeamOversightService teamOversight = null,
     ISupportAssistantPricing pricing = null,
-    ISupportStaffDirectory staffDirectory = null) : ISupportCaseService, ISupportCaseTeamQueries
+    ISupportStaffDirectory staffDirectory = null,
+    IEnumerable<ISupportConversationFeedbackSink> feedbackSinks = null,
+    SupportAnswerRating[] feedbackRatings = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
+    private readonly ISupportConversationFeedbackSink[] _feedbackSinks = feedbackSinks?.ToArray() ?? [];
+    private readonly SupportAnswerRating[] _feedbackRatings = feedbackRatings ?? SupportAssistantOptions.DefaultConversationFeedbackRatings;
 
     /// <remarks>
     /// <b>Several channels at once, because they face different people.</b> Email faces the customer and
@@ -1175,6 +1179,68 @@ internal sealed class SupportCaseService(
 
         Notify(teamKey, caseId, SupportCaseChange.Rated);
     }
+
+    public async Task RateConversationAsync(string teamKey, string caseId, SupportAnswerRating rating, string comment = null, CancellationToken cancellationToken = default)
+    {
+        if (!Enum.IsDefined(rating)) throw new ArgumentOutOfRangeException(nameof(rating), rating, "A conversation is rated up, down, or not at all.");
+
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items;
+        if (!messages.Any(x => x.Kind == SupportMessageKind.Assistant))
+            throw new InvalidOperationException($"The assistant never answered in support case '{caseId}', so there is no conversation with it to rate.");
+
+        var text = rating == SupportAnswerRating.None || string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+        RequireWithinLength(text);
+
+        var kept = rating == SupportAnswerRating.None
+            ? null
+            : new SupportConversationRating { Rating = rating, Comment = text, RatedAt = timeProvider.GetUtcNow().UtcDateTime, RatedBy = await authorizer.GetSubjectAsync() };
+
+        await store.SetConversationRatingAsync(teamKey, caseId, kept, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.ConversationRated);
+
+        if (kept != null) await HandFeedbackAsync(teamKey, caseId, kept, messages, cancellationToken);
+    }
+
+    /// <remarks>The culture is the one the person is using as they rate, so whoever reads the feedback knows which language the conversation was in.</remarks>
+    private async Task HandFeedbackAsync(string teamKey, string caseId, SupportConversationRating rating, IEnumerable<SupportMessage> messages, CancellationToken cancellationToken)
+    {
+        if (_feedbackSinks.Length == 0 || !_feedbackRatings.Contains(rating.Rating)) return;
+
+        var feedback = new SupportConversationFeedback
+        {
+            CaseId = caseId,
+            TeamKey = teamKey,
+            Rating = rating.Rating,
+            Comment = rating.Comment,
+            RatedAt = rating.RatedAt,
+            Culture = CultureInfo.CurrentUICulture.Name,
+            Messages = [.. messages.OrderBy(x => x.Sequence).Select(FeedbackMessageOf)]
+        };
+
+        foreach (var sink in _feedbackSinks)
+        {
+            try
+            {
+                await sink.HandleAsync(feedback, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                logger?.LogError(ex, "A conversation feedback sink failed for case {CaseId}. The rating is kept; only that delivery was lost.", caseId);
+            }
+        }
+    }
+
+    /// <summary>The entry as the feedback carries it: the plain text and the names of the calls, never what they were asked or returned.</summary>
+    internal static SupportConversationFeedbackMessage FeedbackMessageOf(SupportMessage message) => new()
+    {
+        Sequence = message.Sequence,
+        Kind = message.Kind,
+        AsSupport = message.AsSupport,
+        SentAt = message.SentAt,
+        Body = message.Body,
+        Calls = [.. (message.AssistantCalls ?? []).Select(x => new SupportConversationFeedbackCall { Name = x.Name, Succeeded = x.Succeeded })]
+    };
 
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {

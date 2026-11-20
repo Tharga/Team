@@ -35,5 +35,8 @@ public enum SupportCaseChange
     Rated,
 
     /// <summary>The case was assigned to a member of support staff, or its assignee was taken away.</summary>
-    AssigneeChanged
+    AssigneeChanged,
+
+    /// <summary>The person the assistant answered rated the conversation as a whole, or took the rating back.</summary>
+    ConversationRated
 }

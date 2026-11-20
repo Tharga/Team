@@ -413,11 +413,35 @@ public class SupportAssistantStreamingTests
         Assert.Equal(["raise", "assistant-answer"], world.Audit.Entries.Select(x => x.Action));
     }
 
-    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments, UsageDetails usage = null, ChatClientMetadata metadata = null, string modelId = null)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ACallThatReturns_IsKeptAsSucceeded(bool streamed)
+    {
+        var responder = Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" });
+
+        var answer = streamed ? await responder.AnswerAsync(Case(), Transcript(), new Reports()) : await responder.AnswerAsync(Case(), Transcript());
+
+        Assert.True(Assert.Single(answer.Calls).Succeeded);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ACallThatThrows_IsKeptAsFailed(bool streamed)
+    {
+        var responder = Calling("search_my_cases", new Dictionary<string, object> { ["text"] = "export" }, tools: new FailingTool());
+
+        var answer = streamed ? await responder.AnswerAsync(Case(), Transcript(), new Reports()) : await responder.AnswerAsync(Case(), Transcript());
+
+        Assert.False(Assert.Single(answer.Calls).Succeeded);
+    }
+
+    private static ChatSupportResponder Calling(string tool, Dictionary<string, object> arguments, UsageDetails usage = null, ChatClientMetadata metadata = null, string modelId = null, ISupportAssistantTools tools = null)
     {
         var chat = new CallingChatClient(tool, arguments, usage, metadata, modelId).AsBuilder().UseFunctionInvocation().Build();
 
-        return new ChatSupportResponder(new RegisteredChatClientResolver(chat), new SearchTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
+        return new ChatSupportResponder(new RegisteredChatClientResolver(chat), tools ?? new SearchTool(), new SupportAssistantOptions(), NullLogger<ChatSupportResponder>.Instance);
     }
 
     private static ChatSupportResponder Responder(IChatClient chat)
@@ -601,6 +625,12 @@ public class SupportAssistantStreamingTests
     {
         public Task<IReadOnlyList<AITool>> ForCurrentCallerAsync(string teamKey, CancellationToken cancellationToken = default)
             => Task.FromResult<IReadOnlyList<AITool>>([AIFunctionFactory.Create((string text, int limit = 10) => new[] { "case-1" }, "search_my_cases")]);
+    }
+
+    private sealed class FailingTool : ISupportAssistantTools
+    {
+        public Task<IReadOnlyList<AITool>> ForCurrentCallerAsync(string teamKey, CancellationToken cancellationToken = default)
+            => Task.FromResult<IReadOnlyList<AITool>>([AIFunctionFactory.Create(new Func<string, string[]>(_ => throw new InvalidOperationException("The index is down.")), "search_my_cases")]);
     }
 
     private sealed class OneTool : ISupportAssistantTools

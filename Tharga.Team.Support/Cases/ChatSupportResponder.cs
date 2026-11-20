@@ -73,7 +73,8 @@ internal sealed class ChatSupportResponder(
                 // The tool loop adds up the usage of its rounds into the response it returns.
                 var response = await chat.GetResponseAsync(history, chatOptions, deadline.Token);
                 body = response.Text?.Trim();
-                calls = [.. response.Messages.SelectMany(x => x.Contents).OfType<FunctionCallContent>().Where(IsServiceCall).Select(CallOf)];
+                var contents = response.Messages.SelectMany(x => x.Contents).ToArray();
+                calls = CallsOf(contents.OfType<FunctionCallContent>(), contents.OfType<FunctionResultContent>());
                 usage = UsageOf([response.Usage], metadata?.ProviderName, response.ModelId ?? metadata?.DefaultModelId);
             }
             else
@@ -133,7 +134,7 @@ internal sealed class ChatSupportResponder(
         var text = new StringBuilder();
         var round = 1;
         List<string> running = [];
-        List<SupportAssistantCall> calls = [];
+        List<(string Id, SupportAssistantCall Call)> calls = [];
         List<UsageDetails> usage = [];
         string modelId = null;
         var waiting = false;
@@ -147,7 +148,7 @@ internal sealed class ChatSupportResponder(
 
             try
             {
-                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running], Calls = [.. calls], Thinking = thinking });
+                progress.Report(new SupportAssistantProgress { AnswerSoFar = text.ToString(), Round = round, Tools = [.. running], Calls = [.. calls.Select(x => x.Call)], Thinking = thinking });
             }
             catch (Exception ex)
             {
@@ -177,11 +178,18 @@ internal sealed class ChatSupportResponder(
                 waiting = true;
                 var shown = asked.Where(IsServiceCall).ToArray();
                 running.AddRange(shown.Select(x => x.Name));
-                calls.AddRange(shown.Select(CallOf));
+                calls.AddRange(shown.Select(x => (x.CallId, CallOf(x))));
                 Report();
             }
 
-            if (waiting && update.Contents.OfType<FunctionResultContent>().Any())
+            var results = update.Contents.OfType<FunctionResultContent>().ToArray();
+            foreach (var result in results)
+            {
+                var index = calls.FindIndex(x => x.Id == result.CallId && x.Call.Succeeded == null);
+                if (index >= 0) calls[index] = calls[index] with { Call = calls[index].Call with { Succeeded = result.Exception == null } };
+            }
+
+            if (waiting && results.Length > 0)
             {
                 waiting = false;
                 running.Clear();
@@ -199,7 +207,7 @@ internal sealed class ChatSupportResponder(
             Report();
         }
 
-        return (text.ToString(), [.. calls], UsageOf(usage, metadata?.ProviderName, modelId ?? metadata?.DefaultModelId));
+        return (text.ToString(), [.. calls.Select(x => x.Call)], UsageOf(usage, metadata?.ProviderName, modelId ?? metadata?.DefaultModelId));
     }
 
     /// <summary>The tokens reported, added up; <c>null</c> when nothing was reported, so no count reads as zero.</summary>
@@ -221,6 +229,14 @@ internal sealed class ChatSupportResponder(
 
     /// <remarks>Noting what the assistant could not do is not a call on the host's services, so it is neither shown nor kept as one.</remarks>
     private static bool IsServiceCall(FunctionCallContent call) => call.Name != MissingSkillTool;
+
+    /// <summary>The service calls in order, each marked by whether the tool loop got a result back without an exception.</summary>
+    internal static SupportAssistantCall[] CallsOf(IEnumerable<FunctionCallContent> asked, IEnumerable<FunctionResultContent> results)
+    {
+        var outcomes = results.Where(x => x.CallId != null).GroupBy(x => x.CallId).ToDictionary(x => x.Key, x => x.Last().Exception == null);
+
+        return [.. asked.Where(IsServiceCall).Select(x => CallOf(x) with { Succeeded = x.CallId != null && outcomes.TryGetValue(x.CallId, out var succeeded) ? succeeded : null })];
+    }
 
     private static readonly JsonSerializerOptions Written = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 

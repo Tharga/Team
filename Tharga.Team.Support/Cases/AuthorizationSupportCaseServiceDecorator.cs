@@ -454,6 +454,16 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.RateAnswerAsync(teamKey, caseId, sequence, rating, cancellationToken);
     }
 
+    /// <remarks>Exactly as rating an answer: read access, and then the author alone.</remarks>
+    public async Task RateConversationAsync(string teamKey, string caseId, SupportAnswerRating rating, string comment = null, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "rate the conversation in", CaseAccessKind.Read);
+        if (!await AsksForThemselvesAsync(teamKey, caseId))
+            throw new UnauthorizedAccessException($"Only the member who raised support case '{caseId}' may rate the conversation in it.");
+
+        await inner.RateConversationAsync(teamKey, caseId, rating, comment, cancellationToken);
+    }
+
     public async Task MarkReadAsync(string teamKey, string caseId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "mark read", CaseAccessKind.Read);

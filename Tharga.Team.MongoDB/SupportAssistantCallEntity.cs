@@ -9,4 +9,8 @@ public record SupportAssistantCallEntity
 
     [BsonIgnoreIfNull]
     public string Arguments { get; init; }
+
+    /// <summary>Whether the call returned without failing. Absent when not known, and on every call kept before this existed.</summary>
+    [BsonIgnoreIfNull]
+    public bool? Succeeded { get; init; }
 }

@@ -495,6 +495,24 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>Audited with the verdict but never the comment, which is the person's own words and is kept on the case.</remarks>
+    public async Task RateConversationAsync(string teamKey, string caseId, SupportAnswerRating rating, string comment = null, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        var metadata = Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.Rating, rating.ToString()));
+        try
+        {
+            await inner.RateConversationAsync(teamKey, caseId, rating, comment, cancellationToken);
+
+            Log("rate-conversation", nameof(RateConversationAsync), sw.ElapsedMilliseconds, true, teamKey, metadata: metadata);
+        }
+        catch (Exception ex)
+        {
+            Log("rate-conversation", nameof(RateConversationAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message, metadata);
+            throw;
+        }
+    }
+
     // Reads and counters, not audited - consistent with every other read. Marking a case read is a write,
     // but it records that somebody looked at something rather than that anything changed, and auditing it
     // would fill the log with one entry per page view.
