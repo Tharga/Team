@@ -47,8 +47,11 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Only decides whether there is a menu for a signed-in caller at all, from the caller's own notifications. Signing in or out is a full navigation that starts a new circuit, and what the menu lists is the caller's own, by the service.
+#pragma warning disable BL0013
         var state = await AuthStateProvider.GetAuthenticationStateAsync();
         _authenticated = state.User.Identity?.IsAuthenticated ?? false;
+#pragma warning restore BL0013
         if (!_authenticated) return;
 
         _text = await TextProvider.ResolveAsync(TeamAccessRequestText.All);

@@ -70,8 +70,11 @@ else if (_canRequest)
             return;
         }
 
+        // Read each time the team changes and the button is worked out again. The request itself is checked by the service, so a stale answer can only offer a button that is then refused.
+#pragma warning disable BL0013
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var callerRoles = authState.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(x => x.Value).ToArray();
+#pragma warning restore BL0013
 
         // Membership decides this, and the caller's own team list is the one read that needs no scope --
         // GetTeamsAsync is self-service metadata, so a non-member asking about a team they cannot see is

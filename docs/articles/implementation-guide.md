@@ -1310,6 +1310,12 @@ builder.AddThargaTeam(o =>
 
 > Server/SSR only. Revalidation is wired when `SkipAuthStateDecoration` is `true` (the default, and the signal for a server-hosted app); a standalone WASM client has no server circuit to revalidate this way. A team **switch** still refreshes claims immediately via a full reload regardless of this setting.
 
+**The views follow the refreshed claims** (Tharga/Team#505). A view that decides what to show from the caller's claims listens for the change and applies it,
+instead of reading the claims once at start: the users and teams lists, the API key views, the team selector and the icon settings. A caller who loses
+`users:manage` stops seeing the list at once, and one who is given it gets the list without a reload. A host's own components can do the same with the
+framework's `AuthorizeView` or the cascading `Task<AuthenticationState>`, which re-render on the same change. Views that read the claims only to
+choose defaults for a short editing session, or per call, say so beside the read; the services enforce access whatever a view offers.
+
 #### Refusing entry to a team, or sending the caller to step up first
 
 A host sometimes has to refuse entry to a team until the caller has done something first, such as an organisation that requires BankID: a member whose

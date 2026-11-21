@@ -26,8 +26,11 @@ internal sealed class TeamEntryService(
     {
         if (!evaluator.Active || string.IsNullOrEmpty(teamKey)) return TeamEntryDecision.Allow;
 
+        // Read at the moment of each check and never kept, so there is nothing to go stale: a later change is read by the next check.
+#pragma warning disable BL0013
         var principal = (await authenticationStateProvider.GetAuthenticationStateAsync()).User;
         if (principal.Identity?.IsAuthenticated != true) return TeamEntryDecision.Allow;
+#pragma warning restore BL0013
 
         var user = userService == null ? null : await userService.GetCurrentUserAsync(principal, recordActivity: false);
         var decision = await evaluator.EvaluateAsync(principal, user?.Key, teamKey, cancellationToken);

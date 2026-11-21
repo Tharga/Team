@@ -1,6 +1,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Tharga.Team
 @using Tharga.Team.Blazor.Framework
+@implements IDisposable
 @inject IIconSettingsService IconSettingsService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject NotificationService NotificationService
@@ -133,19 +134,45 @@ else
     private bool _loaded;
     private bool _busy;
 
+    private CallerFollower _follower;
+
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(IconSettingsViewText.All);
 
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        _canManage = TeamScopeGate.HasSystemScope(authState.User, SystemUserScopes.Manage);
-        _email = authState.User.FindFirst("preferred_username")?.Value
-                 ?? authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        // Followed rather than read once: whether the form is shown, and the settings behind it, come from the caller's claims, which the toolkit changes
+        // while the circuit runs (Tharga/Team#505). The service refuses a caller without users:manage whatever this renders.
+        _follower = new CallerFollower(AuthenticationStateProvider, user => InvokeAsync(async () =>
+        {
+            await ApplyCallerAsync(user);
+            StateHasChanged();
+        }));
 
-        if (_canManage) _state = EditModel.From(await IconSettingsService.GetAsync());
+        await ApplyCallerAsync(await _follower.StartAsync());
 
         _loaded = true;
     }
+
+    /// <summary>Shows the form to a caller who may use it, and drops the settings of one who may not. Runs at start and again whenever their claims change.</summary>
+    private async Task ApplyCallerAsync(System.Security.Claims.ClaimsPrincipal caller)
+    {
+        _canManage = TeamScopeGate.HasSystemScope(caller, SystemUserScopes.Manage);
+        _email = caller.FindFirst("preferred_username")?.Value
+                 ?? caller.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+
+        if (!_canManage) _state = new();
+        else if (!_stateLoaded)
+        {
+            _state = EditModel.From(await IconSettingsService.GetAsync());
+            _stateLoaded = true;
+        }
+
+        if (!_canManage) _stateLoaded = false;
+    }
+
+    private bool _stateLoaded;
+
+    public void Dispose() => _follower?.Dispose();
 
     private async Task SaveAsync()
     {

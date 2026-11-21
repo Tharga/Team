@@ -1,6 +1,8 @@
 ﻿@using Microsoft.Extensions.Logging
 @using Microsoft.Extensions.Options
 @using Tharga.Team
+@using Tharga.Team.Blazor.Framework
+@implements IDisposable
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject ITeamStateService TeamStateService
 @inject ITeamDirectoryService TeamDirectoryService
@@ -274,8 +276,17 @@
             }
         };
 
-        var current = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        if (current.User.Identity?.IsAuthenticated ?? false)
+        // Followed rather than read once: which teams are listed, and whether every team is, depends on the caller's claims, which the toolkit changes
+        // while the circuit runs (Tharga/Team#505). The list is read again when they change.
+        _follower = new CallerFollower(AuthenticationStateProvider, user => InvokeAsync(async () =>
+        {
+            _user = user;
+            if (user.Identity?.IsAuthenticated ?? false) await ReloadTeams();
+            StateHasChanged();
+        }));
+
+        var current = _user = await _follower.StartAsync();
+        if (current.Identity?.IsAuthenticated ?? false)
         {
             await ReloadTeams();
         }
@@ -283,10 +294,18 @@
         await base.OnInitializedAsync();
     }
 
+    private CallerFollower _follower;
+
+    /// <summary>The caller as last told, for a reload the list is asked to make for its own reasons, such as a team created or left.</summary>
+    private System.Security.Claims.ClaimsPrincipal _user;
+
+    public void Dispose() => _follower?.Dispose();
+
     private async Task ReloadTeams()
     {
-        var current = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(current.User);
+        var current = _user;
+        if (current == null) return; // Not told who the caller is yet: the start reads the list itself.
+        _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(current);
         _teams = _canSeeAllTeams
             ? await TeamOversightService.GetAllTeamsAsync().ToArrayAsync()
             : await TeamDirectoryService.GetAllTeamSummariesAsync();
@@ -294,7 +313,7 @@
         // them, and would make one lookup per team in the system.
         _suspendedTeamKeys = _canSeeAllTeams ? [] : await ResolveSuspendedAsync(_teams);
 
-        var callerRoles = current.User.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value);
+        var callerRoles = current.FindAll(System.Security.Claims.ClaimTypes.Role).Select(c => c.Value);
         _showAccess = TeamVisibility.CanSeeConsent(_canSeeAllTeams, callerRoles, BlazorOptions.Value.Consent.Roles);
         _accessByTeam = _showAccess ? await ResolveAccessAsync(_teams) : new();
 

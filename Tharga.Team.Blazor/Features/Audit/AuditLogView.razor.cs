@@ -165,8 +165,6 @@ public partial class AuditLogView : ComponentBase
 
     protected override async Task OnInitializedAsync()
     {
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
 
         // Before the not-configured branch below, which returns early: that alert is user-facing too, and
         // resolving after it would leave the one message shown to a misconfigured host in English.
@@ -283,7 +281,12 @@ public partial class AuditLogView : ComponentBase
 
         try
         {
+            // Read once, deliberately: the claims only choose which user source fills a cosmetic cache of display names, and the service enforces what each
+            // source returns on every call, so a caller whose claims change later can at worst see names they would not have. What the log shows is
+            // authorized by the service per query, not by this.
+#pragma warning disable BL0013
             var claims = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+#pragma warning restore BL0013
             var source = UserDirectoryGate.Resolve(TeamScopeGate.HasSystemScope(claims, SystemUserScopes.Manage));
 
             var users = source == UserDirectorySource.FullDirectory

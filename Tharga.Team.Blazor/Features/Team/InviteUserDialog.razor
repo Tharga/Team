@@ -87,8 +87,11 @@
         _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.Apply(
             Tharga.Team.Blazor.Framework.AccessLevelVisibility.Member, BlazorOptions.Value.HiddenAccessLevels);
         // Only the levels this caller may hand out (Tharga/Team#409); the service refuses the rest regardless.
+        // A dialog that lives for one invitation. The levels are only what it offers; the service refuses a grant above the granter's own whatever was offered.
+#pragma warning disable BL0013
         var caller = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
         _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.ForGranter(_accessLevels,
+#pragma warning restore BL0013
             Tharga.Team.Service.TeamScopePolicy.AccessLevelFor(caller, TeamKey));
         if (_accessLevels.Length > 0 && !_accessLevels.Contains(Model.AccessLevel ?? AccessLevel.User)) Model.AccessLevel = _accessLevels[0];
         _emailSenderAvailable = ServiceProvider.GetService<ITeamEmailSender>() != null;

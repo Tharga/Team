@@ -5,6 +5,7 @@
 @using Tharga.Team
 @using Tharga.Team.Blazor.Framework
 @using Tharga.Team.Service
+@implements IDisposable
 @inject IOptions<ApiKeyOptions> ApiKeyOptionsAccessor
 @inject IServiceProvider ServiceProvider
 @inject IJSRuntime Js
@@ -195,6 +196,15 @@
     private SystemApiKeyModel[] _keys;
     private string[] _allScopes = [];
     private System.Security.Claims.ClaimsPrincipal _caller;
+    private CallerFollower _follower;
+
+    private void SetCaller(System.Security.Claims.ClaimsPrincipal caller)
+    {
+        _caller = caller;
+        _notGrantable = _allScopes.Where(s => !SystemGrantRule.Holds(_caller, [s])).ToHashSet(StringComparer.Ordinal);
+    }
+
+    public void Dispose() => _follower?.Dispose();
 
     /// <summary>The registered scopes the caller does not hold, so cannot hand out. The service refuses them; the picker only does not offer them.</summary>
     private HashSet<string> _notGrantable = [];
@@ -222,8 +232,15 @@
         _allScopes = _systemScopeRegistry?.All.Select(s => s.Name).ToArray() ?? [];
         _scopeDescriptions = _systemScopeRegistry?.All.ToDictionary(s => s.Name, s => s.Description) ?? new Dictionary<string, string>();
 
-        _caller = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
-        _notGrantable = _allScopes.Where(s => !SystemGrantRule.Holds(_caller, [s])).ToHashSet(StringComparer.Ordinal);
+        // Followed rather than read once: what the caller may grant, and which keys they may act on, come from their claims, which the toolkit changes while
+        // the circuit runs (Tharga/Team#505). The service stays the guard; this is only what the page offers.
+        _follower = new CallerFollower(AuthStateProvider, user => InvokeAsync(() =>
+        {
+            SetCaller(user);
+            StateHasChanged();
+            return Task.CompletedTask;
+        }));
+        SetCaller(await _follower.StartAsync());
 
         await ReloadData();
         await base.OnInitializedAsync();

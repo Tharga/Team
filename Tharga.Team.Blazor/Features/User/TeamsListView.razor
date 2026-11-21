@@ -3,6 +3,7 @@
 @using Microsoft.JSInterop
 @using Tharga.Team.Blazor.Features.Team
 @typeparam TMember where TMember : class, Tharga.Team.ITeamMember
+@implements IDisposable
 @inject ITeamManagementService TeamManagementService
 @inject ITeamDirectoryService TeamDirectoryService
 @inject ITeamOversightService TeamOversightService
@@ -241,30 +242,56 @@ else
     private List<TeamViewModel> _teamViewModels = new();
     private TeamViewModel _selectedTeam;
 
+    private CallerFollower _caller;
+
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(TeamsListViewText.All);
 
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(authState.User);
-        _canAdminister = UserAdminGate.CanAdministerUsers(
-            TeamScopeGate.HasSystemScope(authState.User, SystemUserScopes.Manage));
-        _canDeleteTeams = UserAdminGate.CanDeleteTeams(
-            TeamScopeGate.HasSystemScope(authState.User, SystemTeamScopes.Delete));
-        // System grant only — an in-team scope of the same name must not satisfy it.
-        _canSetOwner = TeamScopeGate.HasSystemScope(authState.User, SystemTeamScopes.SetOwner);
-        _canManageTeams = UserAdminGate.CanManageTeams(
-            TeamScopeGate.HasSystemScope(authState.User, SystemTeamScopes.Manage));
+        // Followed rather than read once: which teams this list shows, and which actions it offers, come from the caller's claims, which the toolkit
+        // changes while the circuit runs (Tharga/Team#505).
+        _caller = new CallerFollower(AuthenticationStateProvider, user => InvokeAsync(async () =>
+        {
+            await ApplyCallerAsync(user);
+            StateHasChanged();
+        }));
 
-        if (_canAdminister)
+        await ApplyCallerAsync(await _caller.StartAsync());
+
+        await base.OnInitializedAsync();
+    }
+
+    /// <summary>
+    /// Works out what the caller may do here and shows or drops the list to match. Runs at start and again whenever their claims change, so a caller who lost
+    /// <c>users:manage</c> stops seeing every team at once.
+    /// </summary>
+    private async Task ApplyCallerAsync(System.Security.Claims.ClaimsPrincipal caller)
+    {
+        _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(caller);
+        _canAdminister = UserAdminGate.CanAdministerUsers(
+            TeamScopeGate.HasSystemScope(caller, SystemUserScopes.Manage));
+        _canDeleteTeams = UserAdminGate.CanDeleteTeams(
+            TeamScopeGate.HasSystemScope(caller, SystemTeamScopes.Delete));
+        // System grant only — an in-team scope of the same name must not satisfy it.
+        _canSetOwner = TeamScopeGate.HasSystemScope(caller, SystemTeamScopes.SetOwner);
+        _canManageTeams = UserAdminGate.CanManageTeams(
+            TeamScopeGate.HasSystemScope(caller, SystemTeamScopes.Manage));
+
+        if (!_canAdminister)
+        {
+            _teamViewModels = new();
+            _selectedTeam = null;
+            _loaded = false;
+        }
+        else if (!_loaded)
         {
             await LoadDataAsync();
             _selectedTeam = _teamViewModels.FirstOrDefault(t => t.Key == FocusTeamKey);
             _loaded = true;
         }
-
-        await base.OnInitializedAsync();
     }
+
+    public void Dispose() => _caller?.Dispose();
 
     /// <summary>
     /// Opens the team that a sibling surface asked to focus. Runs on parameter changes rather than only at
