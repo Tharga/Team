@@ -169,6 +169,10 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
     {
         if (user == null || string.IsNullOrEmpty(user.Key)) return;
 
+        // A key with an owner carries its owner's subject, so it resolves to the owner's record (Tharga/Team#547). It is not the owner signing in, though: nobody
+        // was active, and its claims are the key's, not the person's, so it must not move their last seen, store a directory id, or rename them to the key.
+        if (claimsPrincipal?.HasClaim(c => c.Type == TeamClaimTypes.ApiKeyId) == true) return;
+
         // Activity tracking must never break the resolve path (it runs inside the auth pipeline).
         try
         {

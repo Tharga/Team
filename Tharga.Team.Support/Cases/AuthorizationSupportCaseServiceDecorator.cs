@@ -81,7 +81,11 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     {
         var supportCase = await inner.GetCaseAsync(teamKey, caseId);
 
-        return supportCase != null && supportCase.AuthorIdentity == await authorizer.GetSubjectAsync();
+        var subject = await authorizer.GetSubjectAsync();
+
+        // Two empty identities are not the same person. A caller with no subject, such as a shared API key, who got past the case-access check through a scope
+        // would otherwise match every case that has no author, and could then run the assistant on it or rate its answers (Tharga/Team#547).
+        return supportCase != null && !string.IsNullOrEmpty(subject) && supportCase.AuthorIdentity == subject;
     }
 
     /// <remarks>Authorized as replying is: whoever may answer a case may decide who answers it.</remarks>

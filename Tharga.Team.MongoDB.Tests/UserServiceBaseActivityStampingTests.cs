@@ -184,6 +184,35 @@ public class UserServiceBaseActivityStampingTests
         await repo.Received(1).SetDirectoryIdAsync(key, "oid-raw");
     }
 
+    /// <summary>
+    /// A key with an owner carries its owner's subject, so it resolves to the owner's record (Tharga/Team#547). It is not the owner signing in: nobody was
+    /// active, and its claims are the key's, so it must not move last seen, store a directory id or rename the owner to the key.
+    /// </summary>
+    [Fact]
+    public async Task GetCurrentUserAsync_ForAnOwnedKey_ResolvesTheOwner_ButRecordsNothingAboutThem()
+    {
+        var (sut, repo, principal, key) = Build(oid: "oid-of-the-key");
+        var asKey = new ClaimsPrincipal(new ClaimsIdentity([.. principal.Claims, new Claim(TeamClaimTypes.ApiKeyId, "key-1"), new Claim(ClaimTypes.Name, "Evaluation key")], "test"));
+
+        var user = await sut.GetCurrentUserAsync(asKey);
+
+        Assert.Equal(key, user.Key);
+        await repo.DidNotReceiveWithAnyArgs().SetLastSeenAsync(default, default);
+        await repo.DidNotReceiveWithAnyArgs().SetDirectoryIdAsync(default, default);
+    }
+
+    /// <summary>The same person signing in does all of it, so the case above is about the key and not about the owner.</summary>
+    [Fact]
+    public async Task GetCurrentUserAsync_ForTheOwnerThemselves_StillRecordsThem()
+    {
+        var (sut, repo, principal, key) = Build(oid: "oid-of-the-owner");
+
+        await sut.GetCurrentUserAsync(principal);
+
+        await repo.Received(1).SetLastSeenAsync(key, Arg.Any<DateTime>());
+        await repo.Received(1).SetDirectoryIdAsync(key, "oid-of-the-owner");
+    }
+
     private static (TestUserService Sut, IUserRepository<TestUserEntity> Repo, ClaimsPrincipal Principal, string Key) Build(
         double? intervalMinutes = 15, string oid = null, bool useMappedOidClaim = true)
     {

@@ -21,6 +21,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     private readonly ITeamService _teamService;
     private readonly IUserService _userService;
     private readonly IServiceProvider _serviceProvider;
+    private readonly UserIdentityResolver _identityResolver;
 
     /// <summary>
     /// Creates a new instance of the API key authentication handler.
@@ -35,7 +36,8 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         ITenantRoleService tenantRoleService = null,
         ITeamService teamService = null,
         IUserService userService = null,
-        IServiceProvider serviceProvider = null)
+        IServiceProvider serviceProvider = null,
+        UserIdentityResolver identityResolver = null)
         : base(options, logger, encoder)
     {
         _apiKeyAdministrationService = apiKeyAdministrationService;
@@ -45,6 +47,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         _teamService = teamService;
         _userService = userService;
         _serviceProvider = serviceProvider;
+        _identityResolver = identityResolver ?? UserIdentityResolver.Default;
     }
 
     /// <summary>
@@ -53,6 +56,12 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     /// <c>users:manage</c> of nobody and refuse every private key.
     /// </summary>
     private IUserService OwnerReader => _serviceProvider?.GetKeyedService<IUserService>(UserServiceKeys.Inner) ?? _userService;
+
+    /// <summary>
+    /// The claim an owner's subject is written as: the one the host's <see cref="UserIdentityResolver"/> reads first, or <see cref="ClaimTypes.NameIdentifier"/>
+    /// when it is unconfigured. Writing the first is enough, since the resolver takes the first of its list that is present.
+    /// </summary>
+    private string SubjectClaimType => _identityResolver.IsConfigured ? _identityResolver.ClaimTypes[0] : ClaimTypes.NameIdentifier;
 
     /// <summary>
     /// Why a personal system key must be refused, or null when its owner still stands behind it.
@@ -67,21 +76,21 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     /// loses the role, until someone disables or deletes it. A shared system key has the same property.
     /// </para>
     /// </remarks>
-    private async Task<string> ResolveSystemOwnerAsync(IApiKey key)
+    private async Task<(IUser User, string Refusal)> ResolveSystemOwnerAsync(IApiKey key)
     {
-        if (OwnerReader == null) return "The owner of this personal API key cannot be verified.";
+        if (OwnerReader == null) return (null, "The owner of this personal API key cannot be verified.");
 
         try
         {
             var user = await OwnerReader.GetUserByKeyAsync(key.OwnerMemberKey);
-            if (user == null) return "The owner of this personal API key no longer exists.";
-            if (user.DisabledAt != null) return "The owner of this personal API key is disabled.";
-            return null;
+            if (user == null) return (null, "The owner of this personal API key no longer exists.");
+            if (user.DisabledAt != null) return (null, "The owner of this personal API key is disabled.");
+            return (user, null);
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not verify the owner of a personal system API key. Refusing the key.");
-            return "The owner of this personal API key could not be verified.";
+            return (null, "The owner of this personal API key could not be verified.");
         }
     }
 
@@ -103,36 +112,36 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
     /// only private keys depend on this lookup, not every key on the deployment.
     /// </para>
     /// </remarks>
-    private async Task<(TeamGrant Grant, string Refusal)> ResolveOwnerAsync(IApiKey key)
+    private async Task<(TeamGrant Grant, IUser User, string Refusal)> ResolveOwnerAsync(IApiKey key)
     {
         if (_teamService == null || OwnerReader == null)
-            return (null, "The owner of this private API key cannot be verified.");
+            return (null, null, "The owner of this private API key cannot be verified.");
 
         try
         {
             var member = await _teamService.GetTeamMemberAsync(key.TeamKey, key.OwnerMemberKey);
             if (member == null || member.State != MembershipState.Member)
-                return (null, "The owner of this private API key is no longer a member of the team.");
+                return (null, null, "The owner of this private API key is no longer a member of the team.");
             if (member.SuspendedAt != null)
-                return (null, "The owner of this private API key is suspended from the team.");
+                return (null, null, "The owner of this private API key is suspended from the team.");
 
             // The member key is the user key, so the user record is one read away.
             var user = await OwnerReader.GetUserByKeyAsync(key.OwnerMemberKey);
             if (user == null)
-                return (null, "The owner of this private API key no longer exists.");
+                return (null, null, "The owner of this private API key no longer exists.");
             if (user.DisabledAt != null)
-                return (null, "The owner of this private API key is disabled.");
+                return (null, null, "The owner of this private API key is disabled.");
 
             var grant = await new TeamGrantResolver(_teamService, _scopeRegistry, _tenantRoleService)
                 .ResolveFromMemberAsync(key.TeamKey, member);
             return grant == null
-                ? (null, "The owner of this private API key holds no access to the team.")
-                : (grant, null);
+                ? (null, null, "The owner of this private API key holds no access to the team.")
+                : (grant, user, null);
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Could not verify the owner of a private API key. Refusing the key.");
-            return (null, "The owner of this private API key could not be verified.");
+            return (null, null, "The owner of this private API key could not be verified.");
         }
     }
 
@@ -220,9 +229,10 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         }
 
         TeamGrant ownerGrant = null;
+        IUser owner = null;
         if (key.TeamKey != null && !string.IsNullOrEmpty(key.OwnerMemberKey))
         {
-            (ownerGrant, var refusal) = await ResolveOwnerAsync(key);
+            (ownerGrant, owner, var refusal) = await ResolveOwnerAsync(key);
             if (refusal != null)
             {
                 LogAuthEvent(key.Name ?? key.TeamKey, key.TeamKey, key.Key, false, refusal);
@@ -232,7 +242,7 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
 
         if (key.TeamKey == null && !string.IsNullOrEmpty(key.OwnerMemberKey))
         {
-            var refusal = await ResolveSystemOwnerAsync(key);
+            (owner, var refusal) = await ResolveSystemOwnerAsync(key);
             if (refusal != null)
             {
                 LogAuthEvent(key.Name ?? "system", null, key.Key, false, refusal);
@@ -248,6 +258,14 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
         if (!string.IsNullOrEmpty(key.Key))
         {
             claims.Add(new Claim(TeamClaimTypes.ApiKeyId, key.Key));
+        }
+
+        // A key with an owner acts as its owner (Tharga/Team#547): the owner's subject, as the claim the host reads it from. Only after the checks above, which
+        // refuse a key whose owner has left, been suspended or disabled, so a key never speaks for somebody who no longer stands behind it. A shared key has no
+        // owner and keeps no subject. The key's own name stays the Name claim, so what a key did is still said to be the key's, and the audit entry names both.
+        if (!string.IsNullOrWhiteSpace(owner?.Identity))
+        {
+            claims.Add(new Claim(SubjectClaimType, owner.Identity));
         }
 
         if (key.TeamKey == null)
