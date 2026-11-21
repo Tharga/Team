@@ -235,6 +235,101 @@ public class SystemApiKeyScopeCeilingTests
         await _inner.Received(1).SetSystemKeyScopesAsync("k1", Arg.Any<string[]>());
     }
 
+    // Acting on the whole key: refresh, lock, disable, delete
+
+    private static readonly (string Name, Func<SystemApiKeyManagementService, Task> Act, Func<IApiKeyAdministrationService, Task> Reached)[] Operations =
+    [
+        ("refresh", s => s.RefreshSystemKeyAsync("k1"), i => i.RefreshSystemKeyAsync("k1")),
+        ("lock", s => s.LockSystemKeyAsync("k1"), i => i.LockSystemKeyAsync("k1")),
+        ("disable", s => s.SetSystemKeyDisabledAsync("k1", true), i => i.SetSystemKeyDisabledAsync("k1", true, Arg.Any<string>())),
+        ("delete", s => s.DeleteSystemKeyAsync("k1"), i => i.DeleteSystemKeyAsync("k1"))
+    ];
+
+    public static TheoryData<string> OperationNames() => new(Operations.Select(o => o.Name));
+
+    private static (Func<SystemApiKeyManagementService, Task> Act, Func<IApiKeyAdministrationService, Task> Reached) Operation(string name)
+    {
+        var o = Operations.Single(x => x.Name == name);
+        return (o.Act, o.Reached);
+    }
+
+    /// <summary>Somebody holding little cannot delete, lock, disable or replace the secret of a key that holds more, any more than they could change its scopes.</summary>
+    [Theory]
+    [MemberData(nameof(OperationNames))]
+    public async Task AKeyThatHoldsMoreThanTheCaller_IsNotTheirsToActOn(string name)
+    {
+        var (act, _) = Operation(name);
+        var sut = Build([Read], keys: Key("k1", null, Read, Manage));
+
+        var error = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => act(sut));
+
+        Assert.Contains(Manage, error.Message);
+        await _inner.DidNotReceiveWithAnyArgs().RefreshSystemKeyAsync(default);
+        await _inner.DidNotReceiveWithAnyArgs().LockSystemKeyAsync(default);
+        await _inner.DidNotReceiveWithAnyArgs().SetSystemKeyDisabledAsync(default, default, default);
+        await _inner.DidNotReceiveWithAnyArgs().DeleteSystemKeyAsync(default);
+    }
+
+    [Theory]
+    [MemberData(nameof(OperationNames))]
+    public async Task AKeyWithinWhatTheCallerHolds_CanBeActedOn(string name)
+    {
+        var (act, reached) = Operation(name);
+        var sut = Build([Read, Discover], keys: Key("k1", null, Read));
+
+        await act(sut);
+
+        await reached(_inner.Received(1));
+    }
+
+    [Theory]
+    [MemberData(nameof(OperationNames))]
+    public async Task AKeyWithNoScopes_CanBeActedOnByAnyone(string name)
+    {
+        var (act, reached) = Operation(name);
+        var sut = Build(keys: Key("k1", null));
+
+        await act(sut);
+
+        await reached(_inner.Received(1));
+    }
+
+    [Theory]
+    [MemberData(nameof(OperationNames))]
+    public async Task AnOverseer_CanActOnAnyKey(string name)
+    {
+        var (act, reached) = Operation(name);
+        var sut = Build(overseer: true, keys: Key("k1", null, Manage));
+
+        await act(sut);
+
+        await reached(_inner.Received(1));
+    }
+
+    /// <summary>Who may touch a personal key is decided before anything about its scopes is said.</summary>
+    [Theory]
+    [MemberData(nameof(OperationNames))]
+    public async Task APersonalKeyOfSomebodyElse_IsRefusedBeforeItsScopesAreSaid_WhateverIsDoneToIt(string name)
+    {
+        var (act, _) = Operation(name);
+        var sut = Build([Read], memberKey: "u1", keys: Key("k1", "u2", Read, Manage));
+
+        var error = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => act(sut));
+
+        Assert.DoesNotContain(Manage, error.Message);
+        Assert.Contains("personal", error.Message);
+    }
+
+    [Theory]
+    [MemberData(nameof(OperationNames))]
+    public async Task TheOwnerOfAPersonalKey_IsStillHeldToWhatTheyHold(string name)
+    {
+        var (act, _) = Operation(name);
+        var sut = Build([Read], memberKey: "u1", keys: Key("k1", "u1", Read, Manage));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => act(sut));
+    }
+
     // The store
 
     [Fact]

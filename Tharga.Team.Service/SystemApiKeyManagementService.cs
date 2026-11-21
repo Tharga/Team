@@ -88,25 +88,25 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
 
     public async Task<IApiKey> RefreshSystemKeyAsync(string key)
     {
-        await EnsureCanMutateAsync(key);
+        await EnsureCanManageAsync(key);
         return await _inner.RefreshSystemKeyAsync(key);
     }
 
     public async Task LockSystemKeyAsync(string key)
     {
-        await EnsureCanMutateAsync(key);
+        await EnsureCanManageAsync(key);
         await _inner.LockSystemKeyAsync(key);
     }
 
     public async Task SetSystemKeyDisabledAsync(string key, bool disabled)
     {
-        await EnsureCanMutateAsync(key);
+        await EnsureCanManageAsync(key);
         await _inner.SetSystemKeyDisabledAsync(key, disabled, GetCurrentUserIdentity());
     }
 
     public async Task DeleteSystemKeyAsync(string key)
     {
-        await EnsureCanMutateAsync(key);
+        await EnsureCanManageAsync(key);
         await _inner.DeleteSystemKeyAsync(key);
     }
 
@@ -114,7 +114,17 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     /// Guards mutation of a personal system key: only its owner, or a caller with oversight, may refresh,
     /// lock, disable or delete it. Shared keys (and unknown keys) pass through.
     /// </summary>
-    private async Task EnsureCanMutateAsync(string key) => await EnsureCanMutateAsync(await FindAsync(key));
+    /// <summary>
+    /// Refresh, lock, disable and delete act on a key as a whole, so they are held to the ceiling as changing its scopes is: ownership first, so a refusal
+    /// reveals nothing of another person's key, then that the caller holds everything the key does. Otherwise somebody holding little could delete, lock
+    /// or replace the secret of a key that holds more (Tharga/Team#522).
+    /// </summary>
+    private async Task EnsureCanManageAsync(string key)
+    {
+        var target = await FindAsync(key);
+        await EnsureCanMutateAsync(target);
+        if (target != null) _ceiling.EnsureCanChange(Caller, target.SystemScopes);
+    }
 
     private async Task<IApiKey> FindAsync(string key)
     {
