@@ -21,4 +21,14 @@ public sealed record SupportAssistantCall
     /// was recorded or a responder that does not say.
     /// </summary>
     public bool? Succeeded { get; init; }
+
+    /// <summary>
+    /// What the tool handed back to the model, as text; empty when it was not kept, which is the default, and for every call kept before this existed.
+    /// </summary>
+    /// <remarks>
+    /// <b>Opt-in, because a tool's result can hold the tenant's own data.</b> It is kept only when the host sets
+    /// <c>SupportAssistantOptions.StoreCallResults</c>, and cut to <c>MaxStoredCallResultLength</c> with a marker when longer. It is never shown in the panel and
+    /// never part of the conversation feedback sent to the host's sinks or mailed.
+    /// </remarks>
+    public string Result { get; init; } = string.Empty;
 }

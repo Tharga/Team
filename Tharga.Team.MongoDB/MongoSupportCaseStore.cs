@@ -831,7 +831,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         OriginalId = entity.OriginalId,
         Attachments = entity.Attachments == null ? [] : [.. entity.Attachments.Select(ToAttachment)],
         Rating = entity.Rating,
-        AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty, Succeeded = x.Succeeded })],
+        AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty, Succeeded = x.Succeeded, Result = x.Result ?? string.Empty })],
         AssistantUsage = entity.AssistantUsage is { } usage
             ? new SupportAssistantUsage { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, Provider = usage.Provider, Model = usage.Model, Elapsed = usage.ElapsedMs is { } ms ? TimeSpan.FromMilliseconds(ms) : null }
             : null
@@ -857,7 +857,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Attachments = message.Attachments is { Length: > 0 } attachments ? [.. attachments.Select(ToEntity)] : null,
         Rating = message.Rating,
         AssistantCalls = message.AssistantCalls is { Length: > 0 } calls
-            ? [.. calls.Select(x => new SupportAssistantCallEntity { Name = x.Name, Arguments = string.IsNullOrEmpty(x.Arguments) ? null : x.Arguments, Succeeded = x.Succeeded })]
+            ? [.. calls.Select(x => new SupportAssistantCallEntity { Name = x.Name, Arguments = string.IsNullOrEmpty(x.Arguments) ? null : x.Arguments, Succeeded = x.Succeeded, Result = string.IsNullOrEmpty(x.Result) ? null : x.Result })]
             : null,
         AssistantUsage = message.AssistantUsage is { } usage
             ? new SupportAssistantUsageEntity { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, Provider = usage.Provider, Model = usage.Model, ElapsedMs = usage.Elapsed is { } elapsed ? (long)elapsed.TotalMilliseconds : null }

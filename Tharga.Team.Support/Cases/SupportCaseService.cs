@@ -41,7 +41,9 @@ internal sealed class SupportCaseService(
     ISupportAssistantPricing pricing = null,
     ISupportStaffDirectory staffDirectory = null,
     IEnumerable<ISupportConversationFeedbackSink> feedbackSinks = null,
-    SupportAnswerRating[] feedbackRatings = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportAnswerRating[] feedbackRatings = null,
+    bool storeCallResults = false,
+    int maxStoredCallResultLength = 2000) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
@@ -195,7 +197,7 @@ internal sealed class SupportCaseService(
             AuthorName = SupportCaseActors.AssistantName,
             Body = answer.Body,
             SentAt = timeProvider.GetUtcNow().UtcDateTime,
-            AssistantCalls = BoundedCalls(answer.Calls),
+            AssistantCalls = BoundedCalls(answer.Calls, storeCallResults, maxStoredCallResultLength),
             // The time taken is kept with the answer, beside its tokens; an answer the provider reported no tokens for still says how long it took.
             AssistantUsage = (answer.Usage ?? new SupportAssistantUsage()) with { Elapsed = timeProvider.GetElapsedTime(started) }
         };
@@ -1131,8 +1133,12 @@ internal sealed class SupportCaseService(
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(SupportCaseLimits.MaxAssistantGaps)];
 
-    /// <remarks>The model chose these, so they are bounded like anything else it writes.</remarks>
-    internal static SupportAssistantCall[] BoundedCalls(SupportAssistantCall[] calls)
+    /// <remarks>
+    /// The model chose these, so they are bounded like anything else it writes. What a tool returned is kept only when the host asked for it
+    /// (<see cref="SupportAssistantOptions.StoreCallResults"/>), cut to its limit with a marker; otherwise whatever a responder put there is dropped here, so no path
+    /// to the store keeps a tenant's data the host did not choose to keep.
+    /// </remarks>
+    internal static SupportAssistantCall[] BoundedCalls(SupportAssistantCall[] calls, bool storeResults = false, int maxResultLength = 2000)
         => [.. (calls ?? [])
             .Where(x => !string.IsNullOrWhiteSpace(x?.Name))
             .Take(SupportCaseLimits.MaxAssistantCalls)
@@ -1140,8 +1146,14 @@ internal sealed class SupportCaseService(
             {
                 Arguments = x.Arguments is { Length: > SupportCaseLimits.MaxAssistantCallArgumentsLength } arguments
                     ? $"{arguments[..(SupportCaseLimits.MaxAssistantCallArgumentsLength - 1)]}…"
-                    : x.Arguments ?? string.Empty
+                    : x.Arguments ?? string.Empty,
+                Result = storeResults && maxResultLength > 0 ? CutResult(x.Result, maxResultLength) : string.Empty
             })];
+
+    private static string CutResult(string result, int max)
+        => string.IsNullOrEmpty(result) ? string.Empty
+            : result.Length <= max ? result
+            : result[..max] + SupportAssistantOptions.CutMarker;
 
     public async Task ReportTypingAsync(string teamKey, string caseId, bool asSupport, CancellationToken cancellationToken = default)
     {

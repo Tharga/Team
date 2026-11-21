@@ -81,4 +81,25 @@ public class SupportAssistantOptions
     public SupportAnswerRating[] ConversationFeedbackRatings { get; set; } = DefaultConversationFeedbackRatings;
 
     internal static SupportAnswerRating[] DefaultConversationFeedbackRatings => [SupportAnswerRating.Down];
+
+    /// <summary>
+    /// Whether what each tool returned to the model is kept with the answer, as <see cref="SupportAssistantCall.Result"/>. Default <c>false</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Off by default, because a tool's result can hold the tenant's own data</b> and not every host wants it kept. A host that evaluates or debugs its
+    /// assistant turns it on, to tell a tool that returned the wrong thing from a model that misread a right one. Whatever a responder puts in a call's
+    /// <c>Result</c> is dropped before the answer is stored when this is off. The result is never shown in the panel, and never part of the rated-conversation
+    /// feedback, which names the tools and nothing they returned.
+    /// </remarks>
+    public bool StoreCallResults { get; set; }
+
+    /// <summary>
+    /// The longest a stored tool result may be, in characters; a longer one is cut and ends with <see cref="CutMarker"/>. Default 2,000. Used only with
+    /// <see cref="StoreCallResults"/>. A value of zero or less keeps no result.
+    /// </summary>
+    /// <remarks>A tool can return a whole guidance document, and a case is a conversation, not a log.</remarks>
+    public int MaxStoredCallResultLength { get; set; } = 2000;
+
+    /// <summary>What a stored tool result ends with when it was cut to <see cref="MaxStoredCallResultLength"/>.</summary>
+    public const string CutMarker = "… [cut]";
 }

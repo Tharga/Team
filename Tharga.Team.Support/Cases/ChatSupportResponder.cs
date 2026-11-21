@@ -74,7 +74,7 @@ internal sealed class ChatSupportResponder(
                 var response = await chat.GetResponseAsync(history, chatOptions, deadline.Token);
                 body = response.Text?.Trim();
                 var contents = response.Messages.SelectMany(x => x.Contents).ToArray();
-                calls = CallsOf(contents.OfType<FunctionCallContent>(), contents.OfType<FunctionResultContent>());
+                calls = CallsOf(contents.OfType<FunctionCallContent>(), contents.OfType<FunctionResultContent>(), options.StoreCallResults);
                 usage = UsageOf([response.Usage], metadata?.ProviderName, response.ModelId ?? metadata?.DefaultModelId);
             }
             else
@@ -186,7 +186,7 @@ internal sealed class ChatSupportResponder(
             foreach (var result in results)
             {
                 var index = calls.FindIndex(x => x.Id == result.CallId && x.Call.Succeeded == null);
-                if (index >= 0) calls[index] = calls[index] with { Call = calls[index].Call with { Succeeded = result.Exception == null } };
+                if (index >= 0) calls[index] = calls[index] with { Call = calls[index].Call with { Succeeded = result.Exception == null, Result = options.StoreCallResults ? ResultOf(result) : string.Empty } };
             }
 
             if (waiting && results.Length > 0)
@@ -231,12 +231,27 @@ internal sealed class ChatSupportResponder(
     private static bool IsServiceCall(FunctionCallContent call) => call.Name != MissingSkillTool;
 
     /// <summary>The service calls in order, each marked by whether the tool loop got a result back without an exception.</summary>
-    internal static SupportAssistantCall[] CallsOf(IEnumerable<FunctionCallContent> asked, IEnumerable<FunctionResultContent> results)
+    internal static SupportAssistantCall[] CallsOf(IEnumerable<FunctionCallContent> asked, IEnumerable<FunctionResultContent> results, bool withResults = false)
     {
-        var outcomes = results.Where(x => x.CallId != null).GroupBy(x => x.CallId).ToDictionary(x => x.Key, x => x.Last().Exception == null);
+        var last = results.Where(x => x.CallId != null).GroupBy(x => x.CallId).ToDictionary(x => x.Key, x => x.Last());
 
-        return [.. asked.Where(IsServiceCall).Select(x => CallOf(x) with { Succeeded = x.CallId != null && outcomes.TryGetValue(x.CallId, out var succeeded) ? succeeded : null })];
+        return [.. asked.Where(IsServiceCall).Select(x =>
+        {
+            var found = x.CallId != null && last.TryGetValue(x.CallId, out var result) ? result : null;
+
+            return CallOf(x) with { Succeeded = found == null ? null : found.Exception == null, Result = withResults && found != null ? ResultOf(found) : string.Empty };
+        })];
     }
+
+    /// <summary>What a tool handed back to the model, as text: a string as it is, anything else as the JSON the model was given.</summary>
+    internal static string ResultOf(FunctionResultContent result) => result.Result switch
+    {
+        null => string.Empty,
+        string text => text,
+        JsonElement { ValueKind: JsonValueKind.String } element => element.GetString() ?? string.Empty,
+        JsonElement element => element.GetRawText(),
+        var other => JsonSerializer.Serialize(other, Written)
+    };
 
     private static readonly JsonSerializerOptions Written = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 

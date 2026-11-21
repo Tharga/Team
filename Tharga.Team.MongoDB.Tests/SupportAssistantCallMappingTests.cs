@@ -34,6 +34,41 @@ public class SupportAssistantCallMappingTests
         Assert.False(stored[nameof(SupportMessageEntity.AssistantCalls)][0].AsBsonDocument.Contains(nameof(SupportAssistantCallEntity.Arguments)));
     }
 
+    /// <summary>What a tool returned is kept as it was, and read back unchanged (Tharga/Team#545).</summary>
+    [Fact]
+    public void AResult_RoundTrips()
+    {
+        var stored = MongoSupportCaseStore.ToEntity(Answer(new SupportAssistantCall { Name = "get_my_cases", Result = "{\"cases\":[{\"id\":\"c1\"}]}" }));
+
+        var calls = MongoSupportCaseStore.ToMessage(stored).AssistantCalls;
+
+        Assert.Equal("{\"cases\":[{\"id\":\"c1\"}]}", Assert.Single(calls).Result);
+    }
+
+    /// <summary>With nothing kept, nothing is stored: the document is as it was before the field existed.</summary>
+    [Fact]
+    public void ACallWithNoResult_StoresNoResultField()
+    {
+        var stored = MongoSupportCaseStore.ToEntity(Answer(new SupportAssistantCall { Name = "get_my_cases" })).ToBsonDocument();
+
+        Assert.False(stored[nameof(SupportMessageEntity.AssistantCalls)][0].AsBsonDocument.Contains(nameof(SupportAssistantCallEntity.Result)));
+    }
+
+    /// <summary>A message stored before the field existed reads back with an empty result, not a null one.</summary>
+    [Fact]
+    public void AMessageKeptBeforeResultsWereRecorded_ReadsWithAnEmptyResult()
+    {
+        var stored = MongoSupportCaseStore.ToEntity(Answer(new SupportAssistantCall { Name = "get_my_cases" })) with
+        {
+            AssistantCalls = [new SupportAssistantCallEntity { Name = "get_my_cases", Arguments = "text: \"export\"", Succeeded = true }]
+        };
+
+        var call = Assert.Single(MongoSupportCaseStore.ToMessage(stored).AssistantCalls);
+
+        Assert.Equal(string.Empty, call.Result);
+        Assert.Equal("text: \"export\"", call.Arguments);
+    }
+
     [Fact]
     public void TheTokens_RoundTrip()
     {
