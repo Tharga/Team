@@ -142,6 +142,19 @@ public record ThargaTeamOptions
     /// <summary>Collection holding server-side sessions, one document per sign-in, ended ones expiring after 30 days, default <c>UserSession</c> (Tharga/Team#471).</summary>
     public string UserSessionCollectionName { get; set; } = DefaultUserSessionCollectionName;
 
+    /// <summary>The default for <see cref="WorkDayCollectionName"/>.</summary>
+    public const string DefaultWorkDayCollectionName = "WorkDay";
+
+    /// <summary>Collection holding the opt-in record of when people worked, one document per person, team and day, default <c>WorkDay</c> (Tharga/Team#399).</summary>
+    public string WorkDayCollectionName { get; set; } = DefaultWorkDayCollectionName;
+
+    /// <summary>
+    /// How long a day of work time is kept after its last activity. Null, the default, keeps it for good. A record of when somebody worked is personal data, so
+    /// set a limit unless there is a reason to keep it. Read when the collection's indexes are made, so changing it on a database that already has the index
+    /// needs the old one dropped.
+    /// </summary>
+    public TimeSpan? WorkTimeRetention { get; set; }
+
     /// <summary>The default for <see cref="ContactMessageCollectionName"/>.</summary>
     public const string DefaultContactMessageCollectionName = "ContactMessage";
 

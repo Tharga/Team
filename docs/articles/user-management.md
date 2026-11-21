@@ -35,6 +35,43 @@ A custom user or team service takes the signal's time through `IUserService.SetO
 `ITeamService.SetOwnMemberLastSeenAsync`, which default to doing nothing; a store written on the team base class
 overrides `SetTeamMemberLastSeenAsync(teamKey, userKey, lastSeen)` and should only move the value forward.
 
+### Work time (opt-in)
+
+The same signal can keep a record of when people worked: when they started, when they stopped, where the breaks were and
+how long they worked. **It is off by default**, since a record of when somebody worked is personal data; turn it on
+once you have decided to keep it and told your people.
+
+```csharp
+builder.Services.AddThargaTeamBlazor(o =>
+{
+    o.WorkTime.Enabled = true;
+    o.WorkTime.TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Europe/Stockholm"); // where they work; default UTC
+    o.WorkTime.BreakAfter = TimeSpan.FromMinutes(30);                              // idle this long is a break; default 30 minutes
+});
+
+builder.Services.AddThargaTeamRepository(o => o.WorkTimeRetention = TimeSpan.FromDays(365)); // optional; default keeps for good
+```
+
+- **What is stored:** one document per person, team and day (collection `WorkDay`, `WorkDayCollectionName` to rename it):
+  the first and last active minute, and per 15-minute slot a bitmask of the minutes that were active. Written when the
+  slot ends or the circuit closes, with a bitwise or and `$min`/`$max`, so several tabs and instances merge. **Nothing
+  derived is stored**: start, end, breaks and worked time are computed when read, so a different `BreakAfter` applies to
+  history too.
+- **The day is cut in `WorkTime.TimeZone`.** Work either side of midnight is two days, and a session never spans two.
+  Changing the zone does not move what is already recorded; those days keep the cut they were written with.
+- **A break is idle time of `BreakAfter` or longer.** A shorter gap is thinking, reading or a phone call, and stays inside
+  the session and counts as work, so worked time is longer than the active minutes by exactly those gaps.
+- **Only while working in a team:** a person with no selected team has no record, since it is per team.
+- **Reading it:** `IWorkTimeService.GetMyDaysAsync(teamKey, from, to)` returns the caller's own days as
+  `WorkTimeSummary` (start, end, sessions, breaks, worked time), and `GetMyTrendAsync` adds a range up (days worked,
+  average worked, average start and end as the local time of day). It takes no user key and needs no scope. Reading
+  somebody else's work time is not offered. The computation is a pure function, `WorkTimeReport.Summarize` and
+  `WorkTimeReport.Trend`, over the `WorkDay` an `IWorkTimeStore` returns, for a host that keeps it elsewhere.
+- **No browser, no work time:** an API key or an MCP client records nothing.
+- **`WorkTimeRetention`** drops a day that long after its last activity, through an expiry index made with the other
+  indexes. It is read when the index is made, so changing it on a database that already has the index needs the old
+  `Last_ttl` index dropped.
+
 **Last seen is not session activity.** With [session limits](implementation-guide.md#session-limits) on, each sign-in
 also has a server-side session with its own activity stamp, per session rather than per user, written at most once a
 minute and including what the person does inside a circuit, which the page reports. That stamp is what an idle timeout

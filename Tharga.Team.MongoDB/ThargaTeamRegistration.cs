@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Tharga.MongoDB;
+using Tharga.Team.WorkTime;
 
 namespace Tharga.Team.MongoDB;
 
@@ -64,6 +65,12 @@ public static class ThargaTeamRegistration
         services.AddTransient<IUserSessionCollection, UserSessionCollection>();
         services.TrackMongoCollection(typeof(IUserSessionCollection), typeof(UserSessionCollection));
         services.TryAddScoped<IUserSessionStore, MongoUserSessionStore>();
+
+        // The opt-in record of when people worked (Tharga/Team#399). Always registered, like every store; nothing writes to it until the host turns
+        // ThargaBlazorOptions.WorkTime on. TryAdd so a host keeping it elsewhere wins.
+        services.AddTransient<IWorkDayCollection, WorkDayCollection>();
+        services.TrackMongoCollection(typeof(IWorkDayCollection), typeof(WorkDayCollection));
+        services.TryAddScoped<IWorkTimeStore, MongoWorkTimeStore>();
 
         // Automatic notices: occurrences until distributed, each user's notices and streams until mailed, and the
         // choices and team defaults that differ from a default. TryAdd so a host keeping them elsewhere wins.

@@ -335,6 +335,9 @@ public record ThargaBlazorOptions : BlazorOptions
     /// <summary>Settings for server-side sessions (Tharga/Team#471). Nothing here matters until an <see cref="ISessionPolicy"/> is registered.</summary>
     public SessionOptions Sessions { get; set; } = new();
 
+    /// <summary>The opt-in record of when people worked (Tharga/Team#399). Off by default.</summary>
+    public WorkTimeOptions WorkTime { get; set; } = new();
+
     /// <summary>
     /// How often a stored change to the site's <see cref="IconSettings"/> is picked up by an instance that did
     /// not make it. Default 15 minutes; <see cref="TimeSpan.Zero"/> or less loads once at startup and never
