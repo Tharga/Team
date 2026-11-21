@@ -1,12 +1,13 @@
-// Whether somebody is at work on the support desk: the page is the visible tab and they are using it.
-// Reported at most once per interval, so a busy page costs a call a minute rather than one per keystroke.
+// Whether somebody is using the page: it is the visible tab and they are touching it (Tharga/Team#399). The one browser signal that last seen, the support
+// desk's presence and any record of work time are read from. Reported at most once per interval, so a busy page costs a call a minute rather than one per
+// keystroke, and the first use after the page opens is reported at once. Nothing is kept in the browser.
 const watching = new Map();
 const used = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'focus'];
 
 export function watchActivity(id, reference, intervalMs) {
     stopWatching(id);
 
-    let last = Date.now();
+    let last = 0;
     const report = () => {
         if (document.visibilityState !== 'visible') return;
 

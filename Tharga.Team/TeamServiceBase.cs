@@ -915,6 +915,24 @@ public abstract class TeamServiceBase : ITeamService
         await _cache.RemoveMemberAsync(teamKey, user.Key);
     }
 
+    public async Task SetOwnMemberLastSeenAsync(string teamKey, DateTime lastActive)
+    {
+        if (LastSeenStampInterval == null || string.IsNullOrEmpty(teamKey)) return;
+
+        var user = await GetCurrentUserAsync();
+        if (user == null) return;
+
+        await SetTeamMemberLastSeenAsync(teamKey, user.Key, lastActive);
+        await _cache.RemoveMemberAsync(teamKey, user.Key);
+    }
+
+    /// <summary>
+    /// Stamps the member's last seen at <paramref name="lastSeen"/>, which a store should only ever move forward. The default stamps now through
+    /// <see cref="SetTeamMemberLastSeenAsync(string,string)"/>, so a store that has not taken the time still records activity, a little late.
+    /// </summary>
+    protected virtual Task SetTeamMemberLastSeenAsync(string teamKey, string userKey, DateTime lastSeen)
+        => SetTeamMemberLastSeenAsync(teamKey, userKey);
+
     /// <summary>
     /// Backs <see cref="RemoveUserFromAllTeamsAsync"/>. Virtual rather than abstract so existing derived
     /// services keep compiling; the default throws rather than returning 0, since a silent no-op on a

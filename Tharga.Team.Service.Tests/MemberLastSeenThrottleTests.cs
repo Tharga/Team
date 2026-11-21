@@ -116,3 +116,84 @@ public class MemberLastSeenThrottleTests
         Assert.Empty(sut.LastSeenStamps);
     }
 }
+
+/// <summary>
+/// The browser's activity signal names when a member was last active, and the write is not throttled, since the signal has already summed a slot into one call
+/// (Tharga/Team#399).
+/// </summary>
+public class MemberLastActiveTests
+{
+    private static (TestTeamService Sut, string TeamKey) Build(TimeSpan? interval = null, string userKey = "u1")
+    {
+        var userService = Substitute.For<IUserService>();
+        var user = Substitute.For<IUser>();
+        user.Key.Returns(userKey);
+        userService.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns(user);
+
+        return (new TestTeamService(userService) { StampInterval = interval ?? TimeSpan.FromMinutes(15) }, $"team-{Guid.NewGuid():N}");
+    }
+
+    [Fact]
+    public async Task TheTimeTheSignalNames_IsWhatIsWritten_ForTheCaller()
+    {
+        var (sut, team) = Build();
+        var lastActive = new DateTime(2026, 11, 21, 9, 7, 0, DateTimeKind.Utc);
+
+        await sut.SetOwnMemberLastSeenAsync(team, lastActive);
+
+        Assert.Equal([(team, "u1", lastActive)], sut.LastSeenAtStamps);
+    }
+
+    [Fact]
+    public async Task EveryCall_IsWritten_NotThrottled()
+    {
+        var (sut, team) = Build();
+
+        await sut.SetOwnMemberLastSeenAsync(team, new DateTime(2026, 11, 21, 9, 0, 0, DateTimeKind.Utc));
+        await sut.SetOwnMemberLastSeenAsync(team, new DateTime(2026, 11, 21, 9, 15, 0, DateTimeKind.Utc));
+
+        Assert.Equal(2, sut.LastSeenAtStamps.Count);
+    }
+
+    [Fact]
+    public async Task WithStampingTurnedOff_NothingIsWritten()
+    {
+        var userService = Substitute.For<IUserService>();
+        var sut = new TestTeamService(userService) { StampInterval = null };
+
+        await sut.SetOwnMemberLastSeenAsync("team-x", DateTime.UtcNow);
+
+        Assert.Empty(sut.LastSeenAtStamps);
+    }
+
+    [Fact]
+    public async Task WithNoTeam_NothingIsWritten()
+    {
+        var (sut, _) = Build();
+
+        await sut.SetOwnMemberLastSeenAsync(null, DateTime.UtcNow);
+
+        Assert.Empty(sut.LastSeenAtStamps);
+    }
+
+    /// <summary>A store that has not taken the time still records the activity, a little late, through the method it already implements.</summary>
+    [Fact]
+    public async Task AStoreThatHasNotTakenTheTime_StillRecordsTheActivity()
+    {
+        var userService = Substitute.For<IUserService>();
+        var user = Substitute.For<IUser>();
+        user.Key.Returns("u1");
+        userService.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>()).Returns(user);
+        var sut = new TestTeamServiceWithoutTime(userService);
+
+        await sut.SetOwnMemberLastSeenAsync("team-y", DateTime.UtcNow);
+
+        Assert.Equal([("team-y", "u1")], sut.LastSeenStamps);
+    }
+
+    private sealed class TestTeamServiceWithoutTime(IUserService userService) : TestTeamService(userService)
+    {
+        protected override Task SetTeamMemberLastSeenAsync(string teamKey, string userKey, DateTime lastSeen)
+            => SetTeamMemberLastSeenAsync(teamKey, userKey);
+    }
+}

@@ -135,6 +135,15 @@ internal class TestTeamService : TeamServiceBase
         return Task.CompletedTask;
     }
 
+    /// <summary>The times the activity signal named, so a test can tell the time written from when it was written.</summary>
+    public List<(string TeamKey, string UserKey, DateTime LastSeen)> LastSeenAtStamps { get; } = new();
+
+    protected override Task SetTeamMemberLastSeenAsync(string teamKey, string userKey, DateTime lastSeen)
+    {
+        LastSeenAtStamps.Add((teamKey, userKey, lastSeen));
+        return Task.CompletedTask;
+    }
+
     public int GetTeamMembersCallCount { get; private set; }
 
     protected override Task<ITeamMember> GetTeamMembersAsync(string teamKey, string userKey)

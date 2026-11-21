@@ -120,7 +120,7 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
     {
         var filter = LastSeenFilter(teamKey, userKey);
         var update = new UpdateDefinitionBuilder<TTeamEntity>()
-            .Set(x => x.Members.FirstMatchingElement().LastSeen, utcNow);
+            .Max(x => x.Members.FirstMatchingElement().LastSeen, utcNow);
 
         return UpdateMemberAsync(filter, update);
     }

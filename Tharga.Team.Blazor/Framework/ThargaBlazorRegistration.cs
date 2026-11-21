@@ -10,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Tharga.Team.Blazor.Features.Activity;
 using Microsoft.Extensions.Options;
 using Tharga.Blazor.Framework;
 using Tharga.Team;
@@ -81,6 +82,10 @@ public static class ThargaBlazorRegistration
         // participants afterwards. Private API keys are the first; they are cleaned up through
         // IApiKeyAdministrationService, so this covers a host's own key store too (Tharga/Team#323).
         services.TryAddScoped<TeamMemberRemovalCascade>();
+
+        // The one browser activity signal (Tharga/Team#399): per circuit, so it is the person on that circuit.
+        services.TryAddScoped<ActivityTracker>();
+        services.TryAddScoped<IActivitySignal>(sp => sp.GetRequiredService<ActivityTracker>());
         services.TryAddEnumerable(ServiceDescriptor.Transient<ITeamMemberRemovalParticipant, ApiKeyOwnerRemovalParticipant>());
 
         if (o._teamService != null)

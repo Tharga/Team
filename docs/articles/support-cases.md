@@ -2104,7 +2104,8 @@ customer the assistant could not answer, beside **Talk to a person**, rather tha
 - **The support desk.** Put `<SupportDeskStatus />` on the page support works from. Each support person picks
   **Automatic**, **Online**, **Away** or **Hidden** there; it starts at Automatic the first time they open it, and keeps
   their choice in the browser after that. Automatic counts as online only while they are active: answering a case,
-  writing an answer, or using that page, which reports at most once a minute. After `o.StaffIdleAfter` with nothing done,
+  writing an answer, or using the application, which the browser's one activity signal reports at most once a minute
+  (see [Last seen](user-management.md#last-seen)), so any page counts, not only this one. After `o.StaffIdleAfter` with nothing done,
   ten minutes by default, they count as away until they act again. **Online** counts as online for as long as it stands,
   active or not, for somebody who is at the desk reading rather than clicking; so that it does not say support is there
   long after the person left, it too lapses to away after `o.StaffOnlineLapseAfter` without activity, twenty minutes by

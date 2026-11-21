@@ -187,6 +187,15 @@ public interface ITeamService
     /// Throttled per team and user, so it is cheap to call on every resolve; a no-op for a non-member.
     /// </summary>
     Task SetMemberLastSeenAsync(string teamKey);
+
+    /// <summary>
+    /// Records that the current user was last active in <paramref name="teamKey"/> at <paramref name="lastActive"/>
+    /// (<see cref="ITeamMember.LastSeen"/>), as the browser's activity signal reports it (Tharga/Team#399). Unlike
+    /// <see cref="SetMemberLastSeenAsync"/> it is not throttled, since the signal has already summed a slot into one call, and it only ever moves
+    /// the value forward. A no-op for a non-member. The default is a no-op, so a host implementing this contract keeps compiling.
+    /// </summary>
+    Task SetOwnMemberLastSeenAsync(string teamKey, DateTime lastActive) => Task.CompletedTask;
+
     Task TransferOwnershipAsync<TMember>(string teamKey, string newOwnerUserKey) where TMember : ITeamMember;
 
     /// <summary>

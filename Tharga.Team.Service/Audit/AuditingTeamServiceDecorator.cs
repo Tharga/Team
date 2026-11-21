@@ -60,6 +60,7 @@ public class AuditingTeamServiceDecorator : ITeamService
 
     public IAsyncEnumerable<ITeam<TMember>> GetAllTeamsAsync<TMember>() where TMember : ITeamMember => _inner.GetAllTeamsAsync<TMember>();
     public Task SetMemberLastSeenAsync(string teamKey) => _inner.SetMemberLastSeenAsync(teamKey);
+    public Task SetOwnMemberLastSeenAsync(string teamKey, DateTime lastActive) => _inner.SetOwnMemberLastSeenAsync(teamKey, lastActive);
     public Task<IReadOnlyList<TenantRoleDefinition>> GetTeamCustomRolesAsync(string teamKey) => _inner.GetTeamCustomRolesAsync(teamKey);
 
     // Mutation operations — log audit entries

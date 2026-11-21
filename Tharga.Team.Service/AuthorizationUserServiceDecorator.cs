@@ -101,6 +101,9 @@ public sealed class AuthorizationUserServiceDecorator : IUserService
         await _inner.SetUserLastSeenAsync(userKey, lastSeen);
     }
 
+    // The caller's own activity: no user is named, so nothing to authorise.
+    public Task SetOwnLastSeenAsync(DateTime lastActive) => _inner.SetOwnLastSeenAsync(lastActive);
+
     public async Task SetUserDirectoryIdAsync(string userKey, string directoryId)
     {
         await RequireUsersManageAsync(nameof(SetUserDirectoryIdAsync));

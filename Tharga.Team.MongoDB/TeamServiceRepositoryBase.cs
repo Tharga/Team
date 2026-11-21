@@ -245,6 +245,11 @@ public abstract class TeamServiceRepositoryBase<TTeamEntity, TMember> : TeamServ
         return _teamRepository.SetLastSeenAsync(teamKey, userKey, DateTime.UtcNow);
     }
 
+    protected override Task SetTeamMemberLastSeenAsync(string teamKey, string userKey, DateTime lastSeen)
+    {
+        return _teamRepository.SetLastSeenAsync(teamKey, userKey, lastSeen);
+    }
+
     protected override async Task<ITeamMember> GetTeamMembersAsync(string teamKey, string userKey)
     {
         var team = await _teamRepository.GetTeamsByUserAsync(userKey).FirstOrDefaultAsync(x => x.Key == teamKey);

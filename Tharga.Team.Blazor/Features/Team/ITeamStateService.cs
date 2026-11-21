@@ -69,6 +69,16 @@ public interface ITeamStateService
     Task SetSelectedTeamAsync(ITeam selectedTeam);
 
     /// <summary>
+    /// Records that the caller was last active in <paramref name="teamKey"/> at <paramref name="lastActive"/>, as the browser's activity signal
+    /// reports it (Tharga/Team#399). The caller is resolved on the server, and only their own membership is written.
+    /// </summary>
+    /// <remarks>
+    /// Here, not on the signal, because this is the one surface allowed to reach the team service for the caller's own stamp. A default interface
+    /// method, so a host with its own <see cref="ITeamStateService"/> keeps compiling; the default records nothing.
+    /// </remarks>
+    Task SetOwnMemberLastSeenAsync(string teamKey, DateTime lastActive) => Task.CompletedTask;
+
+    /// <summary>
     /// Records the selection, optionally without the page reload that normally follows it.
     /// </summary>
     /// <param name="selectedTeam">The team to select.</param>

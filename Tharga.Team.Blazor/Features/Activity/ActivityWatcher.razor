@@ -1,0 +1,71 @@
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject IJSRuntime JsRuntime
+@inject IServiceProvider Services
+
+@* Watches the page for use and reports it to the circuit's activity signal (Tharga/Team#399). Renders nothing. The sign-in menu and the support desk's
+   status each include it, and only the first one on a circuit watches. *@
+
+@code {
+    private const string ModulePath = "./_content/Tharga.Team.Blazor/activity.js";
+    private static readonly TimeSpan Interval = TimeSpan.FromMinutes(1);
+
+    private readonly string _id = Guid.NewGuid().ToString("N");
+    private ActivityTracker _tracker;
+    private bool _attached;
+    private IJSObjectReference _module;
+    private DotNetObjectReference<ActivityWatcher> _self;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _tracker = Services.GetService(typeof(ActivityTracker)) as ActivityTracker;
+        if (_tracker == null || !_tracker.TryAttach()) return;
+        _attached = true;
+
+        try
+        {
+            _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            _self = DotNetObjectReference.Create(this);
+            await _module.InvokeVoidAsync("watchActivity", _id, _self, (int)Interval.TotalMilliseconds);
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+            // Without it nothing reports use, and last seen falls back to when the person arrived.
+        }
+    }
+
+    /// <summary>Somebody used the page while it was in front of them.</summary>
+    [JSInvokable]
+    public async Task OnActivity()
+    {
+        try
+        {
+            await _tracker.ReportAsync();
+        }
+        catch (Exception)
+        {
+            // Advisory: a report that does not arrive is caught up by the next one.
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_attached) _tracker?.Detach();
+
+        if (_module != null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("stopWatching", _id);
+                await _module.DisposeAsync();
+            }
+            catch (Exception exception) when (exception is JSException or JSDisconnectedException)
+            {
+            }
+        }
+
+        _self?.Dispose();
+    }
+}

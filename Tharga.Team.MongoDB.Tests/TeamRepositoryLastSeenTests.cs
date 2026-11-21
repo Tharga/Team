@@ -21,11 +21,12 @@ public class TeamRepositoryLastSeenTests
         => new(BsonSerializer.LookupSerializer<TestTeamEntity>(), BsonSerializer.SerializerRegistry);
 
     [Fact]
-    public async Task TheStamp_SetsOnlyThatMembersLastSeen()
+    public async Task TheStamp_MovesOnlyThatMembersLastSeenForward()
     {
         var (_, update, _) = await StampAsync();
 
-        var expected = new BsonDocument("$set", new BsonDocument("Members.$.LastSeen", Now));
+        // $max, not $set: the signal is written by several tabs and instances, and an older time must never win (Tharga/Team#399).
+        var expected = new BsonDocument("$max", new BsonDocument("Members.$.LastSeen", Now));
         Assert.Equal(expected, update);
     }
 
