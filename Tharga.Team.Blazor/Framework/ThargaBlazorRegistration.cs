@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Tharga.Team.Blazor.Features.Activity;
+using Tharga.Team.WorkTime;
 using Microsoft.Extensions.Options;
 using Tharga.Blazor.Framework;
 using Tharga.Team;
@@ -86,6 +87,10 @@ public static class ThargaBlazorRegistration
         // The one browser activity signal (Tharga/Team#399): per circuit, so it is the person on that circuit.
         services.TryAddScoped<ActivityTracker>();
         services.TryAddScoped<IActivitySignal>(sp => sp.GetRequiredService<ActivityTracker>());
+
+        // The caller's own work time, opt-in through ThargaBlazorOptions.WorkTime. Registered always, like the stores; it reads nothing the host has not recorded.
+        // A host with no IWorkTimeStore gets a clear failure on first use rather than a missing service at start-up.
+        services.TryAddScoped<IWorkTimeService, WorkTimeService>();
         services.TryAddEnumerable(ServiceDescriptor.Transient<ITeamMemberRemovalParticipant, ApiKeyOwnerRemovalParticipant>());
 
         if (o._teamService != null)
