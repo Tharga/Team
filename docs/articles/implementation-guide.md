@@ -1676,7 +1676,8 @@ administer system keys, not how much they may give, so creating a system key, or
 | A scope that is not a registered system scope | Refused for everybody, `apikeys:oversee` holders included |
 | A scope the caller does not hold as a system scope | Refused, naming the scopes the caller lacks. Holders of `apikeys:oversee` may grant any registered scope |
 | Changing a key that holds a scope the caller does not | Refused, even to a smaller set or to none: a key above you is not yours to lower |
-| Changing a personal key | Its owner, or an `apikeys:oversee` holder, as for refresh, lock, disable and delete |
+| Refreshing, locking, disabling or deleting a key that holds a scope the caller does not | Refused, as changing its scopes is. Who may touch a personal key is decided first, so a refusal says nothing of another person's key |
+| Changing a personal key | Its owner, or an `apikeys:oversee` holder, as for refresh, lock, disable and delete. The owner is held to the rows above too |
 
 **A key's scopes can be changed after it is created**, which used to mean deleting it and creating another, changing its value and breaking
 every client that used it. `ISystemApiKeyManagementService.SetSystemKeyScopesAsync(key, scopes)` replaces the scope set and leaves the key's value,
