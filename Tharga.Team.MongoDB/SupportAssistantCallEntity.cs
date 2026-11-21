@@ -13,4 +13,8 @@ public record SupportAssistantCallEntity
     /// <summary>Whether the call returned without failing. Absent when not known, and on every call kept before this existed.</summary>
     [BsonIgnoreIfNull]
     public bool? Succeeded { get; init; }
+
+    /// <summary>What the tool handed back, when the host chose to keep it. Absent otherwise, and on every call kept before this existed.</summary>
+    [BsonIgnoreIfNull]
+    public string Result { get; init; }
 }

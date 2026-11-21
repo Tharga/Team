@@ -1981,6 +1981,19 @@ them under the answer, folded as **2 service calls · 830 tokens**, opening to a
   only whoever reads the case from the support side; or `Nobody`. They are kept either way.
 - **A responder of your own** lists its calls and tokens by returning them on `SupportAnswer.Calls` and
   `SupportAnswer.Usage`.
+- **What each tool returned can be kept too**, as `SupportAssistantCall.Result`, so a stored conversation shows what the
+  assistant was told as well as what it asked. When an answer is wrong, that is what tells a tool that returned the wrong
+  thing from a model that misread a right one. It is **off by default**, because a result can hold the tenant's own data:
+
+  ```csharp
+  o.Assistant.StoreCallResults = true;
+  o.Assistant.MaxStoredCallResultLength = 2000;   // the default; a longer result is cut and ends with "… [cut]"
+  ```
+
+  With it off nothing is stored, whatever a responder of your own puts in `Result`; with it on, the built-in responder fills it
+  with the text the tool returned (a string as it is, anything else as JSON) and a responder of your own passes it on the
+  call. The result is **never shown in the panel** and **never part of the rated-conversation feedback**, which names the tools and
+  nothing they returned. A message kept before this existed reads back with an empty result.
 
 ### What the assistant used, per team
 
