@@ -1348,6 +1348,9 @@ When one is found:
 
 - The case records it as `InReplyToMailId`.
 - When the reply has no subject of its own, the case takes the subject of the mail it answers.
+- When the sender is verified and a member of several teams, the team the mail was about (its `TeamKey` in the mail log) settles which
+  of them the case opens in. It is only looked for among the sender's own teams and never places an unverified sender, an address
+  several accounts hold, or anybody the sender checks would not place; a team the sender is not in changes nothing.
 - Staff see **In reply to:** above the first message, with the subject, when it was sent and to whom, and a button to
   read the mail.
 
