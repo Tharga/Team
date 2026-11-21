@@ -1679,6 +1679,11 @@ administer system keys, not how much they may give, so creating a system key, or
 | Refreshing, locking, disabling or deleting a key that holds a scope the caller does not | Refused, as changing its scopes is. Who may touch a personal key is decided first, so a refusal says nothing of another person's key |
 | Changing a personal key | Its owner, or an `apikeys:oversee` holder, as for refresh, lock, disable and delete. The owner is held to the rows above too |
 
+**`SystemApiKeyView` does not offer what the service will refuse.** A scope the caller does not hold is shown in the pickers but cannot be ticked, with a
+tooltip saying why, and a key that holds a scope the caller does not has no Edit scopes, Lock, Refresh, Disable or Delete in its row menu; the actions button's
+tooltip names the scopes missing. Copy, show and the audit log are not changes and stay. The service remains the guard. A host that wants the same answer
+for its own UI calls `SystemGrantRule.Missing(user, scopes)`, which the service uses too.
+
 **A key's scopes can be changed after it is created**, which used to mean deleting it and creating another, changing its value and breaking
 every client that used it. `ISystemApiKeyManagementService.SetSystemKeyScopesAsync(key, scopes)` replaces the scope set and leaves the key's value,
 name, expiry and owner as they are. `SystemApiKeyView` offers it as **Edit scopes** in a row's menu while `ShowScopeOverrides` is on, in the picker the

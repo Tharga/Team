@@ -1,8 +1,10 @@
-﻿@using Microsoft.Extensions.DependencyInjection
+﻿@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
 @using Tharga.Team
 @using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Service
 @inject IOptions<ApiKeyOptions> ApiKeyOptionsAccessor
 @inject IServiceProvider ServiceProvider
 @inject IJSRuntime Js
@@ -10,6 +12,7 @@
 @inject NotificationService NotificationService
 @inject ContextMenuService ContextMenuService
 @inject IThargaTextProvider TextProvider
+@inject AuthenticationStateProvider AuthStateProvider
 
 <AuthorizeView Roles="@Roles.Developer" Context="authState">
     <Authorized>
@@ -78,7 +81,7 @@
                     <RadzenDataGridColumn Width="56px" TextAlign="TextAlign.Right">
                         <Template>
                             <RadzenButton Icon="more_vert" Variant="Variant.Flat" ButtonStyle="ButtonStyle.Base"
-                                          Click="@(args => OpenRowMenu(args, context))" title="@_text[ApiKeyViewText.Actions]" />
+                                          Click="@(args => OpenRowMenu(args, context))" title="@(WholeKeyRefusal(context) ?? _text[ApiKeyViewText.Actions])" />
                         </Template>
                     </RadzenDataGridColumn>
                 </Columns>
@@ -101,9 +104,10 @@
                                             AllowClear="true"
                                             AllowFiltering="true"
                                             FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
-                                            Placeholder="@_text[SystemApiKeyViewText.SelectScopes]">
+                                            Placeholder="@_text[SystemApiKeyViewText.SelectScopes]"
+                                            ItemRender="@(args => args.Disabled = _notGrantable.Contains((string)args.Item))">
                                 <Template>
-                                    <span title="@(_scopeDescriptions.TryGetValue((string)context, out var d) ? d : null)">@context</span>
+                                    <span title="@ScopeTooltip((string)context)">@context</span>
                                 </Template>
                             </RadzenDropDown>
                         </RadzenStack>
@@ -190,6 +194,11 @@
     private ISystemScopeRegistry _systemScopeRegistry;
     private SystemApiKeyModel[] _keys;
     private string[] _allScopes = [];
+    private System.Security.Claims.ClaimsPrincipal _caller;
+
+    /// <summary>The registered scopes the caller does not hold, so cannot hand out. The service refuses them; the picker only does not offer them.</summary>
+    private HashSet<string> _notGrantable = [];
+
     private IReadOnlyDictionary<string, string> _scopeDescriptions = new Dictionary<string, string>();
     private readonly string _apiKeyMask = "**********";
 
@@ -212,6 +221,9 @@
         _systemScopeRegistry = ServiceProvider.GetService<ISystemScopeRegistry>();
         _allScopes = _systemScopeRegistry?.All.Select(s => s.Name).ToArray() ?? [];
         _scopeDescriptions = _systemScopeRegistry?.All.ToDictionary(s => s.Name, s => s.Description) ?? new Dictionary<string, string>();
+
+        _caller = (await AuthStateProvider.GetAuthenticationStateAsync()).User;
+        _notGrantable = _allScopes.Where(s => !SystemGrantRule.Holds(_caller, [s])).ToHashSet(StringComparer.Ordinal);
 
         await ReloadData();
         await base.OnInitializedAsync();
@@ -285,22 +297,45 @@
             new DialogOptions { Width = "640px", CloseDialogOnOverlayClick = false });
     }
 
+    /// <summary>
+    /// Why this row offers no change, or null when it does: the key holds scopes the caller does not, and the service refuses every act on a key as a whole
+    /// then (Tharga/Team#522). The service is the guard; this is so the menu does not offer what it will refuse. Copy, show and the audit log are not
+    /// changes, so they stay.
+    /// </summary>
+    private string WholeKeyRefusal(SystemApiKeyModel context)
+    {
+        var missing = SystemGrantRule.Missing(_caller, context.SystemScopes);
+        return missing.Length == 0 ? null : _text.Format(SystemApiKeyViewText.AboveYou, string.Join(", ", missing));
+    }
+
+    private string ScopeTooltip(string scope)
+    {
+        if (_notGrantable.Contains(scope)) return _text[SystemApiKeyViewText.NotHeld];
+        return _scopeDescriptions.TryGetValue(scope, out var description) ? description : null;
+    }
+
     private void OpenRowMenu(MouseEventArgs args, SystemApiKeyModel context)
     {
         var hasValue = !string.IsNullOrEmpty(context.ApiKey);
+        var mayChange = WholeKeyRefusal(context) == null;
 
         var items = new List<ContextMenuItem>();
         if (hasValue) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Copy], Icon = "content_copy", Value = "copy" });
         if (hasValue && context.VisibleKey == _apiKeyMask) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.ShowValue], Icon = "visibility", Value = "show" });
         if (hasValue && context.VisibleKey != _apiKeyMask) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.HideValue], Icon = "visibility_off", Value = "hide" });
         if (ShowAuditLogButton) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.AuditLog], Icon = "manage_search", Value = "audit" });
-        if (ShowScopeOverrides) items.Add(new ContextMenuItem { Text = _text[SystemApiKeyViewText.EditScopes], Icon = "tune", Value = "edit-scopes" });
-        if (hasValue) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Lock], Icon = "lock", Value = "lock" });
-        items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Refresh], Icon = "refresh", Value = "refresh" });
-        items.Add(context.IsDisabled
-            ? new ContextMenuItem { Text = _text[ApiKeyViewText.Enable], Icon = "play_circle", Value = "enable" }
-            : new ContextMenuItem { Text = _text[ApiKeyViewText.Disable], Icon = "block", IconColor = "var(--rz-danger)", Value = "disable" });
-        items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Delete], Icon = "delete", IconColor = "var(--rz-danger)", Value = "delete" });
+        if (mayChange)
+        {
+            if (ShowScopeOverrides) items.Add(new ContextMenuItem { Text = _text[SystemApiKeyViewText.EditScopes], Icon = "tune", Value = "edit-scopes" });
+            if (hasValue) items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Lock], Icon = "lock", Value = "lock" });
+            items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Refresh], Icon = "refresh", Value = "refresh" });
+            items.Add(context.IsDisabled
+                ? new ContextMenuItem { Text = _text[ApiKeyViewText.Enable], Icon = "play_circle", Value = "enable" }
+                : new ContextMenuItem { Text = _text[ApiKeyViewText.Disable], Icon = "block", IconColor = "var(--rz-danger)", Value = "disable" });
+            items.Add(new ContextMenuItem { Text = _text[ApiKeyViewText.Delete], Icon = "delete", IconColor = "var(--rz-danger)", Value = "delete" });
+        }
+
+        if (items.Count == 0) return;
 
         ContextMenuService.Open(args, items, async e =>
         {
@@ -373,6 +408,7 @@
             {
                 [nameof(SystemApiKeyScopesDialog.Scopes)] = context.SystemScopes ?? [],
                 [nameof(SystemApiKeyScopesDialog.AllScopes)] = _allScopes,
+                [nameof(SystemApiKeyScopesDialog.NotGrantable)] = _notGrantable,
                 [nameof(SystemApiKeyScopesDialog.Descriptions)] = _scopeDescriptions
             },
             new DialogOptions { Width = "520px", ShowClose = false });

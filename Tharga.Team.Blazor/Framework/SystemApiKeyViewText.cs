@@ -27,9 +27,15 @@ public static class SystemApiKeyViewText
 
     public static readonly TextKey Deleted = new("team.systemApiKeys.deleted", "System API key deleted");
 
+    /// <summary>Why a key's row offers no change: it holds scopes the caller does not. Shown as the tooltip of the row's actions button. <c>{0}</c> lists those scopes.</summary>
+    public static readonly TextKey AboveYou = new("team.systemApiKeys.aboveYou", "This key holds scopes you do not hold yourself ({0}), so it is not yours to change.");
+
+    /// <summary>The tooltip of a scope in the picker that the caller cannot grant, because they do not hold it themselves.</summary>
+    public static readonly TextKey NotHeld = new("team.systemApiKeys.notHeld", "You do not hold this scope yourself, so you cannot grant it.");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/> together with <see cref="ApiKeyViewText.All"/>.</summary>
     public static readonly TextKey[] All =
     [
-        AccessDenied, SelectScopes, Created, EditScopes, RevealTitle, ConfirmDisable, ConfirmDelete, Deleted
+        AccessDenied, SelectScopes, Created, EditScopes, RevealTitle, ConfirmDisable, ConfirmDelete, Deleted, AboveYou, NotHeld
     ];
 }

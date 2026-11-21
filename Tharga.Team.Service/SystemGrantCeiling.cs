@@ -52,12 +52,5 @@ internal sealed class SystemGrantCeiling(ISystemScopeRegistry registry)
             $"This key holds scopes you do not hold yourself ({string.Join(", ", missing)}), so it is not yours to change.");
     }
 
-    private static string[] MissingFor(ClaimsPrincipal caller, IEnumerable<string> scopes)
-    {
-        if (caller?.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee) == true) return [];
-
-        var held = (caller?.FindAll(TeamClaimTypes.SystemScope).Select(c => c.Value) ?? []).ToHashSet(StringComparer.Ordinal);
-
-        return (scopes ?? []).Where(s => !held.Contains(s)).Distinct().Order().ToArray();
-    }
+    private static string[] MissingFor(ClaimsPrincipal caller, IEnumerable<string> scopes) => SystemGrantRule.Missing(caller, scopes);
 }

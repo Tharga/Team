@@ -30,6 +30,7 @@ public class SystemApiKeyEditScopesTests : BunitContext
         var key = new Mock<IApiKey>();
         key.SetupGet(x => x.Key).Returns(id);
         key.SetupGet(x => x.Name).Returns(name);
+        key.SetupGet(x => x.ApiKey).Returns("secret"); // a key with a value, so that Lock is offered too
         key.SetupGet(x => x.SystemScopes).Returns(scopes);
         return key.Object;
     }
@@ -143,10 +144,117 @@ public class SystemApiKeyEditScopesTests : BunitContext
     private IRenderedComponent<RadzenDialog> Dialogs { get; set; }
     private IRenderedComponent<RadzenNotification> Notifications { get; set; }
 
-    private IRenderedComponent<SystemApiKeyView> RenderView(out Mock<ISystemApiKeyManagementService> keys, bool showScopeOverrides = true)
+    // --- what the view offers a caller who holds less than a key does (Tharga/Team#540, #541) ---
+
+    private static readonly string[] WholeKeyActions = ["Edit scopes", "Lock", "Refresh", "Disable", "Delete"];
+
+    /// <summary>The service refuses every act on a key that holds more than the caller does, so the menu does not offer them.</summary>
+    [Fact]
+    public void AKeyThatHoldsMoreThanTheCaller_OffersNoChange()
     {
+        var view = RenderView(out _, held: [Read], keyScopes: [Read, Manage]);
+
+        OpenMenu(view);
+
+        foreach (var action in WholeKeyActions) Assert.DoesNotContain(action, Menu.Markup);
+    }
+
+    /// <summary>A refusal that reveals nothing is not enough: the person is told why the row has no actions.</summary>
+    [Fact]
+    public void AKeyThatHoldsMoreThanTheCaller_SaysWhyOnItsActionsButton()
+    {
+        var view = RenderView(out _, held: [Read], keyScopes: [Read, Manage]);
+
+        var title = view.Find("button.rz-button").GetAttribute("title");
+
+        Assert.Contains(Manage, title);
+        Assert.DoesNotContain(Read + ",", title);
+    }
+
+    [Fact]
+    public void AKeyWithinWhatTheCallerHolds_OffersEveryChange()
+    {
+        var view = RenderView(out _, held: [Read, Manage], keyScopes: [Read]);
+
+        OpenMenu(view);
+
+        foreach (var action in WholeKeyActions) Assert.Contains(action, Menu.Markup);
+    }
+
+    [Fact]
+    public void AnOverseer_IsOfferedEveryChangeOnAnyKey()
+    {
+        var view = RenderView(out _, held: [SystemApiKeyScopes.Oversee], keyScopes: [Read, Manage]);
+
+        OpenMenu(view);
+
+        foreach (var action in WholeKeyActions) Assert.Contains(action, Menu.Markup);
+    }
+
+    [Fact]
+    public void AKeyWithNoScopes_IsOfferedEveryChange_ToACallerHoldingNothing()
+    {
+        var view = RenderView(out _, held: [], keyScopes: []);
+
+        OpenMenu(view);
+
+        foreach (var action in WholeKeyActions) Assert.Contains(action, Menu.Markup);
+    }
+
+    /// <summary>Copying and the audit log are not changes, so a key above the caller keeps them.</summary>
+    [Fact]
+    public void AKeyThatHoldsMoreThanTheCaller_KeepsWhatIsNotAChange()
+    {
+        var view = RenderView(out _, held: [Read], keyScopes: [Read, Manage], showAuditLogButton: true);
+
+        OpenMenu(view);
+
+        Assert.Contains("audit", Menu.Markup, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> DisabledOptions(IRenderedComponent<RadzenDropDown<IEnumerable<string>>> picker, IRenderedComponent<RadzenDropDown<IEnumerable<string>>> open = null)
+        => (open ?? picker).FindAll(".rz-dropdown-item.rz-state-disabled, .rz-multiselect-item.rz-state-disabled").Select(x => x.TextContent.Trim());
+
+    /// <summary>The picker lists every registered scope, but one the caller does not hold cannot be ticked, since the service would refuse it.</summary>
+    [Fact]
+    public void TheCreatePicker_DisablesScopesTheCallerDoesNotHold()
+    {
+        var view = RenderView(out _, held: [Read], keyScopes: [Read]);
+        var picker = view.FindComponent<RadzenDropDown<IEnumerable<string>>>();
+        picker.Find(".rz-dropdown").Click();
+
+        var disabled = DisabledOptions(picker).ToArray();
+
+        Assert.Equal([Manage], disabled);
+    }
+
+    [Fact]
+    public void TheCreatePicker_DisablesNothingForAnOverseer()
+    {
+        var view = RenderView(out _, held: [SystemApiKeyScopes.Oversee], keyScopes: [Read]);
+        var picker = view.FindComponent<RadzenDropDown<IEnumerable<string>>>();
+        picker.Find(".rz-dropdown").Click();
+
+        Assert.Empty(DisabledOptions(picker));
+    }
+
+    [Fact]
+    public async Task TheEditPicker_DisablesScopesTheCallerDoesNotHold()
+    {
+        var view = RenderView(out _, held: [Read], keyScopes: [Read]);
+        await OpenDialogAsync(view);
+        var picker = Dialogs.FindComponent<RadzenDropDown<IEnumerable<string>>>();
+        picker.Find(".rz-dropdown").Click();
+
+        Assert.Equal([Manage], DisabledOptions(picker));
+    }
+
+    private IRenderedComponent<SystemApiKeyView> RenderView(out Mock<ISystemApiKeyManagementService> keys, bool showScopeOverrides = true, string[] held = null, string[] keyScopes = null, bool showAuditLogButton = false)
+    {
+        held ??= [Read, Manage];
+        keyScopes ??= [Read];
         keys = _keys;
-        _keys.Setup(x => x.GetSystemKeysAsync(It.IsAny<PrivateKeyScope>())).Returns(() => Async(Key("k1", "Integration", Read)));
+        _keys.Setup(x => x.GetSystemKeysAsync(It.IsAny<PrivateKeyScope>())).Returns(() => Async(Key("k1", "Integration", keyScopes)));
 
         var registry = new SystemScopeRegistry();
         registry.Register(Read, "Read cases");
@@ -162,6 +270,7 @@ public class SystemApiKeyEditScopesTests : BunitContext
         var authorization = this.AddAuthorization();
         authorization.SetAuthorized("alice");
         authorization.SetRoles(Roles.Developer);
+        authorization.SetClaims(held.Select(s => new System.Security.Claims.Claim(TeamClaimTypes.SystemScope, s)).ToArray());
 
         SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
@@ -169,7 +278,7 @@ public class SystemApiKeyEditScopesTests : BunitContext
         Dialogs = Render<RadzenDialog>();
         Notifications = Render<RadzenNotification>();
 
-        return Render<SystemApiKeyView>(p => p.Add(x => x.ShowScopeOverrides, showScopeOverrides));
+        return Render<SystemApiKeyView>(p => p.Add(x => x.ShowScopeOverrides, showScopeOverrides).Add(x => x.ShowAuditLogButton, showAuditLogButton));
     }
 
     private void OpenMenu(IRenderedComponent<SystemApiKeyView> view)
