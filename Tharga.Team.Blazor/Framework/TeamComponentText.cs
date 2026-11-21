@@ -142,6 +142,9 @@ public static class TeamComponentText
 
     public static readonly TextKey ActionCopyInviteLink = new("team.component.actionCopyInviteLink", "Copy invitation link");
     public static readonly TextKey ActionAuditLog = new("team.component.actionAuditLog", "Audit log");
+
+    /// <summary>The member row action that opens the audit log on what was done to this member in this team, rather than on what they did.</summary>
+    public static readonly TextKey ActionAuditSubject = new("team.component.actionAuditSubject", "Audit log: done to this member");
     public static readonly TextKey ActionRestoreAccess = new("team.component.actionRestoreAccess", "Restore access");
     public static readonly TextKey ActionSuspendAccess = new("team.component.actionSuspendAccess", "Suspend access");
     public static readonly TextKey ActionRemoveMember = new("team.component.actionRemoveMember", "Remove member");
@@ -155,6 +158,9 @@ public static class TeamComponentText
     /// <summary><c>{0}</c> identifies the member.</summary>
     public static readonly TextKey AuditLogTitle = new("team.component.auditLogTitle", "Audit log — {0}");
 
+    /// <summary><c>{0}</c> is the member's name.</summary>
+    public static readonly TextKey AuditSubjectTitle = new("team.component.auditSubjectTitle", "Done to — {0}");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
@@ -166,8 +172,8 @@ public static class TeamComponentText
         EditDisplayName, ColumnAccessLevel, ColumnRoles, ColumnScopeOverrides, ColumnScopes, ColumnStatus,
         InvitedAt, Suspended, ColumnLastSeen, NotAMember, NotAMemberTooltip, ConsentTooltip, NoAccess, NoAccessLevel,
         ConsentAccessFor, ConfirmDeleteTeam, ConfirmSuspendTitle, ConfirmSuspendDetail, CouldNotSuspend,
-        CouldNotRestore, SuspendedTooltip, SuspendedByTooltip, ActionCopyInviteLink, ActionAuditLog,
+        CouldNotRestore, SuspendedTooltip, SuspendedByTooltip, ActionCopyInviteLink, ActionAuditLog, ActionAuditSubject,
         ActionRestoreAccess, ActionSuspendAccess, ActionRemoveMember, ActionInviteUser, ActionSetIcon,
-        ActionTransferOwnership, ActionLeaveTeam, ActionDeleteTeam, ActionRenameTeam, AuditLogTitle, HideNoAccessTeams, ShowAllTeams
+        ActionTransferOwnership, ActionLeaveTeam, ActionDeleteTeam, ActionRenameTeam, AuditLogTitle, AuditSubjectTitle, HideNoAccessTeams, ShowAllTeams
     ];
 }

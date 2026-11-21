@@ -97,6 +97,7 @@ else if (_loaded)
                                 @if (ShowAuditLogButton)
                                 {
                                     <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionAuditLog]" Value="@AuditAction" Icon="manage_search" />
+                                    <RadzenSplitButtonItem Text="@_text[TeamsListViewText.ActionAuditSubject]" Value="@AuditSubjectAction" Icon="manage_search" />
                                 }
                                 @TeamActionItems
                                 @if (_canManageTeams)
@@ -327,6 +328,7 @@ else
     }
 
     private const string AuditAction = "audit";
+    private const string AuditSubjectAction = "audit-subject";
     private const string DeleteAction = "delete";
     private const string SetOwnerAction = "set-owner";
     private const string RenameAction = "rename";
@@ -345,6 +347,9 @@ else
                 break;
             case AuditAction:
                 await OpenAuditLogAsync(team);
+                break;
+            case AuditSubjectAction:
+                await OpenAuditSubjectAsync(team);
                 break;
             case DeleteAction:
                 await DeleteTeamAsync(team);
@@ -379,6 +384,19 @@ else
         var pinned = new Audit.AuditPinnedFilter { TeamKey = team.Key };
 
         await DialogService.OpenAsync(_text.Format(TeamsListViewText.AuditLogTitle, team.Name), _ =>
+            @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
+            new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
+    }
+
+    /// <summary>
+    /// The audit log of what was done to this team itself, such as a rename, an ownership transfer or a deletion, rather than everything that happened in it
+    /// (Tharga/Team#404).
+    /// </summary>
+    private async Task OpenAuditSubjectAsync(TeamViewModel team)
+    {
+        var pinned = new Audit.AuditPinnedFilter { TargetKind = Tharga.Team.Service.Audit.AuditTargetKinds.Team, TargetKey = team.Key };
+
+        await DialogService.OpenAsync(_text.Format(TeamsListViewText.AuditSubjectTitle, team.Name), _ =>
             @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
             new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
     }

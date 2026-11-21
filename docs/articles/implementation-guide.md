@@ -3231,7 +3231,7 @@ second grid beside the first:
 
 Raw columns rather than a per-row template, so an added column carries its own header, width and sorting.
 
-**Five action values are the component's own** — `copy-invite`, `remove-member`, `member-audit`,
+**Six action values are the component's own** — `copy-invite`, `remove-member`, `member-audit`, `member-audit-subject`,
 `suspend-member`, `restore-member`. An item using one of those is handled as that built-in rather than
 forwarded, so pick something else; matching is exact, so a prefix or a different casing is yours.
 
@@ -3417,6 +3417,11 @@ The fields above say **who acted**. Two more say **what it was done to**, so "wh
 - **Query it** with `AuditQuery.TargetKind` and `AuditQuery.TargetKey` (exact match), or pin `AuditLogView` to one with `AuditPinnedFilter { TargetKind = AuditTargetKinds.User, TargetKey = user.Key }`. The CSV export gains `TargetKind` and `TargetKey` as its last two columns.
 - **Your own entries** carry a target with `entry with { TargetKind = AuditTargetKinds.User, TargetKey = userKey }`. A kind needs a key and a key needs a kind; one alone is dropped. A custom `IAuditLogger` that filters in its own store has to honour the two new query fields itself, or its answers will ignore them.
 - **Stored sparsely**, with an index on kind, key and time, so entries without a target cost nothing.
+- **In the view**, `AuditLogView` has a **Done to** filter (the kind, and the key typed in) that hides itself where the host pinned the target, and an
+  entry's expanded detail says what it was done to. Entries written before targets were recorded have none, so naming either leaves them out.
+- **From the lists**, `UsersListView` and `TeamsListView` offer **Audit log: done to this user / team** beside the existing audit action, and a member's
+  row in the team view offers **Audit log: done to this member**, confined to that team as well. That one is a sixth built-in member action,
+  `member-audit-subject`; see *Six action values are the component's own* below.
 
 `CallerType` and `CallerSource` say what kind of actor it was:
 

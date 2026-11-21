@@ -87,6 +87,10 @@ public partial class AuditLogView : ComponentBase
     private IEnumerable<string> _filterActions = Enumerable.Empty<string>();
     private IEnumerable<AuditEventType> _filterEventTypes = Enumerable.Empty<AuditEventType>();
     private IEnumerable<bool> _filterSuccess = Enumerable.Empty<bool>();
+
+    /// <summary>What an operation was done to: the kind (one of <see cref="AuditTargetKinds"/>, or null for any) and the key, typed. Neither shows when the host pinned it.</summary>
+    internal string _filterTargetKind;
+    internal string _filterTargetKey = "";
     private string _timeGrouping = "hourly";
 
     /// <summary>Scopes the host hid on open. The toggle below reveals them; it is not rendered when this is empty.</summary>
@@ -316,6 +320,16 @@ public partial class AuditLogView : ComponentBase
         }
     }
 
+    /// <summary>The kinds the filter offers. A host's own kind is still shown in an entry's detail, by its name.</summary>
+    private KeyValuePair<string, string>[] TargetKindOptions =>
+    [
+        new(AuditTargetKinds.User, _text[AuditLogViewText.TargetUser]),
+        new(AuditTargetKinds.Team, _text[AuditLogViewText.TargetTeam]),
+        new(AuditTargetKinds.ApiKey, _text[AuditLogViewText.TargetApiKey])
+    ];
+
+    internal string TargetKindLabel(string kind) => TargetKindOptions.FirstOrDefault(x => x.Key == kind) is { Key: not null } known ? known.Value : kind;
+
     private async Task OnFilterChanged()
     {
         if (_grid != null)
@@ -365,7 +379,7 @@ public partial class AuditLogView : ComponentBase
         }
     }
 
-    private AuditQuery BuildQuery(int skip = 0, int take = 0, string orderBy = null, IEnumerable<FilterDescriptor> filters = null)
+    internal AuditQuery BuildQuery(int skip = 0, int take = 0, string orderBy = null, IEnumerable<FilterDescriptor> filters = null)
     {
         // Extract in-grid filter values
         string callerFilter = null;
@@ -437,6 +451,8 @@ public partial class AuditLogView : ComponentBase
             CallerType = RestrictCallerType,
             CallerIdentity = callerFilter,
             MethodName = methodFilter,
+            TargetKind = string.IsNullOrWhiteSpace(_filterTargetKind) ? null : _filterTargetKind,
+            TargetKey = string.IsNullOrWhiteSpace(_filterTargetKey) ? null : _filterTargetKey.Trim(),
             Success = success,
             From = from,
             To = to,

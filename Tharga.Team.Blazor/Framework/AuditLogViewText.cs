@@ -92,6 +92,20 @@ public static class AuditLogViewText
     public static readonly TextKey DetailEmpty = new("team.auditLogView.detailEmpty", "(empty)");
     public static readonly TextKey NoAdditionalDetails = new("team.auditLogView.noAdditionalDetails", "No additional details.");
 
+    /// <summary>The filter on what an operation was done to: the kind of thing and its key.</summary>
+    public static readonly TextKey DoneTo = new("team.auditLogView.doneTo", "Done to");
+
+    public static readonly TextKey DoneToKey = new("team.auditLogView.doneToKey", "Key of what it was done to");
+
+    public static readonly TextKey TargetUser = new("team.auditLogView.targetUser", "User");
+
+    public static readonly TextKey TargetTeam = new("team.auditLogView.targetTeam", "Team");
+
+    public static readonly TextKey TargetApiKey = new("team.auditLogView.targetApiKey", "API key");
+
+    /// <summary>The detail row of an entry that was done to something: <c>{0}</c> is the kind (user, team, API key); its key follows, set apart.</summary>
+    public static readonly TextKey DetailDoneTo = new("team.auditLogView.detailDoneTo", "Done to {0}:");
+
     /// <summary>Placeholders: the entry count, then the retention sentence (which may be empty).</summary>
     public static readonly TextKey TotalEntries = new("team.auditLogView.totalEntries", "{0} total entries. {1}");
 
@@ -141,7 +155,7 @@ public static class AuditLogViewText
         ColumnTime, ColumnCaller, ColumnScope, ColumnOperation, OperationNotScopeChecked,
         ShowHiddenEntries, HiddenScopes,
         ColumnMethod, ColumnDuration, ColumnFeature, ColumnAction, ColumnDurationMs,
-        DetailName, DetailValue, DetailEmpty, NoAdditionalDetails, TotalEntries,
+        DetailName, DetailValue, DetailEmpty, NoAdditionalDetails, DoneTo, DoneToKey, TargetUser, TargetTeam, TargetApiKey, DetailDoneTo, TotalEntries,
         ChartCallsOverTime, GroupingHourly, GroupingDaily, AxisCount, SeriesCalls,
         ChartSuccessVsFailure, SeriesStatus, ChartByFeature, ChartTopCallers, NoDataForFilters,
         ChartAverageResponseTime, ChartResponseTimeByFeature, ChartSlowestOperations, SeriesAverageMs,

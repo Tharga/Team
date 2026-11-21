@@ -110,6 +110,21 @@ else
                                         Placeholder="@_text[AuditLogViewText.FilterAll]" Change="@(_ => OnFilterChanged())"
                                         Style="width: 200px;" />
                     </RadzenStack>
+                    @* What an operation was done to, as opposed to who did it: "who changed this person's access". Each half hides when the
+                       host pinned it, since a dialog opened on one user has nothing left to choose. Entries written before targets were
+                       recorded have none, so naming either leaves them out. *@
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(PinnedFilter?.TargetKind == null)">
+                        <RadzenLabel Text="@_text[AuditLogViewText.DoneTo]" />
+                        <RadzenDropDown @bind-Value="_filterTargetKind" TValue="string" Data="@TargetKindOptions"
+                                        TextProperty="@nameof(KeyValuePair<string, string>.Value)" ValueProperty="@nameof(KeyValuePair<string, string>.Key)"
+                                        AllowClear="true" Placeholder="@_text[AuditLogViewText.FilterAll]" Change="@(_ => OnFilterChanged())"
+                                        Style="width: 140px;" data-audit-target-kind />
+                    </RadzenStack>
+                    <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(PinnedFilter?.TargetKey == null)">
+                        <RadzenLabel Text="@_text[AuditLogViewText.DoneToKey]" />
+                        <RadzenTextBox @bind-Value="_filterTargetKey" Change="@(_ => OnFilterChanged())"
+                                       Style="width: 200px;" data-audit-target-key />
+                    </RadzenStack>
                     @* Rendered only when the host hid something. Nothing is held back without a way to
                        see it — that is the whole difference between an opening value and a pin. *@
                     <RadzenStack Orientation="Orientation.Vertical" Gap="0" Visible="@(_hiddenScopes.Length > 0)">
@@ -245,6 +260,13 @@ else
                                     }
                                 </RadzenTableBody>
                             </RadzenTable>
+                        }
+                        @* What the operation was done to, when it has a target: the key is what the filter above takes. *@
+                        @if (!string.IsNullOrEmpty(entry.TargetKind) && !string.IsNullOrEmpty(entry.TargetKey))
+                        {
+                            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-2" data-audit-target>
+                                @_text.Format(AuditLogViewText.DetailDoneTo, TargetKindLabel(entry.TargetKind)) <code>@entry.TargetKey</code>
+                            </RadzenText>
                         }
                         @if (entry.Metadata is { Count: > 0 })
                         {
