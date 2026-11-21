@@ -371,7 +371,7 @@ internal sealed class EmailEventHandler(
 
         var placement = closed
             ? SupportSenderPlacement.Decide(false, [])
-            : SupportSenderPlacement.Decide(mail.SenderVerified, await SendersAsync(mail.From, cancellationToken));
+            : SupportSenderPlacement.Decide(mail.SenderVerified, await SendersAsync(mail.From, cancellationToken), answered?.Mail?.TeamKey);
         var team = placement.Team;
         var authorIdentity = placement.Sender?.Identity;
         var authorName = placement.Sender?.Name ?? mail.From;
