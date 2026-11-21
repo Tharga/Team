@@ -82,8 +82,11 @@
         _profilePath = TeamMenuNavigation.Resolve(ThargaBlazorOptions.Value.ProfilePath, TeamMenuNavigation.DefaultProfilePath);
         _teamPath = TeamMenuNavigation.Resolve(ThargaBlazorOptions.Value.TeamPath, TeamMenuNavigation.DefaultTeamPath);
 
+        // Shows who is signed in. Signing in or out is a full navigation that starts a new circuit, and the revalidation ends this one for a caller who is no longer allowed.
+#pragma warning disable BL0013
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (authState.User.Identity?.IsAuthenticated ?? false)
+#pragma warning restore BL0013
         {
             _signedIn = true;
             _email = authState.User.GetEmail();

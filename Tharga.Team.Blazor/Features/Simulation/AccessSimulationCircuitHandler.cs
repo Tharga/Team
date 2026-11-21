@@ -44,8 +44,11 @@ internal sealed class AccessSimulationCircuitHandler(
     {
         try
         {
+            // Read for each inbound activity and never kept, so each one sees the claims as they are then.
+#pragma warning disable BL0013
             var state = await authenticationStateProvider.GetAuthenticationStateAsync();
             return state?.User;
+#pragma warning restore BL0013
         }
         catch (Exception ex)
         {

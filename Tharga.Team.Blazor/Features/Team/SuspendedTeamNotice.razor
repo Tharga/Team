@@ -71,8 +71,11 @@
 
     private async Task RefreshAsync()
     {
+        // Read on every refresh and never kept, so each refresh sees the caller as they are then.
+#pragma warning disable BL0013
         var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         if (state.User.Identity?.IsAuthenticated != true)
+#pragma warning restore BL0013
         {
             _suspended = false;
             return;

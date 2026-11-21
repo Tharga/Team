@@ -161,8 +161,11 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Only decides whether the Directory tab is drawn. What is inside it, and the users list beside it, follow the caller themselves, and the services enforce users:manage on every read.
+#pragma warning disable BL0013
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var hasUsersManage = TeamScopeGate.HasSystemScope(authState.User, SystemUserScopes.Manage);
+#pragma warning restore BL0013
         var directoryRegistered = ServiceProvider.GetService<IUserDirectoryService>() is { IsConfigured: true };
         _showDirectoryTab = UserAdminGate.ShowDirectoryFeatures(hasUsersManage, directoryRegistered);
 

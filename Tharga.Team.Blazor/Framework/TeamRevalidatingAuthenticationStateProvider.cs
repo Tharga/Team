@@ -44,8 +44,11 @@ internal sealed class TeamRevalidatingAuthenticationStateProvider : Revalidating
     {
         try
         {
+            // This is the provider: the state it reads is its own, and it is the one that raises the change.
+#pragma warning disable BL0013
             var state = await GetAuthenticationStateAsync();
             if (state.User.Identity?.IsAuthenticated != true) return;
+#pragma warning restore BL0013
 
             await using var scope = _scopeFactory.CreateAsyncScope();
             var users = scope.ServiceProvider.GetService<IUserService>();

@@ -372,21 +372,41 @@ else
     private UserViewModel _selectedUser;
     private TextSet _text = TextSet.Empty;
 
+    private CallerFollower _caller;
+
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(UsersListViewText.All);
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var hasUsersManage = TeamScopeGate.HasSystemScope(authState.User, SystemUserScopes.Manage);
+        // Followed rather than read once: what this list offers, and whether it shows anyone at all, comes from the caller's claims, which the toolkit
+        // changes while the circuit runs (Tharga/Team#505).
+        _caller = new CallerFollower(AuthStateProvider, user => InvokeAsync(async () =>
+        {
+            await ApplyCallerAsync(user);
+            StateHasChanged();
+        }));
+
+        await ApplyCallerAsync(await _caller.StartAsync());
+
+        await base.OnInitializedAsync();
+    }
+
+    /// <summary>
+    /// Works out what the caller may do here and shows or drops the list to match. Runs at start and again whenever their claims change: a caller who lost
+    /// <c>users:manage</c> stops seeing everyone's details at once, and one who was given it gets the list without reloading.
+    /// </summary>
+    private async Task ApplyCallerAsync(System.Security.Claims.ClaimsPrincipal caller)
+    {
+        var hasUsersManage = TeamScopeGate.HasSystemScope(caller, SystemUserScopes.Manage);
 
         // The audit action is cross-team from here -- this list spans every team -- so it needs the
         // system grant. Without this the action appeared for anyone whenever the host set the flag, and
         // the dialog it opened said "Access denied": shown-then-refused, the defect PR #126 fixed for
         // per-team actions. TeamComponent already gated its equivalent; this surface did not.
-        _canReadAudit = TeamScopeGate.HasSystemScope(authState.User, AuditScopes.Read);
+        _canReadAudit = TeamScopeGate.HasSystemScope(caller, AuditScopes.Read);
 
         var directoryRegistered = ServiceProvider.GetService<IUserDirectoryService>() is { IsConfigured: true };
-        _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(authState.User);
+        _canSeeAllTeams = TeamVisibility.CanSeeAllTeams(caller);
         _canAdminister = UserAdminGate.CanAdministerUsers(hasUsersManage);
         _showDirectory = UserAdminGate.ShowDirectoryFeatures(hasUsersManage, directoryRegistered);
         _writeNameToDirectory = BlazorOptions.Value.WriteNameToDirectory;
@@ -402,15 +422,21 @@ else
         _signInReader = new SignInMethodReader((keys, cancellationToken) => UserManagementService.GetSignInIdentitiesAsync(keys, cancellationToken),
             _signInMethodOptions, _signInLabels);
 
-        if (_canAdminister)
+        if (!_canAdminister)
+        {
+            // Lost, or never held: nobody's details stay on screen for a caller who may not see them.
+            _allUsers = new();
+            _rows = new();
+            _selectedUser = null;
+            _loaded = false;
+        }
+        else if (!_loaded)
         {
             _currentUserKey = (await UserService.GetCurrentUserAsync())?.Key;
             await LoadDataAsync();
             _selectedUser = _allUsers.FirstOrDefault(u => u.Key == FocusUserKey);
             _loaded = true;
         }
-
-        await base.OnInitializedAsync();
     }
 
     /// <summary>
@@ -546,7 +572,11 @@ else
         return [.. choices];
     }
 
-    public void Dispose() => _signInReadCancellation?.Cancel();
+    public void Dispose()
+    {
+        _caller?.Dispose();
+        _signInReadCancellation?.Cancel();
+    }
 
     private sealed record SignInChoice(SignInFilter Filter, string Text);
 

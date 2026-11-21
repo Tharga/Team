@@ -220,8 +220,11 @@ else
     {
         try
         {
+            // Read when the editor opens and used to pick its defaults: a short-lived editing session, and the service decides what a save may do whatever was offered.
+#pragma warning disable BL0013
             var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
             return authState?.User;
+#pragma warning restore BL0013
         }
         catch { return null; }
     }

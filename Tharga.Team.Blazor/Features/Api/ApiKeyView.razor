@@ -2,6 +2,7 @@
 @using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
 @using Tharga.Team.Blazor.Features.Team
+@implements IDisposable
 @inject ITeamStateService TeamStateService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IOptions<Tharga.Team.Blazor.Framework.ThargaBlazorOptions> BlazorOptions
@@ -335,8 +336,26 @@ else
             return;
         }
 
-        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        // Followed rather than read once: whether this page offers key management, and which levels it may hand out, come from the caller's claims, which the
+        // toolkit changes while the circuit runs (Tharga/Team#505). A caller who lost apikey:manage stops seeing the keys at once.
+        _caller = new CallerFollower(AuthStateProvider, user => InvokeAsync(async () =>
+        {
+            await ApplyCallerAsync(user);
+            StateHasChanged();
+        }));
+
+        await ApplyCallerAsync(await _caller.StartAsync());
+
+        await base.OnInitializedAsync();
+    }
+
+    private CallerFollower _caller;
+
+    public void Dispose() => _caller?.Dispose();
+
+    /// <summary>Works out what the caller may do here and shows or drops the keys to match. Runs at start and again whenever their claims change.</summary>
+    private async Task ApplyCallerAsync(System.Security.Claims.ClaimsPrincipal user)
+    {
         _selectedTeam = await TeamStateService.GetSelectedTeamAsync();
 
         // Bound to the selected team: apikey:manage is issued for one team, so a bare claim check would
@@ -344,13 +363,23 @@ else
         // team selected yet this is not a denial — the "No team selected" branch handles that.
         _hasAccess = _selectedTeam == null
                      || TeamScopeGate.HasTeamScope(user, ApiKeyScopes.Manage, _selectedTeam.Key);
-        if (!_hasAccess) { _teamLoaded = true; await base.OnInitializedAsync(); return; }
+        if (!_hasAccess)
+        {
+            _keys = null;
+            _teamLoaded = true;
+            return;
+        }
 
         // Only the levels this caller may hand out (Tharga/Team#409). An overseer is exempt, as in the service.
-        _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.ForGranter(_accessLevels,
+        _accessLevels = Tharga.Team.Blazor.Framework.AccessLevelVisibility.ForGranter(
+            Tharga.Team.Blazor.Framework.AccessLevelVisibility.Apply(Tharga.Team.Blazor.Framework.AccessLevelVisibility.ApiKey, BlazorOptions.Value.HiddenAccessLevels),
             _selectedTeam == null ? null : Tharga.Team.Service.TeamScopePolicy.AccessLevelFor(user, _selectedTeam.Key),
             exempt: Tharga.Team.Service.TeamScopePolicy.HasSystemScope(user, SystemApiKeyScopes.Oversee));
         if (_accessLevels.Length > 0 && !_accessLevels.Contains(_newAccessLevel)) _newAccessLevel = _accessLevels[0];
+
+        // The keys are what a caller without access must not keep seeing, so they are what is loaded again when access comes back.
+        if (_keys != null) return;
+
 
         _scopeRegistry = ServiceProvider.GetService<IScopeRegistry>();
         _allScopeNames = _scopeRegistry?.All.Where(s => !s.GrantOnly).Select(s => s.Name).ToArray() ?? Array.Empty<string>();
@@ -369,7 +398,6 @@ else
             _scopeRegistry?.All.Select(s => s.Name) ?? []);
         _teamLoaded = true;
         await ReloadData();
-        await base.OnInitializedAsync();
     }
 
     private async Task ReloadData()

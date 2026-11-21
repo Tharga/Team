@@ -81,8 +81,11 @@ public sealed class AccessSimulationState
     /// <summary>The simulation currently in force, or null.</summary>
     public async Task<AccessSimulation> GetActiveAsync()
     {
+        // Read at each call and never kept. A simulation is started by a full reload, so the claim cannot change under a running circuit.
+#pragma warning disable BL0013
         var state = await _authenticationStateProvider.GetAuthenticationStateAsync();
         return AccessSimulationCookie.Read(state.User.FindFirst(AccessSimulationCookie.ClaimType)?.Value);
+#pragma warning restore BL0013
     }
 
     /// <summary>
