@@ -16,9 +16,10 @@
                         AllowFiltering="true"
                         FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
                         Placeholder="@_text[SystemApiKeyViewText.SelectScopes]"
+                        ItemRender="@(args => args.Disabled = NotGrantable != null && NotGrantable.Contains((string)args.Item))"
                         Style="min-width: 360px; width: 100%;">
             <Template>
-                <span title="@(Descriptions != null && Descriptions.TryGetValue((string)context, out var description) ? description : null)">@context</span>
+                <span title="@Tooltip((string)context)">@context</span>
             </Template>
         </RadzenDropDown>
     </RadzenStack>
@@ -37,6 +38,15 @@
 
     /// <summary>What each scope grants, shown as a tooltip beside it.</summary>
     [Parameter] public IReadOnlyDictionary<string, string> Descriptions { get; set; }
+
+    /// <summary>The scopes the caller does not hold, shown but not selectable: the service refuses to grant them, so the picker does not offer them.</summary>
+    [Parameter] public IReadOnlySet<string> NotGrantable { get; set; }
+
+    private string Tooltip(string scope)
+    {
+        if (NotGrantable != null && NotGrantable.Contains(scope)) return _text[SystemApiKeyViewText.NotHeld];
+        return Descriptions != null && Descriptions.TryGetValue(scope, out var description) ? description : null;
+    }
 
     private TextSet _text = TextSet.Empty;
     private IEnumerable<string> _selected = [];
