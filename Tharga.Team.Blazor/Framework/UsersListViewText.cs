@@ -32,6 +32,9 @@ public static class UsersListViewText
     public static readonly TextKey ActionChangeEmail = new("team.usersList.actionChangeEmail", "Change email");
     public static readonly TextKey ActionSetIcon = new("team.usersList.actionSetIcon", "Set icon");
     public static readonly TextKey ActionAuditLog = new("team.usersList.actionAuditLog", "Audit log");
+
+    /// <summary>The row action that opens the audit log on what was done to this user, rather than on what they did.</summary>
+    public static readonly TextKey ActionAuditSubject = new("team.usersList.actionAuditSubject", "Audit log: done to this user");
     public static readonly TextKey ActionEnable = new("team.usersList.actionEnable", "Enable");
     public static readonly TextKey ActionDisable = new("team.usersList.actionDisable", "Disable");
     public static readonly TextKey ActionDelete = new("team.usersList.actionDelete", "Delete");
@@ -93,6 +96,9 @@ public static class UsersListViewText
     public static readonly TextKey RenameTitle = new("team.usersList.renameTitle", "Rename — {0}");
     public static readonly TextKey ChangeEmailTitle = new("team.usersList.changeEmailTitle", "Change email — {0}");
     public static readonly TextKey AuditLogTitle = new("team.usersList.auditLogTitle", "Audit log — {0}");
+
+    /// <summary><c>{0}</c> is the user's name.</summary>
+    public static readonly TextKey AuditSubjectTitle = new("team.usersList.auditSubjectTitle", "Done to — {0}");
 
 
     public static readonly TextKey Cancel = new("team.usersList.cancel", "Cancel");
@@ -194,10 +200,10 @@ public static class UsersListViewText
         SignInReading, SignInReadFailed,
         SignInEmail, SignInUserName, SignInPrincipalName,
         VerifyAll, ColumnName, ColumnEmail, ColumnTeams, ColumnLastSeen, BadgeDisabled, ActionView,
-        ActionVerify, ActionRename, ActionChangeEmail, ActionSetIcon, ActionAuditLog, ActionEnable, ActionDisable, ActionDelete,
+        ActionVerify, ActionRename, ActionChangeEmail, ActionSetIcon, ActionAuditLog, ActionAuditSubject, ActionEnable, ActionDisable, ActionDelete,
         ActionDisableSelf, ActionDeleteSelf, UserKey, CopyUserKey, Identity, CopyIdentity, DirectoryId,
         CopyDirectoryId, TeamMemberships, ColumnTeam, ShowThisTeam, ColumnRole, ColumnState, IconTitle,
-        RenameTitle, ChangeEmailTitle, AuditLogTitle, Cancel, UserDisabledDetail,
+        RenameTitle, ChangeEmailTitle, AuditLogTitle, AuditSubjectTitle, Cancel, UserDisabledDetail,
         UserEnabledDetail, RenamedLocallyTitle, VerificationFailed,
         CannotDisableSelfTitle, CannotDisableSelfDetail, ConfirmDisable, ConfirmDisableTitle, UserDisabled,
         UserEnabled, CouldNotDisable, CouldNotEnable, DisabledTooltip, DisabledByTooltip,

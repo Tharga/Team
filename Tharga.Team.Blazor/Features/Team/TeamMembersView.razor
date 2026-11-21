@@ -557,6 +557,7 @@ else
         var actions = new List<(string, string, string)>();
         if (_ctx.CanManageMembersOn(_team) && member.Invitation != null) actions.Add((MemberActionValues.CopyInvite, text[TeamComponentText.ActionCopyInviteLink], "link"));
         if (ShowAuditLogButton && _ctx.CanReadMemberAudit(_team)) actions.Add((MemberActionValues.MemberAudit, text[TeamComponentText.ActionAuditLog], "manage_search"));
+        if (ShowAuditLogButton && _ctx.CanReadMemberAudit(_team)) actions.Add((MemberActionValues.MemberAuditSubject, text[TeamComponentText.ActionAuditSubject], "manage_search"));
         if (_ctx.CanManageMembersOn(_team) && _ctx.User.Key != member.Key && member.AccessLevel != AccessLevel.Owner)
         {
             // Suspension needs access to take away, and an invitation that has not been accepted grants none -- the right
@@ -596,6 +597,7 @@ else
         {
             case MemberActionValues.CopyInvite: await CopyInvitationLink(memberKey); break;
             case MemberActionValues.MemberAudit: await OpenMemberAuditLogAsync(memberKey); break;
+            case MemberActionValues.MemberAuditSubject: await OpenMemberAuditSubjectAsync(memberKey); break;
             case MemberActionValues.RemoveMember: await RemoveUserFromTeam(memberKey); break;
             case MemberActionValues.SuspendMember: await SetMemberSuspendedAsync(memberKey, true); break;
             case MemberActionValues.RestoreMember: await SetMemberSuspendedAsync(memberKey, false); break;
@@ -646,6 +648,28 @@ else
         // enclosing namespaces the way C# does, so a partially-qualified tag compiles clean and renders as an unknown HTML
         // element: an empty dialog, no exception, no log.
         await DialogService.OpenAsync(_ctx.Text.Format(TeamComponentText.AuditLogTitle, identity), _ =>
+            @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
+            new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
+    }
+
+    /// <summary>
+    /// The audit log of what was done to one member <i>in this team</i>: who changed their access, suspended them or removed them. Pinning the team as well
+    /// as the target keeps a team administrator inside their own tenant, as <see cref="OpenMemberAuditLogAsync"/> does; the target is the user's key, which is
+    /// also the member's (Tharga/Team#404).
+    /// </summary>
+    private async Task OpenMemberAuditSubjectAsync(string memberKey)
+    {
+        var user = _ctx.Users.FirstOrDefault(x => x.Key == memberKey);
+        var identity = user?.EMail ?? user?.Name ?? memberKey;
+
+        var pinned = new Tharga.Team.Blazor.Features.Audit.AuditPinnedFilter
+        {
+            TargetKind = Tharga.Team.Service.Audit.AuditTargetKinds.User,
+            TargetKey = memberKey,
+            TeamKey = _team.Key
+        };
+
+        await DialogService.OpenAsync(_ctx.Text.Format(TeamComponentText.AuditSubjectTitle, identity), _ =>
             @<Tharga.Team.Blazor.Features.Audit.AuditLogView PinnedFilter="@pinned" />,
             new DialogOptions { Width = "90vw", Height = "85vh", Resizable = true, Draggable = true });
     }

@@ -30,6 +30,9 @@ public static class TeamsListViewText
 
     public static readonly TextKey ActionView = new("team.teamsList.actionView", "View");
     public static readonly TextKey ActionAuditLog = new("team.teamsList.actionAuditLog", "Audit log");
+
+    /// <summary>The row action that opens the audit log on what was done to this team itself.</summary>
+    public static readonly TextKey ActionAuditSubject = new("team.teamsList.actionAuditSubject", "Audit log: done to this team");
     public static readonly TextKey ActionRename = new("team.teamsList.actionRename", "Rename");
     public static readonly TextKey ActionSetIcon = new("team.teamsList.actionSetIcon", "Set icon");
     /// <summary>
@@ -53,6 +56,9 @@ public static class TeamsListViewText
 
     /// <summary>Dialog titles. <c>{0}</c> is the team name in each.</summary>
     public static readonly TextKey AuditLogTitle = new("team.teamsList.auditLogTitle", "Audit log — {0}");
+
+    /// <summary><c>{0}</c> is the team's name.</summary>
+    public static readonly TextKey AuditSubjectTitle = new("team.teamsList.auditSubjectTitle", "Done to — {0}");
     public static readonly TextKey RenameTitle = new("team.teamsList.renameTitle", "Rename {0}");
     public static readonly TextKey IconTitle = new("team.teamsList.iconTitle", "Icon — {0}");
     public static readonly TextKey AssignOwnerTitle = new("team.teamsList.assignOwnerTitle", "Assign owner — {0}");
@@ -101,9 +107,9 @@ public static class TeamsListViewText
     public static readonly TextKey[] All =
     [
         RequiresScope, ColumnName, BadgeEmpty, ColumnOwner, BadgeNoOwner, ColumnMembers, InvitedCount,
-        ColumnLastUsed, ColumnConsent, ActionView, ActionAuditLog, ActionRename, ActionSetIcon,
+        ColumnLastUsed, ColumnConsent, ActionView, ActionAuditLog, ActionAuditSubject, ActionRename, ActionSetIcon,
         ActionAssignOwner, ActionDelete, TeamKey, CopyTeamKey, MembersHeading, ShowThisUser, ColumnEmail,
-        ColumnRole, ColumnState, ColumnLastSeen, AuditLogTitle, RenameTitle, IconTitle, AssignOwnerTitle,
+        ColumnRole, ColumnState, ColumnLastSeen, AuditLogTitle, AuditSubjectTitle, RenameTitle, IconTitle, AssignOwnerTitle,
         OwnerAssigned, OwnerAssignedDetail, CouldNotAssignOwner,
         ActionChangeOwner, ActionReduceOwners, ChangeOwnerTitle, ReduceOwnersTitle,
         OwnerSetDetail, OwnerUnchanged, OwnerUnchangedDetail, DeleteConfirmOne, DeleteConfirmMany,

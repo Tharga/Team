@@ -15,12 +15,13 @@ internal static class MemberActionValues
     internal const string CopyInvite = "copy-invite";
     internal const string RemoveMember = "remove-member";
     internal const string MemberAudit = "member-audit";
+    internal const string MemberAuditSubject = "member-audit-subject";
     internal const string SuspendMember = "suspend-member";
     internal const string RestoreMember = "restore-member";
 
     /// <summary>Every value the component routes internally.</summary>
     internal static IReadOnlyList<string> All { get; } =
-        [CopyInvite, RemoveMember, MemberAudit, SuspendMember, RestoreMember];
+        [CopyInvite, RemoveMember, MemberAudit, MemberAuditSubject, SuspendMember, RestoreMember];
 
     /// <summary>
     /// Whether <paramref name="value"/> is one the component handles itself.
@@ -28,7 +29,7 @@ internal static class MemberActionValues
     /// <remarks>
     /// A host value that collides with one of these is handled as the built-in, not forwarded — the built-in
     /// behaviour is what a member row's Remove or Suspend has to keep meaning. Hosts pick their own values,
-    /// and these five are documented, so a collision is a choice rather than an accident.
+    /// and these six are documented, so a collision is a choice rather than an accident.
     /// </remarks>
     internal static bool IsBuiltIn(string value) => All.Contains(value);
 }

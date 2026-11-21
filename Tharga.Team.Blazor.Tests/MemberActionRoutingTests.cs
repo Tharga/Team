@@ -17,6 +17,7 @@ public class MemberActionRoutingTests
     [InlineData(MemberActionValues.CopyInvite)]
     [InlineData(MemberActionValues.RemoveMember)]
     [InlineData(MemberActionValues.MemberAudit)]
+    [InlineData(MemberActionValues.MemberAuditSubject)]
     [InlineData(MemberActionValues.SuspendMember)]
     [InlineData(MemberActionValues.RestoreMember)]
     public void EveryBuiltInValue_IsRecognisedAsTheComponentsOwn(string value)
@@ -49,9 +50,9 @@ public class MemberActionRoutingTests
     /// that used to work, and the host would see their action stop firing with nothing logged.
     /// </remarks>
     [Fact]
-    public void TheBuiltInSet_IsTheFiveDocumentedValues()
+    public void TheBuiltInSet_IsTheSixDocumentedValues()
         => Assert.Equal(
-            ["copy-invite", "remove-member", "member-audit", "suspend-member", "restore-member"],
+            ["copy-invite", "remove-member", "member-audit", "member-audit-subject", "suspend-member", "restore-member"],
             MemberActionValues.All);
 
     /// <summary>A row action carries the host's own member type, not the interface.</summary>

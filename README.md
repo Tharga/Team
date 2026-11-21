@@ -229,8 +229,8 @@ grid beside the first — `<TeamComponent>` takes an extra column, extra menu it
 </TeamComponent>
 ```
 
-Your action appears even on rows where the built-in ones do not — the caller's own, or the owner's. Five
-action values are the component's own (`copy-invite`, `remove-member`, `member-audit`, `suspend-member`,
+Your action appears even on rows where the built-in ones do not — the caller's own, or the owner's. Six
+action values are the component's own (`copy-invite`, `remove-member`, `member-audit`, `member-audit-subject`, `suspend-member`,
 `restore-member`); pick anything else. `TeamsListView` and `UsersListView` have had the same trio since
 3.7.x. See the [Implementation guide](docs/articles/implementation-guide.md).
 
