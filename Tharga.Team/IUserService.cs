@@ -103,6 +103,14 @@ public interface IUserService
     Task SetUserLastSeenAsync(string userKey, DateTime lastSeen) => Task.CompletedTask;
 
     /// <summary>
+    /// Records that the <b>caller</b> was last active at <paramref name="lastActive"/> (<see cref="IUser.LastSeen"/>), as the browser's activity
+    /// signal reports it (Tharga/Team#399). The server resolves the caller, so the call names no user and needs no scope. It only ever moves
+    /// the value forward: an older time, from a slower tab or another instance, changes nothing. The default is a no-op, like
+    /// <see cref="SetUserLastSeenAsync"/>.
+    /// </summary>
+    Task SetOwnLastSeenAsync(DateTime lastActive) => Task.CompletedTask;
+
+    /// <summary>
     /// Links the user to their external-directory id (<see cref="IUser.DirectoryId"/>). Called by the
     /// oid backfill (internal self-call) and by directory verification on an email-fallback match
     /// (relink). Default is a no-op — stores that track the directory id override it.

@@ -54,8 +54,8 @@ public class UserRepositoryDirectoryFieldsTests
 
         Assert.NotNull(captured);
         var rendered = Render(captured);
-        Assert.True(rendered.Contains("$set"), $"Expected a $set update, got: {rendered}");
-        Assert.True(rendered["$set"].AsBsonDocument.Contains(nameof(IUser.LastSeen)), $"Expected LastSeen in: {rendered}");
+        Assert.True(rendered.Contains("$max"), $"Expected a $max update, got: {rendered}");
+        Assert.True(rendered["$max"].AsBsonDocument.Contains(nameof(IUser.LastSeen)), $"Expected LastSeen in: {rendered}");
     }
 
     [Fact]

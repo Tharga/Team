@@ -285,6 +285,17 @@ public abstract class UserServiceBase : IUserService, IUserCacheInvalidator
 
     public virtual Task SetUserLastSeenAsync(string userKey, DateTime lastSeen) => Task.CompletedTask;
 
+    public async Task SetOwnLastSeenAsync(DateTime lastActive)
+    {
+        if (LastSeenStampInterval == null) return;
+
+        // Not recording activity: this is the record of it, and resolving must not stamp a second time.
+        var user = await GetCurrentUserAsync(null, recordActivity: false);
+        if (user == null || string.IsNullOrEmpty(user.Key)) return;
+
+        await SetUserLastSeenAsync(user.Key, lastActive);
+    }
+
     public virtual Task SetUserDirectoryIdAsync(string userKey, string directoryId) => Task.CompletedTask;
 
     /// <summary>

@@ -99,6 +99,49 @@ public class UserServiceBaseActivityStampingTests
         await repo.Received(1).SetLastSeenAsync(key, Arg.Any<DateTime>());
     }
 
+    private static (TestUserService Sut, IUserRepository<TestUserEntity> Repo, string Key) BuildSignedIn(double? intervalMinutes = 15)
+    {
+        var (_, repo, principal, key) = Build(intervalMinutes);
+        var provider = Substitute.For<AuthenticationStateProvider>();
+        provider.GetAuthenticationStateAsync().Returns(new AuthenticationState(principal));
+
+        var sut = new TestUserService(repo, provider) { Interval = intervalMinutes == null ? null : TimeSpan.FromMinutes(intervalMinutes.Value) };
+        return (sut, repo, key);
+    }
+
+    /// <summary>The browser's signal writes when the person was last active, which is the time it names and not the time the write happens (Tharga/Team#399).</summary>
+    [Fact]
+    public async Task SetOwnLastSeenAsync_WritesTheGivenTime_ForTheCaller()
+    {
+        var (sut, repo, key) = BuildSignedIn();
+        var lastActive = new DateTime(2026, 11, 21, 9, 7, 0, DateTimeKind.Utc);
+
+        await sut.SetOwnLastSeenAsync(lastActive);
+
+        await repo.Received(1).SetLastSeenAsync(key, lastActive);
+    }
+
+    /// <summary>Recording activity is not itself a resolve that stamps: that would write a second, later time for the same use.</summary>
+    [Fact]
+    public async Task SetOwnLastSeenAsync_DoesNotAlsoStampOnResolve()
+    {
+        var (sut, repo, _) = BuildSignedIn();
+
+        await sut.SetOwnLastSeenAsync(new DateTime(2026, 11, 21, 9, 7, 0, DateTimeKind.Utc));
+
+        await repo.Received(1).SetLastSeenAsync(Arg.Any<string>(), Arg.Any<DateTime>());
+    }
+
+    [Fact]
+    public async Task SetOwnLastSeenAsync_NullInterval_WritesNothing()
+    {
+        var (sut, repo, _) = BuildSignedIn(intervalMinutes: null);
+
+        await sut.SetOwnLastSeenAsync(DateTime.UtcNow);
+
+        await repo.DidNotReceiveWithAnyArgs().SetLastSeenAsync(default, default);
+    }
+
     /// <summary>Filling in the directory id keeps the record right; it is not activity, so it still happens.</summary>
     [Fact]
     public async Task GetCurrentUserAsync_NotRecordingActivity_StillBackfillsTheDirectoryId()
@@ -176,8 +219,8 @@ public class UserServiceBaseActivityStampingTests
 
     private sealed class TestUserService : UserServiceRepositoryBase<TestUserEntity>
     {
-        public TestUserService(IUserRepository<TestUserEntity> repo)
-            : base(Substitute.For<AuthenticationStateProvider>(), repo)
+        public TestUserService(IUserRepository<TestUserEntity> repo, AuthenticationStateProvider provider = null)
+            : base(provider ?? Substitute.For<AuthenticationStateProvider>(), repo)
         {
         }
 

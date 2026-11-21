@@ -2,19 +2,21 @@
 @using Microsoft.JSInterop
 @using Tharga.Team.Support.Cases
 @using Tharga.Team.Blazor.Framework
+@using Tharga.Team.Blazor.Features.Activity
 @implements IAsyncDisposable
 @inject ISupportCaseService SupportCases
 @inject ILocalStorageService LocalStorage
-@inject IJSRuntime JsRuntime
 @inject IThargaTextProvider TextProvider
 @inject IServiceProvider Services
 
 @* How a support person is shown to members: Automatic, Online, Away or Hidden, chosen here, with Automatic counting as
-   online only while they are active in support. Using this page counts, reported at most once a minute. Renders nothing for anybody who is
+   online only while they are active in support. Using the application counts, from the circuit's activity signal, at most once a minute. Renders nothing for anybody who is
    not on the support desk. *@
 
 @if (_allowed)
 {
+    @* The page's one watcher, here too for a host whose layout has no sign-in menu; only the first on a circuit watches. *@
+    <ActivityWatcher />
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.75rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap" data-desk-status="@_status">
         <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[SupportDeskStatusText.Label]</RadzenText>
         <div role="group" aria-label="@_text[SupportDeskStatusText.Label]" style="display: inline-flex; gap: 0.25rem;">
@@ -32,21 +34,16 @@
 }
 
 @code {
-    private const string ModulePath = "./_content/Tharga.Team.Blazor/support-desk.js";
-    private static readonly TimeSpan ActivityInterval = TimeSpan.FromMinutes(1);
     private static readonly SupportStaffStatus[] Statuses = [SupportStaffStatus.Automatic, SupportStaffStatus.Online, SupportStaffStatus.Away, SupportStaffStatus.Hidden];
 
     /// <summary>Where the choice is remembered in the browser, for the next visit.</summary>
     [Parameter] public string StorageKey { get; set; } = "Tharga.Team.Support.DeskStatus";
 
-    private readonly string _id = Guid.NewGuid().ToString("N");
     private TextSet _text = TextSet.Empty;
     private bool _allowed;
-    private bool _watching;
     private SupportStaffStatus _status = SupportStaffStatus.Automatic;
     private ISupportPresence _presence;
-    private IJSObjectReference _module;
-    private DotNetObjectReference<SupportDeskStatus> _self;
+    private IActivitySignal _signal;
 
     protected override async Task OnInitializedAsync()
     {
@@ -74,30 +71,14 @@
 
         _presence = Services.GetService(typeof(ISupportPresence)) as ISupportPresence;
         if (_presence != null) _presence.Changed += OnPresenceChanged;
+
+        _signal = Services.GetService(typeof(IActivitySignal)) as IActivitySignal;
+        if (_signal != null) _signal.Active += OnSignal;
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!_allowed || _watching) return;
-        _watching = true;
-
-        try
-        {
-            _module ??= await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
-            if (_module == null) return;
-
-            _self ??= DotNetObjectReference.Create(this);
-            await _module.InvokeVoidAsync("watchActivity", _id, _self, (int)ActivityInterval.TotalMilliseconds);
-        }
-        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
-        {
-            // Without it only answering and writing count as acting; the choice still holds.
-        }
-    }
-
-    /// <summary>Somebody used the page while it was in front of them.</summary>
-    [JSInvokable]
-    public async Task OnActivity()
+    // Somebody used a page of the application while it was in front of them: the circuit's one activity signal, not a watcher of this page's own, so
+    // using any page counts as being at work (Tharga/Team#399).
+    private void OnSignal(object sender, EventArgs args) => _ = InvokeAsync(async () =>
     {
         try
         {
@@ -107,7 +88,7 @@
         {
             // Presence is advisory; a report that does not arrive is caught up by the next one.
         }
-    }
+    });
 
     private async Task SetAsync(SupportStaffStatus status)
     {
@@ -174,22 +155,11 @@
         _ => "visibility_off"
     };
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         if (_presence != null) _presence.Changed -= OnPresenceChanged;
+        if (_signal != null) _signal.Active -= OnSignal;
 
-        if (_module != null)
-        {
-            try
-            {
-                await _module.InvokeVoidAsync("stopWatching", _id);
-                await _module.DisposeAsync();
-            }
-            catch (Exception exception) when (exception is JSException or JSDisconnectedException)
-            {
-            }
-        }
-
-        _self?.Dispose();
+        return ValueTask.CompletedTask;
     }
 }

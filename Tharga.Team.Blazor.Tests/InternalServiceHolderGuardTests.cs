@@ -52,7 +52,9 @@ public class InternalServiceHolderGuardTests
             nameof(ITeamService.GetAllTeamsAsync),
             nameof(ITeamService.GetTeamByKeyAsync),
             nameof(ITeamService.CreateTeamAsync),
-            nameof(ITeamService.SetMemberLastSeenAsync)
+            nameof(ITeamService.SetMemberLastSeenAsync),
+            // The caller's own stamp from the activity signal (Tharga/Team#399): the caller is resolved on the server and only their own membership is written.
+            nameof(ITeamService.SetOwnMemberLastSeenAsync)
         ],
         ["AccessSimulationState"] = [nameof(ITeamService.GetMembersAsync)],
         ["TeamClaimsAuthenticationStateProvider"] = [nameof(ITeamService.GetTeamMemberAsync)],

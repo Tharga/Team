@@ -61,6 +61,8 @@ public sealed class CacheInvalidatingUserServiceDecorator : IUserService
 
     public Task SetUserLastSeenAsync(string userKey, DateTime lastSeen) => _inner.SetUserLastSeenAsync(userKey, lastSeen);
 
+    public Task SetOwnLastSeenAsync(DateTime lastActive) => _inner.SetOwnLastSeenAsync(lastActive);
+
     public async Task SeedUserNameAsync(string userKey, string name)
     {
         await _inner.SeedUserNameAsync(userKey, name);

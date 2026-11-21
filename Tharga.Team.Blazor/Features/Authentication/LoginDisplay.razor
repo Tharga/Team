@@ -2,6 +2,7 @@
 @using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
 @using Tharga.Team
+@using Tharga.Team.Blazor.Features.Activity
 @using Tharga.Team.Blazor.Features.User
 @using Tharga.Toolkit
 @implements IDisposable
@@ -18,6 +19,8 @@
 <CascadingAuthenticationState>
     <AuthorizeView>
         <Authorized>
+            @* The one browser activity signal that last seen and support presence follow (Tharga/Team#399). *@
+            <ActivityWatcher />
             <RadzenProfileMenu Click="@(ClickAction)" title="@_email">
                 <Template>
                     <UserAvatar User="_user" EMail="@_email" Size="32px" />

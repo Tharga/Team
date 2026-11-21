@@ -132,7 +132,7 @@ internal class UserRepository<TUserEntity> : IUserRepository<TUserEntity>
         var filter = new FilterDefinitionBuilder<TUserEntity>()
             .Eq(x => x.Key, userKey);
         var update = new UpdateDefinitionBuilder<TUserEntity>()
-            .Set(x => x.LastSeen, lastSeen);
+            .Max(x => x.LastSeen, lastSeen);
 
         return _collection.UpdateOneAsync(filter, update);
     }

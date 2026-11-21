@@ -90,6 +90,7 @@ public sealed class AuthorizationTeamServiceDecorator : ITeamService
     }
     public Task<IReadOnlyList<TenantRoleDefinition>> GetTeamCustomRolesAsync(string teamKey) => _inner.GetTeamCustomRolesAsync(teamKey);
     public Task SetMemberLastSeenAsync(string teamKey) => _inner.SetMemberLastSeenAsync(teamKey);
+    public Task SetOwnMemberLastSeenAsync(string teamKey, DateTime lastActive) => _inner.SetOwnMemberLastSeenAsync(teamKey, lastActive);
     public Task SetInvitationResponseAsync(string teamKey, string userKey, string inviteCode, bool accept) => _inner.SetInvitationResponseAsync(teamKey, userKey, inviteCode, accept);
 
     /// <summary>

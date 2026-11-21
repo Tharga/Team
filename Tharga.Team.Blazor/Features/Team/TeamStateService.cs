@@ -137,6 +137,8 @@ internal class TeamStateService : ITeamStateService
         }
     }
 
+    public Task SetOwnMemberLastSeenAsync(string teamKey, DateTime lastActive) => _teamService.SetOwnMemberLastSeenAsync(teamKey, lastActive);
+
     public bool TryGetSelectedTeam(out ITeam team)
     {
         // Deliberately unsynchronised: a reference read is atomic, and taking the semaphore would make this

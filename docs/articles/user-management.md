@@ -18,6 +18,23 @@ all night. Code of your own that reads the user on a schedule should do the same
 A user service of your own that implements only `GetCurrentUserAsync(principal)` keeps working, and decides for itself
 what it records.
 
+**Last seen means last active, from one browser signal.** The sign-in menu (`<LoginDisplay />`) watches the page: while
+the tab is visible and the person is using it (pointer, keys, wheel, touch), it reports to the circuit at most once a
+minute, and the first use after the page opens is reported at once. The circuit sums those reports into one write per
+person per 15-minute slot, written when the slot or the selected team changes and when the circuit closes, and what it
+writes is the *last time the person was active in the slot*, for the user and for their membership in the selected team.
+Both writes use `$max`, so several tabs and several instances merge into the latest, and an older time never wins. A
+short burst of work therefore leaves a trace of when it ended, which the sliding throttle above could not. The
+throttled stamp on resolve stays, and records arrival. The same signal is what the support desk's presence follows
+(`IActivitySignal`, one per circuit), so presence works on any page rather than only the one hosting
+`<SupportDeskStatus />`. A host whose layout has no sign-in menu gets the signal wherever it includes
+`<ActivityWatcher />`, or `<SupportDeskStatus />`, which includes one; only the first on a circuit watches.
+
+A caller that is not at a browser, such as an API key or an MCP client, is not seen: last seen means a person at a page.
+A custom user or team service takes the signal's time through `IUserService.SetOwnLastSeenAsync` and
+`ITeamService.SetOwnMemberLastSeenAsync`, which default to doing nothing; a store written on the team base class
+overrides `SetTeamMemberLastSeenAsync(teamKey, userKey, lastSeen)` and should only move the value forward.
+
 **Last seen is not session activity.** With [session limits](implementation-guide.md#session-limits) on, each sign-in
 also has a server-side session with its own activity stamp, per session rather than per user, written at most once a
 minute and including what the person does inside a circuit, which the page reports. That stamp is what an idle timeout

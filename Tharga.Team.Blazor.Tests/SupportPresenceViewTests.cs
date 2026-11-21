@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Radzen;
+using Tharga.Team.Blazor.Features.Activity;
 using Tharga.Team.Blazor.Features.Support;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Support.Cases;
@@ -216,7 +217,6 @@ public class SupportCaseConversationPresenceTests : BunitContext
 public class SupportDeskStatusTests : BunitContext
 {
     private const string StorageKey = "Tharga.Team.Support.DeskStatus";
-    private const string ModulePath = "./_content/Tharga.Team.Blazor/support-desk.js";
 
     private readonly Mock<ISupportCaseService> _cases = new();
     private readonly Mock<ILocalStorageService> _storage = new();
@@ -302,17 +302,42 @@ public class SupportDeskStatusTests : BunitContext
         Assert.Equal("Away", Pressed(view));
     }
 
+    /// <summary>Using any page of the application is acting on the desk: the status follows the circuit's one activity signal, not a watcher of its own (Tharga/Team#399).</summary>
     [Fact]
-    public async Task UsingThePage_IsWatched_AndReported()
+    public void UsingTheApplication_IsReportedAsActingOnTheDesk()
     {
-        var module = JSInterop.SetupModule(ModulePath);
-        module.SetupVoid("watchActivity", _ => true);
+        var signal = new TestSignal();
+        Services.AddSingleton<IActivitySignal>(signal);
         var view = Render();
 
-        view.WaitForAssertion(() => Assert.Single(module.Invocations["watchActivity"]));
-        await view.InvokeAsync(() => view.Instance.OnActivity());
+        signal.Raise();
 
-        _cases.Verify(x => x.ReportStaffActivityAsync(default), Times.Once);
+        view.WaitForAssertion(() => _cases.Verify(x => x.ReportStaffActivityAsync(default), Times.Once));
+    }
+
+    [Fact]
+    public async Task LeavingTheDesk_StopsListening()
+    {
+        var signal = new TestSignal();
+        Services.AddSingleton<IActivitySignal>(signal);
+        var view = Render();
+
+        await DisposeComponentsAsync();
+        signal.Raise();
+
+        _cases.Verify(x => x.ReportStaffActivityAsync(default), Times.Never);
+    }
+
+    private sealed class TestSignal : IActivitySignal
+    {
+        public DateTimeOffset? LastActive { get; private set; }
+        public event EventHandler Active;
+
+        public void Raise()
+        {
+            LastActive = DateTimeOffset.UtcNow;
+            Active?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     [Fact]
