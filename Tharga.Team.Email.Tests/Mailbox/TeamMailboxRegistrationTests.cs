@@ -80,6 +80,59 @@ public class TeamMailboxRegistrationTests
     }
 
     [Fact]
+    public void ThePrefixAndTheAcceptedFormats_ReachTheService()
+    {
+        using var provider = Build(o =>
+        {
+            o.Domain = "fortdocs.app";
+            o.Prefix = "case-";
+            o.AcceptedFormats = [new TeamMailAddressFormat { Suffix = "-case" }];
+        });
+
+        var options = provider.GetRequiredService<IOptions<TeamMailboxOptions>>().Value;
+
+        Assert.Equal("case-", options.Prefix);
+        Assert.Equal("-case", Assert.Single(options.AcceptedFormats).Suffix);
+    }
+
+    [Fact]
+    public void WithoutAPrefixOrFormats_TheDefaultsAreAsBefore()
+    {
+        using var provider = Build(Fortdocs);
+
+        var options = provider.GetRequiredService<IOptions<TeamMailboxOptions>>().Value;
+
+        Assert.Equal(string.Empty, options.Prefix);
+        Assert.Empty(options.AcceptedFormats);
+    }
+
+    [Theory]
+    [InlineData("a+b", "", "")]
+    [InlineData("a@b", "", "")]
+    [InlineData("a b", "", "")]
+    [InlineData("", "x+", "")]
+    [InlineData("", "", "-c@")]
+    public void APrefixOrFormatThatCannotBePartOfAnAddress_IsRefusedAtStartup(string prefix, string acceptedPrefix, string acceptedSuffix)
+    {
+        Assert.Throws<InvalidOperationException>(() => Build(o =>
+        {
+            o.Domain = "fortdocs.app";
+            o.Prefix = prefix;
+            o.AcceptedFormats = [new TeamMailAddressFormat { Prefix = acceptedPrefix, Suffix = acceptedSuffix }];
+        }));
+    }
+
+    [Fact]
+    public void ANullAcceptedFormat_IsRefusedAtStartup()
+    {
+        Assert.Throws<InvalidOperationException>(() => Build(o =>
+        {
+            o.Domain = "fortdocs.app";
+            o.AcceptedFormats = [null];
+        }));
+    }
+
+    [Fact]
     public void ByDefault_ReadingAndHandlingAreForUsers_AndChangingTheAddressForAdministrators()
     {
         using var provider = Build(Fortdocs);

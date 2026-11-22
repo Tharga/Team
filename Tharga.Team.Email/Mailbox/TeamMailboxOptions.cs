@@ -8,8 +8,18 @@ public class TeamMailboxOptions
     /// <summary>The domain every team address is on, e.g. <c>fortdocs.app</c>. The catch-all mailbox receives the whole domain.</summary>
     public string Domain { get; set; }
 
+    /// <summary>Written before the key in the local part, e.g. <c>case-</c> for <c>case-{key}@…</c>; empty for none, which is how every address was made before this option existed.</summary>
+    public string Prefix { get; set; } = string.Empty;
+
     /// <summary>Written after the key in the local part, e.g. <c>-case</c> for <c>{key}-case@…</c>; empty for none.</summary>
     public string Suffix { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Earlier formats that are still understood, so changing <see cref="Prefix"/> or <see cref="Suffix"/> does not stop the addresses already handed out from routing.
+    /// An address in one of these routes to the same key and item as the same key in the configured format, and a retiring key keeps working through its
+    /// retirement period. They are only read, never made: every address shown or sent is in the configured format.
+    /// </summary>
+    public List<TeamMailAddressFormat> AcceptedFormats { get; set; } = [];
 
     /// <summary>How many characters a key has. Twelve lowercase letters and digits is about 62 bits.</summary>
     public int KeyLength { get; set; } = 12;
