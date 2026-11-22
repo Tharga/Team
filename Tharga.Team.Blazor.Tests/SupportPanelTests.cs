@@ -93,8 +93,59 @@ public class SupportPanelTests : BunitContext
 
     private static void Send(IRenderedComponent<SupportPanel> view, string text)
     {
-        view.Find("input[data-draft]").Input(text);
+        view.Find("textarea[data-draft]").Input(text);
         view.Find("[data-send]").Click();
+    }
+
+    // ---- the message box ----
+
+    /// <summary>One row to start with; script grows it as the text does, so a longer message is written in several rows rather than scrolled sideways.</summary>
+    [Fact]
+    public void TheMessageBox_IsATextArea_StartingAtOneRow()
+    {
+        var box = Render(open: true).Find("[data-draft]");
+
+        Assert.Equal("textarea", box.TagName.ToLowerInvariant());
+        Assert.Equal("1", box.GetAttribute("rows"));
+    }
+
+    [Fact]
+    public void Enter_SendsTheMessage()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+
+        view.Find("textarea[data-draft]").Input(Question);
+        view.Find("textarea[data-draft]").KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Enter" });
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question, It.IsAny<SupportAssistance>(), default), Times.Once));
+    }
+
+    /// <summary>A new line is Shift+Enter, so what is typed stays in the box until it is sent.</summary>
+    [Fact]
+    public void ShiftEnter_DoesNotSend()
+    {
+        var view = Render(open: true);
+
+        view.Find("textarea[data-draft]").Input("First line");
+        view.Find("textarea[data-draft]").KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Enter", ShiftKey = true });
+
+        _cases.Verify(x => x.RaiseCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default), Times.Never);
+    }
+
+    [Fact]
+    public void AMessageOfSeveralLines_IsSentAsWritten_AndShownWithItsLineBreaks()
+    {
+        const string written = "The export is empty.\nDate range: last week.\n\nCan you check?";
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, written, SupportMessageKind.User));
+        var view = Render(open: true);
+
+        Send(view, written);
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, written, It.IsAny<SupportAssistance>(), default), Times.Once));
+        view.WaitForAssertion(() => Assert.Equal(written, view.Find(".support-panel__msg--me").TextContent.Trim()));
     }
 
     // ---- the allowance bar ----
@@ -895,8 +946,8 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
         view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-message]")));
 
-        view.Find("input[data-draft]").Input("And the");
-        view.Find("input[data-draft]").Input("And the date");
+        view.Find("textarea[data-draft]").Input("And the");
+        view.Find("textarea[data-draft]").Input("And the date");
 
         view.WaitForAssertion(() => _cases.Verify(x => x.ReportTypingAsync(TeamKey, raised.Id, false, default), Times.Once));
     }
@@ -911,7 +962,7 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
         view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once));
 
-        view.Find("input[data-draft]").Input("And the date");
+        view.Find("textarea[data-draft]").Input("And the date");
 
         _cases.Verify(x => x.ReportTypingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), default), Times.Never);
     }

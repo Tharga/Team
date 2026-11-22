@@ -217,9 +217,10 @@
                 </div>
 
                 <div class="support-panel__composer">
-                    <input class="support-panel__input" type="text" @bind="_draft" @bind:event="oninput" @bind:after="DraftChanged" @onkeydown="OnKeyDownAsync"
-                           placeholder="@(_support ? _text[SupportPanelText.WriteToSupport] : _text[SupportPanelText.AskAQuestion])"
-                           aria-label="@_text[SupportPanelText.Message]" disabled="@AssistantPausedHere" data-draft />
+                    @* One row to start with and growing with what is written, to a limit; Enter sends and Shift+Enter starts a new line. *@
+                    <textarea class="support-panel__input" rows="1" @ref="_draftBox" @bind="_draft" @bind:event="oninput" @bind:after="DraftChanged" @onkeydown="OnKeyDownAsync"
+                              placeholder="@(_support ? _text[SupportPanelText.WriteToSupport] : _text[SupportPanelText.AskAQuestion])"
+                              aria-label="@_text[SupportPanelText.Message]" disabled="@AssistantPausedHere" data-draft></textarea>
                     <button type="button" class="support-panel__icon support-panel__send" title="@_text[SupportPanelText.Send]" aria-label="@_text[SupportPanelText.Send]"
                             disabled="@(_busy || AssistantPausedHere || string.IsNullOrWhiteSpace(_draft))" @onclick="SendAsync" data-send>
                         <RadzenIcon Icon="send" />
@@ -307,6 +308,9 @@
     private SupportAssistantProgress _progress;
     private ElementReference _resizeHandle;
     private ElementReference _log;
+    private ElementReference _draftBox;
+    private bool _composerWired;
+    private bool _fitComposer;
     private bool _resizeWired;
     private bool _scrollOnRender;
 
@@ -472,6 +476,19 @@
                 await _module.InvokeVoidAsync("enableResize", _resizeHandle, _self, MinimumWidth);
             }
 
+            if (_expanded && !_composerWired && _draftBox.Id != null)
+            {
+                _composerWired = true;
+                await _module.InvokeVoidAsync("enableComposer", _draftBox);
+            }
+
+            // After the message is sent and the box is emptied, so it shrinks back to one row.
+            if (_fitComposer)
+            {
+                _fitComposer = false;
+                await _module.InvokeVoidAsync("fitComposer", _draftBox);
+            }
+
             if (_scrollOnRender)
             {
                 _scrollOnRender = false;
@@ -480,7 +497,7 @@
         }
         catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
         {
-            // Resizing and scrolling are conveniences; the conversation works without them.
+            // Resizing, scrolling and growing the box are conveniences; the conversation works without them.
         }
     }
 
@@ -582,6 +599,7 @@
         _support = support;
         _expanded = true;
         _resizeWired = false;
+        _composerWired = false;
         _scrollOnRender = true;
         await SaveAsync(OpenKey, true);
         await ReadConversationAsync();
@@ -791,6 +809,7 @@
 
         _messages.Add(new PanelMessage(true, text));
         _draft = null;
+        _fitComposer = true;
         _declined = false;
         _busy = true;
         _scrollOnRender = true;

@@ -233,7 +233,9 @@
     color: var(--rz-text-secondary-color);
 }
 
+/* What the member wrote keeps its line breaks, as it was written in the box. */
 .support-panel__msg--me {
+    white-space: pre-wrap;
     align-self: flex-end;
     background-color: color-mix(in srgb, var(--rz-primary) 20%, transparent);
 }
@@ -333,23 +335,31 @@
     color: var(--rz-text-secondary-color);
 }
 
+/* The send button stays at the foot of the box as it grows. */
 .support-panel__composer {
     flex: 0 0 auto;
     display: flex;
-    align-items: center;
+    align-items: flex-end;
     gap: 0.25rem;
     padding: 0.5rem 0.75rem;
     border-top: 1px solid color-mix(in srgb, var(--rz-text-color) 20%, transparent);
 }
 
+/* A message box that starts as one row and is made as tall as what is written (support-panel.js), up to about eight lines, then scrolls. */
 .support-panel__input {
     flex: 1 1 auto;
     min-width: 0;
+    box-sizing: border-box;
     padding: 0.375rem 0.5rem;
     border: 1px solid color-mix(in srgb, var(--rz-text-color) 30%, transparent);
     border-radius: var(--rz-border-radius, 4px);
     background: transparent;
     color: currentColor;
+    font: inherit;
+    line-height: 1.4;
+    resize: none;
+    overflow-y: auto;
+    max-height: 12rem;
 }
 
 /* The panel is docked right, so its left edge is the one dragged. */
