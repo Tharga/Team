@@ -344,6 +344,66 @@ public class SupportPanelTests : BunitContext
         Assert.True(view.Find("[data-draft]").HasAttribute("disabled"));
     }
 
+    private Mock<ISupportAiConnectionService> Connections(bool administrator = true)
+    {
+        var connections = new Mock<ISupportAiConnectionService>();
+        if (administrator)
+        {
+            connections.Setup(x => x.GetChoicesAsync(TeamKey, default)).ReturnsAsync(new SupportAiConnectionChoices
+            {
+                Kinds = [SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Off],
+                PlatformModels = [new SupportAiPlatformModelChoice { Id = "big", DisplayName = "Big", IsDefault = true }, new SupportAiPlatformModelChoice { Id = "small", DisplayName = "Small" }]
+            });
+            connections.Setup(x => x.GetConnectionAsync(TeamKey, default)).ReturnsAsync(new SupportAiConnection());
+        }
+        else
+        {
+            connections.Setup(x => x.GetChoicesAsync(TeamKey, default)).ThrowsAsync(new UnauthorizedAccessException());
+        }
+
+        Services.AddSingleton(connections.Object);
+        return connections;
+    }
+
+    [Fact]
+    public void WhenTheAssistantIsPaused_AnAdministratorIsOfferedWhatToDoAboutIt()
+    {
+        Connections();
+
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-refusal-actions] [data-switch-model='small']")));
+        Assert.NotNull(view.Find("[data-refusal-actions] [data-use-own]"));
+    }
+
+    [Fact]
+    public void WhenTheAssistantIsPaused_AMemberHasTheNoticeAlone()
+    {
+        Connections(administrator: false);
+
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+
+        Assert.NotNull(view.Find("[data-assistant-paused]"));
+        Assert.Empty(view.FindAll("[data-refusal-actions]"));
+    }
+
+    /// <summary>Choosing another model asks again whether the assistant answers, and when it does the notice and the actions give way to the conversation.</summary>
+    [Fact]
+    public void ChoosingAnotherModel_ReadsTheReadinessAgain_AndTheNoticeGoesAway()
+    {
+        var connections = Connections();
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-switch-model='small']")));
+        _cases.Setup(x => x.GetAssistantReadinessAsync(It.IsAny<string>(), default)).ReturnsAsync(SupportAssistantReadiness.Ready);
+
+        view.Find("[data-switch-model='small']").Click();
+
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-assistant-paused]")));
+        Assert.Empty(view.FindAll("[data-refusal-actions]"));
+        Assert.False(view.Find("[data-draft]").HasAttribute("disabled"));
+        connections.Verify(x => x.UsePlatformModelAsync(TeamKey, "small", default), Times.Once);
+    }
+
     [Fact]
     public void WithAnAssistantReady_NothingIsPaused()
     {

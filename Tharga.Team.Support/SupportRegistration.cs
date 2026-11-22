@@ -82,7 +82,8 @@ public static class SupportRegistration
                     sp.GetService<IChatClient>() != null,
                     CompositeSupportChatClientFactory.From(sp),
                     SupportAiConnectionService.DescribePlatformModel(sp.GetService<IChatClient>()),
-                    sp.GetService<IPlatformAiCatalogueStore>()),
+                    sp.GetService<IPlatformAiCatalogueStore>(),
+                    sp.GetService<SupportProviderRefusals>()),
                 sp.GetRequiredService<TeamAuthorizer>()),
             sp.GetRequiredService<CompositeAuditLogger>(),
             sp.GetRequiredService<IAuditEntryFactory>()));

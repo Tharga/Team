@@ -1,0 +1,154 @@
+@using Tharga.Team.Blazor.Framework
+@inject DialogService Dialogs
+
+@* What a team's administrators can do about an assistant that has stopped answering: another platform model where the account
+   behind this one is refused, and their own subscription, which no allowance limits. Shown only to somebody who may manage the
+   team's assistant, which the connection service tells by refusing everybody else; members see the notice alone. Nothing here
+   changes a choice by itself: the model is switched by a click, the subscription is given in the connection view, in a dialog. *@
+
+@if (_choices != null)
+{
+    <div class="support-refusal" data-refusal-actions>
+        @if (_others.Length > 0)
+        {
+            <span class="support-refusal__heading" data-switch-heading>@_text[SupportRefusalActionsText.SwitchModel]</span>
+            @foreach (var model in _others)
+            {
+                <button type="button" class="support-refusal__action" disabled="@_busy" @onclick="() => SwitchAsync(model.Id)" data-switch-model="@model.Id">
+                    <span class="support-refusal__action-title">@_text.Format(SupportRefusalActionsText.UseModel, model.DisplayName)</span>
+                    @if (Detail(model.Id) is { } detail)
+                    {
+                        <span class="support-refusal__action-detail" data-model-detail="@model.Id">@detail</span>
+                    }
+                </button>
+            }
+        }
+
+        @if (_canUseOwn)
+        {
+            <button type="button" class="support-refusal__action" disabled="@_busy" @onclick="UseOwnAsync" data-use-own>
+                <span class="support-refusal__action-title">@_text[SupportRefusalActionsText.UseOwn]</span>
+                <span class="support-refusal__action-detail">@_text[SupportRefusalActionsText.UseOwnExplanation]</span>
+            </button>
+        }
+
+        @if (_failed)
+        {
+            <span class="support-refusal__failed" role="alert" data-refusal-failed>@_text[SupportRefusalActionsText.Failed]</span>
+        }
+    </div>
+}
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+    [Inject] private IServiceProvider Services { get; set; }
+
+    /// <summary>The team whose assistant has stopped.</summary>
+    [Parameter] public string TeamKey { get; set; }
+
+    /// <summary>Why it stopped. Another model is offered only where the account behind this one is refused: a team that has used its allowance has used it up on any model.</summary>
+    [Parameter] public SupportAssistantReadiness Readiness { get; set; }
+
+    /// <summary>What each model costs a question, where the allowance knows; the amounts are there only for administrators.</summary>
+    [Parameter] public SupportAssistantAllowance Allowance { get; set; }
+
+    /// <summary>Raised when the team's AI was changed, so whoever shows the assistant can ask again whether it answers.</summary>
+    [Parameter] public EventCallback Changed { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private ISupportAiConnectionService _connections;
+    private SupportAiConnectionChoices _choices;
+    private SupportAiPlatformModelChoice[] _others = [];
+    private bool _canUseOwn;
+    private string _loadedFor;
+    private bool _busy;
+    private bool _failed;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var key = $"{TeamKey}|{Readiness}";
+        if (key == _loadedFor) return;
+
+        _loadedFor = key;
+        _text = await TextProvider.ResolveAsync(SupportRefusalActionsText.All);
+        _connections ??= Services.GetService(typeof(ISupportAiConnectionService)) as ISupportAiConnectionService;
+        _choices = null;
+        _others = [];
+        _canUseOwn = false;
+        if (_connections == null || string.IsNullOrWhiteSpace(TeamKey)) return;
+
+        try
+        {
+            var choices = await _connections.GetChoicesAsync(TeamKey);
+            var connection = await _connections.GetConnectionAsync(TeamKey);
+
+            // The model in use is the one the team chose, or the one a team gets without choosing.
+            var current = connection.Kind == SupportAiConnectionKind.Platform && choices.PlatformModels.Any(x => x.Id == connection.PlatformModelId)
+                ? connection.PlatformModelId
+                : (choices.PlatformModels.FirstOrDefault(x => x.IsDefault) ?? choices.PlatformModels.FirstOrDefault())?.Id;
+
+            _others = Readiness == SupportAssistantReadiness.ProviderRefused && connection.Kind == SupportAiConnectionKind.Platform
+                ? [.. choices.PlatformModels.Where(x => x.Id != current)]
+                : [];
+            _canUseOwn = choices.Kinds.Any(x => x is not (SupportAiConnectionKind.Platform or SupportAiConnectionKind.Off));
+            _choices = choices;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            // Not somebody who manages the team's assistant: only the notice is for them.
+            _choices = null;
+        }
+        catch (Exception)
+        {
+            _choices = null;
+        }
+    }
+
+    private string Detail(string modelId)
+    {
+        var model = Allowance?.Models.FirstOrDefault(x => x.ModelId == modelId);
+        if (model?.CostPerAnswer is not { } cost || Allowance?.Unit is not { } unit) return null;
+
+        var amount = Allowance.Display == SupportAllowanceDisplay.Money ? cost.ToString("N2") : cost.ToString("N0");
+        var detail = _text.Format(SupportRefusalActionsText.CostPerAnswer, amount, unit);
+        return model.QuestionsLeft is { } left && left > 0
+            ? $"{detail} · {_text.Format(SupportRefusalActionsText.QuestionsLeft, left.ToString("N0"))}"
+            : detail;
+    }
+
+    private async Task SwitchAsync(string modelId)
+    {
+        _busy = true;
+        _failed = false;
+        try
+        {
+            await _connections.UsePlatformModelAsync(TeamKey, modelId);
+            await Changed.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            _failed = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    /// <remarks>Returns when the dialog is closed, whatever was done in it, so the panel then asks again.</remarks>
+    private async Task UseOwnAsync()
+    {
+        _failed = false;
+        try
+        {
+            await Dialogs.OpenAsync<SupportAssistantConnectionView>(_text[SupportRefusalActionsText.ConnectionTitle],
+                new Dictionary<string, object> { [nameof(SupportAssistantConnectionView.TeamKey)] = TeamKey },
+                new DialogOptions { Width = "min(40rem, 95vw)", CloseDialogOnOverlayClick = true });
+            await Changed.InvokeAsync();
+        }
+        catch (Exception)
+        {
+            _failed = true;
+        }
+    }
+}

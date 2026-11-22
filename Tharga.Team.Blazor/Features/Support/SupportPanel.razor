@@ -158,6 +158,9 @@
                         <div class="support-panel__msg support-panel__msg--them support-panel__msg--notice" role="status" data-assistant-paused="@_readiness">
                             @PausedText
                         </div>
+
+                        @* What to do about it, for the team's administrators; nothing for a member, who has only the notice. *@
+                        <SupportRefusalActions TeamKey="@_teamKey" Readiness="@_readiness" Allowance="@_allowance" Changed="RefreshAllowanceAsync" />
                     }
 
                     @if (_declined && _withAssistant && !_busy)
