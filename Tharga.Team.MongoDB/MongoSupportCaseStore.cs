@@ -833,7 +833,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         Rating = entity.Rating,
         AssistantCalls = entity.AssistantCalls == null ? [] : [.. entity.AssistantCalls.Select(x => new SupportAssistantCall { Name = x.Name, Arguments = x.Arguments ?? string.Empty, Succeeded = x.Succeeded, Result = x.Result ?? string.Empty })],
         AssistantUsage = entity.AssistantUsage is { } usage
-            ? new SupportAssistantUsage { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, Provider = usage.Provider, Model = usage.Model, Elapsed = usage.ElapsedMs is { } ms ? TimeSpan.FromMilliseconds(ms) : null }
+            ? new SupportAssistantUsage { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, CacheWriteTokens = usage.CacheWriteTokens, Provider = usage.Provider, Model = usage.Model, Elapsed = usage.ElapsedMs is { } ms ? TimeSpan.FromMilliseconds(ms) : null }
             : null
     };
 
@@ -860,7 +860,7 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
             ? [.. calls.Select(x => new SupportAssistantCallEntity { Name = x.Name, Arguments = string.IsNullOrEmpty(x.Arguments) ? null : x.Arguments, Succeeded = x.Succeeded, Result = string.IsNullOrEmpty(x.Result) ? null : x.Result })]
             : null,
         AssistantUsage = message.AssistantUsage is { } usage
-            ? new SupportAssistantUsageEntity { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, Provider = usage.Provider, Model = usage.Model, ElapsedMs = usage.Elapsed is { } elapsed ? (long)elapsed.TotalMilliseconds : null }
+            ? new SupportAssistantUsageEntity { InputTokens = usage.InputTokens, OutputTokens = usage.OutputTokens, TotalTokens = usage.TotalTokens, CachedInputTokens = usage.CachedInputTokens, CacheWriteTokens = usage.CacheWriteTokens, Provider = usage.Provider, Model = usage.Model, ElapsedMs = usage.Elapsed is { } elapsed ? (long)elapsed.TotalMilliseconds : null }
             : null
     };
 

@@ -235,7 +235,12 @@ person answered can rate the whole conversation, with a comment on thumbs-down (
 `SupportAssistantOptions.ConversationFeedbackRatings` lets through (thumbs-down by default) goes to each
 `ISupportConversationFeedbackSink` as a `SupportConversationFeedback`, the conversation with its tool names and whether
 each call succeeded but never their arguments or results, written by `SupportConversationFeedbackJson` in one shape for
-the host to deliver, for example to its support inbox. Planned: Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
+the host to deliver, for example to its support inbox. What a team may spend on the platform's model each month can be limited
+(`SupportAssistantOptions.Allowance`, a default limit and one per team, shown to the team as a share or in a unit of the host's
+choosing, never as money, with a progress bar in `SupportPanel`); when it is used up, or the provider refuses the account, the
+assistant says why and offers a team's administrators another model or their own subscription, and a host can be told
+(`ISupportAssistantRefusalSink`), hold the assistant back with a message of its own (`ISupportAssistantGate`) and place its own
+content in the panel (`SupportPanel.AssistantTop`). Planned: Jira tickets with a customer-facing ticket view. Those bring real dependencies, which is why this is a separate
 package rather than part of `Tharga.Team.Service`.
 
 ## Links

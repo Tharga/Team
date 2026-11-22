@@ -62,6 +62,9 @@ public sealed record SupportAssistantUsageTotal
     /// <summary>Of <see cref="InputTokens"/>, those read from the provider's cache.</summary>
     public long CachedInputTokens { get; init; }
 
+    /// <summary>Of <see cref="InputTokens"/>, those written to the provider's cache.</summary>
+    public long CacheWriteTokens { get; init; }
+
     /// <summary>The tokens the model wrote.</summary>
     public long OutputTokens { get; init; }
 

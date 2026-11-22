@@ -163,6 +163,23 @@ public class SupportAssistantStreamingTests
     }
 
     [Fact]
+    public void CacheWrites_AreReadFromTheProvidersAdditionalCounts_AndAddedUpOverRounds()
+    {
+        var usage = ChatSupportResponder.UsageOf(
+        [
+            new UsageDetails { InputTokenCount = 500, OutputTokenCount = 10, AdditionalCounts = new AdditionalPropertiesDictionary<long> { ["CacheCreationInputTokens"] = 300 } },
+            new UsageDetails { InputTokenCount = 700, OutputTokenCount = 20 },
+            new UsageDetails { InputTokenCount = 800, OutputTokenCount = 30, AdditionalCounts = new AdditionalPropertiesDictionary<long> { ["CacheCreationInputTokens"] = 50, ["Other"] = 9 } }
+        ]);
+
+        Assert.Equal(350, usage.CacheWriteTokens);
+    }
+
+    [Fact]
+    public void NoAdditionalCounts_IsNoCacheWrites()
+        => Assert.Equal(0, ChatSupportResponder.UsageOf([new UsageDetails { InputTokenCount = 7, OutputTokenCount = 3 }]).CacheWriteTokens);
+
+    [Fact]
     public void ATotalNotReported_IsInputAndOutputAddedUp()
     {
         var usage = ChatSupportResponder.UsageOf([new UsageDetails { InputTokenCount = 7, OutputTokenCount = 3 }, null]);

@@ -167,6 +167,44 @@ public class SupportAssistantUsageRecordingTests
     public void WithNoPriceAtAll_ThereIsNoCost()
         => Assert.Null(SupportAssistantUsageRecord.CostOf(1000, 0, 500, null, null, null));
 
+    [Theory]
+    [InlineData(1000, 0, 400, 0, "3", "0.3", "3.75", "15", "0.0033")]
+    [InlineData(1000, 200, 300, 100, "3", "0.3", "3.75", "15", "0.004185")]
+    [InlineData(1000, 0, 400, 0, "3", "0.3", null, "15", "0.003")]
+    [InlineData(1000, 800, 800, 0, "3", "0.3", "3.75", "15", "0.00099")]
+    [InlineData(1000, 0, 9999, 0, "3", "0.3", "3.75", "15", "0.00375")]
+    public void CacheWrites_ArePricedAtTheirOwnPrice_OrAsInputWhenNoneIsGiven(long input, long cached, long written, long output, string priceInput, string priceCached, string priceWrite, string priceOutput, string expected)
+    {
+        static decimal? Price(string text) => text == null ? null : decimal.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+
+        Assert.Equal(Price(expected), SupportAssistantUsageRecord.CostOf(input, cached, written, output, Price(priceInput), Price(priceCached), Price(priceWrite), Price(priceOutput)));
+    }
+
+    [Fact]
+    public void WithOnlyACacheWritePrice_ThereIsACost()
+        => Assert.NotNull(SupportAssistantUsageRecord.CostOf(1000, 0, 400, 0, null, null, 3.75m, null));
+
+    [Fact]
+    public void TheOldOverload_PricesNoWrites()
+        => Assert.Equal(SupportAssistantUsageRecord.CostOf(1000, 400, 0, 500, 3m, 0.3m, null, 15m), SupportAssistantUsageRecord.CostOf(1000, 400, 500, 3m, 0.3m, 15m));
+
+    [Fact]
+    public async Task APricedAnswer_CountsCacheWritesAtTheirPrice_AndKeepsThePrice()
+    {
+        var sink = new CollectingSink();
+        var pricing = Substitute.For<ISupportAssistantPricing>();
+        pricing.GetAsync(TeamA, Arg.Any<CancellationToken>()).Returns(new PlatformAiModel { Id = "m1", PriceInput = 3m, PriceCachedInput = 0.3m, PriceCacheWrite = 3.75m, PriceOutput = 15m, Currency = "USD" });
+        var world = new World(pricing, Answering(SupportAnswer.FromBody(AnswerText) with { Usage = Usage with { CacheWriteTokens = 100 } }), sink);
+        var raised = await world.Service.RaiseCaseAsync(TeamA, null, Question, SupportAssistance.Assistant);
+
+        await world.Service.RunAssistantAsync(TeamA, raised.Id);
+
+        var record = Assert.Single(sink.Records);
+        Assert.Equal((100L, 3.75m), (record.CacheWriteTokens, record.PriceCacheWrite));
+        // 110 fresh input at 3, 400 cached at 0.3, 100 written at 3.75, 220 output at 15, per million tokens.
+        Assert.Equal((110 * 3m + 400 * 0.3m + 100 * 3.75m + 220 * 15m) / 1_000_000m, record.Cost);
+    }
+
     private static ISupportResponder Answering(SupportAnswer answer)
     {
         var responder = Substitute.For<ISupportResponder>();

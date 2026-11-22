@@ -83,4 +83,10 @@ public static class SystemSupportScopes
     /// (<see cref="IPlatformAiCatalogueService"/>). Held by no level and no role by default; grant it to the platform's staff or a system key.
     /// </summary>
     public const string AiCatalogueManage = "support:aicatalogue:manage";
+
+    /// <summary>
+    /// Give a team a spend limit of its own for the support assistant, or take it away (<see cref="ISupportAssistantLimitService"/>). Held by no level and
+    /// no role by default; grant it to the platform's staff or a system key. A system scope, because a team's administrators raising their own limit is what it is there to prevent.
+    /// </summary>
+    public const string AllowanceManage = "support:allowance:manage";
 }

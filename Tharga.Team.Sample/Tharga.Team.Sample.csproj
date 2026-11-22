@@ -20,6 +20,7 @@
     <ProjectReference Include="..\Tharga.Team.Support.OpenAI\Tharga.Team.Support.OpenAI.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- Held at 10.0.0: 11.0.0 pulls Microsoft.Extensions.* and System.Text.Json 11.0.0 into this net10.0 app; applications stay on .NET 10 until spring 2027. -->
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
   </ItemGroup>
 

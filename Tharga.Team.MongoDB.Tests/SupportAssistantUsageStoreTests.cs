@@ -138,6 +138,36 @@ public class SupportAssistantUsageStoreTests
     }
 
     [Fact]
+    public void CacheWrites_AreSummedByTheServer_AndReadBack()
+    {
+        var group = Stages(null)[1]["$group"].AsBsonDocument;
+        Assert.Equal(new BsonDocument("$sum", "$CacheWriteTokens"), group["cacheWrite"].AsBsonDocument);
+
+        var row = new BsonDocument
+        {
+            { "_id", new BsonDocument { { "t", "team-a" }, { "p", "anthropic" }, { "m", "m" }, { "c", "USD" } } },
+            { "answers", 1 }, { "declines", 0 }, { "toolCalls", 0L }, { "input", 10L }, { "cached", 0L }, { "cacheWrite", 4L }, { "output", 5L }, { "total", 15L }
+        };
+
+        Assert.Equal(4, SupportAssistantUsageCollection.ToTotal(row).CacheWriteTokens);
+    }
+
+    [Fact]
+    public void ARecordWithCacheWrites_KeepsThemAndThePrice_AndStoresThePriceAsDecimal128()
+    {
+        var record = Record() with { CacheWriteTokens = 120, PriceCacheWrite = 3.75m };
+
+        var entity = MongoSupportAssistantUsageStore.ToEntity(record);
+
+        Assert.Equal(record, MongoSupportAssistantUsageStore.ToRecord(entity));
+        Assert.Equal(BsonType.Decimal128, entity.ToBsonDocument()["PriceCacheWrite"].BsonType);
+    }
+
+    [Fact]
+    public void NoCacheWritePrice_IsNotStored()
+        => Assert.False(MongoSupportAssistantUsageStore.ToEntity(Record()).ToBsonDocument().Contains("PriceCacheWrite"));
+
+    [Fact]
     public async Task TheTotals_AreTheCollections()
     {
         SupportAssistantUsageTotal[] totals = [new() { TeamKey = "team-a", Answers = 1 }];

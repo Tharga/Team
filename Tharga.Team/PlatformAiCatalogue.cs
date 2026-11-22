@@ -47,6 +47,9 @@ public sealed record PlatformAiModel
     /// <summary>Price per million cached input tokens; null when not given.</summary>
     public decimal? PriceCachedInput { get; init; }
 
+    /// <summary>Price per million tokens written to the provider's cache; null when not given, which prices writes as ordinary input.</summary>
+    public decimal? PriceCacheWrite { get; init; }
+
     /// <summary>Price per million output tokens; null when not given.</summary>
     public decimal? PriceOutput { get; init; }
 

@@ -25,6 +25,7 @@ internal sealed class MongoSupportAssistantUsageStore(ISupportAssistantUsageColl
         Model = record.Model,
         InputTokens = record.InputTokens,
         CachedInputTokens = record.CachedInputTokens,
+        CacheWriteTokens = record.CacheWriteTokens,
         OutputTokens = record.OutputTokens,
         TotalTokens = record.TotalTokens,
         ToolCalls = record.ToolCalls,
@@ -33,6 +34,7 @@ internal sealed class MongoSupportAssistantUsageStore(ISupportAssistantUsageColl
         At = record.At,
         PriceInput = record.PriceInput,
         PriceCachedInput = record.PriceCachedInput,
+        PriceCacheWrite = record.PriceCacheWrite,
         PriceOutput = record.PriceOutput,
         Currency = record.Currency,
         Cost = record.Cost
@@ -47,6 +49,7 @@ internal sealed class MongoSupportAssistantUsageStore(ISupportAssistantUsageColl
         Model = entity.Model,
         InputTokens = entity.InputTokens,
         CachedInputTokens = entity.CachedInputTokens,
+        CacheWriteTokens = entity.CacheWriteTokens,
         OutputTokens = entity.OutputTokens,
         TotalTokens = entity.TotalTokens,
         ToolCalls = entity.ToolCalls,
@@ -55,6 +58,7 @@ internal sealed class MongoSupportAssistantUsageStore(ISupportAssistantUsageColl
         At = entity.At,
         PriceInput = entity.PriceInput,
         PriceCachedInput = entity.PriceCachedInput,
+        PriceCacheWrite = entity.PriceCacheWrite,
         PriceOutput = entity.PriceOutput,
         Currency = entity.Currency,
         Cost = entity.Cost

@@ -25,9 +25,12 @@ internal sealed class ChatSupportResponder(
     ISupportChatClientResolver chatClients,
     ISupportAssistantTools tools,
     SupportAssistantOptions options,
-    ILogger<ChatSupportResponder> logger) : ISupportResponder
+    ILogger<ChatSupportResponder> logger,
+    SupportProviderRefusals refusals = null) : ISupportResponder
 {
     internal const string NotConfiguredReason = "The assistant is not set up for this team.";
+
+    internal const string ProviderRefusedReason = "The assistant's provider has refused the account, so it cannot answer for now.";
 
     internal const string MissingSkillTool = "report_missing_skill";
 
@@ -40,6 +43,9 @@ internal sealed class ChatSupportResponder(
     public async Task<SupportAnswer> AnswerAsync(SupportCase supportCase, IReadOnlyList<SupportMessage> transcript, IProgress<SupportAssistantProgress> progress, CancellationToken cancellationToken = default)
     {
         if (transcript == null || transcript.Count == 0) return SupportAnswer.Declined("The case has no messages to answer.");
+
+        // Asking again would be refused the same way, and spends nothing but a request the provider has already said no to.
+        if (refusals?.IsRefused(supportCase.TeamKey) == true) return SupportAnswer.Declined(ProviderRefusedReason);
 
         var history = new List<ChatMessage> { new(ChatRole.System, options.Instructions) };
         history.AddRange(transcript.TakeLast(options.TranscriptLimit).Select(ToChatMessage));
@@ -83,6 +89,9 @@ internal sealed class ChatSupportResponder(
                 body = body.Trim();
             }
 
+            // The provider took the request, so whatever refused the account before is mended.
+            refusals?.Answered(supportCase.TeamKey);
+
             var answer = string.IsNullOrWhiteSpace(body)
                 ? SupportAnswer.Declined("The assistant returned nothing.")
                 : SupportAnswer.FromBody(body);
@@ -95,6 +104,13 @@ internal sealed class ChatSupportResponder(
             // person, which is the outcome the customer would have had anyway.
             logger.LogWarning("The support assistant did not answer case {CaseId} within {Timeout}.", supportCase.Id, options.Timeout);
             return SupportAnswer.Declined("The assistant took too long to answer.");
+        }
+        catch (Exception ex) when (ProviderRefusal.IsAccountLevel(ex))
+        {
+            // The account is refused, not the request: said once and remembered, so the next questions are not sent to be refused too.
+            refusals?.Refused(supportCase.TeamKey);
+            logger.LogWarning(ex, "The support assistant's provider refused the account for team {TeamKey} on case {CaseId}; it is not asked again for {RetryAfter}.", supportCase.TeamKey, supportCase.Id, options.ProviderRefusalRetryAfter);
+            return SupportAnswer.Declined(ProviderRefusedReason);
         }
         catch (Exception ex)
         {
@@ -210,6 +226,9 @@ internal sealed class ChatSupportResponder(
         return (text.ToString(), [.. calls.Select(x => x.Call)], UsageOf(usage, metadata?.ProviderName, modelId ?? metadata?.DefaultModelId));
     }
 
+    /// <summary>The name the Anthropic chat client files tokens written to its cache under, in <see cref="UsageDetails.AdditionalCounts"/>.</summary>
+    internal const string CacheWriteCountName = "CacheCreationInputTokens";
+
     /// <summary>The tokens reported, added up; <c>null</c> when nothing was reported, so no count reads as zero.</summary>
     internal static SupportAssistantUsage UsageOf(IEnumerable<UsageDetails> reported, string provider = null, string model = null)
     {
@@ -222,6 +241,7 @@ internal sealed class ChatSupportResponder(
             OutputTokens = details.Sum(x => x.OutputTokenCount ?? 0),
             TotalTokens = details.Sum(x => x.TotalTokenCount ?? (x.InputTokenCount ?? 0) + (x.OutputTokenCount ?? 0)),
             CachedInputTokens = details.Sum(x => x.CachedInputTokenCount ?? 0),
+            CacheWriteTokens = details.Sum(x => x.AdditionalCounts != null && x.AdditionalCounts.TryGetValue(CacheWriteCountName, out var written) ? written : 0),
             Provider = provider,
             Model = model
         };
@@ -280,9 +300,9 @@ internal sealed class ChatSupportResponder(
     {
         try
         {
-            return await chatClients.GetAsync(teamKey, cancellationToken) == null
-                ? SupportAssistantReadiness.NotConfigured
-                : SupportAssistantReadiness.Ready;
+            if (await chatClients.GetAsync(teamKey, cancellationToken) == null) return SupportAssistantReadiness.NotConfigured;
+
+            return refusals?.IsRefused(teamKey) == true ? SupportAssistantReadiness.ProviderRefused : SupportAssistantReadiness.Ready;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {

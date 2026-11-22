@@ -29,7 +29,8 @@ internal sealed class SupportAiConnectionService(
     bool platformModelAvailable,
     ISupportChatClientFactory factory = null,
     string platformModelName = null,
-    IPlatformAiCatalogueStore catalogueStore = null) : ISupportAiConnectionService
+    IPlatformAiCatalogueStore catalogueStore = null,
+    SupportProviderRefusals refusals = null) : ISupportAiConnectionService
 {
     internal const string ProtectionPurpose = "Tharga.Team.Support.AiConnection.ApiKey.v1";
     internal const string TestPrompt = "Reply with one short sentence saying that you can answer.";
@@ -221,7 +222,8 @@ internal sealed class SupportAiConnectionService(
     }
 
     private async Task SaveAsync(string teamKey, SupportAiConnectionKind kind, string baseAddress, string model, string protectedApiKey, CancellationToken cancellationToken, string platformModelId = null)
-        => await store.SetAsync(new StoredSupportAiConnection
+    {
+        await store.SetAsync(new StoredSupportAiConnection
         {
             TeamKey = teamKey,
             Kind = kind,
@@ -233,6 +235,10 @@ internal sealed class SupportAiConnectionService(
             ChangedByIdentity = await authorizer.GetSubjectAsync(),
             ChangedByName = await authorizer.GetDisplayNameAsync()
         }, cancellationToken);
+
+        // A refusal was of the account behind the AI the team had. Another model, or the team's own account, deserves a try at once rather than when the wait is over.
+        refusals?.Answered(teamKey);
+    }
 
     internal static string Normalize(string address) => address?.Trim().TrimEnd('/');
 

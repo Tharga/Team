@@ -62,4 +62,7 @@ public static class SupportAuditMetadataKeys
 
     /// <summary>The provider's host, without path or credentials.</summary>
     public const string AssistantHost = "assistant.host";
+
+    /// <summary>The limit a team was given, per period in the catalogue's currency, or <c>none</c> or <c>default</c>.</summary>
+    public const string AssistantAllowanceLimit = "assistant.allowance.limit";
 }

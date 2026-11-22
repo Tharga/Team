@@ -1,0 +1,255 @@
+@using Tharga.Team.Blazor.Framework
+@using Tharga.Blazor
+@using Microsoft.Extensions.DependencyInjection
+@inject ISupportAssistantLimitService Limits
+@inject NotificationService NotificationService
+@inject IServiceProvider ServiceProvider
+
+@* What the platform's staff let each team spend on the assistant: the default every team is held to, and a limit of its own for single teams.
+   Needs the support:allowance:manage system scope. Amounts are money in the catalogue's currency; what a team is shown is the host's choice of unit. *@
+
+@if (!_ready)
+{
+    <Loading />
+}
+else if (!_permitted)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Info" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter">
+        @_text[SupportAssistantLimitViewText.NotPermitted]
+    </RadzenAlert>
+}
+else
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="1.5rem">
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-default-limit>
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportAssistantLimitViewText.DefaultTitle]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[SupportAssistantLimitViewText.DefaultExplanation]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-default-now>
+                <strong>@_text.Format(SupportAssistantLimitViewText.Current, Amount(_limits.DefaultLimit))</strong>
+                @(_limits.StoredDefault ? _text[SupportAssistantLimitViewText.FromHere] : _text[SupportAssistantLimitViewText.FromHost])
+            </RadzenText>
+
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
+                <RadzenFormField Text="@($"{_text[SupportAssistantLimitViewText.Limit]} ({_limits.Currency})")" Variant="Variant.Outlined">
+                    <RadzenNumeric TValue="decimal?" @bind-Value="_defaultAmount" Min="0" Disabled="_busy || _defaultNone" data-default-amount />
+                </RadzenFormField>
+                <RadzenCheckBox TValue="bool" @bind-Value="_defaultNone" Disabled="_busy" Name="defaultNone" data-default-none />
+                <RadzenLabel Text="@_text[SupportAssistantLimitViewText.NoLimit]" Component="defaultNone" />
+                <RadzenButton Text="@_text[SupportAssistantLimitViewText.SaveDefault]" Icon="save" Click="SaveDefaultAsync" Disabled="_busy" data-save-default />
+                @if (_limits.StoredDefault)
+                {
+                    <RadzenButton Text="@_text[SupportAssistantLimitViewText.UseHostSetting]" ButtonStyle="ButtonStyle.Light" Click="ClearDefaultAsync" Disabled="_busy" data-clear-default />
+                }
+            </RadzenStack>
+        </RadzenStack>
+
+        <RadzenStack Orientation="Orientation.Vertical" Gap="0.5rem" data-team-limits>
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">@_text[SupportAssistantLimitViewText.TeamsTitle]</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@_text[SupportAssistantLimitViewText.TeamsExplanation]</RadzenText>
+
+            @if (_limits.Teams.Length == 0)
+            {
+                <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0" data-no-team-limits>@_text[SupportAssistantLimitViewText.NoTeams]</RadzenText>
+            }
+            else
+            {
+                <div style="overflow-x: auto;">
+                    <table class="rz-grid-table rz-grid-table-fixed">
+                        <thead>
+                            <tr>
+                                <th>@_text[SupportAssistantLimitViewText.Team]</th>
+                                <th style="text-align: end;">@_text[SupportAssistantLimitViewText.Limit]</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var team in _limits.Teams)
+                            {
+                                <tr data-team-limit-row="@team.TeamKey">
+                                    <td data-team>@TeamName(team.TeamKey)</td>
+                                    <td style="text-align: end;" data-limit>@Amount(team.Limit)</td>
+                                    <td style="text-align: end; white-space: nowrap;">
+                                        <RadzenButton Text="@_text[SupportAssistantLimitViewText.Edit]" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => Edit(team))" Disabled="_busy" data-edit-team-limit />
+                                        <RadzenButton Text="@_text[SupportAssistantLimitViewText.UseDefault]" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Text" Size="ButtonSize.Small" Click="@(() => ClearTeamAsync(team))" Disabled="_busy" data-clear-team-limit />
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap" AlignItems="AlignItems.Center">
+                @if (_teams.Count > 0)
+                {
+                    <RadzenFormField Text="@_text[SupportAssistantLimitViewText.Team]" Variant="Variant.Outlined">
+                        <RadzenDropDown TValue="string" Data="_teams" TextProperty="Name" ValueProperty="Key" @bind-Value="_teamKey" AllowFiltering="true" Disabled="_busy" Style="min-width: 16rem;" data-team-choice />
+                    </RadzenFormField>
+                }
+                else
+                {
+                    <RadzenFormField Text="@_text[SupportAssistantLimitViewText.Team]" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="_teamKey" Disabled="_busy" data-team-key />
+                    </RadzenFormField>
+                }
+                <RadzenFormField Text="@($"{_text[SupportAssistantLimitViewText.Limit]} ({_limits.Currency})")" Variant="Variant.Outlined">
+                    <RadzenNumeric TValue="decimal?" @bind-Value="_teamAmount" Min="0" Disabled="_busy || _teamNone" data-team-amount />
+                </RadzenFormField>
+                <RadzenCheckBox TValue="bool" @bind-Value="_teamNone" Disabled="_busy" Name="teamNone" data-team-none />
+                <RadzenLabel Text="@_text[SupportAssistantLimitViewText.NoLimit]" Component="teamNone" />
+                <RadzenButton Text="@_text[SupportAssistantLimitViewText.SaveTeam]" Icon="save" Click="SaveTeamAsync" Disabled="_busy" data-save-team-limit />
+            </RadzenStack>
+        </RadzenStack>
+
+        @if (_problem != null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" ShowIcon="true" Variant="Variant.Flat" Shade="Shade.Lighter" AllowClose="false" data-problem>
+                @_problem
+            </RadzenAlert>
+        }
+    </RadzenStack>
+}
+
+@code {
+    [Inject] private IThargaTextProvider TextProvider { get; set; }
+
+    private TextSet _text = TextSet.Empty;
+    private SupportAssistantLimits _limits = new() { Currency = "USD" };
+    private List<TeamChoice> _teams = [];
+    private bool _ready;
+    private bool _permitted = true;
+    private bool _busy;
+    private string _problem;
+
+    private decimal? _defaultAmount;
+    private bool _defaultNone;
+
+    private string _teamKey;
+    private decimal? _teamAmount;
+    private bool _teamNone;
+
+    private sealed record TeamChoice(string Key, string Name);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _text = await TextProvider.ResolveAsync(SupportAssistantLimitViewText.All);
+        await ReloadAsync();
+        if (_permitted) _teams = await TeamsAsync();
+        _ready = true;
+    }
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            _limits = await Limits.GetLimitsAsync();
+            _permitted = true;
+            _defaultNone = _limits.DefaultLimit == null && _limits.StoredDefault;
+            _defaultAmount = _limits.DefaultLimit;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+    }
+
+    /// <summary>Every team, to choose one from; none where the reader may not read the directory, so a key is typed instead.</summary>
+    private async Task<List<TeamChoice>> TeamsAsync()
+    {
+        var directory = ServiceProvider.GetService<ITeamDirectoryService>();
+        if (directory == null) return [];
+
+        try
+        {
+            List<TeamChoice> teams = [];
+            await foreach (var team in directory.GetTeamsAsync())
+            {
+                if (team?.Key != null) teams.Add(new TeamChoice(team.Key, string.IsNullOrWhiteSpace(team.Name) ? team.Key : team.Name));
+            }
+
+            return [.. teams.OrderBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase)];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return [];
+        }
+    }
+
+    private string TeamName(string teamKey) => _teams.FirstOrDefault(x => x.Key == teamKey)?.Name ?? teamKey;
+
+    private string Amount(decimal? amount) => amount == null ? _text[SupportAssistantLimitViewText.NoLimit] : $"{amount:N2} {_limits.Currency}";
+
+    private void Edit(SupportAssistantLimit limit)
+    {
+        _teamKey = limit.TeamKey;
+        _teamNone = limit.Limit == null;
+        _teamAmount = limit.Limit;
+    }
+
+    private Task SaveDefaultAsync()
+    {
+        if (!_defaultNone && _defaultAmount == null)
+        {
+            _problem = _text[SupportAssistantLimitViewText.EnterAmount];
+            return Task.CompletedTask;
+        }
+
+        return RunAsync(() => Limits.SetDefaultLimitAsync(new SupportAssistantDefaultLimitRequest { Limit = _defaultNone ? null : _defaultAmount }));
+    }
+
+    private Task ClearDefaultAsync() => RunAsync(() => Limits.ClearDefaultLimitAsync());
+
+    private Task SaveTeamAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_teamKey))
+        {
+            _problem = _text[SupportAssistantLimitViewText.ChooseTeam];
+            return Task.CompletedTask;
+        }
+
+        if (!_teamNone && _teamAmount == null)
+        {
+            _problem = _text[SupportAssistantLimitViewText.EnterAmount];
+            return Task.CompletedTask;
+        }
+
+        return RunAsync(async () =>
+        {
+            await Limits.SetLimitAsync(new SupportAssistantLimitRequest { TeamKey = _teamKey.Trim(), Limit = _teamNone ? null : _teamAmount });
+            _teamKey = null;
+            _teamAmount = null;
+            _teamNone = false;
+            return await Limits.GetLimitsAsync();
+        });
+    }
+
+    private Task ClearTeamAsync(SupportAssistantLimit team) => RunAsync(async () =>
+    {
+        await Limits.ClearLimitAsync(team.TeamKey);
+        return await Limits.GetLimitsAsync();
+    });
+
+    private async Task RunAsync(Func<Task<SupportAssistantLimits>> operation)
+    {
+        _busy = true;
+        _problem = null;
+        try
+        {
+            await operation();
+            NotificationService.Notify(NotificationSeverity.Success, _text[SupportAssistantLimitViewText.Saved]);
+            await ReloadAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _permitted = false;
+        }
+        catch (Exception ex) when (ex is ArgumentException)
+        {
+            _problem = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

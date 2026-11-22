@@ -25,6 +25,12 @@ else
                     <PlatformAiCatalogueView />
                 </RadzenTabsItem>
             }
+            @if (_canLimit)
+            {
+                <RadzenTabsItem Text="@_text[SupportAssistantAdminViewText.LimitsTab]">
+                    <SupportAssistantLimitView />
+                </RadzenTabsItem>
+            }
         </Tabs>
     </RadzenTabs>
 }
@@ -32,20 +38,45 @@ else
 @code {
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
-    /// <summary>Which tab to open: <c>usage</c> or <c>configuration</c>. Usage when not set, or when the caller may not configure.</summary>
+    /// <summary>Which tab to open: <c>usage</c>, <c>configuration</c> or <c>limits</c>. Usage when not set, or when the caller may not open the one asked for.</summary>
     [SupplyParameterFromQuery(Name = "tab")] public string Tab { get; set; }
 
     private TextSet _text = TextSet.Empty;
     private bool _ready;
     private bool _canConfigure;
+    private bool _canLimit;
     private int _selected;
+    private List<string> _tabs = ["usage"];
 
     protected override async Task OnInitializedAsync()
     {
         _text = await TextProvider.ResolveAsync(SupportAssistantAdminViewText.All);
         _canConfigure = await CanConfigureAsync();
-        _selected = _canConfigure && string.Equals(Tab, "configuration", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        _canLimit = await CanLimitAsync();
+
+        _tabs = ["usage"];
+        if (_canConfigure) _tabs.Add("configuration");
+        if (_canLimit) _tabs.Add("limits");
+
+        _selected = Math.Max(0, _tabs.FindIndex(x => string.Equals(x, Tab, StringComparison.OrdinalIgnoreCase)));
         _ready = true;
+    }
+
+    /// <remarks>Asked of the service itself, so the scope is checked in the one place that checks it. A refusal, or a host with no limit store, hides the tab.</remarks>
+    private async Task<bool> CanLimitAsync()
+    {
+        try
+        {
+            var limits = ServiceProvider.GetService<ISupportAssistantLimitService>();
+            if (limits == null) return false;
+
+            await limits.GetLimitsAsync();
+            return true;
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     /// <remarks>Asked of the service itself, so the scope is checked in the one place that checks it; a refusal hides the tab.</remarks>
@@ -68,6 +99,6 @@ else
     private void OnSelectedChanged(int index)
     {
         _selected = index;
-        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("tab", index == 1 ? "configuration" : "usage"), new NavigationOptions { ReplaceHistoryEntry = true });
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("tab", _tabs[Math.Clamp(index, 0, _tabs.Count - 1)]), new NavigationOptions { ReplaceHistoryEntry = true });
     }
 }

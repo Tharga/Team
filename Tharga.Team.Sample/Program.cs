@@ -183,9 +183,9 @@ builder.AddThargaTeam(o =>
         // support:all:manage and support:unassigned:read/manage let a Developer staff the support desk at
         // /support-desk: every team's cases and the ones with no team, answered in place. That is the back-office
         // half of trying support out -- write as a member in the side panel, answer here in another window.
-        // support:usage:read shows the assistant's usage per team on the same page.
+        // support:usage:read shows the assistant's usage per team on the same page, and support:allowance:manage sets what each team may spend on it.
         roles.Map("Developer", "system:metrics:read", "mcp:discover", ApiKeyScopes.SystemManage, AuditScopes.Read, SystemUserScopes.Manage, SystemTeamScopes.Delete, SimulationScopes.Demo, SystemApiKeyScopes.Oversee, SystemMessageScopes.Send, SystemContactScopes.Send,
-            SystemSupportScopes.AllManage, SystemSupportScopes.Read, SystemSupportScopes.Manage, SystemSupportScopes.UsageRead, SystemSupportScopes.AiCatalogueManage);
+            SystemSupportScopes.AllManage, SystemSupportScopes.Read, SystemSupportScopes.Manage, SystemSupportScopes.UsageRead, SystemSupportScopes.AiCatalogueManage, SystemSupportScopes.AllowanceManage);
     };
 
     // Controllers on, which exposes the toolkit's own REST endpoints — GET /api/audit — plus Swagger at
@@ -289,9 +289,21 @@ builder.Services.AddSingleton<IChatClient>(_ => new SampleChatClient()
     .UseFunctionInvocation()
     .Build());
 
+// A price for the scripted assistant, so the toolkit's own allowance has something to count: an answer costs what its tokens cost. A host with a
+// real model keeps its prices in the platform's AI catalogue instead and registers nothing like this. Added before the catalogue, which only adds
+// its own pricing when none is there.
+builder.Services.AddScoped<ISupportAssistantPricing, Tharga.Team.Sample.Framework.SampleAssistantPricing>();
+
 builder.Services.AddThargaSupportCases(o =>
 {
     o.SlackChannel = builder.Configuration["Slack:SupportChannel"];
+
+    // What a team may spend on the assistant each month, in money, unless it has a limit of its own. Staff change this at runtime on the Assistant admin
+    // page, Limits tab, where a limit set there beats this one; clear it there and this holds again. Teams are shown the share used and amounts in "WU",
+    // not money. Support:AssistantAllowance:DefaultLimit overrides it; unset, it is 0.25 USD, a few questions at the sample's demonstration prices.
+    o.Assistant.Allowance.DefaultLimit = builder.Configuration.GetValue<decimal?>("Support:AssistantAllowance:DefaultLimit") ?? 0.25m;
+    o.Assistant.Allowance.Display = SupportAllowanceDisplay.Units;
+    o.Assistant.Allowance.UnitLabel = "WU";
     o.SigningSecret = builder.Configuration["Slack:SigningSecret"];
 
     // Where SupportPage shows one case, so the assistant can link to the cases it mentions.

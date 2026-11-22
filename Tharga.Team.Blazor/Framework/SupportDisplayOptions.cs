@@ -27,6 +27,15 @@ public sealed class SupportDisplayOptions
     /// reported. Default <see cref="SupportAnswerDetailsAudience.Everyone"/>.
     /// </summary>
     public SupportAnswerDetailsAudience AnswerDetailsShownTo { get; set; } = SupportAnswerDetailsAudience.Everyone;
+
+    /// <summary>
+    /// Whether the assistant tab of <c>SupportPanel</c> shows how much of the team's allowance is spent, as a bar. Default <c>true</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>The bar only ever shows where there is a limit</b>: a team on its own provider, or with no limit set, has none. Turning it off hides the bar and nothing
+    /// else; the assistant still stops answering, and says why, when the allowance is used up.
+    /// </remarks>
+    public bool ShowAllowance { get; set; } = true;
 }
 
 /// <summary>Who sees the details under the assistant's answers: its service calls and its tokens.</summary>

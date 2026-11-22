@@ -369,7 +369,8 @@ members:
   the panel continues on the support page and back.
 - **Writing to support** on a conversation the assistant is answering hands it to a person, keeping the conversation.
   Going back to the assistant after that starts a new conversation beside it. When the assistant does not answer,
-  the panel says so.
+  the panel says so and, for a team that is limited, shows how much of its allowance is spent
+  ([A spend allowance per team](#a-spend-allowance-per-team)).
 - **Its width and open state are remembered in the browser**, under `StorageKey`. It opens at `DefaultWidth` (320)
   until dragged, never narrower than 280 pixels.
 - **On a screen 768 pixels wide or less, `NarrowScreen` decides.** `SupportPanelNarrowScreen.Hide`, the default, hides
@@ -388,7 +389,8 @@ members:
 turned the assistant off, or has no model, gets only support. `Offered` narrows what shows, as on `SupportCasesView`.
 To switch either channel per team, for example behind a feature a team has bought, register an
 `ISupportPanelAvailability`. Its `GetOfferedAsync(teamKey)` says who may be asked, and raising its `Changed` event
-redraws an open panel. It can only narrow: the assistant is never offered to a team that is not ready for it. With
+redraws an open panel. It can only narrow: the assistant is never offered to a team that is not ready for it (a team
+whose allowance is used up, whose provider refused the account, or that the host holds back still has the tab, to say why). With
 nobody to ask, or no team selected, the panel is not drawn at all.
 
 **`SupportCasesView`** has two tabs — the cases first, then where help is asked for. `Tab` names the one to
@@ -2033,8 +2035,12 @@ builder.Services.AddThargaTeamRepository(...);   // Tharga.Team.MongoDB keeps th
 
 Each usage record keeps **the price per million tokens it was given at**: the model's input, cached input and output
 price, the currency, and the cost worked out from them (`SupportAssistantUsageRecord.PriceInput`, `PriceCachedInput`,
-`PriceOutput`, `Currency`, `Cost`). A later price change therefore never rewrites what an earlier answer cost. Cached
-input is charged at its own price, or at the input price where none is given.
+`PriceCacheWrite`, `PriceOutput`, `Currency`, `Cost`). A later price change therefore never rewrites what an earlier
+answer cost. Cached input is charged at its own price, or at the input price where none is given. **Tokens written to
+the provider's cache** (`CacheWriteTokens`, reported by Anthropic as cache creation) are charged at the cache-write
+price, or at the input price where none is given. The input count includes both cached reads and cache writes, so the
+cost is the fresh input at the input price, plus the reads, plus the writes, plus the output, each at its own price.
+Reasoning tokens are not added: the output count already includes them.
 
 - **Only the platform's catalogue prices an answer.** A team on its own provider, a team that is off, answers from
   before prices were recorded, and a host with no catalogue are recorded **without a cost**, shown as a dash, never as
@@ -2086,6 +2092,115 @@ builder.Services.AddThargaSupportAiProviders();           // or OpenAI: the kind
   `SupportAiConnectionChoices.PlatformModels`. A decorator of your own must forward the new overload.
 - **`SupportAssistantAdminView`** is the staff page around it: a **Usage** tab and a **Configuration** tab, the second
   only for a caller holding the catalogue scope and only where the catalogue is registered. `?tab=configuration` opens it.
+
+### A spend allowance per team
+
+A host that lends the platform's AI to its teams can limit what each team spends on it each month. The limit is set in
+**money**, in the catalogue's currency, and **a team is not shown money**: it is shown how much of its allowance it has used, in
+a unit the host chooses. Nothing is limited until a limit is set.
+
+```csharp
+builder.Services.AddThargaSupportCases(o =>
+{
+    o.Assistant.Allowance.DefaultLimit = 25m;        // per team per month, in the catalogue's currency; null (the default) limits nobody
+    o.Assistant.Allowance.Display = SupportAllowanceDisplay.Units;   // Share, Units (default), Tokens or Money
+    o.Assistant.Allowance.UnitValue = 0.0001m;       // what one unit is worth; the default is a hundredth of a cent
+    o.Assistant.Allowance.UnitLabel = "WU";          // "units" by default
+    o.Assistant.Allowance.WarnAt = 0.8m;             // the share at which the bar turns to a warning
+});
+```
+
+- **What is counted.** The cost of the month's answers, as each was priced when it was given (see *What an answer cost*).
+  The period is a **calendar month in UTC**. A team on its **own provider**, a team that is off, and a model with **no price**
+  cost the platform nothing and are **never limited**.
+- **What a team reads.** `Display` chooses: `Share` only the percentage; `Units` cost divided by `UnitValue`, called
+  `UnitLabel`; `Tokens` an estimate at the rate the team's own answers have cost; `Money` the amounts as they are, for a host
+  that wants them shown. Members always see the share. A team's **administrators** (`assistant:manage`) also see the amounts,
+  and an estimate of **how many questions are left** on the model they use, from what answers have cost over the last
+  `AverageOverDays` (30).
+- **One limit for all, and one for a team.** The default is `DefaultLimit`, or what staff set at runtime, which beats it
+  (`ISupportAssistantLimitService.SetDefaultLimitAsync`). A **single team can have a limit of its own**, higher, lower or none
+  (`SetLimitAsync`), which beats the default; clearing it puts the team back on the default. Staff do both in
+  `SupportAssistantLimitView`, which is a **Limits** tab on `SupportAssistantAdminView` for a caller holding the
+  `support:allowance:manage` system scope (held by nobody by default; grant it as you do `support:aicatalogue:manage`).
+  Changes are audited under `assistant`, and a purged team's limit goes with it. The limits are kept by `Tharga.Team.MongoDB`
+  in `SupportAssistantLimit` (`ThargaTeamOptions.SupportAssistantLimitCollectionName`); the default is stored under a reserved
+  key that is never a team.
+- **When it is used up** the assistant **does not ask the model**: no tokens are spent and no usage record is written for a
+  question never sent, and no new case is handed to it. `GetAssistantReadinessAsync` says `SupportAssistantReadiness.AllowanceUsed`.
+  Support is unaffected.
+- **Your own counter.** The default source (`ISupportAssistantAllowanceSource`) sums the usage store. A host that also spends on
+  the model elsewhere registers its own before `AddThargaSupportCases`; it returns a `SupportAssistantAllowance` with the full amounts,
+  in the units the team reads, and the service takes them out for a member. **A source that throws counts as not used up**, and is logged: a broken counter must not take the
+  assistant from every team.
+
+**The bar.** `SupportPanel` shows a progress bar on the assistant tab, for a team that is limited: the share used, when it
+starts again, and for administrators the amounts and the questions left. It turns to a warning at `WarnAt` and to danger when
+used up. It is **optional and on by default**:
+
+```csharp
+o.Blazor.Support.ShowAllowance = false;   // hides the bar and nothing else
+```
+
+With the bar off the assistant still stops, and says when it starts again.
+
+**When the assistant cannot answer.** The assistant tab stays, with a notice instead of a silent absence, and the message
+box is disabled; the support tab still works. Three reasons, each its own readiness:
+
+| Readiness | Why | A member is told | An administrator is offered |
+|---|---|---|---|
+| `AllowanceUsed` | The team has spent its allowance | When it starts again | Connect their own subscription |
+| `ProviderRefused` | The provider refused the account: a revoked key, billing, a usage or spend limit | To try again later | Another platform model, with what an answer costs and the questions left; connect their own subscription |
+| `Held` | The host's own gate says so | The host's message | What the host places (below) |
+
+Where the team has support, a line under the notice sends them to it. Where it has none, a **member** is told to ask one of the team's
+administrators (text only; there is no request to send), and an administrator is shown the actions instead. Another model is
+offered only when the provider refused the account: an allowance is money, so it is used up on any model and changing model
+frees nothing. Connecting their own subscription, which nothing limits, is offered in both cases and opens
+`SupportAssistantConnectionView` in a dialog. Choosing a model or connecting clears the remembered refusal, so the next
+question is tried at once.
+
+- **What counts as a provider refusing the account.** 401, 402 and 403 always. 400 and 429 only when the provider's words say
+  credit, quota, billing or a limit, because Anthropic reports an empty balance as a 400 and an exhausted quota as a 429, which
+  also carries ordinary rate limiting. 5xx and plain rate limits are not. The status is read from the exception by name
+  (`StatusCode`, `Status`), so no provider's package is referenced. The words are **English**, matched as substrings.
+- **Remembered per team, in memory,** for `ProviderRefusalRetryAfter` (10 minutes by default), so the assistant does not
+  send a request that is bound to be refused with every question. It clears when an answer goes through.
+
+**Being told, and refusing for your own reasons.**
+
+```csharp
+builder.Services.AddScoped<ISupportAssistantRefusalSink, NotifyOurPeople>();
+builder.Services.AddScoped<ISupportAssistantGate, PlanGate>();
+```
+
+```razor
+<SupportPanel>
+    <AssistantTop Context="state">
+        @if (state is SupportAssistantReadiness.AllowanceUsed)
+        {
+            <a href="/billing">Buy more</a>
+        }
+    </AssistantTop>
+</SupportPanel>
+```
+
+- **`ISupportAssistantRefusalSink`** is told when a question is refused: the team, the case, the reason, the time, and the
+  allowance (for `AllowanceUsed`) or the gate's message (for `Held`). Use it to notify yourself. It is told **once per spell**,
+  not once per question: again only after the assistant has answered that team, or, for the allowance, in a new period. The
+  memory is the process's, so a restart may repeat a message. It fires for a question actually refused, not when the panel is
+  opened and not when an answer crosses the limit. A sink that throws is logged, never changes the refusal, and the others
+  are still told.
+- **`ISupportAssistantGate`** returns a `SupportAssistantHold` with a message, or null to let the assistant answer. It is asked
+  before every question and whenever readiness is read, so keep it quick. It comes **before the allowance**, the panel shows
+  its message in place of the conversation, and the toolkit's own actions are not offered: the rule is yours whatever the team
+  connects. A gate that throws holds nothing back.
+- **`SupportPanel.AssistantTop`** is your own content at the top of the assistant tab, above the bar, told the readiness, for
+  what only you can offer, such as buying more. It is not shown on the support tab.
+- **Texts** are in `SupportPanelText` (the notice, the bar) and `SupportRefusalActionsText` (the actions), and
+  `SupportAssistantLimitViewText` (the Limits tab), each with an English default.
+
+Not covered here: REST endpoints and MCP tools for the allowance and the limits, as the connection and the catalogue have.
 
 ### Settings
 

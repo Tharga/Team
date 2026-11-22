@@ -100,6 +100,15 @@ public class SupportAssistantOptions
     /// <remarks>A tool can return a whole guidance document, and a case is a conversation, not a log.</remarks>
     public int MaxStoredCallResultLength { get; set; } = 2000;
 
+    /// <summary>
+    /// How long the assistant stays away from a provider that refused the account (a revoked key, billing, a usage or spend limit) before it asks again. Default 10 minutes.
+    /// </summary>
+    /// <remarks>Long enough not to spend a request on every message, short enough that a topped-up account is answering again without anybody restarting anything.</remarks>
+    public TimeSpan ProviderRefusalRetryAfter { get; set; } = TimeSpan.FromMinutes(10);
+
+    /// <summary>What a team may spend on the platform's model, and how it is shown. Nothing is limited by default.</summary>
+    public SupportAssistantAllowanceOptions Allowance { get; set; } = new();
+
     /// <summary>What a stored tool result ends with when it was cut to <see cref="MaxStoredCallResultLength"/>.</summary>
     public const string CutMarker = "… [cut]";
 }

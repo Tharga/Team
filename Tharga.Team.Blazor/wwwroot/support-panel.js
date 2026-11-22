@@ -63,6 +63,30 @@ export function enableResize(handle, reference, minimumWidth) {
     handle.addEventListener('pointercancel', stop);
 }
 
+// The message box grows with what is written, to the height its style allows, then scrolls. Enter sends, which the component answers; here it only
+// stops Enter from also starting a new line. Shift+Enter is left alone and does start one, and so is Enter while an input method is composing a word,
+// which is how it confirms the word. Wired once per box, so showing the panel again does not add a second listener.
+export function enableComposer(box) {
+    if (!box || box.dataset.supportPanelComposer) return;
+
+    box.dataset.supportPanelComposer = '1';
+    box.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) e.preventDefault();
+    });
+    box.addEventListener('input', () => fitComposer(box));
+    fitComposer(box);
+}
+
+// One row for nothing written, as tall as the text for more. Measured from a collapsed box, because a box that was tall cannot report that its text now fits.
+export function fitComposer(box) {
+    if (!box) return;
+
+    box.style.height = 'auto';
+
+    // The box is border-box, so what it is given includes its border, which scrollHeight does not.
+    box.style.height = (box.scrollHeight + box.offsetHeight - box.clientHeight) + 'px';
+}
+
 // A few pixels of slack: a log scrolled by a fractional pixel is still at the bottom to a reader.
 export function isAtBottom(element, slack) {
     if (!element) return true;

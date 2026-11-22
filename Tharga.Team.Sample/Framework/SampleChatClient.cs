@@ -167,7 +167,10 @@ internal sealed class SampleChatClient : IChatClient
 
     /// <summary>Says what it is, the way a real client does, so the AI assistant page can name the platform's model.</summary>
     public object GetService(Type serviceType, object serviceKey = null)
-        => serviceType == typeof(ChatClientMetadata) ? new ChatClientMetadata("Sample", null, "scripted replies") : null;
+        => serviceType == typeof(ChatClientMetadata) ? new ChatClientMetadata("Sample", null, ModelName) : null;
+
+    /// <summary>The model the scripted client says it is, which its usage is recorded under and the sample's pricing is kept for.</summary>
+    internal const string ModelName = "scripted replies";
 
     public void Dispose()
     {

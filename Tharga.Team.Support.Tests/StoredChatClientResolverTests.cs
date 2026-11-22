@@ -126,6 +126,28 @@ public class StoredChatClientResolverTests
         Assert.Equal(SupportAssistantReadiness.NotConfigured, await responder.GetReadinessAsync(TeamA));
     }
 
+    /// <summary>A refusal was of the account behind what the team had, so any other choice is tried at once instead of after the wait.</summary>
+    [Fact]
+    public async Task ChoosingSomethingElse_ForgetsThatTheProviderRefusedTheTeam()
+    {
+        var refusals = new SupportProviderRefusals(TimeProvider.System, new SupportAssistantOptions());
+        var principal = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "admin"), new Claim(TeamClaimTypes.TeamKey, TeamA)], "test"));
+        var service = new SupportAiConnectionService(_store, _keyRing, new TeamAuthorizer(new FixedPrincipalAccessor(principal)), TimeProvider.System, true, _factory, null, null, refusals);
+
+        refusals.Refused(TeamA);
+        await service.UsePlatformModelAsync(TeamA);
+        Assert.False(refusals.IsRefused(TeamA));
+
+        refusals.Refused(TeamA);
+        var connected = await service.ConnectAsync(TeamA, new SupportAiProviderRequest { Kind = SupportAiConnectionKind.Neurolito, ApiKey = GoodKey, Model = Model });
+        Assert.True(connected.Succeeded, connected.Problem);
+        Assert.False(refusals.IsRefused(TeamA));
+
+        refusals.Refused(TeamA);
+        await service.TurnOffAsync(TeamA);
+        Assert.False(refusals.IsRefused(TeamA));
+    }
+
     private StoredChatClientResolver Resolver(bool withPlatform = true, bool withFactory = true, SupportAiClientCache cache = null, ISupportChatClientFactory factory = null)
         => new(_store, _keyRing, cache ?? new SupportAiClientCache(), NullLogger<StoredChatClientResolver>.Instance, withPlatform ? _platform : null, withFactory ? factory ?? _factory : null);
 

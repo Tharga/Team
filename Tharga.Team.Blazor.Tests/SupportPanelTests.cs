@@ -55,7 +55,9 @@ public class SupportPanelTests : BunitContext
         bool open = false,
         int? width = null,
         bool withTeam = true,
-        SupportPanelNarrowScreen narrowScreen = SupportPanelNarrowScreen.Hide)
+        SupportPanelNarrowScreen narrowScreen = SupportPanelNarrowScreen.Hide,
+        ISupportAssistantAllowanceService allowances = null,
+        Microsoft.AspNetCore.Components.RenderFragment<SupportAssistantReadiness> top = null)
     {
         var team = new Mock<ITeam>();
         team.SetupGet(x => x.Key).Returns(TeamKey);
@@ -74,11 +76,12 @@ public class SupportPanelTests : BunitContext
         Services.AddSingleton<ISupportTypingNotifier>(_typing);
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         if (availability != null) Services.AddSingleton(availability);
+        if (allowances != null) Services.AddSingleton(allowances);
         Services.AddRadzenComponents();
         JSInterop.Mode = JSRuntimeMode.Loose;
         SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
-        return Render<SupportPanel>(p => p.Add(x => x.Offered, offered).Add(x => x.NarrowScreen, narrowScreen));
+        return Render<SupportPanel>(p => p.Add(x => x.Offered, offered).Add(x => x.NarrowScreen, narrowScreen).Add(x => x.AssistantTop, top));
     }
 
     private void Raises(SupportCase raised, bool answered = true, params SupportMessage[] messages)
@@ -91,8 +94,444 @@ public class SupportPanelTests : BunitContext
 
     private static void Send(IRenderedComponent<SupportPanel> view, string text)
     {
-        view.Find("input[data-draft]").Input(text);
+        view.Find("textarea[data-draft]").Input(text);
         view.Find("[data-send]").Click();
+    }
+
+    // ---- the message box ----
+
+    /// <summary>One row to start with; script grows it as the text does, so a longer message is written in several rows rather than scrolled sideways.</summary>
+    [Fact]
+    public void TheMessageBox_IsATextArea_StartingAtOneRow()
+    {
+        var box = Render(open: true).Find("[data-draft]");
+
+        Assert.Equal("textarea", box.TagName.ToLowerInvariant());
+        Assert.Equal("1", box.GetAttribute("rows"));
+    }
+
+    [Fact]
+    public void Enter_SendsTheMessage()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User));
+        var view = Render(open: true);
+
+        view.Find("textarea[data-draft]").Input(Question);
+        view.Find("textarea[data-draft]").KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Enter" });
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question, It.IsAny<SupportAssistance>(), default), Times.Once));
+    }
+
+    /// <summary>A new line is Shift+Enter, so what is typed stays in the box until it is sent.</summary>
+    [Fact]
+    public void ShiftEnter_DoesNotSend()
+    {
+        var view = Render(open: true);
+
+        view.Find("textarea[data-draft]").Input("First line");
+        view.Find("textarea[data-draft]").KeyDown(new Microsoft.AspNetCore.Components.Web.KeyboardEventArgs { Key = "Enter", ShiftKey = true });
+
+        _cases.Verify(x => x.RaiseCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default), Times.Never);
+    }
+
+    [Fact]
+    public void AMessageOfSeveralLines_IsSentAsWritten_AndShownWithItsLineBreaks()
+    {
+        const string written = "The export is empty.\nDate range: last week.\n\nCan you check?";
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, written, SupportMessageKind.User));
+        var view = Render(open: true);
+
+        Send(view, written);
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, written, It.IsAny<SupportAssistance>(), default), Times.Once));
+        view.WaitForAssertion(() => Assert.Equal(written, view.Find(".support-panel__msg--me").TextContent.Trim()));
+    }
+
+    // ---- the allowance bar ----
+
+    private static SupportAssistantAllowance Allowance(decimal share = 0.4m, bool exhausted = false, bool applies = true, bool amounts = false) => new()
+    {
+        TeamKey = TeamKey,
+        Applies = applies,
+        Display = SupportAllowanceDisplay.Units,
+        Unit = "WU",
+        Share = share,
+        Exhausted = exhausted,
+        WarnAt = 0.8m,
+        PeriodEndsAt = new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc),
+        Limit = amounts ? 10_000m : null,
+        Used = amounts ? share * 10_000m : null,
+        Models = [new SupportAssistantModelAllowance { ModelId = "m1", DisplayName = "Sonnet", Current = true, QuestionsLeft = amounts ? 60 : 60, CostPerAnswer = amounts ? 100m : null }]
+    };
+
+    private static ISupportAssistantAllowanceService Allowing(params SupportAssistantAllowance[] inOrder)
+    {
+        var service = new Mock<ISupportAssistantAllowanceService>();
+        var sequence = service.SetupSequence(x => x.GetAllowanceAsync(TeamKey, default));
+        foreach (var allowance in inOrder) sequence = sequence.ReturnsAsync(allowance);
+        service.Setup(x => x.GetAllowanceAsync(TeamKey, default)).ReturnsAsync(inOrder[^1]);
+        return service.Object;
+    }
+
+    [Fact]
+    public void TheBar_IsShownByDefault_WhereTheTeamIsLimited()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m)));
+
+        var bar = view.Find("[data-allowance-bar]");
+        Assert.Equal("40", bar.GetAttribute("aria-valuenow"));
+        Assert.Contains("width: 40%", view.Find(".support-panel__allowance-fill").GetAttribute("style"));
+        Assert.Contains("40% used", view.Find("[data-allowance-text]").TextContent);
+    }
+
+    [Fact]
+    public void TheBar_CanBeTurnedOff_AndNothingElseChanges()
+    {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.ShowAllowance = false);
+
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m)));
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.NotNull(view.Find("[data-draft]"));
+    }
+
+    [Fact]
+    public void ATeamWithNoLimit_HasNoBar()
+        => Assert.Empty(Render(open: true, allowances: Allowing(Allowance(applies: false))).FindAll("[data-allowance]"));
+
+    [Fact]
+    public void WithNoAllowanceService_ThereIsNoBar_AndThePanelWorks()
+    {
+        var view = Render(open: true);
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.NotNull(view.Find("[data-draft]"));
+    }
+
+    [Fact]
+    public void AnAllowanceThatCannotBeRead_IsNoBar_AndNoFailure()
+    {
+        var service = new Mock<ISupportAssistantAllowanceService>();
+        service.Setup(x => x.GetAllowanceAsync(TeamKey, default)).ThrowsAsync(new InvalidOperationException("The usage database is down."));
+
+        var view = Render(open: true, allowances: service.Object);
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.NotNull(view.Find("[data-draft]"));
+    }
+
+    [Fact]
+    public void TheBar_IsForTheAssistant_NotForSupport()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance()));
+
+        view.Find("[data-tab='support']").Click();
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+    }
+
+    [Theory]
+    [InlineData(0.79, false, "support-panel__allowance")]
+    [InlineData(0.8, false, "support-panel__allowance support-panel__allowance--warn")]
+    [InlineData(1.0, true, "support-panel__allowance support-panel__allowance--full")]
+    public void TheBar_WarnsFromTheWarningShare_AndIsFullWhenUsedUp(double share, bool exhausted, string expected)
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance((decimal)share, exhausted)));
+
+        Assert.Equal(expected, view.Find("[data-allowance]").GetAttribute("class"));
+    }
+
+    /// <summary>99.7 percent is not 100: the bar is full only when nothing is left.</summary>
+    [Fact]
+    public void TheBar_IsNeverFullWhileThereIsSomethingLeft()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.997m)));
+
+        Assert.Equal("99", view.Find("[data-allowance-bar]").GetAttribute("aria-valuenow"));
+    }
+
+    [Fact]
+    public void AnAdministrator_SeesTheAmounts_AndHowManyQuestionsAreLeft()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m, amounts: true)));
+
+        Assert.Contains($"{4_000m:N0} of {10_000m:N0} WU used", view.Find("[data-allowance-text]").TextContent);
+        Assert.Contains("About 60 questions left on Sonnet", view.Find("[data-allowance-left]").TextContent);
+    }
+
+    /// <summary>A member is given the share and no amount, and so is not told how many questions are left either.</summary>
+    [Fact]
+    public void AMember_SeesOnlyTheShare()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m)));
+
+        Assert.DoesNotContain("WU", view.Find("[data-allowance]").TextContent);
+        Assert.Empty(view.FindAll("[data-allowance-left]"));
+    }
+
+    [Fact]
+    public void WhenItStartsAgain_IsSaid()
+        => Assert.Contains(new DateTime(2026, 12, 1).ToString("d"), Render(open: true, allowances: Allowing(Allowance())).Find("[data-allowance-text]").TextContent);
+
+    [Fact]
+    public void TheBar_MovesAfterAnAnswer()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User), Message(2, "Check the date range.", SupportMessageKind.Assistant, author: null));
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m), Allowance(0.5m)));
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.Equal("50", view.Find("[data-allowance-bar]").GetAttribute("aria-valuenow")));
+    }
+
+    /// <summary>Another member's answer spends the same allowance, so every open panel moves its bar.</summary>
+    [Fact]
+    public void TheBar_MovesWhenAnotherMembersAnswerIsAnnounced()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m), Allowance(0.7m)));
+
+        _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = "someone-elses", Change = SupportCaseChange.Replied, FromChannel = false, FromRemote = true });
+
+        view.WaitForAssertion(() => Assert.Equal("70", view.Find("[data-allowance-bar]").GetAttribute("aria-valuenow")));
+    }
+
+    [Fact]
+    public void AReadingThatIsOnlyAReadMark_DoesNotAskAgain()
+    {
+        var service = Allowing(Allowance(0.4m));
+        var view = Render(open: true, allowances: service);
+
+        _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = "x", Change = SupportCaseChange.Read, FromChannel = false });
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-allowance]")));
+        Mock.Get(service).Verify(x => x.GetAllowanceAsync(TeamKey, default), Times.Once);
+    }
+
+    [Fact]
+    public void WhenTheAllowanceIsUsedUp_TheTabStays_SaysWhy_AndTakesNoMessage()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, open: true, allowances: Allowing(Allowance(1.0m, exhausted: true)));
+
+        Assert.NotNull(view.Find("[data-tab='assistant']"));
+        Assert.Contains("allowance", view.Find("[data-assistant-paused]").TextContent);
+        Assert.Contains(new DateTime(2026, 12, 1).ToString("d"), view.Find("[data-assistant-paused]").TextContent);
+        Assert.True(view.Find("[data-draft]").HasAttribute("disabled"));
+        Assert.True(view.Find("[data-send]").HasAttribute("disabled"));
+        Assert.Equal("support-panel__allowance support-panel__allowance--full", view.Find("[data-allowance]").GetAttribute("class"));
+    }
+
+    /// <summary>Support is still there: the person can write to it, and the notice goes with the assistant tab.</summary>
+    [Fact]
+    public void WhenTheAllowanceIsUsedUp_SupportCanStillBeWrittenTo()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, open: true, allowances: Allowing(Allowance(1.0m, exhausted: true)));
+
+        view.Find("[data-tab='support']").Click();
+
+        Assert.Empty(view.FindAll("[data-assistant-paused]"));
+        Assert.False(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void WhenTheProviderRefusedTheAccount_TheTabStays_AndSaysSo()
+    {
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+
+        Assert.NotNull(view.Find("[data-tab='assistant']"));
+        Assert.Contains("refused", view.Find("[data-assistant-paused]").TextContent);
+        Assert.True(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    private Mock<ISupportAiConnectionService> Connections(bool administrator = true)
+    {
+        var connections = new Mock<ISupportAiConnectionService>();
+        if (administrator)
+        {
+            connections.Setup(x => x.GetChoicesAsync(TeamKey, default)).ReturnsAsync(new SupportAiConnectionChoices
+            {
+                Kinds = [SupportAiConnectionKind.Platform, SupportAiConnectionKind.Neurolito, SupportAiConnectionKind.Off],
+                PlatformModels = [new SupportAiPlatformModelChoice { Id = "big", DisplayName = "Big", IsDefault = true }, new SupportAiPlatformModelChoice { Id = "small", DisplayName = "Small" }]
+            });
+            connections.Setup(x => x.GetConnectionAsync(TeamKey, default)).ReturnsAsync(new SupportAiConnection());
+        }
+        else
+        {
+            connections.Setup(x => x.GetChoicesAsync(TeamKey, default)).ThrowsAsync(new UnauthorizedAccessException());
+        }
+
+        Services.AddSingleton(connections.Object);
+        return connections;
+    }
+
+    [Fact]
+    public void WhenTheAssistantIsPaused_AnAdministratorIsOfferedWhatToDoAboutIt()
+    {
+        Connections();
+
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-refusal-actions] [data-switch-model='small']")));
+        Assert.NotNull(view.Find("[data-refusal-actions] [data-use-own]"));
+    }
+
+    [Fact]
+    public void WhenTheAssistantIsPaused_AMemberHasTheNoticeAlone()
+    {
+        Connections(administrator: false);
+
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+
+        Assert.NotNull(view.Find("[data-assistant-paused]"));
+        Assert.Empty(view.FindAll("[data-refusal-actions]"));
+    }
+
+    /// <summary>Choosing another model asks again whether the assistant answers, and when it does the notice and the actions give way to the conversation.</summary>
+    [Fact]
+    public void ChoosingAnotherModel_ReadsTheReadinessAgain_AndTheNoticeGoesAway()
+    {
+        var connections = Connections();
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-switch-model='small']")));
+        _cases.Setup(x => x.GetAssistantReadinessAsync(It.IsAny<string>(), default)).ReturnsAsync(SupportAssistantReadiness.Ready);
+
+        view.Find("[data-switch-model='small']").Click();
+
+        view.WaitForAssertion(() => Assert.Empty(view.FindAll("[data-assistant-paused]")));
+        Assert.Empty(view.FindAll("[data-refusal-actions]"));
+        Assert.False(view.Find("[data-draft]").HasAttribute("disabled"));
+        connections.Verify(x => x.UsePlatformModelAsync(TeamKey, "small", default), Times.Once);
+    }
+
+    // ---- whom to turn to ----
+
+    [Theory]
+    [InlineData(SupportAssistantReadiness.AllowanceUsed)]
+    [InlineData(SupportAssistantReadiness.ProviderRefused)]
+    [InlineData(SupportAssistantReadiness.Held)]
+    public void WhereTheTeamHasSupport_TheNoticeSendsThemThere_AndOnlyInTheLineUnderIt(SupportAssistantReadiness readiness)
+    {
+        Connections(administrator: false);
+
+        var view = Render(readiness, open: true);
+
+        Assert.Equal(SupportPanelText.PausedWriteToSupport.Default, view.Find("[data-paused-support]").TextContent.Trim());
+        Assert.DoesNotContain("support", view.Find("[data-assistant-paused]").TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(view.FindAll("[data-ask-administrator]"));
+    }
+
+    [Theory]
+    [InlineData(SupportAssistantReadiness.AllowanceUsed)]
+    [InlineData(SupportAssistantReadiness.ProviderRefused)]
+    public void WhereTheTeamHasNoSupport_AMemberIsToldToAskAnAdministrator_NotToWriteToSupport(SupportAssistantReadiness readiness)
+    {
+        Connections(administrator: false);
+
+        var view = Render(readiness, open: true, offered: [SupportAssistance.Assistant]);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-ask-administrator]")));
+        Assert.Empty(view.FindAll("[data-paused-support]"));
+        Assert.DoesNotContain("support", view.Find("[data-log]").TextContent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WhereTheTeamHasNoSupport_AnAdministratorGetsTheActions_NotAnInstructionToAskThemselves()
+    {
+        Connections();
+
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true, offered: [SupportAssistance.Assistant]);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-use-own]")));
+        Assert.Empty(view.FindAll("[data-ask-administrator]"));
+        Assert.Empty(view.FindAll("[data-paused-support]"));
+    }
+
+    // ---- the host's own say ----
+
+    /// <summary>The host's words are shown in place of ours, and the toolkit's own actions are not: whatever the team connects, the host's rule holds.</summary>
+    [Fact]
+    public void WhenTheHostHoldsTheAssistant_ItsMessageIsShown_AndTheToolkitsActionsAreNot()
+    {
+        Connections();
+        var gate = new Mock<ISupportAssistantGate>();
+        gate.Setup(x => x.CheckAsync(TeamKey, default)).ReturnsAsync(new SupportAssistantHold { Message = "Your plan does not include the assistant." });
+        Services.AddSingleton(gate.Object);
+
+        var view = Render(SupportAssistantReadiness.Held, open: true);
+
+        Assert.Equal("Your plan does not include the assistant.", view.Find("[data-assistant-paused]").TextContent.Trim());
+        Assert.Empty(view.FindAll("[data-refusal-actions]"));
+        Assert.True(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void WhenTheHostHoldsTheAssistantWithoutWords_TheTabSaysItIsNotAvailable()
+    {
+        var view = Render(SupportAssistantReadiness.Held, open: true);
+
+        Assert.Contains(SupportPanelText.AssistantHeld.Default, view.Find("[data-assistant-paused]").TextContent);
+    }
+
+    /// <summary>A gate that fails leaves the generic notice rather than a blank panel.</summary>
+    [Fact]
+    public void AGateThatFailsToAnswerTheMessage_LeavesTheGenericNotice()
+    {
+        var gate = new Mock<ISupportAssistantGate>();
+        gate.Setup(x => x.CheckAsync(TeamKey, default)).ThrowsAsync(new InvalidOperationException());
+        Services.AddSingleton(gate.Object);
+
+        var view = Render(SupportAssistantReadiness.Held, open: true);
+
+        Assert.Contains(SupportPanelText.AssistantHeld.Default, view.Find("[data-assistant-paused]").TextContent);
+    }
+
+    [Theory]
+    [InlineData(SupportAssistantReadiness.Ready)]
+    [InlineData(SupportAssistantReadiness.AllowanceUsed)]
+    [InlineData(SupportAssistantReadiness.ProviderRefused)]
+    [InlineData(SupportAssistantReadiness.Held)]
+    public void TheHostsContent_IsShownAtTheTopOfTheAssistantTab_ToldWhyTheAssistantIsOrIsNotAnswering(SupportAssistantReadiness readiness)
+    {
+        var view = Render(readiness, open: true, top: state => builder => builder.AddContent(0, $"state:{state}"));
+
+        Assert.Equal($"state:{readiness}", view.Find("[data-assistant-top]").TextContent);
+    }
+
+    [Fact]
+    public void TheHostsContent_IsNotShownTowardsSupport()
+    {
+        var view = Render(open: true, top: state => builder => builder.AddContent(0, "x"));
+
+        view.Find("[data-tab='support']").Click();
+
+        Assert.Empty(view.FindAll("[data-assistant-top]"));
+    }
+
+    [Fact]
+    public void WithoutHostContent_NothingIsAdded()
+        => Assert.Empty(Render(open: true).FindAll("[data-assistant-top]"));
+
+    [Fact]
+    public void WithAnAssistantReady_NothingIsPaused()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance()));
+
+        Assert.Empty(view.FindAll("[data-assistant-paused]"));
+        Assert.False(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    /// <summary>The date a used-up allowance starts again is read even where the host has turned the bar off.</summary>
+    [Fact]
+    public void WithTheBarOff_AUsedUpAllowance_StillSaysWhenItStartsAgain()
+    {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.ShowAllowance = false);
+
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, open: true, allowances: Allowing(Allowance(1.0m, exhausted: true)));
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.Contains(new DateTime(2026, 12, 1).ToString("d"), view.Find("[data-assistant-paused]").TextContent);
     }
 
     [Fact]
@@ -676,8 +1115,8 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
         view.WaitForAssertion(() => Assert.Single(view.FindAll("[data-message]")));
 
-        view.Find("input[data-draft]").Input("And the");
-        view.Find("input[data-draft]").Input("And the date");
+        view.Find("textarea[data-draft]").Input("And the");
+        view.Find("textarea[data-draft]").Input("And the date");
 
         view.WaitForAssertion(() => _cases.Verify(x => x.ReportTypingAsync(TeamKey, raised.Id, false, default), Times.Once));
     }
@@ -692,7 +1131,7 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
         view.WaitForAssertion(() => _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once));
 
-        view.Find("input[data-draft]").Input("And the date");
+        view.Find("textarea[data-draft]").Input("And the date");
 
         _cases.Verify(x => x.ReportTypingAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<bool>(), default), Times.Never);
     }

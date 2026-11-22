@@ -439,8 +439,8 @@ public class SupportScopeCatalogueTests
     {
         var names = SystemScopes().All.Select(x => x.Name).ToList();
 
-        // The two pairs, and the usage read.
-        Assert.Equal(5, names.Count(x => x.StartsWith("support:", StringComparison.Ordinal)));
+        // The two pairs, the usage read and the allowance management.
+        Assert.Equal(6, names.Count(x => x.StartsWith("support:", StringComparison.Ordinal)));
     }
 
     /// <summary>
@@ -612,6 +612,6 @@ public class SupportTeamScopeLevelTests
 
         var system = services.BuildServiceProvider().GetRequiredService<ISystemScopeRegistry>().All;
 
-        Assert.Equal(5, system.Count(x => x.Name.StartsWith("support:", StringComparison.Ordinal)));
+        Assert.Equal(6, system.Count(x => x.Name.StartsWith("support:", StringComparison.Ordinal)));
     }
 }

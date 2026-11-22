@@ -78,6 +78,33 @@ public static class SupportPanelText
     /// <summary>Once the conversation is rated.</summary>
     public static readonly TextKey ConversationThanks = new("team.support.panel.conversationThanks", "Thank you for your feedback.");
 
+    /// <summary>The label of the allowance bar, for a screen reader.</summary>
+    public static readonly TextKey AllowanceLabel = new("team.support.panel.allowanceLabel", "Assistant allowance");
+
+    /// <summary>Under the bar: the share of the allowance spent. {0} is a number from 0 up.</summary>
+    public static readonly TextKey AllowanceShare = new("team.support.panel.allowanceShare", "{0}% used");
+
+    /// <summary>Under the bar, for a team's administrators: what is spent of what may be. {0} is spent, {1} the limit, {2} the unit.</summary>
+    public static readonly TextKey AllowanceAmounts = new("team.support.panel.allowanceAmounts", "{0} of {1} {2} used");
+
+    /// <summary>Under the bar: when the allowance starts again. {0} is a date.</summary>
+    public static readonly TextKey AllowanceRenews = new("team.support.panel.allowanceRenews", "Starts again {0}");
+
+    /// <summary>Under the bar, for a team's administrators. {0} is how many questions, {1} the model.</summary>
+    public static readonly TextKey AllowanceQuestionsLeft = new("team.support.panel.allowanceQuestionsLeft", "About {0} questions left on {1}");
+
+    /// <summary>In place of the conversation when the team has used its allowance. {0} is the date it starts again.</summary>
+    public static readonly TextKey AllowanceUsedUp = new("team.support.panel.allowanceUsedUp", "The assistant has been used as much as this team's allowance lets it, so it cannot answer right now. It starts again {0}.");
+
+    /// <summary>In place of the conversation when the provider has refused the account.</summary>
+    public static readonly TextKey ProviderRefused = new("team.support.panel.providerRefused", "The assistant cannot answer right now, because the service behind it has refused the account. Please try again a little later.");
+
+    /// <summary>In place of the conversation when the host holds the assistant back and gave no words of its own.</summary>
+    public static readonly TextKey AssistantHeld = new("team.support.panel.assistantHeld", "The assistant is not available to this team right now.");
+
+    /// <summary>Under the notice, only where the team has support to write to.</summary>
+    public static readonly TextKey PausedWriteToSupport = new("team.support.panel.pausedWriteToSupport", "You can write to support meanwhile.");
+
     /// <summary>Every key the component renders, its own and the shared decline notice, for building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
@@ -85,6 +112,7 @@ public static class SupportPanelText
         SupportGreeting, Message, AskAQuestion, WriteToSupport, Send, Working, Failed, SelectTeam, RateConversation, ConversationGood,
         ConversationNotGood, ConversationComment, ConversationNotice, SendConversationRating, ConversationThanks, SupportCasesViewText.AssistantDeclined,
         SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.Thinking, SupportTranscriptText.ThinkingLoop, SupportTranscriptText.Helpful,
-        SupportTranscriptText.NotHelpful, SupportTranscriptText.NoAnswerYet, SupportTranscriptText.NoAnswerAway
+        SupportTranscriptText.NotHelpful, SupportTranscriptText.NoAnswerYet, SupportTranscriptText.NoAnswerAway,
+        AllowanceLabel, AllowanceShare, AllowanceAmounts, AllowanceRenews, AllowanceQuestionsLeft, AllowanceUsedUp, ProviderRefused, AssistantHeld, PausedWriteToSupport
     ];
 }
