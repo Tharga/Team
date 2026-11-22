@@ -132,7 +132,7 @@ internal sealed class UserMailDispatcher(
 
         var composed = await _composer.ComposeAsync(mail.Subject, mail.Body, mail.BodyHtml, mail.RecipientUserKey, category);
 
-        return await DeliverAsync(item, claimant, mailClient, Outbound(mail, composed, recipient, decision, mail.ReplyTo ?? options.Value.ReplyTo), recipient.EMail, retry, cancellationToken);
+        return await DeliverAsync(item, claimant, mailClient, Outbound(mail, composed, recipient, decision, mail.ReplyTo ?? options.Value.ReplyTo, mailClient), recipient.EMail, retry, cancellationToken);
     }
 
     /// <summary>A contact mail: to its address unless that has opted out by now, from the contact sender with the contact footer.</summary>
@@ -161,7 +161,7 @@ internal sealed class UserMailDispatcher(
         var composed = _composer.Compose(mail.Subject, mail.Body, mail.BodyHtml, await contacts.Footer.ForAsync(address, category));
         var recipient = new UserMailRecipient { Key = null, EMail = address, Name = mail.RecipientName };
 
-        return await DeliverAsync(item, claimant, contacts.Mail, Outbound(mail, composed, recipient, decision, contacts.ReplyTo), address, retry, cancellationToken);
+        return await DeliverAsync(item, claimant, contacts.Mail, Outbound(mail, composed, recipient, decision, contacts.ReplyTo, contacts.Mail), address, retry, cancellationToken);
     }
 
     /// <summary>What the outbound mail policy does with this mail, logged when it is withheld or redirected.</summary>
@@ -206,7 +206,7 @@ internal sealed class UserMailDispatcher(
         };
     }
 
-    private static OutboundMail Outbound(UserMail mail, UserMailComposed composed, UserMailRecipient recipient, OutboundMailDecision decision, string replyTo)
+    private static OutboundMail Outbound(UserMail mail, UserMailComposed composed, UserMailRecipient recipient, OutboundMailDecision decision, string replyTo, IMailClient client)
     {
         var to = decision.Action == OutboundMailAction.Deliver && !string.IsNullOrWhiteSpace(recipient.Name)
             ? new MailboxAddress(recipient.Name, decision.Recipient).ToString()
@@ -216,10 +216,26 @@ internal sealed class UserMailDispatcher(
             to,
             decision.Subject,
             composed.Body,
+            InReplyTo: mail.InReplyTo,
+            References: mail.References,
             ReplyTo: replyTo,
             Attachments: [.. (mail.Attachments ?? []).Where(x => x.Content != null).Select(x => new MailAttachment(x.FileName, x.ContentType, x.Content, x.ContentId))],
             BodyHtml: composed.BodyHtml,
-            UnsubscribeUrl: composed.UnsubscribeUrl);
+            UnsubscribeUrl: composed.UnsubscribeUrl,
+            From: FromOf(mail, client));
+    }
+
+    /// <summary>
+    /// The name this mail asked to be sent under, on the client's own sending address; null when it asked for none, which sends it as the configured sender. Only the name is the
+    /// mail's: the address stays the configured one, so no send-as permission is involved and SPF and DKIM are unaffected.
+    /// </summary>
+    private static string FromOf(UserMail mail, IMailClient client)
+    {
+        if (string.IsNullOrWhiteSpace(mail.FromName)) return null;
+
+        var address = AddressOf(client.DefaultFrom);
+
+        return address == null ? null : new MailboxAddress(mail.FromName, address).ToString();
     }
 
     private async Task<UserMailStatus> RetryAsync(UserMailItem item, string claimant, string reason, bool retry, CancellationToken cancellationToken)

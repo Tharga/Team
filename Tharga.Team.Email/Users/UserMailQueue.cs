@@ -117,6 +117,7 @@ internal sealed partial class UserMailQueue(
         BouncedAt = item.BouncedAt,
         SentByUserKey = item.Mail.SentByUserKey,
         FromAddress = item.FromAddress ?? item.Mail.FromAddress,
+        FromName = item.Mail.FromName,
         ReplyTo = item.EffectiveReplyTo,
         CaseId = item.Mail.CaseId
     };
@@ -272,8 +273,57 @@ internal sealed partial class UserMailQueue(
             TeamKey = Team(mail.TeamKey),
             SentByUserKey = Team(mail.SentByUserKey),
             FromAddress = Team(mail.FromAddress),
-            CaseId = Team(mail.CaseId)
+            CaseId = Team(mail.CaseId),
+            FromName = FromName(mail.FromName),
+            InReplyTo = MessageId(mail.InReplyTo, nameof(mail.InReplyTo)),
+            References = ReferenceList(mail.References)
         };
+    }
+
+    internal const int MaxFromNameLength = 100;
+    internal const int MaxMessageIdLength = 255;
+    internal const int MaxReferences = 50;
+
+    /// <summary>
+    /// The name as it can safely be written in a From line: on one line, with no control characters and no angle brackets, which would otherwise read as an address.
+    /// MimeKit quotes and encodes what is left, so the name cannot become a header of its own.
+    /// </summary>
+    /// <exception cref="ArgumentException">The cleaned name is longer than <see cref="MaxFromNameLength"/>.</exception>
+    internal static string FromName(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        // Line breaks and tabs become spaces and any run of spaces one, so what is left is a name on one line; other control characters and angle brackets are dropped.
+        var kept = new string([.. value.Where(c => char.IsWhiteSpace(c) || !char.IsControl(c)).Where(c => c is not ('<' or '>'))]);
+        var name = string.Join(' ', kept.Split((char[])null, StringSplitOptions.RemoveEmptyEntries));
+        if (name.Length == 0) return null;
+        if (name.Length > MaxFromNameLength) throw new ArgumentException($"A sender's name is at most {MaxFromNameLength} characters.", nameof(UserMail.FromName));
+
+        return name;
+    }
+
+    /// <summary>One <c>Message-ID</c>, without its angle brackets; null for none. Refused rather than cleaned, since a value that is not one id is a mistake the caller should hear of, and a value with a line break is an attempt to write a header.</summary>
+    /// <exception cref="ArgumentException">Not one message id: empty brackets, a space, a line break or another control character, an unbalanced bracket, too long, or not an id a mail header takes.</exception>
+    internal static string MessageId(string value, string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var id = value.Trim();
+        if (id.Length > MaxMessageIdLength + 2) throw new ArgumentException($"A message id is at most {MaxMessageIdLength} characters.", parameterName);
+        if (id.Any(c => char.IsControl(c) || char.IsWhiteSpace(c))) throw new ArgumentException("A message id has no spaces or line breaks.", parameterName);
+
+        if (id.StartsWith('<') && id.EndsWith('>')) id = id[1..^1];
+        if (id.Length == 0 || id.Contains('<') || id.Contains('>')) throw new ArgumentException("A message id is one id, in angle brackets or without, and the brackets must pair.", parameterName);
+
+        return MimeKit.Utils.MimeUtils.ParseMessageId(id) ?? throw new ArgumentException($"'{id}' is not a message id.", parameterName);
+    }
+
+    private static string[] ReferenceList(string[] values)
+    {
+        var ids = (values ?? []).Select(x => MessageId(x, nameof(UserMail.References))).Where(x => x != null).Distinct(StringComparer.Ordinal).ToArray();
+        if (ids.Length > MaxReferences) throw new ArgumentException($"A mail refers to at most {MaxReferences} earlier mails.", nameof(UserMail.References));
+
+        return ids.Length == 0 ? null : ids;
     }
 
     private static string Team(string teamKey) => string.IsNullOrWhiteSpace(teamKey) ? null : teamKey.Trim();
