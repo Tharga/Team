@@ -52,6 +52,7 @@ internal sealed class MongoPlatformAiCatalogueStore(IPlatformAiCatalogueCollecti
             AgreementUrl = x.AgreementUrl,
             PriceInput = x.PriceInput,
             PriceCachedInput = x.PriceCachedInput,
+            PriceCacheWrite = x.PriceCacheWrite,
             PriceOutput = x.PriceOutput,
             Currency = x.Currency ?? "USD",
             Offered = x.Offered
@@ -83,6 +84,7 @@ internal sealed class MongoPlatformAiCatalogueStore(IPlatformAiCatalogueCollecti
             AgreementUrl = x.AgreementUrl,
             PriceInput = x.PriceInput,
             PriceCachedInput = x.PriceCachedInput,
+            PriceCacheWrite = x.PriceCacheWrite,
             PriceOutput = x.PriceOutput,
             Currency = x.Currency,
             Offered = x.Offered

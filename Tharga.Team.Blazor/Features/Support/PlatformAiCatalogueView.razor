@@ -109,6 +109,7 @@ else
                                 <th>@_text[PlatformAiCatalogueViewText.ProcessedIn]</th>
                                 <th style="text-align: end;">@_text[PlatformAiCatalogueViewText.PriceInput]</th>
                                 <th style="text-align: end;">@_text[PlatformAiCatalogueViewText.PriceCachedInput]</th>
+                                <th style="text-align: end;">@_text[PlatformAiCatalogueViewText.PriceCacheWrite]</th>
                                 <th style="text-align: end;">@_text[PlatformAiCatalogueViewText.PriceOutput]</th>
                                 <th>@_text[PlatformAiCatalogueViewText.Offered]</th>
                                 <th></th>
@@ -123,6 +124,7 @@ else
                                     <td>@model.ProcessedIn</td>
                                     <td style="text-align: end;">@Price(model.PriceInput, model)</td>
                                     <td style="text-align: end;">@Price(model.PriceCachedInput, model)</td>
+                                    <td style="text-align: end;">@Price(model.PriceCacheWrite, model)</td>
                                     <td style="text-align: end;">@Price(model.PriceOutput, model)</td>
                                     <td>@(model.Offered ? "✓" : "")</td>
                                     <td style="text-align: end; white-space: nowrap;">
@@ -181,6 +183,9 @@ else
                     <RadzenFormField Text="@_text[PlatformAiCatalogueViewText.PriceCachedInput]" Variant="Variant.Outlined">
                         <RadzenNumeric TValue="decimal?" @bind-Value="_modelPriceCached" Disabled="_busy" />
                     </RadzenFormField>
+                    <RadzenFormField Text="@_text[PlatformAiCatalogueViewText.PriceCacheWrite]" Variant="Variant.Outlined">
+                        <RadzenNumeric TValue="decimal?" @bind-Value="_modelPriceCacheWrite" Disabled="_busy" />
+                    </RadzenFormField>
                     <RadzenFormField Text="@_text[PlatformAiCatalogueViewText.PriceOutput]" Variant="Variant.Outlined">
                         <RadzenNumeric TValue="decimal?" @bind-Value="_modelPriceOutput" Disabled="_busy" />
                     </RadzenFormField>
@@ -237,6 +242,7 @@ else
     private string _modelAgreementUrl;
     private decimal? _modelPriceInput;
     private decimal? _modelPriceCached;
+    private decimal? _modelPriceCacheWrite;
     private decimal? _modelPriceOutput;
     private bool _modelOffered = true;
 
@@ -306,6 +312,7 @@ else
         _modelAgreementUrl = model.AgreementUrl;
         _modelPriceInput = model.PriceInput;
         _modelPriceCached = model.PriceCachedInput;
+        _modelPriceCacheWrite = model.PriceCacheWrite;
         _modelPriceOutput = model.PriceOutput;
         _modelOffered = model.Offered;
         _providerModels = [];
@@ -319,7 +326,7 @@ else
         _modelProcessedIn = null;
         _modelStoredIn = null;
         _modelAgreementUrl = null;
-        _modelPriceInput = _modelPriceCached = _modelPriceOutput = null;
+        _modelPriceInput = _modelPriceCached = _modelPriceCacheWrite = _modelPriceOutput = null;
         _modelOffered = true;
         _providerModels = [];
     }
@@ -359,6 +366,7 @@ else
             AgreementUrl = _modelAgreementUrl,
             PriceInput = _modelPriceInput,
             PriceCachedInput = _modelPriceCached,
+            PriceCacheWrite = _modelPriceCacheWrite,
             PriceOutput = _modelPriceOutput,
             Offered = _modelOffered
         };

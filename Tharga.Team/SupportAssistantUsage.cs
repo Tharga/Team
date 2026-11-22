@@ -21,6 +21,9 @@ public sealed record SupportAssistantUsage
     /// <summary>Of <see cref="InputTokens"/>, those the provider read from its cache, which most providers charge less for; 0 when it said none.</summary>
     public long CachedInputTokens { get; init; }
 
+    /// <summary>Of <see cref="InputTokens"/>, those the provider wrote to its cache, which some providers charge more for than ordinary input; 0 when it said none.</summary>
+    public long CacheWriteTokens { get; init; }
+
     /// <summary>Who served the answer, as the chat client names its provider, such as "openai" or "ollama"; null when it does not say.</summary>
     public string Provider { get; init; }
 

@@ -210,6 +210,9 @@ internal sealed class ChatSupportResponder(
         return (text.ToString(), [.. calls.Select(x => x.Call)], UsageOf(usage, metadata?.ProviderName, modelId ?? metadata?.DefaultModelId));
     }
 
+    /// <summary>The name the Anthropic chat client files tokens written to its cache under, in <see cref="UsageDetails.AdditionalCounts"/>.</summary>
+    internal const string CacheWriteCountName = "CacheCreationInputTokens";
+
     /// <summary>The tokens reported, added up; <c>null</c> when nothing was reported, so no count reads as zero.</summary>
     internal static SupportAssistantUsage UsageOf(IEnumerable<UsageDetails> reported, string provider = null, string model = null)
     {
@@ -222,6 +225,7 @@ internal sealed class ChatSupportResponder(
             OutputTokens = details.Sum(x => x.OutputTokenCount ?? 0),
             TotalTokens = details.Sum(x => x.TotalTokenCount ?? (x.InputTokenCount ?? 0) + (x.OutputTokenCount ?? 0)),
             CachedInputTokens = details.Sum(x => x.CachedInputTokenCount ?? 0),
+            CacheWriteTokens = details.Sum(x => x.AdditionalCounts != null && x.AdditionalCounts.TryGetValue(CacheWriteCountName, out var written) ? written : 0),
             Provider = provider,
             Model = model
         };

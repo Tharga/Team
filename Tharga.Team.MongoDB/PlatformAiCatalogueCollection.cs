@@ -74,6 +74,10 @@ public record PlatformAiModelEntity
 
     [BsonIgnoreIfNull]
     [BsonRepresentation(BsonType.Decimal128)]
+    public decimal? PriceCacheWrite { get; init; }
+
+    [BsonIgnoreIfNull]
+    [BsonRepresentation(BsonType.Decimal128)]
     public decimal? PriceOutput { get; init; }
 
     public string Currency { get; init; }

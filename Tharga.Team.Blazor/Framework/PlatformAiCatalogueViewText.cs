@@ -31,7 +31,8 @@ public static class PlatformAiCatalogueViewText
     public static readonly TextKey AgreementUrl = new("team.support.catalogue.agreementUrl", "Agreement link");
     public static readonly TextKey PriceInput = new("team.support.catalogue.priceInput", "Input, per million");
     public static readonly TextKey PriceCachedInput = new("team.support.catalogue.priceCachedInput", "Cached, per million");
-    public static readonly TextKey PriceOutput = new("team.support.catalogue.priceOutput", "Output, per million");
+    public static readonly TextKey PriceCacheWrite = new("team.support.catalogue.priceCacheWrite", "Cache write, per million");
+    public static readonly TextKey PriceOutput =new("team.support.catalogue.priceOutput", "Output, per million");
     public static readonly TextKey Offered = new("team.support.catalogue.offered", "Offered to teams");
     public static readonly TextKey Default = new("team.support.catalogue.default", "Default");
     public static readonly TextKey MakeDefault = new("team.support.catalogue.makeDefault", "Make default");
@@ -47,7 +48,7 @@ public static class PlatformAiCatalogueViewText
     public static readonly TextKey[] All =
     [
         NotPermitted, ProvidersTitle, ProvidersExplanation, ModelsTitle, ModelsExplanation, NoProviders, NoModels, Name, Kind, Address, ApiKey, ApiKeyStored, HasKey, NoKey,
-        SaveProvider, NewProvider, Edit, Remove, Provider, ModelId, DisplayName, ProcessedIn, StoredIn, AgreementUrl, PriceInput, PriceCachedInput, PriceOutput, Offered,
+        SaveProvider, NewProvider, Edit, Remove, Provider, ModelId, DisplayName, ProcessedIn, StoredIn, AgreementUrl, PriceInput, PriceCachedInput, PriceCacheWrite, PriceOutput, Offered,
         Default, MakeDefault, SaveModel, NewModel, LoadModels, Test, TestReply, Saved, Failed, ChangedBy
     ];
 }

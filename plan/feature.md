@@ -14,6 +14,11 @@ A host that answers teams with a platform model can cap what each team spends, s
 6. **Host extension points.** A `RenderFragment` slot at the top of the assistant tab and a hook that lets the host refuse a question with its own message and actions (the issue's stated minimum, and what the host-specific "buy more" builds on).
 7. Texts through the existing text provider, tests for every new function, README and docs updates.
 
+## Decisions (user, 2026-11-22)
+- **The limit is set in money (catalogue currency) but money is not what a team sees.** Display is configurable: `Share` (percentage only), `Units` (default; units = cost / `UnitValue`, with the label, e.g. "WU", from the text provider) or `Tokens` (raw total tokens). `Money` exists for hosts that want it, off by default. A Neurolito work unit is tokens x active parameters in billions, which a commercial model has no figure for, so Tharga.Team derives units from cost; a host that has real work units supplies them through the allowance contract.
+- **Limits:** a default in options plus an individual override per team (stored per team, set through a scope-gated operation).
+- **The ask-administrators request is built last**, and is the first thing cut if the PR is too big.
+
 ## Deferred, with the trigger that unparks it
 - **Exchange rate / host currency.** The allowance is kept in the catalogue currency. Unparks when a host needs to bill in another currency; records would then store the rate used.
 - **Counting abandoned (timed-out) answers.** Unparks if the allowance proves to undercount in practice; needs the usage known at the timeout.

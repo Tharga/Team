@@ -229,9 +229,10 @@ internal sealed class SupportCaseService(
         {
             PriceInput = price?.PriceInput,
             PriceCachedInput = price?.PriceCachedInput,
+            PriceCacheWrite = price?.PriceCacheWrite,
             PriceOutput = price?.PriceOutput,
             Currency = price?.Currency,
-            Cost = price == null ? null : SupportAssistantUsageRecord.CostOf(usage.InputTokens, usage.CachedInputTokens, usage.OutputTokens, price.PriceInput, price.PriceCachedInput, price.PriceOutput),
+            Cost = price == null ? null : SupportAssistantUsageRecord.CostOf(usage.InputTokens, usage.CachedInputTokens, usage.CacheWriteTokens, usage.OutputTokens, price.PriceInput, price.PriceCachedInput, price.PriceCacheWrite, price.PriceOutput),
             TeamKey = supportCase.TeamKey,
             CaseId = supportCase.Id,
             AskedBy = await authorizer.GetSubjectAsync(),
@@ -239,6 +240,7 @@ internal sealed class SupportCaseService(
             Model = usage.Model,
             InputTokens = usage.InputTokens,
             CachedInputTokens = usage.CachedInputTokens,
+            CacheWriteTokens = usage.CacheWriteTokens,
             OutputTokens = usage.OutputTokens,
             TotalTokens = usage.TotalTokens,
             ToolCalls = answer.Calls?.Length ?? 0,
@@ -268,7 +270,7 @@ internal sealed class SupportCaseService(
         try
         {
             var model = await pricing.GetAsync(teamKey, cancellationToken);
-            return model is { PriceInput: null, PriceCachedInput: null, PriceOutput: null } ? null : model;
+            return model is { PriceInput: null, PriceCachedInput: null, PriceCacheWrite: null, PriceOutput: null } ? null : model;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

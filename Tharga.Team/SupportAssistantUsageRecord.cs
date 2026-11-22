@@ -33,6 +33,9 @@ public sealed record SupportAssistantUsageRecord
     /// <summary>Of <see cref="InputTokens"/>, those read from the provider's cache.</summary>
     public long CachedInputTokens { get; init; }
 
+    /// <summary>Of <see cref="InputTokens"/>, those the provider wrote to its cache.</summary>
+    public long CacheWriteTokens { get; init; }
+
     /// <summary>The tokens the model wrote.</summary>
     public long OutputTokens { get; init; }
 
@@ -57,6 +60,9 @@ public sealed record SupportAssistantUsageRecord
     /// <summary>The price per million cached input tokens at the time; null when none was given.</summary>
     public decimal? PriceCachedInput { get; init; }
 
+    /// <summary>The price per million cache-write tokens at the time; null when none was given, in which case writes are priced as ordinary input.</summary>
+    public decimal? PriceCacheWrite { get; init; }
+
     /// <summary>The price per million output tokens at the time.</summary>
     public decimal? PriceOutput { get; init; }
 
@@ -71,12 +77,25 @@ public sealed record SupportAssistantUsageRecord
     /// price (the input price when none is given), and output at the output price. Null when no price is known.
     /// </summary>
     public static decimal? CostOf(long inputTokens, long cachedInputTokens, long outputTokens, decimal? priceInput, decimal? priceCachedInput, decimal? priceOutput)
+        => CostOf(inputTokens, cachedInputTokens, 0, outputTokens, priceInput, priceCachedInput, null, priceOutput);
+
+    /// <summary>
+    /// The cost with cache writes priced apart: input that was neither read from nor written to the cache at the input price, cache reads
+    /// at the cached price (the input price when none is given), cache writes at the write price (the input price when none is given),
+    /// and output at the output price. Input includes both cache counts, as the providers report it. Null when no price is known.
+    /// </summary>
+    public static decimal? CostOf(long inputTokens, long cachedInputTokens, long cacheWriteTokens, long outputTokens, decimal? priceInput, decimal? priceCachedInput, decimal? priceCacheWrite, decimal? priceOutput)
     {
-        if (priceInput == null && priceCachedInput == null && priceOutput == null) return null;
+        if (priceInput == null && priceCachedInput == null && priceCacheWrite == null && priceOutput == null) return null;
 
-        var cached = Math.Clamp(cachedInputTokens, 0, Math.Max(0, inputTokens));
-        var fresh = Math.Max(0, inputTokens) - cached;
+        var input = Math.Max(0, inputTokens);
+        var cached = Math.Clamp(cachedInputTokens, 0, input);
+        var written = Math.Clamp(cacheWriteTokens, 0, input - cached);
+        var fresh = input - cached - written;
 
-        return (fresh * (priceInput ?? 0m) + cached * (priceCachedInput ?? priceInput ?? 0m) + Math.Max(0, outputTokens) * (priceOutput ?? 0m)) / 1_000_000m;
+        return (fresh * (priceInput ?? 0m)
+                + cached * (priceCachedInput ?? priceInput ?? 0m)
+                + written * (priceCacheWrite ?? priceInput ?? 0m)
+                + Math.Max(0, outputTokens) * (priceOutput ?? 0m)) / 1_000_000m;
     }
 }

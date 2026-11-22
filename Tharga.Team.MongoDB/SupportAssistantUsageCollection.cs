@@ -17,6 +17,7 @@ public record SupportAssistantUsageRecordEntity : EntityBase
     public string Model { get; init; }
     public long InputTokens { get; init; }
     public long CachedInputTokens { get; init; }
+    public long CacheWriteTokens { get; init; }
     public long OutputTokens { get; init; }
     public long TotalTokens { get; init; }
     public int ToolCalls { get; init; }
@@ -31,6 +32,10 @@ public record SupportAssistantUsageRecordEntity : EntityBase
     [global::MongoDB.Bson.Serialization.Attributes.BsonIgnoreIfNull]
     [global::MongoDB.Bson.Serialization.Attributes.BsonRepresentation(BsonType.Decimal128)]
     public decimal? PriceCachedInput { get; init; }
+
+    [global::MongoDB.Bson.Serialization.Attributes.BsonIgnoreIfNull]
+    [global::MongoDB.Bson.Serialization.Attributes.BsonRepresentation(BsonType.Decimal128)]
+    public decimal? PriceCacheWrite { get; init; }
 
     [global::MongoDB.Bson.Serialization.Attributes.BsonIgnoreIfNull]
     [global::MongoDB.Bson.Serialization.Attributes.BsonRepresentation(BsonType.Decimal128)]
@@ -111,6 +116,7 @@ public class SupportAssistantUsageCollection : DiskRepositoryCollectionBase<Supp
                 { "toolCalls", Sum(nameof(SupportAssistantUsageRecordEntity.ToolCalls)) },
                 { "input", Sum(nameof(SupportAssistantUsageRecordEntity.InputTokens)) },
                 { "cached", Sum(nameof(SupportAssistantUsageRecordEntity.CachedInputTokens)) },
+                { "cacheWrite", Sum(nameof(SupportAssistantUsageRecordEntity.CacheWriteTokens)) },
                 { "output", Sum(nameof(SupportAssistantUsageRecordEntity.OutputTokens)) },
                 { "total", Sum(nameof(SupportAssistantUsageRecordEntity.TotalTokens)) },
                 { "cost", Sum(nameof(SupportAssistantUsageRecordEntity.Cost)) },
@@ -138,6 +144,7 @@ public class SupportAssistantUsageCollection : DiskRepositoryCollectionBase<Supp
             ToolCalls = row["toolCalls"].ToInt64(),
             InputTokens = row["input"].ToInt64(),
             CachedInputTokens = row["cached"].ToInt64(),
+            CacheWriteTokens = row.TryGetValue("cacheWrite", out var written) ? written.ToInt64() : 0,
             OutputTokens = row["output"].ToInt64(),
             TotalTokens = row["total"].ToInt64(),
             Cost = row.TryGetValue("priced", out var priced) && priced.ToInt64() > 0 ? row["cost"].ToDecimal() : null,

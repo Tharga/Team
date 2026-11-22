@@ -3,12 +3,13 @@
 Legend: [x] done, [~] in progress, [ ] to do.
 
 - [x] 0. NuGet update (commit c106ce6). Applied Microsoft.Extensions.AI and .OpenAI 11.0.1 on net11.0; full suite 16150 passed. Held, with recorded reasons: MailKit 4.18.2 (existing hold in the csproj), Swashbuckle 10.3.1 on net10.0 (existing, Microsoft.OpenApi), Serilog.AspNetCore 10.0.0 in the sample (11.0.0 pulls .NET 11 packages into a net10.0 app; comment added), Microsoft.CodeAnalysis.CSharp 4.8.0 (stays until CI builds on the .NET 11 SDK), and every net10.0 package that would jump to 11.x.
-- [~] 1. Confirm the plan and the open decisions with the user.
-- [ ] 2. Cache-write pricing: `PriceCacheWrite`, `CacheWriteTokens`, `CostOf`, store mapping (BSON by name where enums, test of stored shape), `ChatSupportResponder.UsageOf` reads `CacheCreationInputTokens`. Tests first.
-- [ ] 3. Allowance contract and default implementation over the usage store; options for the limit; scope-gated service plus architecture-test compliance; registration by the library with TryAdd.
+- [x] 1. Plan confirmed 2026-11-22: units not money on screen (configurable), default in options plus per-team override, ask-administrators last (step 6b).
+- [x] 2. Cache-write pricing done. `PriceCacheWrite` (catalogue model, usage record, Mongo, admin view and text), `CacheWriteTokens` (usage, record, totals, per-message usage), new `CostOf` overload with writes (old overload kept; a write with no write price costs as input, as before), `ChatSupportResponder.UsageOf` reads `CacheCreationInputTokens`. The key was checked as a string literal in the Anthropic 13.12.0 assembly, not by running the SDK's conversion. Reasoning tokens are not added (output already includes them). 26 new test runs, suite 16176 passed on both targets.
+- [~] 3. Allowance contract and default implementation over the usage store; options for the default limit and the display (`Share`/`Units`/`Tokens`/`Money`, `UnitValue`); per-team override stored and set through a scope-gated operation; architecture-test compliance; registration by the library with TryAdd.
 - [ ] 4. Readiness: `AllowanceUsed`, `ProviderRefused`; `ChatSupportResponder` classifies account-level provider refusals; cases are not handed over in those states.
 - [ ] 5. Panel: progress bar, administrator amounts and questions left, hidden on own provider, refresh after an answer and through the live relay.
-- [ ] 6. Refusal actions by role, including the ask-administrators request.
+- [ ] 6. Refusal actions by role: other platform model, own subscription, host actions.
+- [ ] 6b. Ask-administrators request (built last).
 - [ ] 7. Host slot and refusal hook on `SupportPanel`.
 - [ ] 8. Texts, README, docs articles.
 - [ ] 9. Full suite on both targets, push the branch for the user to test.

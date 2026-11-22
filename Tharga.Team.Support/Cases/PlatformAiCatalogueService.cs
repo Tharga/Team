@@ -171,7 +171,7 @@ internal sealed class PlatformAiCatalogueService(
             if (string.IsNullOrWhiteSpace(model.Id)) return "Every model needs an identifier.";
             if (string.IsNullOrWhiteSpace(model.ModelId)) return $"'{model.Id}' needs the provider's model name.";
             if (providers.All(x => x.Id != model.ProviderId)) return $"'{model.DisplayName ?? model.Id}' names a provider that does not exist.";
-            if (new[] { model.PriceInput, model.PriceCachedInput, model.PriceOutput }.Any(x => x < 0)) return $"'{model.DisplayName ?? model.Id}' has a negative price.";
+            if (new[] { model.PriceInput, model.PriceCachedInput, model.PriceCacheWrite, model.PriceOutput }.Any(x => x < 0)) return $"'{model.DisplayName ?? model.Id}' has a negative price.";
             if (!string.IsNullOrWhiteSpace(model.AgreementUrl)
                 && !(Uri.TryCreate(model.AgreementUrl.Trim(), UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(uri.UserInfo)))
                 return $"The agreement link of '{model.DisplayName ?? model.Id}' must be an https address.";

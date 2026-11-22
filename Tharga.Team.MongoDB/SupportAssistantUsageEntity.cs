@@ -9,6 +9,9 @@ public record SupportAssistantUsageEntity
 
     public long TotalTokens { get; init; }
     public long CachedInputTokens { get; init; }
+
+    /// <summary>Absent, which reads as 0, on an answer kept before cache writes were counted.</summary>
+    public long CacheWriteTokens { get; init; }
     public string Provider { get; init; }
     public string Model { get; init; }
 

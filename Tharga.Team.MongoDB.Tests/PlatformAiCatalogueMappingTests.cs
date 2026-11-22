@@ -21,7 +21,7 @@ public class PlatformAiCatalogueMappingTests
             new PlatformAiModel
             {
                 Id = "m1", ProviderId = "p1", ModelId = "claude-x", DisplayName = "Claude X", ProcessedIn = "Sweden", StoredIn = "Sweden", AgreementUrl = "https://example.com/dpa",
-                PriceInput = 3m, PriceCachedInput = 0.3m, PriceOutput = 15m, Currency = "USD", Offered = true
+                PriceInput = 3m, PriceCachedInput = 0.3m, PriceCacheWrite = 3.75m, PriceOutput = 15m, Currency = "USD", Offered = true
             },
             new PlatformAiModel { Id = "m2", ProviderId = "p2", ModelId = "llama", DisplayName = "Llama", Offered = false }
         ],
@@ -53,6 +53,9 @@ public class PlatformAiCatalogueMappingTests
         var back = BsonSerializer.Deserialize<PlatformAiCatalogueEntity>(document);
 
         Assert.Equal(0.3m, back.Models[0].PriceCachedInput);
+        Assert.Equal(3.75m, back.Models[0].PriceCacheWrite);
+        Assert.Equal(BsonType.Decimal128, document["Models"][0]["PriceCacheWrite"].BsonType);
+        Assert.Null(back.Models[1].PriceCacheWrite);
         Assert.Equal(15m, back.Models[0].PriceOutput);
         Assert.Null(back.Models[1].PriceInput);
     }
