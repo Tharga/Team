@@ -30,7 +30,7 @@ internal sealed class DefaultSupportAssistantAllowanceSource(
         if (current == null) return notLimited;
 
         var own = limits == null ? null : await limits.GetAsync(teamKey, cancellationToken);
-        var limit = own != null ? own.Limit : options.DefaultLimit;
+        var limit = own != null ? own.Limit : (await AllowanceLimits.DefaultAsync(limits, options, cancellationToken)).Limit;
         if (limit == null) return notLimited;
 
         var thisPeriod = await usage.GetTotalsAsync(start, end, teamKey, cancellationToken);

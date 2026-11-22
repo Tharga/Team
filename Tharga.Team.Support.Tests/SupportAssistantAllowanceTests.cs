@@ -334,6 +334,132 @@ public class SupportAssistantAllowanceTests
         Assert.Same(own, scope.ServiceProvider.GetRequiredService<ISupportAssistantAllowanceSource>());
     }
 
+    // ---- the default staff set ----
+
+    private static StoredSupportAssistantLimit StoredDefault(decimal? limit) => new() { TeamKey = StoredSupportAssistantLimit.DefaultKey, Limit = limit };
+
+    [Fact]
+    public async Task ADefaultStaffSet_BeatsTheHostsOption()
+    {
+        _limits.GetAsync(StoredSupportAssistantLimit.DefaultKey, Arg.Any<CancellationToken>()).Returns(StoredDefault(5m));
+
+        Assert.Equal(0.8m, (await Source().GetAsync(Team)).Share);
+    }
+
+    [Fact]
+    public async Task ADefaultOfNone_BeatsTheHostsOption()
+    {
+        _limits.GetAsync(StoredSupportAssistantLimit.DefaultKey, Arg.Any<CancellationToken>()).Returns(StoredDefault(null));
+
+        Assert.False((await Source().GetAsync(Team)).Applies);
+    }
+
+    [Fact]
+    public async Task ATeamsOwnLimit_BeatsTheDefaultStaffSet()
+    {
+        _limits.GetAsync(StoredSupportAssistantLimit.DefaultKey, Arg.Any<CancellationToken>()).Returns(StoredDefault(5m));
+        _limits.GetAsync(Team, Arg.Any<CancellationToken>()).Returns(new StoredSupportAssistantLimit { TeamKey = Team, Limit = 8m });
+
+        Assert.Equal(0.5m, (await Source().GetAsync(Team)).Share);
+    }
+
+    [Fact]
+    public async Task WithNoDefaultSet_TheOptionHolds_AndTheLimitsSayWhereItCameFrom()
+    {
+        _limits.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var limits = await LimitService(Authorizer(member: false, manage: false, system: true)).GetLimitsAsync();
+
+        Assert.Equal((10m, false, 10m, "USD"), (limits.DefaultLimit, limits.StoredDefault, limits.OptionDefault, limits.Currency));
+        Assert.Empty(limits.Teams);
+    }
+
+    [Fact]
+    public async Task TheLimits_ListTheDefaultAndEveryTeamsOwn_NotTheDefaultAsATeam()
+    {
+        _limits.GetAllAsync(Arg.Any<CancellationToken>()).Returns(
+        [
+            new StoredSupportAssistantLimit { TeamKey = "team-b", Limit = null },
+            StoredDefault(3m),
+            new StoredSupportAssistantLimit { TeamKey = Team, Limit = 50m }
+        ]);
+
+        var limits = await LimitService(Authorizer(member: false, manage: false, system: true)).GetLimitsAsync();
+
+        Assert.Equal((3m, true, 10m), (limits.DefaultLimit, limits.StoredDefault, limits.OptionDefault));
+        Assert.Equal([Team, "team-b"], limits.Teams.Select(x => x.TeamKey));
+        Assert.Equal([50m, null], limits.Teams.Select(x => x.Limit));
+        Assert.All(limits.Teams, x => Assert.Equal((true, 3m), (x.IsOwn, x.DefaultLimit)));
+    }
+
+    [Fact]
+    public async Task SettingTheDefault_StoresItUnderTheDefaultKey_AndSaysItHolds()
+    {
+        _limits.GetAllAsync(Arg.Any<CancellationToken>()).Returns([StoredDefault(20m)]);
+        var service = LimitService(Authorizer(member: false, manage: false, system: true));
+
+        var limits = await service.SetDefaultLimitAsync(new SupportAssistantDefaultLimitRequest { Limit = 20m });
+
+        await _limits.Received().SetAsync(Arg.Is<StoredSupportAssistantLimit>(x => x.TeamKey == StoredSupportAssistantLimit.DefaultKey && x.Limit == 20m && x.ChangedAt == Now && x.ChangedByIdentity == "staff"));
+        Assert.Equal((20m, true), (limits.DefaultLimit, limits.StoredDefault));
+    }
+
+    [Fact]
+    public async Task ClearingTheDefault_DeletesIt_SoTheOptionHoldsAgain()
+    {
+        _limits.GetAllAsync(Arg.Any<CancellationToken>()).Returns([]);
+
+        var limits = await LimitService(Authorizer(member: false, manage: false, system: true)).ClearDefaultLimitAsync();
+
+        await _limits.Received().DeleteForTeamAsync(StoredSupportAssistantLimit.DefaultKey, Arg.Any<CancellationToken>());
+        Assert.Equal((10m, false), (limits.DefaultLimit, limits.StoredDefault));
+    }
+
+    [Fact]
+    public async Task ANegativeDefault_IsRefused()
+    {
+        var service = LimitService(Authorizer(member: false, manage: false, system: true));
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => service.SetDefaultLimitAsync(new SupportAssistantDefaultLimitRequest { Limit = -1m }));
+
+        await _limits.DidNotReceiveWithAnyArgs().SetAsync(default);
+    }
+
+    /// <summary>The default lives under a key no team has, and must never be reachable as if it were one.</summary>
+    [Fact]
+    public async Task TheDefaultsKey_IsNotATeam()
+    {
+        var service = LimitService(Authorizer(member: false, manage: false, system: true));
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SetLimitAsync(new SupportAssistantLimitRequest { TeamKey = StoredSupportAssistantLimit.DefaultKey, Limit = 1m }));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ClearLimitAsync(StoredSupportAssistantLimit.DefaultKey));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetLimitAsync(StoredSupportAssistantLimit.DefaultKey));
+
+        await _limits.DidNotReceiveWithAnyArgs().SetAsync(default);
+        await _limits.DidNotReceiveWithAnyArgs().DeleteForTeamAsync(default);
+    }
+
+    [Fact]
+    public async Task PurgingATeam_NeverRemovesTheDefault()
+    {
+        Assert.Equal(0, await new SupportAssistantLimitPurgeParticipant(_limits).PurgeTeamDataAsync(StoredSupportAssistantLimit.DefaultKey));
+
+        await _limits.DidNotReceiveWithAnyArgs().DeleteForTeamAsync(default);
+    }
+
+    [Fact]
+    public async Task TheDefaultAndTheListCannotBeReadOrChanged_WithoutTheSystemScope()
+    {
+        var service = LimitService(Authorizer(member: true, manage: true, system: false));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetLimitsAsync());
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.SetDefaultLimitAsync(new SupportAssistantDefaultLimitRequest { Limit = 1m }));
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.ClearDefaultLimitAsync());
+
+        await _limits.DidNotReceiveWithAnyArgs().GetAllAsync();
+        await _limits.DidNotReceiveWithAnyArgs().SetAsync(default);
+    }
+
     private ISupportAssistantLimitService LimitService(TeamAuthorizer authorizer)
         => new AuthorizationSupportAssistantLimitServiceDecorator(
             new SupportAssistantLimitService(_limits, _options, new FixedClock(Now), authorizer, _catalogue),

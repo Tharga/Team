@@ -58,6 +58,7 @@ public static class SupportAssistantAdminViewText
 {
     public static readonly TextKey UsageTab = new("team.support.admin.usage", "Usage");
     public static readonly TextKey ConfigurationTab = new("team.support.admin.configuration", "Configuration");
+    public static readonly TextKey LimitsTab = new("team.support.admin.limits", "Limits");
 
-    public static readonly TextKey[] All = [UsageTab, ConfigurationTab];
+    public static readonly TextKey[] All = [UsageTab, ConfigurationTab, LimitsTab];
 }

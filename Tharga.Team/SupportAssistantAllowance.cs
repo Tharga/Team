@@ -129,6 +129,12 @@ public sealed record StoredSupportAssistantLimit
 
     /// <summary>Who set it, by name when it was set.</summary>
     public string ChangedByName { get; init; }
+
+    /// <summary>
+    /// The key the default limit is kept under, beside the teams' own. No team has this key, so it can never be a team's own limit or be
+    /// removed with one.
+    /// </summary>
+    public const string DefaultKey = "*";
 }
 
 /// <summary>Keeps each team's own limit. The persistence port behind <see cref="ISupportAssistantLimitService"/>.</summary>
@@ -142,6 +148,9 @@ public interface ISupportAssistantLimitStore
 
     /// <summary>Removes the team's own limit, so it is held to the default again; true when there was one.</summary>
     Task<bool> DeleteForTeamAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>Every limit kept: the teams' own and, under <see cref="StoredSupportAssistantLimit.DefaultKey"/>, the default when staff have set one.</summary>
+    Task<StoredSupportAssistantLimit[]> GetAllAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>A team's limit as the platform's staff see it.</summary>
@@ -156,11 +165,37 @@ public sealed record SupportAssistantLimit
     /// <summary>Whether the team has a limit of its own.</summary>
     public bool IsOwn { get; init; }
 
-    /// <summary>The default every team without its own is held to; null means none.</summary>
+    /// <summary>The default every team without its own is held to: the one staff set, otherwise the host's option. Null means none.</summary>
     public decimal? DefaultLimit { get; init; }
 
     /// <summary>The currency of the amounts, from the catalogue; "USD" when there is none.</summary>
     public string Currency { get; init; }
+}
+
+/// <summary>Every limit staff manage: the default, and each team that has one of its own.</summary>
+public sealed record SupportAssistantLimits
+{
+    /// <summary>The default that holds for a team with no limit of its own: <see cref="StoredDefault"/> when staff have set one, otherwise <see cref="OptionDefault"/>. Null means none.</summary>
+    public decimal? DefaultLimit { get; init; }
+
+    /// <summary>Whether staff have set the default, so it beats the host's option; false when it is the option that holds.</summary>
+    public bool StoredDefault { get; init; }
+
+    /// <summary>The default the host configured, which holds until staff set one. Null means none.</summary>
+    public decimal? OptionDefault { get; init; }
+
+    /// <summary>The currency of the amounts, from the catalogue; "USD" when there is none.</summary>
+    public string Currency { get; init; }
+
+    /// <summary>The teams that have a limit of their own, each with the amount (null for no limit at all).</summary>
+    public SupportAssistantLimit[] Teams { get; init; } = [];
+}
+
+/// <summary>Setting the default limit.</summary>
+public sealed record SupportAssistantDefaultLimitRequest
+{
+    /// <summary>The limit per period for every team without one of its own, in the catalogue's currency, from zero; null for no limit at all.</summary>
+    public decimal? Limit { get; init; }
 }
 
 /// <summary>Setting a team's own limit.</summary>
@@ -190,4 +225,13 @@ public interface ISupportAssistantLimitService
 
     /// <summary>Removes a team's own limit, so it is held to the default.</summary>
     Task<SupportAssistantLimit> ClearLimitAsync(string teamKey, CancellationToken cancellationToken = default);
+
+    /// <summary>The default, and every team that has a limit of its own.</summary>
+    Task<SupportAssistantLimits> GetLimitsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Sets the default every team without a limit of its own is held to, or no limit at all. Beats the host's option until cleared. Refused for a negative limit.</summary>
+    Task<SupportAssistantLimits> SetDefaultLimitAsync(SupportAssistantDefaultLimitRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Removes the default staff set, so the host's option holds again.</summary>
+    Task<SupportAssistantLimits> ClearDefaultLimitAsync(CancellationToken cancellationToken = default);
 }

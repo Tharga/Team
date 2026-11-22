@@ -1,4 +1,5 @@
 using MongoDB.Driver;
+using Tharga.MongoDB;
 
 namespace Tharga.Team.MongoDB;
 
@@ -42,6 +43,13 @@ internal sealed class MongoSupportAssistantLimitStore(ISupportAssistantLimitColl
 
         await collection.DeleteOneAsync(entity.Id);
         return true;
+    }
+
+    /// <remarks>Every document: one per team that has a limit of its own, and the default. Few by nature, since a limit is an exception staff made.</remarks>
+    public async Task<StoredSupportAssistantLimit[]> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        var found = await collection.GetManyAsync(Builders<SupportAssistantLimitEntity>.Filter.Empty, new Options<SupportAssistantLimitEntity> { Limit = 5000 }, cancellationToken);
+        return [.. (found?.Items ?? []).Select(ToRecord)];
     }
 
     internal static StoredSupportAssistantLimit ToRecord(SupportAssistantLimitEntity entity) => new()
