@@ -59,6 +59,12 @@ public record ThargaTeamOptions
     public string SupportAssistantUsageCollectionName { get; set; } = "SupportAssistantUsage";
 
     /// <summary>
+    /// Collection holding the limits staff give single teams for the support assistant, one document per team. Default
+    /// <c>SupportAssistantLimit</c>.
+    /// </summary>
+    public string SupportAssistantLimitCollectionName { get; set; } = "SupportAssistantLimit";
+
+    /// <summary>
     /// Collection holding the Data Protection key ring, when <c>PersistKeysToThargaMongo</c> keeps it here. Default
     /// <c>DataProtectionKey</c>.
     /// </summary>

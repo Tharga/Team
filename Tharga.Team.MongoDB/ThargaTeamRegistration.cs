@@ -170,6 +170,11 @@ public static class ThargaTeamRegistration
             services.TrackMongoCollection(typeof(ISupportAssistantUsageCollection), typeof(SupportAssistantUsageCollection));
             services.TryAddScoped<ISupportAssistantUsageStore, MongoSupportAssistantUsageStore>();
             services.TryAddEnumerable(ServiceDescriptor.Scoped<ISupportAssistantUsageSink, SupportAssistantUsageStoreSink>());
+
+            // A team's own assistant limit, one document per team that has one. TryAdd so a host keeping its own wins.
+            services.AddTransient<ISupportAssistantLimitCollection, SupportAssistantLimitCollection>();
+            services.TrackMongoCollection(typeof(ISupportAssistantLimitCollection), typeof(SupportAssistantLimitCollection));
+            services.TryAddScoped<ISupportAssistantLimitStore, MongoSupportAssistantLimitStore>();
             services.AddTransient<IInboundMailCollection, InboundMailCollection>();
             services.TrackMongoCollection(typeof(IInboundMailCollection), typeof(InboundMailCollection));
             services.TryAddScoped<ITeamMailStore, MongoTeamMailStore>();

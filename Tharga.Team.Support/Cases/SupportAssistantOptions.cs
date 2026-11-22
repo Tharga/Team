@@ -100,6 +100,9 @@ public class SupportAssistantOptions
     /// <remarks>A tool can return a whole guidance document, and a case is a conversation, not a log.</remarks>
     public int MaxStoredCallResultLength { get; set; } = 2000;
 
+    /// <summary>What a team may spend on the platform's model, and how it is shown. Nothing is limited by default.</summary>
+    public SupportAssistantAllowanceOptions Allowance { get; set; } = new();
+
     /// <summary>What a stored tool result ends with when it was cut to <see cref="MaxStoredCallResultLength"/>.</summary>
     public const string CutMarker = "… [cut]";
 }

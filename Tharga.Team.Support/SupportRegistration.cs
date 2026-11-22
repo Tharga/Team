@@ -335,6 +335,34 @@ public static class SupportRegistration
             ? new SupportAssistantUsagePurgeParticipant(usageStore)
             : NoUsageToPurge.Instance);
 
+        // The allowance: what a team may spend on the platform's model, read by its members and administrators, and limits set by staff.
+        // The source is the host's to replace, because a host that spends on the model elsewhere counts that too; the default sums the assistant's own usage.
+        services.AddSingleton(caseOptions.Assistant.Allowance);
+        services.TryAddScoped<ISupportAssistantAllowanceSource>(sp => new DefaultSupportAssistantAllowanceSource(
+            caseOptions.Assistant.Allowance,
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetService<ISupportAssistantUsageStore>(),
+            sp.GetService<ISupportAssistantLimitStore>(),
+            sp.GetService<ISupportAssistantPricing>(),
+            sp.GetService<IPlatformAiCatalogueStore>()));
+        services.TryAddScoped<ISupportAssistantAllowanceService>(sp => new AuthorizationSupportAssistantAllowanceServiceDecorator(
+            new SupportAssistantAllowanceService(sp.GetRequiredService<ISupportAssistantAllowanceSource>()),
+            sp.GetRequiredService<TeamAuthorizer>()));
+        services.TryAddScoped<ISupportAssistantLimitService>(sp => new AuditingSupportAssistantLimitServiceDecorator(
+            new AuthorizationSupportAssistantLimitServiceDecorator(
+                new SupportAssistantLimitService(
+                    sp.GetRequiredService<ISupportAssistantLimitStore>(),
+                    caseOptions.Assistant.Allowance,
+                    sp.GetRequiredService<TimeProvider>(),
+                    sp.GetRequiredService<TeamAuthorizer>(),
+                    sp.GetService<IPlatformAiCatalogueStore>()),
+                sp.GetRequiredService<TeamAuthorizer>()),
+            sp.GetRequiredService<CompositeAuditLogger>(),
+            sp.GetRequiredService<IAuditEntryFactory>()));
+        services.AddTransient<ITeamPurgeParticipant>(sp => sp.GetService<ISupportAssistantLimitStore>() is { } limitStore
+            ? new SupportAssistantLimitPurgeParticipant(limitStore)
+            : NoLimitToPurge.Instance);
+
         // The level is the host's to choose, because whether a team administrator should read their members'
         // conversations is a product decision rather than a library one. The default is what every host had
         // before the option existed.
@@ -359,6 +387,8 @@ public static class SupportRegistration
                 "Reply to, close, reopen and hand over a support case in any team, without belonging to it. Satisfies a read as well. Does not grant assignment, which decides which tenant an unassigned case joins and stays with the unassigned queue.");
             scopes.Register(SystemSupportScopes.UsageRead,
                 "Read how much the support assistant was used, per team, provider and model -- for whoever runs or bills the product. Reads no conversation, but says how much every team used.");
+            scopes.Register(SystemSupportScopes.AllowanceManage,
+                "Give a team a spend limit of its own for the support assistant, or take it away. Decides how much of the platform's account a team may use, so it is for whoever runs the product, not for a team's own administrators.");
         });
 
         // The assistant, and only when the host has given it something to talk to. An IChatClient is the
