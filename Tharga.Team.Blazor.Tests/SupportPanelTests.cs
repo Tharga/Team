@@ -55,7 +55,8 @@ public class SupportPanelTests : BunitContext
         bool open = false,
         int? width = null,
         bool withTeam = true,
-        SupportPanelNarrowScreen narrowScreen = SupportPanelNarrowScreen.Hide)
+        SupportPanelNarrowScreen narrowScreen = SupportPanelNarrowScreen.Hide,
+        ISupportAssistantAllowanceService allowances = null)
     {
         var team = new Mock<ITeam>();
         team.SetupGet(x => x.Key).Returns(TeamKey);
@@ -74,6 +75,7 @@ public class SupportPanelTests : BunitContext
         Services.AddSingleton<ISupportTypingNotifier>(_typing);
         Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
         if (availability != null) Services.AddSingleton(availability);
+        if (allowances != null) Services.AddSingleton(allowances);
         Services.AddRadzenComponents();
         JSInterop.Mode = JSRuntimeMode.Loose;
         SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
@@ -93,6 +95,223 @@ public class SupportPanelTests : BunitContext
     {
         view.Find("input[data-draft]").Input(text);
         view.Find("[data-send]").Click();
+    }
+
+    // ---- the allowance bar ----
+
+    private static SupportAssistantAllowance Allowance(decimal share = 0.4m, bool exhausted = false, bool applies = true, bool amounts = false) => new()
+    {
+        TeamKey = TeamKey,
+        Applies = applies,
+        Display = SupportAllowanceDisplay.Units,
+        Unit = "WU",
+        Share = share,
+        Exhausted = exhausted,
+        WarnAt = 0.8m,
+        PeriodEndsAt = new DateTime(2026, 12, 1, 0, 0, 0, DateTimeKind.Utc),
+        Limit = amounts ? 10_000m : null,
+        Used = amounts ? share * 10_000m : null,
+        Models = [new SupportAssistantModelAllowance { ModelId = "m1", DisplayName = "Sonnet", Current = true, QuestionsLeft = amounts ? 60 : 60, CostPerAnswer = amounts ? 100m : null }]
+    };
+
+    private static ISupportAssistantAllowanceService Allowing(params SupportAssistantAllowance[] inOrder)
+    {
+        var service = new Mock<ISupportAssistantAllowanceService>();
+        var sequence = service.SetupSequence(x => x.GetAllowanceAsync(TeamKey, default));
+        foreach (var allowance in inOrder) sequence = sequence.ReturnsAsync(allowance);
+        service.Setup(x => x.GetAllowanceAsync(TeamKey, default)).ReturnsAsync(inOrder[^1]);
+        return service.Object;
+    }
+
+    [Fact]
+    public void TheBar_IsShownByDefault_WhereTheTeamIsLimited()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m)));
+
+        var bar = view.Find("[data-allowance-bar]");
+        Assert.Equal("40", bar.GetAttribute("aria-valuenow"));
+        Assert.Contains("width: 40%", view.Find(".support-panel__allowance-fill").GetAttribute("style"));
+        Assert.Contains("40% used", view.Find("[data-allowance-text]").TextContent);
+    }
+
+    [Fact]
+    public void TheBar_CanBeTurnedOff_AndNothingElseChanges()
+    {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.ShowAllowance = false);
+
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m)));
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.NotNull(view.Find("[data-draft]"));
+    }
+
+    [Fact]
+    public void ATeamWithNoLimit_HasNoBar()
+        => Assert.Empty(Render(open: true, allowances: Allowing(Allowance(applies: false))).FindAll("[data-allowance]"));
+
+    [Fact]
+    public void WithNoAllowanceService_ThereIsNoBar_AndThePanelWorks()
+    {
+        var view = Render(open: true);
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.NotNull(view.Find("[data-draft]"));
+    }
+
+    [Fact]
+    public void AnAllowanceThatCannotBeRead_IsNoBar_AndNoFailure()
+    {
+        var service = new Mock<ISupportAssistantAllowanceService>();
+        service.Setup(x => x.GetAllowanceAsync(TeamKey, default)).ThrowsAsync(new InvalidOperationException("The usage database is down."));
+
+        var view = Render(open: true, allowances: service.Object);
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.NotNull(view.Find("[data-draft]"));
+    }
+
+    [Fact]
+    public void TheBar_IsForTheAssistant_NotForSupport()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance()));
+
+        view.Find("[data-tab='support']").Click();
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+    }
+
+    [Theory]
+    [InlineData(0.79, false, "support-panel__allowance")]
+    [InlineData(0.8, false, "support-panel__allowance support-panel__allowance--warn")]
+    [InlineData(1.0, true, "support-panel__allowance support-panel__allowance--full")]
+    public void TheBar_WarnsFromTheWarningShare_AndIsFullWhenUsedUp(double share, bool exhausted, string expected)
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance((decimal)share, exhausted)));
+
+        Assert.Equal(expected, view.Find("[data-allowance]").GetAttribute("class"));
+    }
+
+    /// <summary>99.7 percent is not 100: the bar is full only when nothing is left.</summary>
+    [Fact]
+    public void TheBar_IsNeverFullWhileThereIsSomethingLeft()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.997m)));
+
+        Assert.Equal("99", view.Find("[data-allowance-bar]").GetAttribute("aria-valuenow"));
+    }
+
+    [Fact]
+    public void AnAdministrator_SeesTheAmounts_AndHowManyQuestionsAreLeft()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m, amounts: true)));
+
+        Assert.Contains($"{4_000m:N0} of {10_000m:N0} WU used", view.Find("[data-allowance-text]").TextContent);
+        Assert.Contains("About 60 questions left on Sonnet", view.Find("[data-allowance-left]").TextContent);
+    }
+
+    /// <summary>A member is given the share and no amount, and so is not told how many questions are left either.</summary>
+    [Fact]
+    public void AMember_SeesOnlyTheShare()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m)));
+
+        Assert.DoesNotContain("WU", view.Find("[data-allowance]").TextContent);
+        Assert.Empty(view.FindAll("[data-allowance-left]"));
+    }
+
+    [Fact]
+    public void WhenItStartsAgain_IsSaid()
+        => Assert.Contains(new DateTime(2026, 12, 1).ToString("d"), Render(open: true, allowances: Allowing(Allowance())).Find("[data-allowance-text]").TextContent);
+
+    [Fact]
+    public void TheBar_MovesAfterAnAnswer()
+    {
+        var raised = Case("case-1");
+        Raises(raised, answered: true, Message(1, Question, SupportMessageKind.User), Message(2, "Check the date range.", SupportMessageKind.Assistant, author: null));
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m), Allowance(0.5m)));
+
+        Send(view, Question);
+
+        view.WaitForAssertion(() => Assert.Equal("50", view.Find("[data-allowance-bar]").GetAttribute("aria-valuenow")));
+    }
+
+    /// <summary>Another member's answer spends the same allowance, so every open panel moves its bar.</summary>
+    [Fact]
+    public void TheBar_MovesWhenAnotherMembersAnswerIsAnnounced()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance(0.4m), Allowance(0.7m)));
+
+        _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = "someone-elses", Change = SupportCaseChange.Replied, FromChannel = false, FromRemote = true });
+
+        view.WaitForAssertion(() => Assert.Equal("70", view.Find("[data-allowance-bar]").GetAttribute("aria-valuenow")));
+    }
+
+    [Fact]
+    public void AReadingThatIsOnlyAReadMark_DoesNotAskAgain()
+    {
+        var service = Allowing(Allowance(0.4m));
+        var view = Render(open: true, allowances: service);
+
+        _notifier.Raise(x => x.CaseUpdated += null, _notifier.Object, new SupportCaseUpdatedEventArgs { TeamKey = TeamKey, CaseId = "x", Change = SupportCaseChange.Read, FromChannel = false });
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-allowance]")));
+        Mock.Get(service).Verify(x => x.GetAllowanceAsync(TeamKey, default), Times.Once);
+    }
+
+    [Fact]
+    public void WhenTheAllowanceIsUsedUp_TheTabStays_SaysWhy_AndTakesNoMessage()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, open: true, allowances: Allowing(Allowance(1.0m, exhausted: true)));
+
+        Assert.NotNull(view.Find("[data-tab='assistant']"));
+        Assert.Contains("allowance", view.Find("[data-assistant-paused]").TextContent);
+        Assert.Contains(new DateTime(2026, 12, 1).ToString("d"), view.Find("[data-assistant-paused]").TextContent);
+        Assert.True(view.Find("[data-draft]").HasAttribute("disabled"));
+        Assert.True(view.Find("[data-send]").HasAttribute("disabled"));
+        Assert.Equal("support-panel__allowance support-panel__allowance--full", view.Find("[data-allowance]").GetAttribute("class"));
+    }
+
+    /// <summary>Support is still there: the person can write to it, and the notice goes with the assistant tab.</summary>
+    [Fact]
+    public void WhenTheAllowanceIsUsedUp_SupportCanStillBeWrittenTo()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, open: true, allowances: Allowing(Allowance(1.0m, exhausted: true)));
+
+        view.Find("[data-tab='support']").Click();
+
+        Assert.Empty(view.FindAll("[data-assistant-paused]"));
+        Assert.False(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void WhenTheProviderRefusedTheAccount_TheTabStays_AndSaysSo()
+    {
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true);
+
+        Assert.NotNull(view.Find("[data-tab='assistant']"));
+        Assert.Contains("refused", view.Find("[data-assistant-paused]").TextContent);
+        Assert.True(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void WithAnAssistantReady_NothingIsPaused()
+    {
+        var view = Render(open: true, allowances: Allowing(Allowance()));
+
+        Assert.Empty(view.FindAll("[data-assistant-paused]"));
+        Assert.False(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    /// <summary>The date a used-up allowance starts again is read even where the host has turned the bar off.</summary>
+    [Fact]
+    public void WithTheBarOff_AUsedUpAllowance_StillSaysWhenItStartsAgain()
+    {
+        Services.Configure<ThargaBlazorOptions>(o => o.Support.ShowAllowance = false);
+
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, open: true, allowances: Allowing(Allowance(1.0m, exhausted: true)));
+
+        Assert.Empty(view.FindAll("[data-allowance]"));
+        Assert.Contains(new DateTime(2026, 12, 1).ToString("d"), view.Find("[data-assistant-paused]").TextContent);
     }
 
     [Fact]

@@ -69,6 +69,22 @@
                     </div>
                 }
 
+                @* Only where the team is limited, only towards the assistant, and only when the host has not turned it off. *@
+                @if (ShowsAllowance)
+                {
+                    <div class="@AllowanceClass" data-allowance>
+                        <div class="support-panel__allowance-track" role="progressbar" aria-label="@_text[SupportPanelText.AllowanceLabel]"
+                             aria-valuemin="0" aria-valuemax="100" aria-valuenow="@AllowancePercent" data-allowance-bar>
+                            <div class="support-panel__allowance-fill" style="@($"width: {AllowanceFill}%;")"></div>
+                        </div>
+                        <div class="support-panel__allowance-text" data-allowance-text>@AllowanceText</div>
+                        @if (AllowanceQuestionsLeft is { } left)
+                        {
+                            <div class="support-panel__allowance-text" data-allowance-left>@left</div>
+                        }
+                    </div>
+                }
+
                 @if (_earlierOpen)
                 {
                     <div class="support-panel__earlier" data-earlier-list>
@@ -137,6 +153,13 @@
                         </div>
                     }
 
+                    @if (AssistantPausedHere)
+                    {
+                        <div class="support-panel__msg support-panel__msg--them support-panel__msg--notice" role="status" data-assistant-paused="@_readiness">
+                            @PausedText
+                        </div>
+                    }
+
                     @if (_declined && _withAssistant && !_busy)
                     {
                         <div class="support-panel__msg support-panel__msg--them" data-declined>@_text[SupportCasesViewText.AssistantDeclined]</div>
@@ -196,9 +219,9 @@
                 <div class="support-panel__composer">
                     <input class="support-panel__input" type="text" @bind="_draft" @bind:event="oninput" @bind:after="DraftChanged" @onkeydown="OnKeyDownAsync"
                            placeholder="@(_support ? _text[SupportPanelText.WriteToSupport] : _text[SupportPanelText.AskAQuestion])"
-                           aria-label="@_text[SupportPanelText.Message]" data-draft />
+                           aria-label="@_text[SupportPanelText.Message]" disabled="@AssistantPausedHere" data-draft />
                     <button type="button" class="support-panel__icon support-panel__send" title="@_text[SupportPanelText.Send]" aria-label="@_text[SupportPanelText.Send]"
-                            disabled="@(_busy || string.IsNullOrWhiteSpace(_draft))" @onclick="SendAsync" data-send>
+                            disabled="@(_busy || AssistantPausedHere || string.IsNullOrWhiteSpace(_draft))" @onclick="SendAsync" data-send>
                         <RadzenIcon Icon="send" />
                     </button>
                 </div>
@@ -246,7 +269,7 @@
     private const int MinimumWidth = 280;
     private const string RailWidth = "3.25rem";
 
-    /// <summary>Who may be asked: the assistant, support, or both. Null offers both. Never offers the assistant to a team not ready for one.</summary>
+    /// <summary>Who may be asked: the assistant, support, or both. Null offers both. Never offers the assistant to a team with none set up; a team whose allowance is used up, or whose provider refused the account, keeps the tab, which says why it is not answering.</summary>
     [Parameter] public SupportAssistance[] Offered { get; set; }
 
     /// <summary>The host's full support page, which the panel links to. Defaults to <c>/support</c>.</summary>
@@ -289,6 +312,9 @@
 
     private string _teamKey;
     private bool _assistantOffered;
+    private SupportAssistantReadiness _readiness;
+    private SupportAssistantAllowance _allowance;
+    private ISupportAssistantAllowanceService _allowances;
     private bool _supportOffered;
     private bool _expanded;
     private int _width;
@@ -332,6 +358,50 @@
 
     private string WhoClass(bool support) => support == _support ? "support-panel__who-pick support-panel__who-pick--on" : "support-panel__who-pick";
 
+    // Set up, but not answering: the allowance is used up or the provider has refused the account. The tab stays to say so rather than vanish.
+    private bool AssistantPaused => _readiness is SupportAssistantReadiness.AllowanceUsed or SupportAssistantReadiness.ProviderRefused;
+
+    private bool AssistantPausedHere => !_support && _assistantOffered && AssistantPaused;
+
+    private bool ShowsAllowance => !_support && _assistantOffered && _display.ShowAllowance && _allowance is { Applies: true };
+
+    // Never 100 while there is something left, and never less once it is used up.
+    private int AllowancePercent
+    {
+        get
+        {
+            var percent = (int)Math.Floor((_allowance?.Share ?? 0m) * 100m);
+            return _allowance?.Exhausted == true ? Math.Max(100, percent) : Math.Min(99, percent);
+        }
+    }
+
+    private int AllowanceFill => Math.Clamp(AllowancePercent, 0, 100);
+
+    private string AllowanceClass => _allowance?.Exhausted == true
+        ? "support-panel__allowance support-panel__allowance--full"
+        : (_allowance?.Share ?? 0m) >= _allowance?.WarnAt
+            ? "support-panel__allowance support-panel__allowance--warn"
+            : "support-panel__allowance";
+
+    private string Amount(decimal value) => _allowance?.Display == SupportAllowanceDisplay.Money ? value.ToString("N2") : value.ToString("N0");
+
+    private string RenewsOn => _allowance?.PeriodEndsAt.ToString("d") ?? string.Empty;
+
+    // The share for everybody; the amounts only where the service gave them, which it does for a team's administrators.
+    private string AllowanceText => string.Join(" · ",
+        _allowance?.Used is { } used && _allowance.Limit is { } limit
+            ? _text.Format(SupportPanelText.AllowanceAmounts, Amount(used), Amount(limit), _allowance.Unit)
+            : _text.Format(SupportPanelText.AllowanceShare, AllowancePercent),
+        _text.Format(SupportPanelText.AllowanceRenews, RenewsOn));
+
+    private string AllowanceQuestionsLeft => _allowance?.Models.FirstOrDefault(x => x.Current) is { QuestionsLeft: { } left } model && _allowance.Limit != null
+        ? _text.Format(SupportPanelText.AllowanceQuestionsLeft, left.ToString("N0"), model.DisplayName)
+        : null;
+
+    private string PausedText => _readiness == SupportAssistantReadiness.ProviderRefused
+        ? _text[SupportPanelText.ProviderRefused]
+        : _text.Format(SupportPanelText.AllowanceUsedUp, RenewsOn);
+
     // Once the assistant has answered at least once, and not while it is answering again.
     private bool ConversationRatable => _display.RateConversations && _caseId != null && !_busy && _messages.Any(x => x.ByAssistant);
 
@@ -354,6 +424,7 @@
         _display = SupportDisplay.Of(Services);
         _text = await TextProvider.ResolveAsync(SupportPanelText.All);
         _availability =Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
+        _allowances = Services.GetService(typeof(ISupportAssistantAllowanceService)) as ISupportAssistantAllowanceService;
 
         var time = Services.GetService(typeof(TimeProvider)) as TimeProvider;
         _typing = new SupportTypingWatch(Services.GetService(typeof(ISupportTypingNotifier)) as ISupportTypingNotifier, time, OnWritingChanged);
@@ -427,6 +498,8 @@
     {
         _assistantOffered = false;
         _supportOffered = false;
+        _readiness = SupportAssistantReadiness.NotRegistered;
+        _allowance = null;
         if (_teamKey == null) return;
 
         try
@@ -435,8 +508,13 @@
             if (_availability != null) offered = [.. offered.Intersect(await _availability.GetOfferedAsync(_teamKey) ?? [])];
 
             _supportOffered = offered.Contains(SupportAssistance.None);
-            _assistantOffered = offered.Contains(SupportAssistance.Assistant)
-                                && await SupportCases.GetAssistantReadinessAsync(_teamKey) == SupportAssistantReadiness.Ready;
+
+            // A team whose allowance is used up, or whose provider refused the account, is still offered the assistant: the tab says why it is not answering.
+            if (offered.Contains(SupportAssistance.Assistant))
+            {
+                _readiness = await SupportCases.GetAssistantReadinessAsync(_teamKey);
+                _assistantOffered = _readiness is SupportAssistantReadiness.Ready or SupportAssistantReadiness.AllowanceUsed or SupportAssistantReadiness.ProviderRefused;
+            }
         }
         catch (Exception)
         {
@@ -447,6 +525,42 @@
 
         if (!_assistantOffered) _support = true;
         else if (!_supportOffered) _support = false;
+
+        await ReadAllowanceAsync();
+    }
+
+    /// <summary>The team's allowance, for the bar and for the date a used-up one starts again. Nothing where there is no limit, no service, or the read fails: the bar is a convenience.</summary>
+    private async Task ReadAllowanceAsync()
+    {
+        _allowance = null;
+        if (_allowances == null || _teamKey == null || !_assistantOffered) return;
+        if (!_display.ShowAllowance && _readiness != SupportAssistantReadiness.AllowanceUsed) return;
+
+        try
+        {
+            _allowance = await _allowances.GetAllowanceAsync(_teamKey);
+        }
+        catch (Exception)
+        {
+            _allowance = null;
+        }
+    }
+
+    /// <summary>Reads again whether the assistant will answer and how much of the allowance is spent, after an answer or when another member's answer was announced.</summary>
+    private async Task RefreshAllowanceAsync()
+    {
+        if (!_assistantOffered || _teamKey == null) return;
+
+        try
+        {
+            _readiness = await SupportCases.GetAssistantReadinessAsync(_teamKey);
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        await ReadAllowanceAsync();
     }
 
     private async Task ReadUnreadAsync()
@@ -673,7 +787,7 @@
     private async Task SendAsync()
     {
         var text = _draft?.Trim();
-        if (_busy || string.IsNullOrEmpty(text) || _teamKey == null) return;
+        if (_busy || string.IsNullOrEmpty(text) || _teamKey == null || AssistantPausedHere) return;
 
         _messages.Add(new PanelMessage(true, text));
         _draft = null;
@@ -725,6 +839,9 @@
             }
 
             await ReadConversationAsync();
+
+            // What the answer cost is now spent, so the bar moves, and a team that has just used up its allowance is told so.
+            if (!_support) await RefreshAllowanceAsync();
         }
         catch (Exception)
         {
@@ -760,6 +877,9 @@
         _ = InvokeAsync(async () =>
         {
             await ReadUnreadAsync();
+
+            // Another member's answer spent some of the same allowance, so every open panel of the team moves its bar.
+            if (args.Change != SupportCaseChange.Read && !_busy) await RefreshAllowanceAsync();
 
             // A reply arriving from Slack or mail; reading it again marks it read, which is itself announced.
             if (_caseId != null && args.CaseId == _caseId && args.Change != SupportCaseChange.Read && !_busy)
