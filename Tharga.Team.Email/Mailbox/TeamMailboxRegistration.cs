@@ -15,6 +15,12 @@ public static class TeamMailboxRegistration
     private const string PostmasterReadDescription = "List and open mail that reached the shared mailbox at an address no team owns, and its files. It may hold any team's material, so every open is audited.";
     private const string PostmasterManageDescription = "Route a mail the postmaster holds to a team, which delivers it there marked as rerouted, or archive it without routing it and restore it.";
 
+    private static void RequireFormatFit(string name, string text)
+    {
+        if (!string.IsNullOrEmpty(text) && text.Any(c => c is '+' or '@' || char.IsWhiteSpace(c)))
+            throw new InvalidOperationException($"{nameof(TeamMailboxOptions)} {name} '{text}' cannot be part of an address: it must not hold '+', '@' or whitespace.");
+    }
+
     /// <summary>
     /// Registers <see cref="ITeamMailboxService"/> and its scopes, and reads the catch-all mailbox when
     /// <see cref="TeamMailboxOptions.Mail"/> has IMAP settings. A persistence adapter supplies
@@ -29,9 +35,21 @@ public static class TeamMailboxRegistration
         if (string.IsNullOrWhiteSpace(options.Domain)) throw new InvalidOperationException($"{nameof(TeamMailboxOptions)}.{nameof(TeamMailboxOptions.Domain)} must be set: it is the domain every team address is on.");
         _ = MailKeyGenerator.New(options.KeyLength);
 
+        // Refused here, at startup, rather than found out as addresses that never route: a prefix or suffix is part of the local part of an address.
+        RequireFormatFit(nameof(TeamMailboxOptions.Prefix), options.Prefix);
+        foreach (var format in options.AcceptedFormats ?? [])
+        {
+            if (format == null) throw new InvalidOperationException($"{nameof(TeamMailboxOptions)}.{nameof(TeamMailboxOptions.AcceptedFormats)} cannot hold a null format.");
+
+            RequireFormatFit($"{nameof(TeamMailboxOptions.AcceptedFormats)} {nameof(TeamMailAddressFormat.Prefix)}", format.Prefix);
+            RequireFormatFit($"{nameof(TeamMailboxOptions.AcceptedFormats)} {nameof(TeamMailAddressFormat.Suffix)}", format.Suffix);
+        }
+
         services.Configure<TeamMailboxOptions>(x =>
         {
             x.Domain = options.Domain;
+            x.Prefix = options.Prefix ?? string.Empty;
+            x.AcceptedFormats = [.. (options.AcceptedFormats ?? []).Select(f => new TeamMailAddressFormat { Prefix = f.Prefix ?? string.Empty, Suffix = f.Suffix ?? string.Empty })];
             x.Suffix = options.Suffix ?? string.Empty;
             x.KeyLength = options.KeyLength;
             x.RetirementPeriod = options.RetirementPeriod;

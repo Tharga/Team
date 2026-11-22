@@ -111,6 +111,45 @@ public class MailRouteTests
         Assert.Equal("primarykey01-case@fortdocs.app", decision.DeliveredTo);
     }
 
+    // ---- a host that changed its address format ----
+
+    private static readonly TeamMailboxOptions Changed = new()
+    {
+        Domain = "fortdocs.app",
+        Prefix = "case-",
+        AcceptedFormats = [new TeamMailAddressFormat { Suffix = "-case" }]
+    };
+
+    [Fact]
+    public async Task MailToAnAddressInAnEarlierFormat_StillGoesToItsTeam()
+    {
+        var decision = await MailRoute.DecideAsync(["primarykey01-case+item42@fortdocs.app"], Changed, Lookup, Now);
+
+        Assert.Equal("team-a", decision.TeamKey);
+        Assert.Equal(MailRouteReason.PrimaryKey, decision.Reason);
+        Assert.Equal("item42", decision.ItemKey);
+    }
+
+    [Fact]
+    public async Task ARetiringKey_KeepsWorkingThroughItsRetirement_InAnyFormat()
+    {
+        var earlier = await MailRoute.DecideAsync(["secondary001-case@fortdocs.app"], Changed, Lookup, Now);
+        var current = await MailRoute.DecideAsync(["case-secondary001@fortdocs.app"], Changed, Lookup, Now);
+
+        Assert.Equal(MailRouteReason.RetiringKey, earlier.Reason);
+        Assert.Equal(MailRouteReason.RetiringKey, current.Reason);
+        Assert.Equal(Now.AddDays(30), earlier.KeyRetiresAt);
+    }
+
+    [Fact]
+    public async Task ARetiredKey_IsStillRetired_InAnEarlierFormat()
+    {
+        var decision = await MailRoute.DecideAsync(["retiredkey01-case@fortdocs.app"], Changed, Lookup, Now);
+
+        Assert.Null(decision.TeamKey);
+        Assert.Equal(MailRouteReason.RetiredKey, decision.Reason);
+    }
+
     [Fact]
     public async Task NoRecipientAtAll_GoesToThePostmaster()
     {

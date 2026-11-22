@@ -57,7 +57,7 @@ builder.Services.AddThargaTeamRepository(o =>
 builder.Services.AddThargaTeamMailbox(o =>
 {
     o.Domain = "example.app";                      // every team address is on this domain
-    o.Suffix = "-case";                            // {key}-case@example.app
+    o.Suffix = "-case";                            // {key}-case@example.app (o.Prefix puts a label first; see Addresses)
     o.Mail.Imap.Host = builder.Configuration["Mailbox:Imap:Host"];
     o.Mail.Imap.UserName = builder.Configuration["Mailbox:Imap:UserName"];
     o.Mail.Imap.Password = builder.Configuration["Mailbox:Imap:Password"];
@@ -71,13 +71,38 @@ mailbox, and **refuses to start without an `IInboundMailContentStore`**, naming 
 
 ### Addresses
 
-A team's address is `{key}{suffix}@{domain}` — for example `8fjgthitwne3-case@example.app`. The key is random,
+A team's address is `{prefix}{key}{suffix}@{domain}` — for example `8fjgthitwne3-case@example.app`. The key is random,
 lowercase letters and digits (twelve by default, about 62 bits), and names no team: an address built from a team
-id can be guessed, and then anyone can feed mail into a team.
+id can be guessed, and then anyone can feed mail into a team. Both the prefix and the suffix are empty unless you set them.
 
-An item inside the team — a case, a ticket — has an address of its own: `{key}{suffix}+{itemKey}@{domain}`. The
+An item inside the team — a case, a ticket — has an address of its own: `{prefix}{key}{suffix}+{itemKey}@{domain}`. The
 item key is the host's and is handed back with every mail sent to that address. `ITeamMailboxService.GetItemAddressAsync`
 builds it on the team's current key.
+
+#### Changing how addresses look
+
+`Prefix` puts the label first (`o.Prefix = "case-"` gives `case-8fjgthitwne3@example.app`). Changing the format on a
+site that has handed addresses out would stop every one of them routing, so list the earlier formats in
+`AcceptedFormats`:
+
+```csharp
+builder.Services.AddThargaTeamMailbox(o =>
+{
+    o.Domain = "example.app";
+    o.Prefix = "case-";                                          // what is made from now on
+    o.AcceptedFormats = [new TeamMailAddressFormat { Suffix = "-case" }];   // what was made before, still understood
+});
+```
+
+- **Nothing to migrate.** An address is made when it is read, never stored with the key, so the new format applies to
+  every team at once, and a retiring key keeps working through its retirement period in either format.
+- **Accepted formats are only read, never made.** Every address shown, sent or returned by the service is in the
+  configured format. An address is read in the configured format first, then in each accepted one in order; one in
+  none is not ours, as before.
+- **A format with neither prefix nor suffix** accepts any plain key, as an address always did before either existed.
+- **What may be in them.** A prefix or suffix cannot hold `+`, `@` or whitespace, which are part of the address's own
+  syntax; startup says so rather than leave addresses that never route. The key is letters and digits only, so a
+  hyphen in a prefix or suffix cannot be mistaken for part of a key.
 
 ### Rotating
 
