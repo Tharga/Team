@@ -45,6 +45,17 @@
     color: var(--rz-text-secondary-color);
 }
 
+/* A plain line in the conversation's own voice, for a member with nobody to write to. */
+.support-refusal__hint {
+    align-self: flex-start;
+    max-width: 85%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.75rem;
+    background-color: color-mix(in srgb, var(--rz-text-color) 8%, transparent);
+    font-style: italic;
+    color: var(--rz-text-secondary-color);
+}
+
 .support-refusal__failed {
     font-size: 0.75rem;
     color: var(--rz-danger);

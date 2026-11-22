@@ -48,7 +48,8 @@ public class SupportRefusalActionsTests : BunitContext
         bool permitted = true,
         bool registered = true,
         SupportAssistantAllowance allowance = null,
-        Action changed = null)
+        Action changed = null,
+        bool supportOffered = true)
     {
         if (permitted)
         {
@@ -69,6 +70,7 @@ public class SupportRefusalActionsTests : BunitContext
             .Add(x => x.TeamKey, TeamKey)
             .Add(x => x.Readiness, readiness)
             .Add(x => x.Allowance, allowance)
+            .Add(x => x.SupportOffered, supportOffered)
             .Add(x => x.Changed, Microsoft.AspNetCore.Components.EventCallback.Factory.Create(this, () => changed?.Invoke())));
     }
 
@@ -78,6 +80,41 @@ public class SupportRefusalActionsTests : BunitContext
         var view = Render(SupportAssistantReadiness.ProviderRefused, permitted: false);
 
         Assert.Empty(view.FindAll("[data-refusal-actions]"));
+    }
+
+    /// <summary>With nobody to write to, a member is told whom to ask; an administrator is the one who is asked, so is not told to ask.</summary>
+    [Fact]
+    public void AMemberOfATeamWithoutSupport_IsToldToAskAnAdministrator()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, permitted: false, supportOffered: false);
+
+        Assert.Equal(SupportRefusalActionsText.AskAdministrator.Default, view.Find("[data-ask-administrator]").TextContent.Trim());
+    }
+
+    [Fact]
+    public void AMemberOfATeamWithSupport_IsNotToldToAskAnAdministrator_SupportIsTheWayOn()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, permitted: false, supportOffered: true);
+
+        Assert.Empty(view.FindAll("[data-ask-administrator]"));
+    }
+
+    [Fact]
+    public void AnAdministratorWithoutSupport_IsNotToldToAskAnAdministrator()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, supportOffered: false);
+
+        Assert.Empty(view.FindAll("[data-ask-administrator]"));
+        Assert.NotNull(view.Find("[data-use-own]"));
+    }
+
+    /// <summary>Without the service there is no telling a member from an administrator, so nobody is pointed at somebody who may not be able to help.</summary>
+    [Fact]
+    public void WithoutAConnectionService_NobodyIsToldToAsk()
+    {
+        var view = Render(SupportAssistantReadiness.AllowanceUsed, registered: false, supportOffered: false);
+
+        Assert.Empty(view.FindAll("[data-ask-administrator]"));
     }
 
     [Fact]

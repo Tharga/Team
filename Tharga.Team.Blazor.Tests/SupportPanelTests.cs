@@ -405,6 +405,49 @@ public class SupportPanelTests : BunitContext
         connections.Verify(x => x.UsePlatformModelAsync(TeamKey, "small", default), Times.Once);
     }
 
+    // ---- whom to turn to ----
+
+    [Theory]
+    [InlineData(SupportAssistantReadiness.AllowanceUsed)]
+    [InlineData(SupportAssistantReadiness.ProviderRefused)]
+    [InlineData(SupportAssistantReadiness.Held)]
+    public void WhereTheTeamHasSupport_TheNoticeSendsThemThere_AndOnlyInTheLineUnderIt(SupportAssistantReadiness readiness)
+    {
+        Connections(administrator: false);
+
+        var view = Render(readiness, open: true);
+
+        Assert.Equal(SupportPanelText.PausedWriteToSupport.Default, view.Find("[data-paused-support]").TextContent.Trim());
+        Assert.DoesNotContain("support", view.Find("[data-assistant-paused]").TextContent, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(view.FindAll("[data-ask-administrator]"));
+    }
+
+    [Theory]
+    [InlineData(SupportAssistantReadiness.AllowanceUsed)]
+    [InlineData(SupportAssistantReadiness.ProviderRefused)]
+    public void WhereTheTeamHasNoSupport_AMemberIsToldToAskAnAdministrator_NotToWriteToSupport(SupportAssistantReadiness readiness)
+    {
+        Connections(administrator: false);
+
+        var view = Render(readiness, open: true, offered: [SupportAssistance.Assistant]);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-ask-administrator]")));
+        Assert.Empty(view.FindAll("[data-paused-support]"));
+        Assert.DoesNotContain("support", view.Find("[data-log]").TextContent, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WhereTheTeamHasNoSupport_AnAdministratorGetsTheActions_NotAnInstructionToAskThemselves()
+    {
+        Connections();
+
+        var view = Render(SupportAssistantReadiness.ProviderRefused, open: true, offered: [SupportAssistance.Assistant]);
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-use-own]")));
+        Assert.Empty(view.FindAll("[data-ask-administrator]"));
+        Assert.Empty(view.FindAll("[data-paused-support]"));
+    }
+
     // ---- the host's own say ----
 
     /// <summary>The host's words are shown in place of ours, and the toolkit's own actions are not: whatever the team connects, the host's rule holds.</summary>

@@ -26,5 +26,8 @@ public static class SupportRefusalActionsText
 
     public static readonly TextKey Failed = new("team.support.refusal.failed", "Something went wrong.");
 
-    public static readonly TextKey[] All = [SwitchModel, UseModel, CostPerAnswer, QuestionsLeft, UseOwn, UseOwnExplanation, ConnectionTitle, Failed];
+    /// <summary>For a member of a team that has no support to write to: the people who can change what the team's assistant answers with.</summary>
+    public static readonly TextKey AskAdministrator = new("team.support.refusal.askAdministrator", "Ask one of your team's administrators to look into it.");
+
+    public static readonly TextKey[] All = [SwitchModel, UseModel, CostPerAnswer, QuestionsLeft, UseOwn, UseOwnExplanation, ConnectionTitle, Failed, AskAdministrator];
 }

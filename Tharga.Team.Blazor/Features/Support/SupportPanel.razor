@@ -165,11 +165,17 @@
                             @PausedText
                         </div>
 
+                        @* Where there is somebody to write to, that is the way on; where there is not, the actions below tell a member whom to ask. *@
+                        @if (_supportOffered)
+                        {
+                            <div class="support-panel__msg support-panel__msg--them support-panel__msg--notice" data-paused-support>@_text[SupportPanelText.PausedWriteToSupport]</div>
+                        }
+
                         @* What to do about it, for the team's administrators; nothing for a member, who has only the notice. *@
                         @* Not where the host holds the assistant back: that is the host's rule, whatever the team connects, and its actions are the host's to place above. *@
                         @if (_readiness != SupportAssistantReadiness.Held)
                         {
-                            <SupportRefusalActions TeamKey="@_teamKey" Readiness="@_readiness" Allowance="@_allowance" Changed="RefreshAllowanceAsync" />
+                            <SupportRefusalActions TeamKey="@_teamKey" Readiness="@_readiness" Allowance="@_allowance" SupportOffered="@_supportOffered" Changed="RefreshAllowanceAsync" />
                         }
                     }
 

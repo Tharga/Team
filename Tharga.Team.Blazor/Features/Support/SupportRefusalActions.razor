@@ -38,6 +38,11 @@
         }
     </div>
 }
+else if (_member && !SupportOffered)
+{
+    @* Nobody to write to, and not somebody who can act: the team's administrators can. *@
+    <div class="support-refusal__hint" data-ask-administrator>@_text[SupportRefusalActionsText.AskAdministrator]</div>
+}
 
 @code {
     [Inject] private IThargaTextProvider TextProvider { get; set; }
@@ -52,6 +57,9 @@
     /// <summary>What each model costs a question, where the allowance knows; the amounts are there only for administrators.</summary>
     [Parameter] public SupportAssistantAllowance Allowance { get; set; }
 
+    /// <summary>Whether the team has support to write to. Without it, a member is told whom to ask instead.</summary>
+    [Parameter] public bool SupportOffered { get; set; } = true;
+
     /// <summary>Raised when the team's AI was changed, so whoever shows the assistant can ask again whether it answers.</summary>
     [Parameter] public EventCallback Changed { get; set; }
 
@@ -60,6 +68,7 @@
     private SupportAiConnectionChoices _choices;
     private SupportAiPlatformModelChoice[] _others = [];
     private bool _canUseOwn;
+    private bool _member;
     private string _loadedFor;
     private bool _busy;
     private bool _failed;
@@ -73,6 +82,7 @@
         _text = await TextProvider.ResolveAsync(SupportRefusalActionsText.All);
         _connections ??= Services.GetService(typeof(ISupportAiConnectionService)) as ISupportAiConnectionService;
         _choices = null;
+        _member = false;
         _others = [];
         _canUseOwn = false;
         if (_connections == null || string.IsNullOrWhiteSpace(TeamKey)) return;
@@ -95,8 +105,9 @@
         }
         catch (UnauthorizedAccessException)
         {
-            // Not somebody who manages the team's assistant: only the notice is for them.
+            // Not somebody who manages the team's assistant: the notice is for them, and whom to ask where there is no support.
             _choices = null;
+            _member = true;
         }
         catch (Exception)
         {

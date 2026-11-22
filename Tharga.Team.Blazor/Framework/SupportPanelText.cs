@@ -94,13 +94,16 @@ public static class SupportPanelText
     public static readonly TextKey AllowanceQuestionsLeft = new("team.support.panel.allowanceQuestionsLeft", "About {0} questions left on {1}");
 
     /// <summary>In place of the conversation when the team has used its allowance. {0} is the date it starts again.</summary>
-    public static readonly TextKey AllowanceUsedUp = new("team.support.panel.allowanceUsedUp", "The assistant has been used as much as this team's allowance lets it, so it cannot answer right now. It starts again {0}. You can write to support meanwhile.");
+    public static readonly TextKey AllowanceUsedUp = new("team.support.panel.allowanceUsedUp", "The assistant has been used as much as this team's allowance lets it, so it cannot answer right now. It starts again {0}.");
 
     /// <summary>In place of the conversation when the provider has refused the account.</summary>
-    public static readonly TextKey ProviderRefused = new("team.support.panel.providerRefused", "The assistant cannot answer right now, because the service behind it has refused the account. Please try again a little later, or write to support.");
+    public static readonly TextKey ProviderRefused = new("team.support.panel.providerRefused", "The assistant cannot answer right now, because the service behind it has refused the account. Please try again a little later.");
 
     /// <summary>In place of the conversation when the host holds the assistant back and gave no words of its own.</summary>
-    public static readonly TextKey AssistantHeld = new("team.support.panel.assistantHeld", "The assistant is not available to this team right now. You can write to support.");
+    public static readonly TextKey AssistantHeld = new("team.support.panel.assistantHeld", "The assistant is not available to this team right now.");
+
+    /// <summary>Under the notice, only where the team has support to write to.</summary>
+    public static readonly TextKey PausedWriteToSupport = new("team.support.panel.pausedWriteToSupport", "You can write to support meanwhile.");
 
     /// <summary>Every key the component renders, its own and the shared decline notice, for building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
@@ -110,6 +113,6 @@ public static class SupportPanelText
         ConversationNotGood, ConversationComment, ConversationNotice, SendConversationRating, ConversationThanks, SupportCasesViewText.AssistantDeclined,
         SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.Thinking, SupportTranscriptText.ThinkingLoop, SupportTranscriptText.Helpful,
         SupportTranscriptText.NotHelpful, SupportTranscriptText.NoAnswerYet, SupportTranscriptText.NoAnswerAway,
-        AllowanceLabel, AllowanceShare, AllowanceAmounts, AllowanceRenews, AllowanceQuestionsLeft, AllowanceUsedUp, ProviderRefused, AssistantHeld
+        AllowanceLabel, AllowanceShare, AllowanceAmounts, AllowanceRenews, AllowanceQuestionsLeft, AllowanceUsedUp, ProviderRefused, AssistantHeld, PausedWriteToSupport
     ];
 }
