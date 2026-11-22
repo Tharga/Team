@@ -29,9 +29,10 @@ public class ApiKeyManagementService : IApiKeyManagementService
 
     public async IAsyncEnumerable<IApiKey> GetKeysAsync(string teamKey, PrivateKeyScope privateKeys = PrivateKeyScope.None, bool allowPrivileged = false)
     {
-        var callerMemberKey = GetCallerMemberKey();
-        var canOversee = CanOversee();
-        var privilegedAllowed = allowPrivileged && IsPrivileged(teamKey);
+        var caller = await GetCallerAsync();
+        var callerMemberKey = MemberKeyOf(caller);
+        var canOversee = CanOversee(caller);
+        var privilegedAllowed = allowPrivileged && IsPrivileged(caller, teamKey);
 
         await foreach (var key in _inner.GetKeysAsync(teamKey))
         {
@@ -63,7 +64,8 @@ public class ApiKeyManagementService : IApiKeyManagementService
         if (accessLevel == AccessLevel.Owner)
             throw new InvalidOperationException("An API key cannot be given the Owner level. Use Administrator, or a narrower level with roles and scope overrides.");
 
-        await _ceiling.EnsureCanGrantAsync(await GetCallerAsync(), teamKey, accessLevel, roles, scopeOverrides, oversightExempts: true);
+        var callerPrincipal = await GetCallerAsync();
+        await _ceiling.EnsureCanGrantAsync(callerPrincipal, teamKey, accessLevel, roles, scopeOverrides, oversightExempts: true);
 
         ownerScoped = ApplyOwnership(_ownership, ownerScoped, "team");
 
@@ -71,11 +73,11 @@ public class ApiKeyManagementService : IApiKeyManagementService
         if (ownerScoped)
         {
             // Anti-spoof: a caller can only ever mint a key owned by themselves.
-            ownerMemberKey = GetCallerMemberKey()
+            ownerMemberKey = MemberKeyOf(callerPrincipal)
                 ?? throw new InvalidOperationException("Cannot create an owner-scoped API key: the caller has no team-member context.");
         }
 
-        return await _inner.CreateKeyAsync(teamKey, name, accessLevel, roles, scopeOverrides, expiryDate, tags, GetCurrentUserIdentity(), ownerMemberKey);
+        return await _inner.CreateKeyAsync(teamKey, name, accessLevel, roles, scopeOverrides, expiryDate, tags, IdentityOf(callerPrincipal), ownerMemberKey);
     }
 
     public async Task<IApiKey> RefreshKeyAsync(string teamKey, string key)
@@ -93,7 +95,7 @@ public class ApiKeyManagementService : IApiKeyManagementService
     public async Task SetKeyDisabledAsync(string teamKey, string key, bool disabled)
     {
         await EnsureCanMutateAsync(teamKey, key);
-        await _inner.SetKeyDisabledAsync(teamKey, key, disabled, GetCurrentUserIdentity());
+        await _inner.SetKeyDisabledAsync(teamKey, key, disabled, IdentityOf(await GetCallerAsync()));
     }
 
     public async Task DeleteKeyAsync(string teamKey, string key)
@@ -134,9 +136,10 @@ public class ApiKeyManagementService : IApiKeyManagementService
 
         if (!string.IsNullOrEmpty(target.OwnerMemberKey))
         {
-            var callerMemberKey = GetCallerMemberKey();
+            var caller = await GetCallerAsync();
+        var callerMemberKey = MemberKeyOf(caller);
             var isOwner = callerMemberKey != null && target.OwnerMemberKey == callerMemberKey;
-            if (!isOwner && !CanOversee())
+            if (!isOwner && !CanOversee(caller))
                 throw new UnauthorizedAccessException("This API key is private to another member and can only be managed by its owner.");
         }
 
@@ -172,8 +175,16 @@ public class ApiKeyManagementService : IApiKeyManagementService
         };
     }
 
-    private string GetCallerMemberKey()
-        => _httpContextAccessor?.HttpContext?.User?.FindFirst(TeamClaimTypes.MemberKey)?.Value;
+    /// <summary>
+    /// The caller's member key in the selected team, from the same principal the rest of the service authorizes with (<see cref="GetCallerAsync"/>).
+    /// </summary>
+    /// <remarks>
+    /// <b>Not read from the request alone.</b> In an interactive Blazor circuit <c>HttpContext</c> is the circuit's first request or nothing, and carries
+    /// no member key, which the claims are given for the selected team and kept current by the revalidation. Reading it there made a personal key
+    /// impossible to create from <c>ApiKeyView</c>, and hid a member's own personal keys from them (Tharga/Team#550).
+    /// </remarks>
+    private static string MemberKeyOf(ClaimsPrincipal caller)
+        => caller?.FindFirst(TeamClaimTypes.MemberKey)?.Value;
 
     /// <summary>
     /// Whether the caller may see and manage other members' private keys: the
@@ -184,27 +195,20 @@ public class ApiKeyManagementService : IApiKeyManagementService
     /// scope, so a team role cannot be configured to reach other members' keys. Before 4.0 the <c>Developer</c>
     /// role also granted this, hard-coded; a host that wants that back maps the scope to the role.
     /// </remarks>
-    private bool CanOversee()
-    {
-        var user = _httpContextAccessor?.HttpContext?.User;
-        if (user == null) return false;
-        return user.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee);
-    }
+    private static bool CanOversee(ClaimsPrincipal caller)
+        => caller != null && caller.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee);
 
     /// <summary>Whether the caller is an Owner or Administrator <b>of <paramref name="teamKey"/></b>: the level in that team, not another team's.</summary>
-    private bool IsPrivileged(string teamKey)
+    private static bool IsPrivileged(ClaimsPrincipal caller, string teamKey)
     {
-        var level = TeamScopePolicy.AccessLevelFor(_httpContextAccessor?.HttpContext?.User, teamKey);
+        var level = TeamScopePolicy.AccessLevelFor(caller, teamKey);
 
         return level is AccessLevel.Owner or AccessLevel.Administrator;
     }
 
-    private string GetCurrentUserIdentity()
-    {
-        var user = _httpContextAccessor?.HttpContext?.User;
-        return user?.FindFirst(ClaimTypes.Name)?.Value
-               ?? user?.FindFirst("preferred_username")?.Value
-               ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-               ?? user?.FindFirst("name")?.Value;
-    }
+    private static string IdentityOf(ClaimsPrincipal caller)
+        => caller?.FindFirst(ClaimTypes.Name)?.Value
+           ?? caller?.FindFirst("preferred_username")?.Value
+           ?? caller?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+           ?? caller?.FindFirst("name")?.Value;
 }

@@ -27,20 +27,23 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     private readonly IUserService _userService;
     private readonly ApiKeyOwnership _ownership;
     private readonly SystemGrantCeiling _ceiling;
+    private readonly ITeamPrincipalAccessor _principalAccessor;
 
-    public SystemApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null, IUserService userService = null, ISystemScopeRegistry systemScopeRegistry = null)
+    public SystemApiKeyManagementService(IApiKeyAdministrationService inner, IHttpContextAccessor httpContextAccessor = null, IOptions<ApiKeyOptions> options = null, IUserService userService = null, ISystemScopeRegistry systemScopeRegistry = null, ITeamPrincipalAccessor principalAccessor = null)
     {
         _inner = inner;
         _httpContextAccessor = httpContextAccessor;
         _userService = userService;
         _ownership = options?.Value?.SystemKeys ?? ApiKeyOwnership.Both;
         _ceiling = new SystemGrantCeiling(systemScopeRegistry);
+        _principalAccessor = principalAccessor;
     }
 
     public async IAsyncEnumerable<IApiKey> GetSystemKeysAsync(PrivateKeyScope personalKeys = PrivateKeyScope.None)
     {
-        var callerUserKey = personalKeys == PrivateKeyScope.None ? null : await GetCallerUserKeyAsync();
-        var canOversee = CanOversee();
+        var caller = await GetCallerAsync();
+        var callerUserKey = personalKeys == PrivateKeyScope.None ? null : await GetCallerUserKeyAsync(caller);
+        var canOversee = CanOversee(caller);
 
         await foreach (var key in _inner.GetSystemKeysAsync())
         {
@@ -60,14 +63,15 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     public async Task<IApiKey> CreateSystemKeyAsync(string name, string[] scopes, DateTime? expiryDate = null, bool personal = false)
     {
         personal = ApiKeyManagementService.ApplyOwnership(_ownership, personal, "system");
-        _ceiling.EnsureCanGrant(Caller, scopes);
+        var caller = await GetCallerAsync();
+        _ceiling.EnsureCanGrant(caller, scopes);
 
-        if (!personal) return await _inner.CreateSystemKeyAsync(name, scopes, expiryDate, GetCurrentUserIdentity());
+        if (!personal) return await _inner.CreateSystemKeyAsync(name, scopes, expiryDate, IdentityOf(caller));
 
         // Anti-spoof: a caller can only ever create a key owned by themselves.
-        var owner = await GetCallerUserKeyAsync()
+        var owner = await GetCallerUserKeyAsync(caller)
                     ?? throw new InvalidOperationException("Cannot create a personal system API key: the caller is not a signed-in user.");
-        return await _inner.CreatePersonalSystemKeyAsync(name, scopes, owner, expiryDate, GetCurrentUserIdentity());
+        return await _inner.CreatePersonalSystemKeyAsync(name, scopes, owner, expiryDate, IdentityOf(caller));
     }
 
     /// <remarks>
@@ -77,11 +81,12 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     /// </remarks>
     public async Task SetSystemKeyScopesAsync(string key, string[] scopes)
     {
+        var caller = await GetCallerAsync();
         var target = await FindAsync(key);
-        await EnsureCanMutateAsync(target);
+        await EnsureCanMutateAsync(target, caller);
 
-        _ceiling.EnsureCanGrant(Caller, scopes);
-        if (target != null) _ceiling.EnsureCanChange(Caller, target.SystemScopes);
+        _ceiling.EnsureCanGrant(caller, scopes);
+        if (target != null) _ceiling.EnsureCanChange(caller, target.SystemScopes);
 
         await _inner.SetSystemKeyScopesAsync(key, scopes);
     }
@@ -101,7 +106,7 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     public async Task SetSystemKeyDisabledAsync(string key, bool disabled)
     {
         await EnsureCanManageAsync(key);
-        await _inner.SetSystemKeyDisabledAsync(key, disabled, GetCurrentUserIdentity());
+        await _inner.SetSystemKeyDisabledAsync(key, disabled, IdentityOf(await GetCallerAsync()));
     }
 
     public async Task DeleteSystemKeyAsync(string key)
@@ -111,19 +116,16 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     }
 
     /// <summary>
-    /// Guards mutation of a personal system key: only its owner, or a caller with oversight, may refresh,
-    /// lock, disable or delete it. Shared keys (and unknown keys) pass through.
-    /// </summary>
-    /// <summary>
     /// Refresh, lock, disable and delete act on a key as a whole, so they are held to the ceiling as changing its scopes is: ownership first, so a refusal
     /// reveals nothing of another person's key, then that the caller holds everything the key does. Otherwise somebody holding little could delete, lock
     /// or replace the secret of a key that holds more (Tharga/Team#522).
     /// </summary>
     private async Task EnsureCanManageAsync(string key)
     {
+        var caller = await GetCallerAsync();
         var target = await FindAsync(key);
-        await EnsureCanMutateAsync(target);
-        if (target != null) _ceiling.EnsureCanChange(Caller, target.SystemScopes);
+        await EnsureCanMutateAsync(target, caller);
+        if (target != null) _ceiling.EnsureCanChange(caller, target.SystemScopes);
     }
 
     private async Task<IApiKey> FindAsync(string key)
@@ -136,27 +138,39 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
         return null;
     }
 
-    private async Task EnsureCanMutateAsync(IApiKey target)
+    /// <summary>
+    /// Guards mutation of a personal system key: only its owner, or a caller with oversight, may refresh,
+    /// lock, disable or delete it. Shared keys (and unknown keys) pass through.
+    /// </summary>
+    private async Task EnsureCanMutateAsync(IApiKey target, ClaimsPrincipal caller)
     {
         if (target == null || string.IsNullOrEmpty(target.OwnerMemberKey)) return; // shared — inner handles validity
-        if (CanOversee()) return;
+        if (CanOversee(caller)) return;
 
-        var callerUserKey = await GetCallerUserKeyAsync();
+        var callerUserKey = await GetCallerUserKeyAsync(caller);
         if (callerUserKey != null && target.OwnerMemberKey == callerUserKey) return;
 
         throw new UnauthorizedAccessException("This system API key is personal to another user and can only be managed by its owner.");
     }
 
-    private ClaimsPrincipal Caller => _httpContextAccessor?.HttpContext?.User;
+    /// <summary>
+    /// The caller, from the team principal accessor (a Blazor circuit has no request), else the request.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not the request alone.</b> In an interactive circuit <c>HttpContext</c> is the circuit's first request or nothing, so reading the caller from it
+    /// made a personal system key impossible to create from the page, and hid a person's own personal keys from them (Tharga/Team#550).
+    /// </remarks>
+    private async ValueTask<ClaimsPrincipal> GetCallerAsync()
+        => (_principalAccessor != null ? await _principalAccessor.GetCurrentAsync() : null)
+           ?? _httpContextAccessor?.HttpContext?.User;
 
     /// <summary>The signed-in caller's user key, or null when the caller is not a person.</summary>
     /// <remarks>
     /// <b>An API key is not a person</b>, so a caller authenticated by one can neither own a personal key nor
     /// see one as its owner — even if the store would resolve a user record for its principal.
     /// </remarks>
-    private async Task<string> GetCallerUserKeyAsync()
+    private async Task<string> GetCallerUserKeyAsync(ClaimsPrincipal user)
     {
-        var user = _httpContextAccessor?.HttpContext?.User;
         if (user?.Identity?.IsAuthenticated != true) return null;
         if (user.HasClaim(c => c.Type == TeamClaimTypes.ApiKeyId)) return null;
 
@@ -172,18 +186,12 @@ public class SystemApiKeyManagementService : ISystemApiKeyManagementService
     /// Whether the caller may see and manage other users' personal system keys: the
     /// <see cref="SystemApiKeyScopes.Oversee"/> system scope, read as a system grant only.
     /// </summary>
-    private bool CanOversee()
-    {
-        var user = _httpContextAccessor?.HttpContext?.User;
-        return user != null && user.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee);
-    }
+    private static bool CanOversee(ClaimsPrincipal user)
+        => user != null && user.HasClaim(TeamClaimTypes.SystemScope, SystemApiKeyScopes.Oversee);
 
-    private string GetCurrentUserIdentity()
-    {
-        var user = _httpContextAccessor?.HttpContext?.User;
-        return user?.FindFirst(ClaimTypes.Name)?.Value
-               ?? user?.FindFirst("preferred_username")?.Value
-               ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
-               ?? user?.FindFirst("name")?.Value;
-    }
+    private static string IdentityOf(ClaimsPrincipal user)
+        => user?.FindFirst(ClaimTypes.Name)?.Value
+           ?? user?.FindFirst("preferred_username")?.Value
+           ?? user?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+           ?? user?.FindFirst("name")?.Value;
 }
