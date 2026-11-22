@@ -406,6 +406,7 @@ public static class SupportRegistration
         // even with no IChatClient of its own, because the resolver is then where the models come from.
         services.AddSingleton(caseOptions.Assistant);
         services.TryAddSingleton(sp => new SupportProviderRefusals(sp.GetRequiredService<TimeProvider>(), caseOptions.Assistant));
+        services.TryAddSingleton<SupportRefusalAnnouncements>();
         services.TryAddScoped<ISupportAssistantTools, SupportAssistantTools>();
         services.TryAddScoped<ISupportChatClientResolver>(sp => new RegisteredChatClientResolver(sp.GetService<IChatClient>()));
         services.TryAddScoped<ISupportResponder>(sp =>
@@ -454,7 +455,10 @@ public static class SupportRegistration
                 caseOptions.Assistant.ConversationFeedbackRatings,
                 caseOptions.Assistant.StoreCallResults,
                 caseOptions.Assistant.MaxStoredCallResultLength,
-                sp.GetService<ISupportAssistantAllowanceSource>()),
+                sp.GetService<ISupportAssistantAllowanceSource>(),
+                sp.GetService<ISupportAssistantGate>(),
+                sp.GetServices<ISupportAssistantRefusalSink>(),
+                sp.GetRequiredService<SupportRefusalAnnouncements>()),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,

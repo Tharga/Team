@@ -69,6 +69,12 @@
                     </div>
                 }
 
+                @* The host's own content, at the top of the assistant tab, told why the assistant is or is not answering; for what only the host can offer, such as buying more. *@
+                @if (AssistantTop != null && !_support && _assistantOffered)
+                {
+                    <div class="support-panel__top" data-assistant-top>@AssistantTop(_readiness)</div>
+                }
+
                 @* Only where the team is limited, only towards the assistant, and only when the host has not turned it off. *@
                 @if (ShowsAllowance)
                 {
@@ -160,7 +166,11 @@
                         </div>
 
                         @* What to do about it, for the team's administrators; nothing for a member, who has only the notice. *@
-                        <SupportRefusalActions TeamKey="@_teamKey" Readiness="@_readiness" Allowance="@_allowance" Changed="RefreshAllowanceAsync" />
+                        @* Not where the host holds the assistant back: that is the host's rule, whatever the team connects, and its actions are the host's to place above. *@
+                        @if (_readiness != SupportAssistantReadiness.Held)
+                        {
+                            <SupportRefusalActions TeamKey="@_teamKey" Readiness="@_readiness" Allowance="@_allowance" Changed="RefreshAllowanceAsync" />
+                        }
                     }
 
                     @if (_declined && _withAssistant && !_busy)
@@ -291,6 +301,12 @@
     /// <summary>What the panel does on a screen 768 pixels wide or less: hidden, which leaves asking to the support page, or a drawer over the page. Defaults to <see cref="SupportPanelNarrowScreen.Hide"/>.</summary>
     [Parameter] public SupportPanelNarrowScreen NarrowScreen { get; set; } = SupportPanelNarrowScreen.Hide;
 
+    /// <summary>
+    /// The host's own content at the top of the assistant tab, above the allowance bar, told whether the assistant is answering and why not. Shown whatever the
+    /// state, so a host that sells more allowance or a better plan places its button here and shows it when the state says so. Nothing by default.
+    /// </summary>
+    [Parameter] public RenderFragment<SupportAssistantReadiness> AssistantTop { get; set; }
+
     private sealed record PanelMessage(bool FromMe, string Text, int Sequence = 0, bool ByAssistant = false, SupportAnswerRating Rating = SupportAnswerRating.None, SupportAssistantCall[] Calls = null,
         SupportAssistantUsage Usage = null);
 
@@ -366,7 +382,9 @@
     private string WhoClass(bool support) => support == _support ? "support-panel__who-pick support-panel__who-pick--on" : "support-panel__who-pick";
 
     // Set up, but not answering: the allowance is used up or the provider has refused the account. The tab stays to say so rather than vanish.
-    private bool AssistantPaused => _readiness is SupportAssistantReadiness.AllowanceUsed or SupportAssistantReadiness.ProviderRefused;
+    private bool AssistantPaused => _readiness is SupportAssistantReadiness.AllowanceUsed or SupportAssistantReadiness.ProviderRefused or SupportAssistantReadiness.Held;
+
+    private SupportAssistantHold _hold;
 
     private bool AssistantPausedHere => !_support && _assistantOffered && AssistantPaused;
 
@@ -405,9 +423,12 @@
         ? _text.Format(SupportPanelText.AllowanceQuestionsLeft, left.ToString("N0"), model.DisplayName)
         : null;
 
-    private string PausedText => _readiness == SupportAssistantReadiness.ProviderRefused
-        ? _text[SupportPanelText.ProviderRefused]
-        : _text.Format(SupportPanelText.AllowanceUsedUp, RenewsOn);
+    private string PausedText => _readiness switch
+    {
+        SupportAssistantReadiness.ProviderRefused => _text[SupportPanelText.ProviderRefused],
+        SupportAssistantReadiness.Held => string.IsNullOrWhiteSpace(_hold?.Message) ? _text[SupportPanelText.AssistantHeld] : _hold.Message,
+        _ => _text.Format(SupportPanelText.AllowanceUsedUp, RenewsOn)
+    };
 
     // Once the assistant has answered at least once, and not while it is answering again.
     private bool ConversationRatable => _display.RateConversations && _caseId != null && !_busy && _messages.Any(x => x.ByAssistant);
@@ -533,7 +554,7 @@
             if (offered.Contains(SupportAssistance.Assistant))
             {
                 _readiness = await SupportCases.GetAssistantReadinessAsync(_teamKey);
-                _assistantOffered = _readiness is SupportAssistantReadiness.Ready or SupportAssistantReadiness.AllowanceUsed or SupportAssistantReadiness.ProviderRefused;
+                _assistantOffered = _readiness is SupportAssistantReadiness.Ready or SupportAssistantReadiness.AllowanceUsed or SupportAssistantReadiness.ProviderRefused or SupportAssistantReadiness.Held;
             }
         }
         catch (Exception)
@@ -553,6 +574,7 @@
     private async Task ReadAllowanceAsync()
     {
         _allowance = null;
+        await ReadHoldAsync();
         if (_allowances == null || _teamKey == null || !_assistantOffered) return;
         if (!_display.ShowAllowance && _readiness != SupportAssistantReadiness.AllowanceUsed) return;
 
@@ -563,6 +585,22 @@
         catch (Exception)
         {
             _allowance = null;
+        }
+    }
+
+    /// <summary>What the host tells the team when it holds the assistant back; its own words, read only when it does. A gate that fails leaves the generic notice.</summary>
+    private async Task ReadHoldAsync()
+    {
+        _hold = null;
+        if (_readiness != SupportAssistantReadiness.Held || _teamKey == null) return;
+
+        try
+        {
+            if (Services.GetService(typeof(ISupportAssistantGate)) is ISupportAssistantGate gate) _hold = await gate.CheckAsync(_teamKey);
+        }
+        catch (Exception)
+        {
+            _hold = null;
         }
     }
 

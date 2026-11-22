@@ -44,8 +44,13 @@ internal sealed class SupportCaseService(
     SupportAnswerRating[] feedbackRatings = null,
     bool storeCallResults = false,
     int maxStoredCallResultLength = 2000,
-    ISupportAssistantAllowanceSource allowance = null) : ISupportCaseService, ISupportCaseTeamQueries
+    ISupportAssistantAllowanceSource allowance = null,
+    ISupportAssistantGate gate = null,
+    IEnumerable<ISupportAssistantRefusalSink> refusalSinks = null,
+    SupportRefusalAnnouncements announcements = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
+    private readonly ISupportAssistantRefusalSink[] _refusalSinks = refusalSinks?.ToArray() ?? [];
+
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
     private readonly ISupportConversationFeedbackSink[] _feedbackSinks = feedbackSinks?.ToArray() ?? [];
@@ -156,9 +161,10 @@ internal sealed class SupportCaseService(
             // responder that never said answers every team, as responders did before readiness existed.
             if (readiness == SupportAssistantReadiness.NotRegistered) readiness = SupportAssistantReadiness.Ready;
 
-            return readiness == SupportAssistantReadiness.Ready && await AllowanceUsedAsync(teamKey, cancellationToken)
-                ? SupportAssistantReadiness.AllowanceUsed
-                : readiness;
+            if (readiness != SupportAssistantReadiness.Ready) return readiness;
+            if (await HoldAsync(teamKey, cancellationToken) != null) return SupportAssistantReadiness.Held;
+
+            return await AllowanceUsedAsync(teamKey, cancellationToken) != null ? SupportAssistantReadiness.AllowanceUsed : readiness;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
@@ -170,19 +176,78 @@ internal sealed class SupportCaseService(
     /// <b>A source that fails reads as not used up.</b> The limit protects the platform's account, but a broken counter must not take the
     /// assistant, and with it somebody's support, away from every team at once; the failure is logged where staff will see it.
     /// </remarks>
-    private async Task<bool> AllowanceUsedAsync(string teamKey, CancellationToken cancellationToken)
+    private async Task<SupportAssistantAllowance> AllowanceUsedAsync(string teamKey, CancellationToken cancellationToken)
     {
-        if (allowance == null) return false;
+        if (allowance == null) return null;
 
         try
         {
             var current = await allowance.GetAsync(teamKey, cancellationToken);
-            return current is { Applies: true, Exhausted: true };
+            return current is { Applies: true, Exhausted: true } ? current : null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             logger?.LogWarning(ex, "The support assistant's allowance for team {TeamKey} could not be read, so it is treated as not used up.", teamKey);
-            return false;
+            return null;
+        }
+    }
+
+    /// <remarks>A gate that fails holds nothing back, for the reason a failing allowance does.</remarks>
+    private async Task<SupportAssistantHold> HoldAsync(string teamKey, CancellationToken cancellationToken)
+    {
+        if (gate == null) return null;
+
+        try
+        {
+            return await gate.CheckAsync(teamKey, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            logger?.LogWarning(ex, "The host's support assistant gate failed for team {TeamKey}, so the assistant is not held back.", teamKey);
+            return null;
+        }
+    }
+
+    private async Task<SupportAssistantReadiness> ReadinessOfResponderAsync(string teamKey, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await responder.GetReadinessAsync(teamKey, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            return SupportAssistantReadiness.NotConfigured;
+        }
+    }
+
+    /// <summary>Tells the refusal sinks that a team's question was refused, once for as long as it stays refused.</summary>
+    private async Task RefusedAsync(string teamKey, string caseId, SupportAssistantReadiness reason, SupportAssistantAllowance used = null, string message = null, CancellationToken cancellationToken = default)
+    {
+        if (_refusalSinks.Length == 0) return;
+
+        // A new period is a new spell: the allowance can be used up again after it has started over.
+        if (announcements?.IsNew(teamKey, $"{reason}|{used?.PeriodEndsAt:O}") == false) return;
+
+        var refusal = new SupportAssistantRefusal
+        {
+            TeamKey = teamKey,
+            CaseId = caseId,
+            Reason = reason,
+            RefusedAt = timeProvider.GetUtcNow().UtcDateTime,
+            Allowance = used,
+            Message = message
+        };
+
+        foreach (var sink in _refusalSinks)
+        {
+            try
+            {
+                await sink.HandleAsync(refusal, cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+            {
+                logger?.LogError(ex, "A support assistant refusal sink failed for team {TeamKey}. The refusal stands; only that delivery was lost.", teamKey);
+            }
         }
     }
 
@@ -197,7 +262,19 @@ internal sealed class SupportCaseService(
         if (supportCase?.AssistantState != SupportAssistantState.Active) return false;
 
         // Before the model is asked, so a team that has used up its allowance spends nothing more, and no usage record is made of a question never sent.
-        if (await AllowanceUsedAsync(teamKey, cancellationToken)) return false;
+        var hold = await HoldAsync(teamKey, cancellationToken);
+        if (hold != null)
+        {
+            await RefusedAsync(teamKey, caseId, SupportAssistantReadiness.Held, message: hold.Message, cancellationToken: cancellationToken);
+            return false;
+        }
+
+        var used = await AllowanceUsedAsync(teamKey, cancellationToken);
+        if (used != null)
+        {
+            await RefusedAsync(teamKey, caseId, SupportAssistantReadiness.AllowanceUsed, used, cancellationToken: cancellationToken);
+            return false;
+        }
 
         var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
 
@@ -216,7 +293,17 @@ internal sealed class SupportCaseService(
         var gaps = Bounded(answer?.Gaps);
         if (gaps.Length > 0) await store.AddAssistantGapsAsync(teamKey, caseId, gaps, cancellationToken);
 
-        if (answer?.Answered != true) return false;
+        if (answer?.Answered != true)
+        {
+            // The responder remembers a provider's refusal of the account; asked after the decline, it says whether that is why.
+            if (_refusalSinks.Length > 0 && await ReadinessOfResponderAsync(teamKey, cancellationToken) == SupportAssistantReadiness.ProviderRefused)
+                await RefusedAsync(teamKey, caseId, SupportAssistantReadiness.ProviderRefused, cancellationToken: cancellationToken);
+
+            return false;
+        }
+
+        // Answering again ends the spell, so the next refusal is told as news.
+        announcements?.Clear(teamKey);
 
         var message = new SupportMessage
         {

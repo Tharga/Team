@@ -32,5 +32,11 @@ public enum SupportAssistantReadiness
     /// The provider has refused the account itself, not one request: its usage or spend limit is reached, billing is not in order, or the key was revoked.
     /// Asking again would fail the same way, so no case is handed to the assistant until the provider is asked again after a while.
     /// </summary>
-    ProviderRefused
+    ProviderRefused,
+
+    /// <summary>
+    /// The host's own <see cref="ISupportAssistantGate"/> holds the assistant back for this team, with a message of its own, such as a plan that does not include it.
+    /// No case is handed to the assistant and no tokens are spent.
+    /// </summary>
+    Held
 }

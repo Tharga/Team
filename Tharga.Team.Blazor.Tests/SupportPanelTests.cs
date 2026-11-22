@@ -56,7 +56,8 @@ public class SupportPanelTests : BunitContext
         int? width = null,
         bool withTeam = true,
         SupportPanelNarrowScreen narrowScreen = SupportPanelNarrowScreen.Hide,
-        ISupportAssistantAllowanceService allowances = null)
+        ISupportAssistantAllowanceService allowances = null,
+        Microsoft.AspNetCore.Components.RenderFragment<SupportAssistantReadiness> top = null)
     {
         var team = new Mock<ITeam>();
         team.SetupGet(x => x.Key).Returns(TeamKey);
@@ -80,7 +81,7 @@ public class SupportPanelTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
         SetRendererInfo(new Microsoft.AspNetCore.Components.RendererInfo("Server", true));
 
-        return Render<SupportPanel>(p => p.Add(x => x.Offered, offered).Add(x => x.NarrowScreen, narrowScreen));
+        return Render<SupportPanel>(p => p.Add(x => x.Offered, offered).Add(x => x.NarrowScreen, narrowScreen).Add(x => x.AssistantTop, top));
     }
 
     private void Raises(SupportCase raised, bool answered = true, params SupportMessage[] messages)
@@ -403,6 +404,71 @@ public class SupportPanelTests : BunitContext
         Assert.False(view.Find("[data-draft]").HasAttribute("disabled"));
         connections.Verify(x => x.UsePlatformModelAsync(TeamKey, "small", default), Times.Once);
     }
+
+    // ---- the host's own say ----
+
+    /// <summary>The host's words are shown in place of ours, and the toolkit's own actions are not: whatever the team connects, the host's rule holds.</summary>
+    [Fact]
+    public void WhenTheHostHoldsTheAssistant_ItsMessageIsShown_AndTheToolkitsActionsAreNot()
+    {
+        Connections();
+        var gate = new Mock<ISupportAssistantGate>();
+        gate.Setup(x => x.CheckAsync(TeamKey, default)).ReturnsAsync(new SupportAssistantHold { Message = "Your plan does not include the assistant." });
+        Services.AddSingleton(gate.Object);
+
+        var view = Render(SupportAssistantReadiness.Held, open: true);
+
+        Assert.Equal("Your plan does not include the assistant.", view.Find("[data-assistant-paused]").TextContent.Trim());
+        Assert.Empty(view.FindAll("[data-refusal-actions]"));
+        Assert.True(view.Find("[data-draft]").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public void WhenTheHostHoldsTheAssistantWithoutWords_TheTabSaysItIsNotAvailable()
+    {
+        var view = Render(SupportAssistantReadiness.Held, open: true);
+
+        Assert.Contains(SupportPanelText.AssistantHeld.Default, view.Find("[data-assistant-paused]").TextContent);
+    }
+
+    /// <summary>A gate that fails leaves the generic notice rather than a blank panel.</summary>
+    [Fact]
+    public void AGateThatFailsToAnswerTheMessage_LeavesTheGenericNotice()
+    {
+        var gate = new Mock<ISupportAssistantGate>();
+        gate.Setup(x => x.CheckAsync(TeamKey, default)).ThrowsAsync(new InvalidOperationException());
+        Services.AddSingleton(gate.Object);
+
+        var view = Render(SupportAssistantReadiness.Held, open: true);
+
+        Assert.Contains(SupportPanelText.AssistantHeld.Default, view.Find("[data-assistant-paused]").TextContent);
+    }
+
+    [Theory]
+    [InlineData(SupportAssistantReadiness.Ready)]
+    [InlineData(SupportAssistantReadiness.AllowanceUsed)]
+    [InlineData(SupportAssistantReadiness.ProviderRefused)]
+    [InlineData(SupportAssistantReadiness.Held)]
+    public void TheHostsContent_IsShownAtTheTopOfTheAssistantTab_ToldWhyTheAssistantIsOrIsNotAnswering(SupportAssistantReadiness readiness)
+    {
+        var view = Render(readiness, open: true, top: state => builder => builder.AddContent(0, $"state:{state}"));
+
+        Assert.Equal($"state:{readiness}", view.Find("[data-assistant-top]").TextContent);
+    }
+
+    [Fact]
+    public void TheHostsContent_IsNotShownTowardsSupport()
+    {
+        var view = Render(open: true, top: state => builder => builder.AddContent(0, "x"));
+
+        view.Find("[data-tab='support']").Click();
+
+        Assert.Empty(view.FindAll("[data-assistant-top]"));
+    }
+
+    [Fact]
+    public void WithoutHostContent_NothingIsAdded()
+        => Assert.Empty(Render(open: true).FindAll("[data-assistant-top]"));
 
     [Fact]
     public void WithAnAssistantReady_NothingIsPaused()

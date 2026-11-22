@@ -168,6 +168,13 @@
     opacity: 0.7;
 }
 
+/* The host's own content above the assistant's conversation; it brings its own look. */
+.support-panel__top {
+    flex: 0 0 auto;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--rz-text-color) 15%, transparent);
+}
+
 /* How much of the team's allowance is spent. Sits above the log, so it stays in view; the colour changes at the warning share and when it is used up. */
 .support-panel__allowance {
     flex: 0 0 auto;

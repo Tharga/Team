@@ -99,6 +99,9 @@ public static class SupportPanelText
     /// <summary>In place of the conversation when the provider has refused the account.</summary>
     public static readonly TextKey ProviderRefused = new("team.support.panel.providerRefused", "The assistant cannot answer right now, because the service behind it has refused the account. Please try again a little later, or write to support.");
 
+    /// <summary>In place of the conversation when the host holds the assistant back and gave no words of its own.</summary>
+    public static readonly TextKey AssistantHeld = new("team.support.panel.assistantHeld", "The assistant is not available to this team right now. You can write to support.");
+
     /// <summary>Every key the component renders, its own and the shared decline notice, for building its <see cref="TextSet"/>.</summary>
     public static readonly TextKey[] All =
     [
@@ -107,6 +110,6 @@ public static class SupportPanelText
         ConversationNotGood, ConversationComment, ConversationNotice, SendConversationRating, ConversationThanks, SupportCasesViewText.AssistantDeclined,
         SupportTranscriptText.Typing, SupportTranscriptText.WorkingLoop, SupportTranscriptText.Thinking, SupportTranscriptText.ThinkingLoop, SupportTranscriptText.Helpful,
         SupportTranscriptText.NotHelpful, SupportTranscriptText.NoAnswerYet, SupportTranscriptText.NoAnswerAway,
-        AllowanceLabel, AllowanceShare, AllowanceAmounts, AllowanceRenews, AllowanceQuestionsLeft, AllowanceUsedUp, ProviderRefused
+        AllowanceLabel, AllowanceShare, AllowanceAmounts, AllowanceRenews, AllowanceQuestionsLeft, AllowanceUsedUp, ProviderRefused, AssistantHeld
     ];
 }
