@@ -43,7 +43,8 @@ internal sealed class SupportCaseService(
     IEnumerable<ISupportConversationFeedbackSink> feedbackSinks = null,
     SupportAnswerRating[] feedbackRatings = null,
     bool storeCallResults = false,
-    int maxStoredCallResultLength = 2000) : ISupportCaseService, ISupportCaseTeamQueries
+    int maxStoredCallResultLength = 2000,
+    ISupportAssistantAllowanceSource allowance = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly SupportAttachmentLimits _attachmentLimits = attachmentLimits ?? SupportAttachmentLimits.Default;
     private readonly ISupportAssistantUsageSink[] _usageSinks = usageSinks?.ToArray() ?? [];
@@ -153,11 +154,35 @@ internal sealed class SupportCaseService(
             // NotRegistered is the service's to say, and a responder exists. From a responder it is the zero
             // value of one that never said, such as a test double that does not run the default member, and a
             // responder that never said answers every team, as responders did before readiness existed.
-            return readiness == SupportAssistantReadiness.NotRegistered ? SupportAssistantReadiness.Ready : readiness;
+            if (readiness == SupportAssistantReadiness.NotRegistered) readiness = SupportAssistantReadiness.Ready;
+
+            return readiness == SupportAssistantReadiness.Ready && await AllowanceUsedAsync(teamKey, cancellationToken)
+                ? SupportAssistantReadiness.AllowanceUsed
+                : readiness;
         }
         catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
             return SupportAssistantReadiness.NotConfigured;
+        }
+    }
+
+    /// <remarks>
+    /// <b>A source that fails reads as not used up.</b> The limit protects the platform's account, but a broken counter must not take the
+    /// assistant, and with it somebody's support, away from every team at once; the failure is logged where staff will see it.
+    /// </remarks>
+    private async Task<bool> AllowanceUsedAsync(string teamKey, CancellationToken cancellationToken)
+    {
+        if (allowance == null) return false;
+
+        try
+        {
+            var current = await allowance.GetAsync(teamKey, cancellationToken);
+            return current is { Applies: true, Exhausted: true };
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
+        {
+            logger?.LogWarning(ex, "The support assistant's allowance for team {TeamKey} could not be read, so it is treated as not used up.", teamKey);
+            return false;
         }
     }
 
@@ -170,6 +195,9 @@ internal sealed class SupportCaseService(
 
         var supportCase = await store.GetCaseAsync(teamKey, caseId, cancellationToken);
         if (supportCase?.AssistantState != SupportAssistantState.Active) return false;
+
+        // Before the model is asked, so a team that has used up its allowance spends nothing more, and no usage record is made of a question never sent.
+        if (await AllowanceUsedAsync(teamKey, cancellationToken)) return false;
 
         var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
 

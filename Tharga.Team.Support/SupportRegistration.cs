@@ -404,6 +404,7 @@ public static class SupportRegistration
         // IChatClient; a host that registers its own resolver, before or after this call, has an assistant
         // even with no IChatClient of its own, because the resolver is then where the models come from.
         services.AddSingleton(caseOptions.Assistant);
+        services.TryAddSingleton(sp => new SupportProviderRefusals(sp.GetRequiredService<TimeProvider>(), caseOptions.Assistant));
         services.TryAddScoped<ISupportAssistantTools, SupportAssistantTools>();
         services.TryAddScoped<ISupportChatClientResolver>(sp => new RegisteredChatClientResolver(sp.GetService<IChatClient>()));
         services.TryAddScoped<ISupportResponder>(sp =>
@@ -415,7 +416,8 @@ public static class SupportRegistration
                 resolver,
                 sp.GetRequiredService<ISupportAssistantTools>(),
                 sp.GetRequiredService<SupportAssistantOptions>(),
-                sp.GetRequiredService<ILogger<ChatSupportResponder>>());
+                sp.GetRequiredService<ILogger<ChatSupportResponder>>(),
+                sp.GetRequiredService<SupportProviderRefusals>());
         });
 
         // Auditing wraps authorization so a refusal is recorded as a failed entry rather than lost, matching
@@ -450,7 +452,8 @@ public static class SupportRegistration
                 sp.GetServices<ISupportConversationFeedbackSink>(),
                 caseOptions.Assistant.ConversationFeedbackRatings,
                 caseOptions.Assistant.StoreCallResults,
-                caseOptions.Assistant.MaxStoredCallResultLength),
+                caseOptions.Assistant.MaxStoredCallResultLength,
+                sp.GetService<ISupportAssistantAllowanceSource>()),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,
