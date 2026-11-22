@@ -464,7 +464,17 @@ with people. Add tools over your own product by implementing `ISupportAssistantT
 
 **Help beside every page.** `<SupportPanel />` is a right-hand sidebar in your layout where a member talks to the
 assistant or to support, in the same case the support page shows. The assistant's answer appears as the model
-writes it, and either side sees flashing dots while the other is writing.
+writes it, and either side sees flashing dots while the other is writing. The message box grows to several rows as a
+longer message is written (Shift+Enter for a new line).
+
+**A spend allowance per team.** The platform's model can be limited per team and month, in money but shown to the team as a
+share or in a unit you choose (`SupportAssistantOptions.Allowance`; a default limit, a runtime default and one per team, set
+on the Limits tab of `SupportAssistantAdminView`). `SupportPanel` shows a progress bar, which is optional and on by default
+(`o.Blazor.Support.ShowAllowance`). When the allowance is used up, or the provider refuses the account, the assistant says
+why instead of failing, and a team's administrators are offered another model or their own subscription. A host can be told
+(`ISupportAssistantRefusalSink`), refuse a team's questions with its own message (`ISupportAssistantGate`) and place its own
+content in the panel (`SupportPanel.AssistantTop`). Prices now include cache writes (`PriceCacheWrite`). See
+[Support cases](docs/articles/support-cases.md#a-spend-allowance-per-team).
 
 **What the assistant is doing, and whether support is there (4.4).** While it works the assistant says "Working 2" for
 each round of service calls, and under every answer it keeps what it took: the calls, with what each was asked for,
