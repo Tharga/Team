@@ -60,6 +60,10 @@ public class SupportAssistantLimitViewTests : BunitContext
         Prepare(teams);
         var view = Render<SupportAssistantLimitView>();
         view.WaitForAssertion(() => Assert.True(view.FindAll("[data-default-limit]").Count > 0 || view.Markup.Contains(SupportAssistantLimitViewText.NotPermitted.Default)));
+
+        // The view is drawn before the directory has finished streaming, and the team picker appears with it; a click made before then lands on a view that is
+        // about to be redrawn, and what it showed is gone (this failed once on the build server, and not on any machine here).
+        if (teams.Length > 0 && !view.Markup.Contains(SupportAssistantLimitViewText.NotPermitted.Default)) view.WaitForAssertion(() => Assert.NotEmpty(view.FindAll("[data-team-choice]")));
         return view;
     }
 
