@@ -146,6 +146,9 @@ public sealed record UserMailDelivery
     /// <summary>The address it was sent from; null until it is sent.</summary>
     public string FromAddress { get; init; }
 
+    /// <summary>The name it was sent under when the mail asked for one (<see cref="UserMail.FromName"/>); null when it went under the configured sender's name.</summary>
+    public string FromName { get; init; }
+
     /// <summary>The address replies were asked to go to; null when there was none, or until it is sent.</summary>
     public string ReplyTo { get; init; }
 

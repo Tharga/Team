@@ -65,6 +65,41 @@ public class ContactMailStoreTests
         Assert.Equal("Contact", entity.ToBsonDocument()[nameof(UserMailEntity.Kind)].AsString);
     }
 
+    /// <summary>A sender's name and the headers that thread a mail are part of what is stored, so a mail queued now and sent later still carries them.</summary>
+    [Fact]
+    public void ASendersNameAndThreadingHeaders_SurviveBeingStoredAndRead()
+    {
+        var mail = new UserMail
+        {
+            RecipientUserKey = "u-1",
+            Category = "news",
+            Subject = "S",
+            Body = "B",
+            FromName = "Anna Lind",
+            InReplyTo = "c@example.org",
+            References = ["a@example.org", "b@example.org", "c@example.org"]
+        };
+
+        var entity = MongoUserMailOutbox.ToEntity(mail, Now);
+        var read = MongoUserMailOutbox.ToItem(entity).Mail;
+
+        Assert.Equal("Anna Lind", entity.ToBsonDocument()[nameof(UserMailEntity.FromName)].AsString);
+        Assert.Equal("Anna Lind", read.FromName);
+        Assert.Equal("c@example.org", read.InReplyTo);
+        Assert.Equal(["a@example.org", "b@example.org", "c@example.org"], read.References);
+    }
+
+    /// <summary>Mail without them stores no field, so nothing in a stored document changes for a host that never sets them.</summary>
+    [Fact]
+    public void AMailWithoutThem_StoresNoSuchFields()
+    {
+        var document = MongoUserMailOutbox.ToEntity(new UserMail { RecipientUserKey = "u-1", Category = "news", Subject = "S", Body = "B", References = [] }, Now).ToBsonDocument();
+
+        Assert.False(document.Contains(nameof(UserMailEntity.FromName)));
+        Assert.False(document.Contains(nameof(UserMailEntity.InReplyTo)));
+        Assert.False(document.Contains(nameof(UserMailEntity.References)));
+    }
+
     [Fact]
     public void ABatchNamingUsersAndAddresses_CountsBoth_UsersFirst()
     {

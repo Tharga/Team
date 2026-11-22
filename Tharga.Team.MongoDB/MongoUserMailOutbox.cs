@@ -572,6 +572,9 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
         SentByUserKey = mail.SentByUserKey,
         FromAddress = mail.FromAddress,
         CaseId = mail.CaseId,
+        FromName = mail.FromName,
+        InReplyTo = mail.InReplyTo,
+        References = mail.References is { Length: > 0 } ? mail.References : null,
         Status = UserMailStatus.Queued,
         QueuedAt = queuedAt,
         NextAttemptAt = queuedAt
@@ -596,7 +599,10 @@ internal sealed class MongoUserMailOutbox(IUserMailCollection collection, IUserM
             TeamKey = entity.TeamKey,
             SentByUserKey = entity.SentByUserKey,
             FromAddress = entity.FromAddress,
-            CaseId = entity.CaseId
+            CaseId = entity.CaseId,
+            FromName = entity.FromName,
+            InReplyTo = entity.InReplyTo,
+            References = entity.References
         },
         BatchId = entity.BatchId,
         Refused = entity.Refused,

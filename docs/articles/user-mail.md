@@ -297,6 +297,19 @@ which is gated.
 - **`DeduplicationKey`** makes queuing idempotent: a second mail with the same key is not queued, and the result
   names the first with `Duplicate = true`.
 - **`ReplyTo`** on one mail overrides the configured reply address.
+- **`FromName`** is the name this one mail is sent under, for a person answering someone: `FromName = "Anna Lind"` shows
+  as `Anna Lind <the configured address>`. **Only the name changes**; the address stays the configured one, so SPF and
+  DKIM are unaffected and no send-as permission is needed. Null sends the mail under the configured sender's name, as
+  before. It is kept with the mail, so `GetAsync` and the mail log show it (`UserMailDelivery.FromName`). Line breaks and
+  other control characters and angle brackets are taken out of it, and a name over 100 characters is refused.
+- **`InReplyTo` and `References`** make the mail thread with the one it answers in the recipient's mail client. Give the
+  `Message-ID` of that mail as `InReplyTo`, and the conversation so far, oldest first, as `References`; each is written as
+  the header of the same name, and `InReplyTo` is added as the last reference when the list does not hold it. The
+  `Message-ID` of every mail you send is returned in `UserMailDelivery.MessageId` (from `SendNowAsync`, or `GetAsync`
+  once a queued one is sent), so store it and pass it on the next mail of the conversation. Ids may be given with or
+  without their angle brackets. **Anything that is not one message id is refused** with `ArgumentException` when the mail is
+  queued, and recorded in the mail log like any refusal: a line break, another control character, a space, an unbalanced
+  bracket, more than 255 characters, and more than 50 references. A value from outside therefore cannot write a header.
 - **`Kind`** says where the mail came from in the recipient's history; it defaults to `Mail`.
 - **`GetAsync(id)`** returns where a queued mail stands (`UserMailDelivery`).
 

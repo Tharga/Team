@@ -115,6 +115,18 @@ public record UserMailEntity : EntityBase
     /// <summary>The support case the mail is part of, or null.</summary>
     [BsonIgnoreIfNull]
     public string CaseId { get; init; }
+
+    /// <summary>The name the mail was queued to be sent under, or null for the configured sender's.</summary>
+    [BsonIgnoreIfNull]
+    public string FromName { get; init; }
+
+    /// <summary>The <c>Message-ID</c> of the mail this one answers, or null.</summary>
+    [BsonIgnoreIfNull]
+    public string InReplyTo { get; init; }
+
+    /// <summary>The <c>Message-ID</c>s of the conversation so far, oldest first, or null.</summary>
+    [BsonIgnoreIfNull]
+    public string[] References { get; init; }
 }
 
 /// <summary>A file kept with a queued mail; its content is removed once the mail is done.</summary>

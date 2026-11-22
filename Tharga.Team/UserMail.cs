@@ -53,6 +53,26 @@ public sealed record UserMail
 
     /// <summary>The support case the mail is about, so the log can point back to it; null for mail that is not part of a case.</summary>
     public string CaseId { get; init; }
+
+    /// <summary>
+    /// The name this one mail is sent under, such as the person answering, shown as <c>Anna Lind &lt;configured address&gt;</c>. Only the name changes: the address stays
+    /// the configured one, so SPF and DKIM are unaffected. Null sends it under the configured sender's name, as before. Kept with the mail, so the log records it.
+    /// </summary>
+    /// <remarks>Cleaned when queued: line breaks, other control characters and angle brackets are taken out; a name longer than 100 characters is refused.</remarks>
+    public string FromName { get; init; }
+
+    /// <summary>
+    /// The <c>Message-ID</c> of the mail this one answers, written as the <c>In-Reply-To</c> header so the recipient's mail client threads it with that mail. Null writes none.
+    /// A value that is not one message id, with a line break, a space or an unbalanced angle bracket, is refused when the mail is queued.
+    /// </summary>
+    public string InReplyTo { get; init; }
+
+    /// <summary>
+    /// The <c>Message-ID</c>s of the conversation so far, oldest first, written as the <c>References</c> header; <see cref="InReplyTo"/> is added at the end when it is not in the
+    /// list. Null or empty writes none beyond that. A value that is not a message id is refused when the mail is queued. A host stores each <see cref="UserMailDelivery.MessageId"/> it
+    /// is given, and passes them here on the next mail of the conversation.
+    /// </summary>
+    public string[] References { get; init; }
 }
 
 /// <summary>A file sent with a <see cref="UserMail"/>.</summary>
