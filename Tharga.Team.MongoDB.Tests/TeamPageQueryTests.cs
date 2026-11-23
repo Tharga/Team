@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Bson.Serialization;
 using MongoDB.Driver;
 using TeamEntity = Tharga.Team.MongoDB.Tests.MongoSupportSenderDirectoryTests.TeamEntity;
@@ -56,5 +57,20 @@ public class TeamPageQueryTests
 
         Assert.Contains("\"Members\" : { \"$elemMatch\"", projection);
         Assert.Contains("\"u-1\"", projection);
+    }
+
+    /// <summary>
+    /// A projection naming only the member entry is an inclusion projection, which left every summary without key and name,
+    /// so a member without the read-all permission had no selected team (Tharga/Team#560).
+    /// </summary>
+    [Fact]
+    public void ThePage_CarriesTheSummaryFields_NotOnlyTheMemberEntry()
+    {
+        var projection = BsonDocument.Parse(TeamRepository<TeamEntity, Member>.PageProjection("u-1").Render(Args).ToString());
+
+        foreach (var field in new[] { "Key", "Name", "Icon", "ConsentedRoles", "ConsentAccessLevel", "TemporaryConsent" })
+            Assert.Equal(1, projection[field].ToInt32());
+        Assert.True(projection["Members"].IsBsonDocument);
+        Assert.False(projection.Contains("AccessRequests"));
     }
 }

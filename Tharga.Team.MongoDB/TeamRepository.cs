@@ -40,9 +40,25 @@ internal class TeamRepository<TTeamEntity, TMember> : ITeamRepository<TTeamEntit
     {
         Sort = Builders<TTeamEntity>.Sort.Ascending(x => x.Name).Ascending(x => x.Key),
         Limit = size + 1,
-        Projection = Builders<TTeamEntity>.Projection
-            .ElemMatch(x => x.Members, Builders<TMember>.Filter.Eq(x => x.Key, userKey) & Builders<TMember>.Filter.Eq(x => x.State, MembershipState.Member))
+        Projection = PageProjection(userKey)
     };
+
+    /// <summary>
+    /// The summary fields of a team and the caller's own member entry. A projection that names only the member entry is an
+    /// inclusion projection, so it would send back nothing else and every summary would have no key and no name (Tharga/Team#560).
+    /// </summary>
+    internal static ProjectionDefinition<TTeamEntity> PageProjection(string userKey)
+    {
+        var projection = Builders<TTeamEntity>.Projection;
+        return projection.Combine(
+            projection.Include(x => x.Key),
+            projection.Include(x => x.Name),
+            projection.Include(x => x.Icon),
+            projection.Include(x => x.ConsentedRoles),
+            projection.Include(x => x.ConsentAccessLevel),
+            projection.Include(x => x.TemporaryConsent),
+            projection.ElemMatch(x => x.Members, Builders<TMember>.Filter.Eq(x => x.Key, userKey) & Builders<TMember>.Filter.Eq(x => x.State, MembershipState.Member)));
+    }
 
     /// <exception cref="ArgumentException">The cursor was not issued by a team read.</exception>
     internal static FilterDefinition<TTeamEntity> PageFilter(string userKey, string cursor)
