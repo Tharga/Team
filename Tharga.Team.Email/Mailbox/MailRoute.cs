@@ -17,7 +17,8 @@ internal static class MailRoute
 {
     public static async Task<MailRouteDecision> DecideAsync(IReadOnlyList<string> deliveredTo, TeamMailboxOptions options, Func<string, Task<TeamMailKeyRecord>> findKey, DateTime now)
     {
-        foreach (var address in deliveredTo)
+        var mailbox = options.Mail?.Imap?.UserName;
+        foreach (var address in deliveredTo.Where(x => !IsTheCatchAll(x, mailbox)))
         {
             var parsed = TeamMailAddress.Parse(address, options);
             if (parsed == null) continue;
@@ -39,9 +40,13 @@ internal static class MailRoute
     {
         var mailbox = options.Mail?.Imap?.UserName;
         var suffix = "@" + options.Domain;
-        return deliveredTo.FirstOrDefault(x => x.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && !string.Equals(x, mailbox, StringComparison.OrdinalIgnoreCase))
+        return deliveredTo.FirstOrDefault(x => x.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && !IsTheCatchAll(x, mailbox))
                ?? deliveredTo.FirstOrDefault();
     }
+
+    // With no prefix or suffix the catch-all's own local part reads like a key, so it is never read as a team address.
+    private static bool IsTheCatchAll(string address, string mailbox) =>
+        !string.IsNullOrWhiteSpace(mailbox) && string.Equals(address?.Trim().Trim('<', '>').Trim(), mailbox.Trim(), StringComparison.OrdinalIgnoreCase);
 
     private static MailRouteDecision Postmaster(string itemKey, string deliveredTo, MailRouteReason reason) => new(null, itemKey, deliveredTo, reason, null);
 }
