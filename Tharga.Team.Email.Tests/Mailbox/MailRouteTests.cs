@@ -111,6 +111,32 @@ public class MailRouteTests
         Assert.Equal("primarykey01-case@fortdocs.app", decision.DeliveredTo);
     }
 
+    [Fact]
+    public async Task ACatchAllsOwnMailbox_IsNeverReadAsAKey_WhenAddressesHaveNoPrefixOrSuffix()
+    {
+        var options = new TeamMailboxOptions { Domain = "fortdocs.app" };
+        options.Mail.Imap.UserName = "inkorg@fortdocs.app";
+
+        var decision = await MailRoute.DecideAsync(["<Inkorg@FortDocs.app>", "primarykey01@fortdocs.app"], options, Lookup, Now);
+
+        Assert.Equal("team-a", decision.TeamKey);
+        Assert.Equal(MailRouteReason.PrimaryKey, decision.Reason);
+        Assert.Equal("primarykey01@fortdocs.app", decision.DeliveredTo);
+    }
+
+    [Fact]
+    public async Task MailOnlyToTheCatchAllsOwnMailbox_GoesToThePostmaster_WhenAddressesHaveNoPrefixOrSuffix()
+    {
+        var options = new TeamMailboxOptions { Domain = "fortdocs.app" };
+        options.Mail.Imap.UserName = "inkorg@fortdocs.app";
+
+        var decision = await MailRoute.DecideAsync(["inkorg@fortdocs.app"], options, Lookup, Now);
+
+        Assert.Null(decision.TeamKey);
+        Assert.Equal(MailRouteReason.UnknownAddress, decision.Reason);
+        Assert.Equal("inkorg@fortdocs.app", decision.DeliveredTo);
+    }
+
     // ---- a host that changed its address format ----
 
     private static readonly TeamMailboxOptions Changed = new()
