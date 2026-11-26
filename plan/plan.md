@@ -60,9 +60,13 @@
       copied with `CopySettable`; the service gets `KeepFor` for the limits. One file that cannot be removed is
       logged and skipped, still due next pass. Announces `AttachmentRemoved`. 13 tests in
       `SupportSecureFileSweepTests`. In-memory test store got the two members (step 7's test-store part).
-- [~] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
+- [x] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
       in-memory test store. Tests.
-- [ ] 8. Blazor: picker secure mode; transcript secure / withheld / removed and a staff remove button;
+      Done. `Secure` (ignore if default), `UploadedBy`, `RemovedAt` (ignore if null); `Withheld` never stored.
+      `KeepsSecureAttachments => true`. Due query is a raw `$elemMatch` on entry age and an unremoved secure file;
+      the mark is a positional `$set` conditional on `_id` and `RemovedAt: null` at that position. New sparse index
+      `Messages_Attachments_Secure`, holding only cases with a secure file. 11 tests.
+- [~] 8. Blazor: picker secure mode; transcript secure / withheld / removed and a staff remove button;
       conversation member picker; panel support-tab attach. Texts. Render tests.
 - [ ] 9. Docs: `docs/articles/support-cases.md` (Attachments), `Tharga.Team.Support/README.md`,
       `Tharga.Team.Blazor/README.md`.

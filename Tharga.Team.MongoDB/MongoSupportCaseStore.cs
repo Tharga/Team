@@ -1,3 +1,4 @@
+using MongoDB.Bson;
 using MongoDB.Driver;
 
 namespace Tharga.Team.MongoDB;
@@ -268,6 +269,75 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
 
         // The driver reports the document as it was, not a count. No before-image means the filter matched
         // nothing — which here means another sweep closed it first.
+        return result?.Before != null;
+    }
+
+    /// <remarks>The attachment's secure flag, uploader and removal are mapped like its other fields, and read back as they were written.</remarks>
+    public bool KeepsSecureAttachments => true;
+
+    /// <remarks>
+    /// Narrowed in the database to cases with an entry that is old enough and carries a secure file not yet removed, which the sparse
+    /// <c>Messages_Attachments_Secure</c> index holds alone; which entries and files those are is read from the transcript that arrives
+    /// with each document, as <see cref="GetCasesForInactivityCloseAsync"/> reads its tail.
+    /// </remarks>
+    public async Task<SupportAttachmentLocation[]> GetSecureAttachmentsDueAsync(DateTime sentBefore, int limit, CancellationToken cancellationToken = default)
+    {
+        var due = new List<SupportAttachmentLocation>();
+
+        await foreach (var entity in collection.GetAsync(SecureAttachmentsDue(sentBefore)).WithCancellation(cancellationToken))
+        {
+            foreach (var message in entity.Messages.Where(x => x.SentAt < sentBefore))
+            {
+                foreach (var attachment in (message.Attachments ?? []).Where(x => x.Secure && x.RemovedAt == null))
+                {
+                    due.Add(new SupportAttachmentLocation { TeamKey = entity.TeamKey, CaseId = entity.CaseId, Sequence = message.Sequence, AttachmentId = attachment.Id });
+                    if (due.Count >= limit) return [.. due];
+                }
+            }
+        }
+
+        return [.. due];
+    }
+
+    /// <summary>Cases with an entry written before the moment given that carries a secure file not yet removed.</summary>
+    /// <remarks><c>RemovedAt: null</c> matches the field missing, which is how a file not yet removed is stored.</remarks>
+    internal static FilterDefinition<SupportCaseEntity> SecureAttachmentsDue(DateTime sentBefore)
+        => new BsonDocument(nameof(SupportCaseEntity.Messages), new BsonDocument("$elemMatch", new BsonDocument
+        {
+            { nameof(SupportMessageEntity.SentAt), new BsonDocument("$lt", sentBefore) },
+            {
+                nameof(SupportMessageEntity.Attachments), new BsonDocument("$elemMatch", new BsonDocument
+                {
+                    { nameof(SupportAttachmentEntity.Secure), true },
+                    { nameof(SupportAttachmentEntity.RemovedAt), BsonNull.Value }
+                })
+            }
+        }));
+
+    /// <remarks>
+    /// Conditional on the file still being unremoved, by its position in the entry and the entry's in the case: two sweeps both reach
+    /// here, the second matches nothing and is told it recorded nothing. By position rather than by rewriting the array, so a reply
+    /// arriving at the same moment is not lost.
+    /// </remarks>
+    public async Task<bool> TryMarkAttachmentRemovedAsync(string caseId, int sequence, string attachmentId, DateTime removedAt, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(caseId) || string.IsNullOrWhiteSpace(attachmentId)) return false;
+
+        var entity = await collection.GetOneAsync(Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId));
+        var messageIndex = entity == null ? -1 : Array.FindIndex(entity.Messages, x => x.Sequence == sequence);
+        if (messageIndex < 0) return false;
+
+        var attachmentIndex = Array.FindIndex(entity.Messages[messageIndex].Attachments ?? [], x => x.Id == attachmentId);
+        if (attachmentIndex < 0 || entity.Messages[messageIndex].Attachments[attachmentIndex].RemovedAt != null) return false;
+
+        var path = $"{nameof(SupportCaseEntity.Messages)}.{messageIndex}.{nameof(SupportMessageEntity.Attachments)}.{attachmentIndex}";
+        var filter = Builders<SupportCaseEntity>.Filter.And(
+            Builders<SupportCaseEntity>.Filter.Eq(x => x.CaseId, caseId),
+            Builders<SupportCaseEntity>.Filter.Eq($"{path}.{nameof(SupportAttachmentEntity.Id)}", attachmentId),
+            Builders<SupportCaseEntity>.Filter.Eq($"{path}.{nameof(SupportAttachmentEntity.RemovedAt)}", BsonNull.Value));
+
+        var result = await collection.UpdateOneAsync(filter, Builders<SupportCaseEntity>.Update.Set($"{path}.{nameof(SupportAttachmentEntity.RemovedAt)}", new BsonDateTime(removedAt)));
+
         return result?.Before != null;
     }
 
@@ -871,7 +941,10 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ContentType = entity.ContentType,
         Size = entity.Size,
         Inline = entity.Inline,
-        ContentId = entity.ContentId
+        ContentId = entity.ContentId,
+        Secure = entity.Secure,
+        UploadedBy = entity.UploadedBy,
+        RemovedAt = entity.RemovedAt
     };
 
     private static SupportAttachmentEntity ToEntity(SupportAttachment attachment) => new()
@@ -881,6 +954,9 @@ internal sealed class MongoSupportCaseStore(ISupportCaseRepositoryCollection col
         ContentType = attachment.ContentType,
         Size = attachment.Size,
         Inline = attachment.Inline,
-        ContentId = attachment.ContentId
+        ContentId = attachment.ContentId,
+        Secure = attachment.Secure,
+        UploadedBy = attachment.UploadedBy,
+        RemovedAt = attachment.RemovedAt
     };
 }
