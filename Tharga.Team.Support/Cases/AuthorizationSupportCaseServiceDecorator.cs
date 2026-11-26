@@ -119,6 +119,28 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
         await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken);
     }
 
+    /// <remarks>Authorized exactly as a plain reply: who may then see the secure files is decided as they are read, by <see cref="GetMessagesAsync"/>.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, IReadOnlyList<SupportAttachmentUpload> secureAttachments, CancellationToken cancellationToken = default)
+    {
+        await RequireCaseAccessAsync(teamKey, caseId, "reply to", CaseAccessKind.Write);
+
+        await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, secureAttachments, cancellationToken);
+    }
+
+    /// <remarks>
+    /// The product's support staff only: <see cref="SystemSupportScopes.AllManage"/>, or <see cref="SystemSupportScopes.Manage"/> for a
+    /// case no team owns. The team's own support grants confer nothing here, as they confer nothing over the file itself; nor does having
+    /// uploaded it, since it is support the member handed it to.
+    /// </remarks>
+    public async Task RemoveSecureAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(teamKey)) await RequireSystemScopeAsync(SystemSupportScopes.Manage, "remove a secure file of");
+        else if (!await HasCrossTeamAccessAsync(CaseAccessKind.Write))
+            throw new UnauthorizedAccessException($"Removing a secure file of support case '{caseId}' requires {CrossTeamScopesFor(CaseAccessKind.Write)}.");
+
+        await inner.RemoveSecureAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+    }
+
     /// <remarks>
     /// A support grant and nothing else: authorship lets a member reply to their own case, never answer it as
     /// support, or anybody could clear their own case from the queue by answering it.
@@ -166,12 +188,22 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
     /// Authorized exactly as reading the transcript is — the team's support read grant, the unassigned read grant
     /// for a case with no team, the cross-team grant, or authorship, with per-case visibility applied — because a
     /// file is part of what was said.
+    /// <para>
+    /// A <see cref="SupportAttachment.Secure"/> file then opens only for whoever sees it in full as <see cref="GetMessagesAsync"/> reads
+    /// it: the product's support staff and the member who uploaded it. Anyone else is refused, the team's own support readers included.
+    /// </para>
     /// </remarks>
     public async Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
     {
         await RequireCaseAccessAsync(teamKey, caseId, "open a file of", CaseAccessKind.Read);
 
-        return await inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+        var opened = await inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+        if (opened?.Attachment?.Secure != true || await SeesSecureFilesInFullAsync(teamKey) || IsUploader(opened.Attachment, await authorizer.GetSubjectAsync())) return opened;
+
+        await opened.DisposeAsync();
+
+        throw new UnauthorizedAccessException(
+            $"Only the product's support staff and the member who uploaded it may open secure file '{attachmentId}' of support case '{caseId}'.");
     }
 
     /// <remarks>Authorized exactly as reading the transcript is, because the original is the mail the entry was made from.</remarks>
@@ -438,10 +470,47 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
 
         var page = await inner.GetMessagesAsync(teamKey, caseId, cursor, pageSize, cancellationToken);
 
-        if (string.IsNullOrEmpty(teamKey) || page.Items.All(x => x.InternalComment == null) || await HasCrossTeamAccessAsync(CaseAccessKind.Read)) return page;
+        if (page.Items.All(x => x.InternalComment == null && !HasSecureFile(x)) || await SeesSecureFilesInFullAsync(teamKey)) return page;
 
-        return page with { Items = [.. page.Items.Select(x => x.InternalComment == null ? x : x with { InternalComment = null })] };
+        var subject = await authorizer.GetSubjectAsync();
+
+        return page with { Items = [.. page.Items.Select(x => AsTeamReadsIt(x, subject))] };
     }
+
+    /// <summary>
+    /// Whether the caller sees every entry whole: internal comments and secure files alike. The product's support staff do, and for a case
+    /// no team owns everyone reaching it is staff, since only the unassigned grant reaches one.
+    /// </summary>
+    private async Task<bool> SeesSecureFilesInFullAsync(string teamKey)
+        => string.IsNullOrEmpty(teamKey) || await HasCrossTeamAccessAsync(CaseAccessKind.Read);
+
+    /// <summary>
+    /// The entry as anyone but the product's support staff reads it: no internal comment, and every secure file withheld except the
+    /// caller's own.
+    /// </summary>
+    /// <remarks>
+    /// <b>The team's own support readers are withheld from too.</b> They are the member's colleagues, and a secure file is the one thing a
+    /// member hands support without handing it to them. A withheld file keeps its id, its size and whether it was removed, so the
+    /// conversation still says a file was there; its name and type are blank.
+    /// </remarks>
+    private static SupportMessage AsTeamReadsIt(SupportMessage message, string subject)
+    {
+        var read = message.InternalComment == null ? message : message with { InternalComment = null };
+        if (read.Attachments?.Any(x => x.Secure && !IsUploader(x, subject)) != true) return read;
+
+        return read with
+        {
+            Attachments = [.. read.Attachments.Select(x => x.Secure && !IsUploader(x, subject)
+                ? x with { FileName = string.Empty, ContentType = string.Empty, UploadedBy = null, Withheld = true }
+                : x)]
+        };
+    }
+
+    private static bool HasSecureFile(SupportMessage message) => message.Attachments?.Any(x => x.Secure) == true;
+
+    /// <remarks>An empty subject is nobody's, so it never matches a file whose uploader was not recorded.</remarks>
+    private static bool IsUploader(SupportAttachment attachment, string subject)
+        => !string.IsNullOrEmpty(subject) && string.Equals(attachment.UploadedBy, subject, StringComparison.Ordinal);
 
     /// <remarks>
     /// <b>Reuses the case-access check rather than repeating something similar.</b> Marking a case read is a

@@ -42,9 +42,13 @@
       `Outward` strips secure files in `DeliverAsync` (covers resend) and from the responder's transcript; feedback
       sinks, the assistant's tools and channel opening never carried files. Constructor takes `secureKeepFor`.
       15 tests in `SupportSecureFileServiceTests`.
-- [~] 3. Authorization decorator: withhold in `GetMessagesAsync`, refuse `OpenAttachmentAsync`,
+- [x] 3. Authorization decorator: withhold in `GetMessagesAsync`, refuse `OpenAttachmentAsync`,
       authorize the new overload and removal. Tests.
-- [ ] 4. Auditing decorator: new overload (with secure count), removal, secure open, refused open. Tests.
+      Done. Full view: a case no team owns (only the unassigned grant reaches it), cross-team read, or the uploader.
+      Withheld blanks name, type and `UploadedBy`; keeps id, size, `RemovedAt`. Opening checks the opened file's flag
+      and disposes it before refusing. Removal: `support:all:manage`, or `support:unassigned:manage` with no team;
+      the uploader may not. 13 tests in `SupportSecureFileAuthorizationTests`.
+- [~] 4. Auditing decorator: new overload (with secure count), removal, secure open, refused open. Tests.
 - [ ] 5. Mail channel skips secure files itself. Test.
 - [ ] 6. Sweep, hosted service, options and registration. Tests, including two sweeps racing.
 - [ ] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
