@@ -294,7 +294,7 @@ public class SupportAttachmentServiceTests
     {
         var limits = await Build(new InMemorySupportCaseStore(), new InMemorySupportAttachmentStore(), Bob, limits: SmallLimits).GetAttachmentLimitsAsync();
 
-        Assert.Equal(SmallLimits, limits);
+        Assert.Equal(SmallLimits with { AcceptsSecureFiles = true }, limits);
     }
 
     private static async Task<(InMemorySupportCaseStore Cases, InMemorySupportAttachmentStore Files, string CaseId, int Sequence, string AttachmentId)> CaseWithAFileAsync()

@@ -38,5 +38,8 @@ public enum SupportCaseChange
     AssigneeChanged,
 
     /// <summary>The person the assistant answered rated the conversation as a whole, or took the rating back.</summary>
-    ConversationRated
+    ConversationRated,
+
+    /// <summary>Support removed a secure file's content before its time ran out; the entry now says it was removed.</summary>
+    AttachmentRemoved
 }

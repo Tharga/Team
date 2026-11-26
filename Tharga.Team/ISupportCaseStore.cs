@@ -302,6 +302,17 @@ public interface ISupportCaseStore
         => Task.FromResult(false);
 
     /// <summary>
+    /// Whether this store keeps a file's <see cref="SupportAttachment.Secure"/>, <see cref="SupportAttachment.UploadedBy"/> and
+    /// <see cref="SupportAttachment.RemovedAt"/>, and implements <see cref="GetSecureAttachmentsDueAsync"/> and
+    /// <see cref="TryMarkAttachmentRemovedAsync"/>.
+    /// </summary>
+    /// <remarks>
+    /// <b>Defaults to false, and false refuses secure files before anything is written.</b> A store written before secure files existed
+    /// would keep the file's name and drop the flag, and the file would then be an ordinary one every reader of the case can open.
+    /// </remarks>
+    bool KeepsSecureAttachments => false;
+
+    /// <summary>
     /// Secure files, across every team, carried by entries written before <paramref name="sentBefore"/> whose content is not yet
     /// removed: the ones the secure-file sweep removes.
     /// </summary>

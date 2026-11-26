@@ -33,9 +33,16 @@
       `TryMarkAttachmentRemovedAsync(caseId, sequence, attachmentId, removedAt)` (default throws). Added
       `SupportAttachmentLimits.SecureKeepFor` so the picker can say how long files are kept. `SecureFiles` is a
       `SupportSecureFileOptions` section (`KeepFor` 30 days, zero keeps them; `SweepInterval`; `SweepBatchSize`).
-- [~] 2. Domain (`SupportCaseService`): store secure uploads on reply and raise with `Secure` and
+- [x] 2. Domain (`SupportCaseService`): store secure uploads on reply and raise with `Secure` and
       `UploadedBy`, read-back guard, `RemoveSecureAttachmentAsync`, strip outward. Tests.
-- [ ] 3. Authorization decorator: withhold in `GetMessagesAsync`, refuse `OpenAttachmentAsync`,
+      Done. Added to the plan: `ISupportCaseStore.KeepsSecureAttachments` (default false) refuses secure files before
+      anything is written, because the read-back alone would still leave the file's name visible on a store that
+      drops the flag; the read-back stays as the second guard. `SupportAttachmentLimits.AcceptsSecureFiles` tells a
+      component whether to offer the secure mode. `SupportCaseChange.AttachmentRemoved` announces a removal.
+      `Outward` strips secure files in `DeliverAsync` (covers resend) and from the responder's transcript; feedback
+      sinks, the assistant's tools and channel opening never carried files. Constructor takes `secureKeepFor`.
+      15 tests in `SupportSecureFileServiceTests`.
+- [~] 3. Authorization decorator: withhold in `GetMessagesAsync`, refuse `OpenAttachmentAsync`,
       authorize the new overload and removal. Tests.
 - [ ] 4. Auditing decorator: new overload (with secure count), removal, secure open, refused open. Tests.
 - [ ] 5. Mail channel skips secure files itself. Test.

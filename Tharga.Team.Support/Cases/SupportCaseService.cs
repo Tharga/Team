@@ -47,7 +47,8 @@ internal sealed class SupportCaseService(
     ISupportAssistantAllowanceSource allowance = null,
     ISupportAssistantGate gate = null,
     IEnumerable<ISupportAssistantRefusalSink> refusalSinks = null,
-    SupportRefusalAnnouncements announcements = null) : ISupportCaseService, ISupportCaseTeamQueries
+    SupportRefusalAnnouncements announcements = null,
+    TimeSpan? secureKeepFor = null) : ISupportCaseService, ISupportCaseTeamQueries
 {
     private readonly ISupportAssistantRefusalSink[] _refusalSinks = refusalSinks?.ToArray() ?? [];
 
@@ -68,28 +69,34 @@ internal sealed class SupportCaseService(
     private ISupportAnswerMail AnswerMail => _channels.OfType<ISupportAnswerMail>().FirstOrDefault();
 
     public Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportAssistance assistance = SupportAssistance.None, CancellationToken cancellationToken = default)
-        => RaiseAsync(teamKey, subject, body, assistance, null, null, cancellationToken);
+        => RaiseAsync(teamKey, subject, body, assistance, null, null, null, cancellationToken);
 
     /// <remarks>
     /// An address binds the case to the mail channel at once, with the mailbox answers go from, so the answer route is mail from the first answer and the
     /// case threads like one that arrived by mail. Refused before anything is written when the address is not one plain address or no mail is set up.
+    /// <para>Secure files are stored under the new case's id before the case is written, and carried by its first entry.</para>
     /// </remarks>
     public Task<SupportCase> RaiseCaseAsync(string teamKey, string subject, string body, SupportRaiseOptions options, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        return RaiseAsync(teamKey, subject, body, options.Assistance, options.MailAddress, options.Mailbox, cancellationToken);
+        return RaiseAsync(teamKey, subject, body, options.Assistance, options.MailAddress, options.Mailbox, options.SecureAttachments, cancellationToken);
     }
 
-    private async Task<SupportCase> RaiseAsync(string teamKey, string subject, string body, SupportAssistance assistance, string mailAddress, string mailboxName, CancellationToken cancellationToken)
+    private async Task<SupportCase> RaiseAsync(string teamKey, string subject, string body, SupportAssistance assistance, string mailAddress, string mailboxName, IReadOnlyList<SupportAttachmentUpload> secureAttachments, CancellationToken cancellationToken)
     {
         RequireWithinLength(body);
+
+        var secure = Present(secureAttachments);
+        RequireAttachable(secure);
+        RequireSecureAccepted(secure);
 
         var caseId = Guid.NewGuid().ToString();
         var mailBinding = mailAddress == null ? null : NewMailBinding(caseId, mailAddress, mailboxName, null);
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var subjectIdentity = await authorizer.GetSubjectAsync();
+        RequireUploader(secure, subjectIdentity);
         var authorName = await DisplayNameAsync();
 
         var withAssistant = assistance == SupportAssistance.Assistant
@@ -113,6 +120,8 @@ internal sealed class SupportCaseService(
             Bindings = mailBinding == null ? [] : [mailBinding]
         };
 
+        var stored = await StoreAttachmentsAsync(caseId, [], secure, subjectIdentity, cancellationToken);
+
         var firstMessage = new SupportMessage
         {
             Sequence = 1,
@@ -120,10 +129,21 @@ internal sealed class SupportCaseService(
             AuthorIdentity = subjectIdentity,
             AuthorName = authorName,
             Body = body,
-            SentAt = now
+            SentAt = now,
+            Attachments = stored
         };
 
-        await store.AddCaseAsync(supportCase, firstMessage, cancellationToken);
+        try
+        {
+            await store.AddCaseAsync(supportCase, firstMessage, cancellationToken);
+        }
+        catch
+        {
+            await DiscardAsync(caseId, stored);
+            throw;
+        }
+
+        await RequireSecureKeptAsync(teamKey, caseId, stored, subjectIdentity, cancellationToken);
         await MarkOwnMessageReadAsync(teamKey, supportCase.Id, subjectIdentity, firstMessage.Sequence, cancellationToken);
 
         // The case is written first and is authoritative. Projecting it onto a channel comes after, so a
@@ -276,7 +296,8 @@ internal sealed class SupportCaseService(
             return false;
         }
 
-        var transcript = await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken);
+        // The assistant hears nothing of a secure file: neither its name nor that there is one.
+        var transcript = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken)).Items.Select(Outward).ToArray();
 
         // A test double does not run the streaming default and answers nothing; it is then asked as it always was.
         var started = timeProvider.GetTimestamp();
@@ -285,8 +306,8 @@ internal sealed class SupportCaseService(
         // model has said anything, so the count starts there; one that cannot stream reports nothing, as it always did.
         var timed = progress == null ? null : new StartedProgress(progress, timeProvider.GetUtcNow().UtcDateTime);
 
-        var answer = timed == null ? null : await responder.AnswerAsync(supportCase, transcript.Items, timed, cancellationToken);
-        answer ??= await responder.AnswerAsync(supportCase, transcript.Items, cancellationToken);
+        var answer = timed == null ? null : await responder.AnswerAsync(supportCase, transcript, timed, cancellationToken);
+        answer ??= await responder.AnswerAsync(supportCase, transcript, cancellationToken);
         await RecordUsageAsync(supportCase, answer, timeProvider.GetElapsedTime(started), cancellationToken);
 
         // Kept whether or not it answered: a decline because it could not do what was asked is the more telling one.
@@ -441,6 +462,27 @@ internal sealed class SupportCaseService(
     public Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
         => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: false, cancellationToken);
 
+    public Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, IReadOnlyList<SupportAttachmentUpload> secureAttachments, CancellationToken cancellationToken = default)
+        => WriteAsync(teamKey, caseId, body, bodyHtml, attachments, asSupport: false, cancellationToken, secureAttachments: secureAttachments);
+
+    /// <remarks>
+    /// The content goes first and the record of it second, as the sweep does: a failure between them leaves a file that no longer opens
+    /// and is recorded on the next try, never a "removed" mark over content that is still kept.
+    /// </remarks>
+    public async Task RemoveSecureAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        var attachment = await AttachmentOfAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+        if (attachment?.Secure != true)
+            throw new InvalidOperationException($"Entry {sequence} of support case '{caseId}' carries no secure file '{attachmentId}'.");
+
+        if (attachment.RemovedAt != null) return;
+
+        if (attachmentStore != null) await attachmentStore.DeleteAsync(caseId, attachmentId, cancellationToken);
+        await store.TryMarkAttachmentRemovedAsync(caseId, sequence, attachmentId, timeProvider.GetUtcNow().UtcDateTime, cancellationToken);
+
+        Notify(teamKey, caseId, SupportCaseChange.AttachmentRemoved);
+    }
+
     public Task AnswerCaseAsync(string teamKey, string caseId, string body, CancellationToken cancellationToken = default)
         => WriteAsync(teamKey, caseId, body, null, [], asSupport: true, cancellationToken);
 
@@ -459,15 +501,24 @@ internal sealed class SupportCaseService(
     /// </remarks>
     public async Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
     {
-        if (attachmentStore == null || sequence < 1 || string.IsNullOrWhiteSpace(attachmentId)) return null;
+        if (attachmentStore == null) return null;
 
-        var page = await store.GetMessagesAsync(teamKey, caseId, (sequence - 1).ToString(CultureInfo.InvariantCulture), 1, cancellationToken);
-        var attachment = page?.Items?.FirstOrDefault(x => x.Sequence == sequence)?.Attachments?.FirstOrDefault(x => x.Id == attachmentId);
-        if (attachment == null) return null;
+        var attachment = await AttachmentOfAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+        if (attachment == null || attachment.RemovedAt != null) return null;
 
         var opened = await attachmentStore.OpenAsync(caseId, attachmentId, cancellationToken);
 
         return opened == null ? null : new SupportAttachmentContent { Attachment = attachment, Content = opened.Content };
+    }
+
+    /// <summary>The file with this id on the entry with this sequence, read through the team, or null when that entry carries none.</summary>
+    private async Task<SupportAttachment> AttachmentOfAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken)
+    {
+        if (sequence < 1 || string.IsNullOrWhiteSpace(attachmentId)) return null;
+
+        var page = await store.GetMessagesAsync(teamKey, caseId, (sequence - 1).ToString(CultureInfo.InvariantCulture), 1, cancellationToken);
+
+        return page?.Items?.FirstOrDefault(x => x.Sequence == sequence)?.Attachments?.FirstOrDefault(x => x.Id == attachmentId);
     }
 
     /// <remarks>The entry is read by its sequence and the original found by the id it names, so no other id can be asked for; the store compares the case again.</remarks>
@@ -489,7 +540,14 @@ internal sealed class SupportCaseService(
     }
 
     public Task<SupportAttachmentLimits> GetAttachmentLimitsAsync(CancellationToken cancellationToken = default)
-        => Task.FromResult(_attachmentLimits);
+        => Task.FromResult(_attachmentLimits with
+        {
+            AcceptsSecureFiles = AcceptsSecureFiles,
+            SecureKeepFor = AcceptsSecureFiles && secureKeepFor > TimeSpan.Zero ? secureKeepFor : null
+        });
+
+    /// <summary>Whether a secure file can be kept as one: there is somewhere to keep its content, and the case store keeps it secure.</summary>
+    private bool AcceptsSecureFiles => attachmentStore != null && store.KeepsSecureAttachments;
 
     public async Task<SupportMessageDelivery> ResendAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
     {
@@ -671,13 +729,17 @@ internal sealed class SupportCaseService(
         return string.IsNullOrEmpty(subject) ? [] : await store.GetUnreadByCaseAsync(teamKey, subject, cancellationToken);
     }
 
-    private async Task WriteAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken, SupportAnswerChoice choice = null)
+    private async Task WriteAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, bool asSupport, CancellationToken cancellationToken, SupportAnswerChoice choice = null, IReadOnlyList<SupportAttachmentUpload> secureAttachments = null)
     {
         (body, bodyHtml) = Content(body, bodyHtml);
         RequireWithinLength(body);
 
-        var uploads = (attachments ?? []).Where(x => x != null).ToArray();
-        RequireAttachable(uploads);
+        var uploads = Present(attachments);
+        var secure = Present(secureAttachments);
+        if (asSupport && secure.Length > 0) throw new InvalidOperationException("Secure files are for a member writing to support; an answer from support cannot carry them.");
+
+        RequireAttachable([.. uploads, .. secure]);
+        RequireSecureAccepted(secure);
 
         // Costs a read before the write, and is worth it: the caller learns the case is full before typing
         // is discarded, and the limit is checked in the domain so a second adapter inherits it rather than
@@ -688,8 +750,11 @@ internal sealed class SupportCaseService(
                 $"Support case '{caseId}' already holds {existing.MessageCount} messages, which is the limit of " +
                 $"{SupportCaseLimits.MaxMessagesPerCase}. Raise a new case rather than extending this one.");
 
-        if (uploads.Length > 0 && existing == null)
+        if ((uploads.Length > 0 || secure.Length > 0) && existing == null)
             throw new InvalidOperationException($"No case '{caseId}' on team '{teamKey}' to attach files to.");
+
+        var author = await authorizer.GetSubjectAsync();
+        RequireUploader(secure, author);
 
         // Writing to a closed case means it is not over: it opens again rather than refusing what was written.
         if (existing?.Status == SupportCaseStatus.Closed)
@@ -719,13 +784,13 @@ internal sealed class SupportCaseService(
         var (sentFrom, signed) = mailBinding == null ? (null, false) : await SenderOfAnswerAsync(existing, mailBinding, choice);
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var stored = await StoreAttachmentsAsync(caseId, uploads, cancellationToken);
+        var stored = await StoreAttachmentsAsync(caseId, uploads, secure, author, cancellationToken);
 
         var message = new SupportMessage
         {
             Sequence = 0,
             Kind = SupportMessageKind.User,
-            AuthorIdentity = await authorizer.GetSubjectAsync(),
+            AuthorIdentity = author,
             AuthorName = await DisplayNameAsync(),
             Body = body ?? string.Empty,
             BodyHtml = bodyHtml,
@@ -745,6 +810,8 @@ internal sealed class SupportCaseService(
             await DiscardAsync(caseId, stored);
             throw;
         }
+
+        await RequireSecureKeptAsync(teamKey, caseId, stored, author, cancellationToken);
 
         var sequence = (existing?.MessageCount ?? 0) + 1;
 
@@ -797,6 +864,63 @@ internal sealed class SupportCaseService(
         SupportAttachmentLimitCheck.RequireWithin(uploads, _attachmentLimits);
     }
 
+    private static SupportAttachmentUpload[] Present(IReadOnlyList<SupportAttachmentUpload> uploads)
+        => (uploads ?? []).Where(x => x != null).ToArray();
+
+    /// <summary>Refuses secure files before anything is written when the case store would not keep them secure.</summary>
+    private void RequireSecureAccepted(IReadOnlyList<SupportAttachmentUpload> secure)
+    {
+        if (secure.Count == 0 || AcceptsSecureFiles) return;
+
+        throw new InvalidOperationException(
+            $"Secure files cannot be attached: the support case store does not keep them secure ({nameof(ISupportCaseStore.KeepsSecureAttachments)} is false).");
+    }
+
+    /// <summary>A secure file opens for its uploader by subject, so one with no subject to record could open for nobody but support.</summary>
+    private static void RequireUploader(IReadOnlyList<SupportAttachmentUpload> secure, string uploadedBy)
+    {
+        if (secure.Count > 0 && string.IsNullOrEmpty(uploadedBy))
+            throw new InvalidOperationException("Secure files cannot be attached by a caller with no subject: the uploader is the one member who may open them.");
+    }
+
+    /// <summary>
+    /// Reads the entry back and, when the store did not keep a secure file as secure, removes every secure file it carries and refuses.
+    /// </summary>
+    /// <remarks>
+    /// <b>Fail closed.</b> A store that kept the file and dropped its flag would make it an ordinary file that every reader of the case
+    /// can open. <see cref="ISupportCaseStore.KeepsSecureAttachments"/> is what keeps such a store from being written to; this is what
+    /// catches one that says it keeps them and does not.
+    /// </remarks>
+    private async Task RequireSecureKeptAsync(string teamKey, string caseId, IReadOnlyList<SupportAttachment> stored, string uploadedBy, CancellationToken cancellationToken)
+    {
+        var secure = stored.Where(x => x.Secure).ToArray();
+        if (secure.Length == 0) return;
+
+        var messages = (await store.GetMessagesAsync(teamKey, caseId, null, SupportCaseLimits.MaxMessagesPerCase, cancellationToken))?.Items ?? [];
+        var kept = messages
+            .SelectMany(x => x.Attachments ?? [])
+            .Where(x => x.Secure && x.RemovedAt == null && string.Equals(x.UploadedBy, uploadedBy, StringComparison.Ordinal))
+            .Select(x => x.Id)
+            .ToHashSet(StringComparer.Ordinal);
+
+        if (secure.All(x => kept.Contains(x.Id))) return;
+
+        await DiscardAsync(caseId, secure);
+        logger?.LogError("The support case store did not keep secure files on case {CaseId} as secure, so their content was removed again.", caseId);
+
+        throw new InvalidOperationException("The secure files were not kept as secure by the support case store, so they were removed again.");
+    }
+
+    /// <summary>The entry as it may leave the application: without the secure files it carries.</summary>
+    /// <remarks>
+    /// Everything handed outward goes through this: every channel, the host's own included, and the assistant. A secure file is for the
+    /// product's support staff on the site, so a channel never learns there was one.
+    /// </remarks>
+    internal static SupportMessage Outward(SupportMessage message)
+        => message?.Attachments?.Any(x => x.Secure) == true
+            ? message with { Attachments = [.. message.Attachments.Where(x => !x.Secure)] }
+            : message;
+
     /// <summary>
     /// Stores each file under the case, measured as it is read, and returns what was stored; on any failure the
     /// files already stored are removed again and the failure stands.
@@ -805,16 +929,20 @@ internal sealed class SupportCaseService(
     /// The name is sanitized and the content type normalized here, so nothing a caller declares reaches the
     /// transcript as given.
     /// </remarks>
-    private async Task<SupportAttachment[]> StoreAttachmentsAsync(string caseId, IReadOnlyList<SupportAttachmentUpload> uploads, CancellationToken cancellationToken)
+    private Task<SupportAttachment[]> StoreAttachmentsAsync(string caseId, IReadOnlyList<SupportAttachmentUpload> uploads, CancellationToken cancellationToken)
+        => StoreAttachmentsAsync(caseId, uploads, [], null, cancellationToken);
+
+    /// <summary>Stores the ordinary files and then the secure ones, measured together against the limits, each secure one marked with who uploaded it.</summary>
+    private async Task<SupportAttachment[]> StoreAttachmentsAsync(string caseId, IReadOnlyList<SupportAttachmentUpload> uploads, IReadOnlyList<SupportAttachmentUpload> secure, string uploadedBy, CancellationToken cancellationToken)
     {
-        if (uploads.Count == 0) return [];
+        if (uploads.Count == 0 && secure.Count == 0) return [];
 
         var stored = new List<SupportAttachment>();
         long total = 0;
 
         try
         {
-            foreach (var upload in uploads)
+            foreach (var (upload, isSecure) in uploads.Select(x => (x, false)).Concat(secure.Select(x => (x, true))))
             {
                 var contentType = AttachmentContentType.Normalize(upload.ContentType);
                 var fileName = AttachmentFileName.Sanitize(upload.FileName, contentType);
@@ -830,7 +958,7 @@ internal sealed class SupportCaseService(
                         Content = measured
                     }, cancellationToken);
 
-                    stored.Add(saved);
+                    stored.Add(isSecure ? saved with { Secure = true, UploadedBy = uploadedBy, Inline = false, ContentId = null } : saved);
                     total += saved.Size;
                 }
                 catch (Exception) when (measured.Exceeded)
@@ -930,6 +1058,8 @@ internal sealed class SupportCaseService(
     private async Task<SupportMessageDelivery> DeliverAsync(string teamKey, string caseId, SupportCase existing, SupportMessage message, CancellationToken cancellationToken)
     {
         if (_channels.Length == 0) return message.Delivery;
+
+        message = Outward(message);
 
         var attempted = false;
         var delivered = false;

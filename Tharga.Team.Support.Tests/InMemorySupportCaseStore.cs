@@ -52,8 +52,15 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
         });
     }
 
+    /// <summary>Whether the store says it keeps secure files; on by default, as the toolkit's own store does.</summary>
+    public bool KeepsSecureAttachments { get; set; } = true;
+
+    /// <summary>Keeps files and drops their secure flag, as a store written before secure files existed would, while still saying it keeps them.</summary>
+    public bool DropsSecureFlag { get; set; }
+
     public Task AddCaseAsync(SupportCase supportCase, SupportMessage firstMessage, CancellationToken cancellationToken = default)
     {
+        firstMessage = Kept(firstMessage);
         _cases.Add((Derive(supportCase, [firstMessage]), [firstMessage]));
 
         return Task.CompletedTask;
@@ -63,7 +70,7 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
     {
         var found = Require(teamKey, caseId);
 
-        found.Messages.Add(message with { Sequence = found.Messages.Count + 1 });
+        found.Messages.Add(Kept(message) with { Sequence = found.Messages.Count + 1 });
 
         Replace(found.Case with { MessageCount = found.Messages.Count }, found.Messages);
 
@@ -118,6 +125,50 @@ internal sealed class InMemorySupportCaseStore : ISupportCaseStore
 
         return Task.FromResult(true);
     }
+
+    /// <summary>Mirrors the Mongo store's predicate: secure, not removed, on an entry written before the moment given.</summary>
+    public Task<SupportAttachmentLocation[]> GetSecureAttachmentsDueAsync(DateTime sentBefore, int limit, CancellationToken cancellationToken = default)
+    {
+        lock (_cases)
+        {
+            return Task.FromResult<SupportAttachmentLocation[]>([
+                .. _cases
+                    .SelectMany(c => c.Messages
+                        .Where(m => m.SentAt < sentBefore)
+                        .SelectMany(m => (m.Attachments ?? [])
+                            .Where(a => a.Secure && a.RemovedAt == null)
+                            .Select(a => new SupportAttachmentLocation { TeamKey = c.Case.TeamKey, CaseId = c.Case.Id, Sequence = m.Sequence, AttachmentId = a.Id })))
+                    .Take(limit)
+            ]);
+        }
+    }
+
+    /// <summary>Conditional, as the real store is: the second to arrive records nothing and says so.</summary>
+    public Task<bool> TryMarkAttachmentRemovedAsync(string caseId, int sequence, string attachmentId, DateTime removedAt, CancellationToken cancellationToken = default)
+    {
+        lock (_cases)
+        {
+            var found = _cases.FirstOrDefault(x => x.Case.Id == caseId);
+            var index = found.Messages?.FindIndex(x => x.Sequence == sequence) ?? -1;
+            if (index < 0) return Task.FromResult(false);
+
+            var message = found.Messages[index];
+            if (message.Attachments?.FirstOrDefault(x => x.Id == attachmentId) is not { RemovedAt: null }) return Task.FromResult(false);
+
+            found.Messages[index] = message with { Attachments = [.. message.Attachments.Select(x => x.Id == attachmentId ? x with { RemovedAt = removedAt } : x)] };
+            MarkedRemoved++;
+
+            return Task.FromResult(true);
+        }
+    }
+
+    /// <summary>How many times a file was recorded as removed, so racing sweeps can be shown to record each once.</summary>
+    public int MarkedRemoved { get; private set; }
+
+    private SupportMessage Kept(SupportMessage message)
+        => DropsSecureFlag && message.Attachments is { Length: > 0 }
+            ? message with { Attachments = [.. message.Attachments.Select(x => x with { Secure = false, UploadedBy = null })] }
+            : message;
 
     public Task<SupportCasePage> GetUnassignedCasesAsync(string cursor, int pageSize, CancellationToken cancellationToken = default)
         => Task.FromResult(Page(_cases.Where(x => string.IsNullOrEmpty(x.Case.TeamKey)).Select(x => x.Case)));
