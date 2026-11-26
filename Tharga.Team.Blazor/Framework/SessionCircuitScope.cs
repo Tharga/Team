@@ -10,11 +10,12 @@ namespace Tharga.Team.Blazor.Framework;
 /// </summary>
 /// <remarks>
 /// <b>Not the circuit's own scope</b>: the watch wakes on a timer thread, and must not share the circuit's scoped services (a host's policy, its user service)
-/// with a render in flight. Whether sessions are on is read from the registrations and options, so asking costs no scope.
+/// with a render in flight. Whether sessions are on is read from the registrations and options, exactly as <see cref="SessionEvaluator.Active"/> decides it,
+/// so asking costs no scope.
 /// </remarks>
 internal sealed class SessionCircuitScope(IServiceScopeFactory scopeFactory, IServiceProviderIsService registered, IOptions<ThargaBlazorOptions> options) : ICircuitSessionChecks
 {
-    public bool Active => options.Value.Sessions?.Enabled == true && registered.IsService(typeof(ISessionPolicy));
+    public bool Active => registered.IsService(typeof(ISessionPolicy)) && (options.Value.Sessions ?? new SessionOptions()).Enabled;
 
     public Task<SessionCheck> InspectCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
         => RunAsync(x => x.InspectCircuitAsync(principal, activeTeamKey, cancellationToken));

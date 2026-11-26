@@ -46,14 +46,14 @@ public class SessionCircuitTests
         configure?.Invoke(o);
     });
 
-    private SessionCircuit Build(string sessionId = "s1", ServerAuthenticationStateProvider auth = null, ClaimsPrincipal principal = null, Action<SessionOptions> configure = null, Microsoft.Extensions.Logging.ILogger<SessionCircuit> logger = null)
+    private SessionCircuit Build(string sessionId = "s1", ServerAuthenticationStateProvider auth = null, ClaimsPrincipal principal = null, Action<SessionOptions> configure = null, Microsoft.Extensions.Logging.ILogger<SessionCircuit> logger = null, bool hostRegistered = true)
     {
         auth ??= _auth;
         auth.SetAuthenticationState(Task.FromResult(new AuthenticationState(principal ?? WithSession(sessionId))));
 
         var options = Configured(configure);
         var evaluator = new SessionEvaluator(_cache, Wrap(options), _clock, _withPolicy ? _policy : null, Sessions(_store, _clock, _audit, _cache));
-        var circuit = new SessionCircuit(evaluator, auth, auth, _cache, Wrap(options), _clock, logger);
+        var circuit = new SessionCircuit(evaluator, auth, hostRegistered ? auth : null, _cache, Wrap(options), _clock, logger);
         circuit.Changed += () => _states.Add(circuit.State);
         return circuit;
     }
@@ -264,6 +264,36 @@ public class SessionCircuitTests
         Assert.Equal(Min(8), TheTimer.LastDue);
     }
 
+    /// <summary>
+    /// The policy may give another idle timeout once the remembered limits expire: an open question then counts down to the new moment, so the view is told
+    /// although the circuit is still warning.
+    /// </summary>
+    [Fact]
+    public async Task AWarning_WhoseIdleMomentMoves_ShouldSaySo_WithTheNewMoment()
+    {
+        var circuit = await StartedAsync(view: true);
+        await AdvanceAsync(circuit, Min(8));
+        _policy.Default = new SessionLimits { IdleTimeout = Min(10.5) };
+        _clock.Advance(TimeSpan.FromSeconds(31));
+
+        await circuit.CheckAsync();
+
+        Assert.Equal(SessionCircuitState.Warning, circuit.State);
+        Assert.Equal(SessionTestData.Start.UtcDateTime.AddMinutes(10.5), circuit.IdleAt);
+        Assert.Equal([SessionCircuitState.Warning, SessionCircuitState.Warning], _states);
+    }
+
+    [Fact]
+    public async Task AWarning_LookedAtAgainWithTheSameIdleMoment_ShouldNotSaySoAgain()
+    {
+        var circuit = await StartedAsync(view: true);
+        await AdvanceAsync(circuit, Min(8));
+
+        await circuit.CheckAsync();
+
+        Assert.Equal([SessionCircuitState.Warning], _states);
+    }
+
     // ---- staying
 
     [Fact]
@@ -322,6 +352,25 @@ public class SessionCircuitTests
         await AdvanceAsync(circuit, Min(10) + TimeSpan.FromSeconds(1));
 
         Assert.Null(TheTimer.DueAt);
+        var state = await _auth.GetAuthenticationStateAsync();
+        Assert.False(state.User.Identity?.IsAuthenticated);
+    }
+
+    /// <summary>
+    /// The framework registers its provider only as <see cref="AuthenticationStateProvider"/>; with claim revalidation off nobody registers it as the host's.
+    /// The circuit still signs it out, or the page would go on showing the person signed in until it navigates.
+    /// </summary>
+    [Fact]
+    public async Task WhenEnded_WithTheHostsProviderNotRegistered_ShouldStillSignTheCircuitOut()
+    {
+        var circuit = Build(hostRegistered: false);
+        circuit.Attach();
+        await circuit.StartAsync();
+        await circuit.SettledAsync();
+
+        await AdvanceAsync(circuit, Min(10) + TimeSpan.FromSeconds(1));
+
+        Assert.Equal(SessionCircuitState.Ended, circuit.State);
         var state = await _auth.GetAuthenticationStateAsync();
         Assert.False(state.User.Identity?.IsAuthenticated);
     }
@@ -475,6 +524,77 @@ public class SessionCircuitTests
         Assert.Empty(_audit);
     }
 
+    /// <summary>
+    /// Until a read has said whose session it is, the circuit knows nobody, and listens to nobody: a hint for anyone on the instance would otherwise reach the
+    /// store past the back-off, from every circuit whose first read failed.
+    /// </summary>
+    [Fact]
+    public async Task BeforeTheFirstSuccessfulRead_NoHintCausesACheck_ForThisPersonOrAnyOther()
+    {
+        _store.Failure = new InvalidOperationException("the session database is down");
+        var circuit = await StartedAsync(view: true);
+        var calls = _store.Calls;
+
+        Hint("user-2");
+        Hint();
+        await circuit.SettledAsync();
+
+        Assert.Equal(calls, _store.Calls);
+    }
+
+    [Fact]
+    public async Task ACircuitWhoseSessionTheStoreDoesNotHave_ListensToNobody()
+    {
+        var circuit = Build("missing");
+        await circuit.StartAsync();
+        await circuit.SettledAsync();
+        var calls = _store.Calls;
+
+        Hint();
+        Hint("user-2");
+        await circuit.SettledAsync();
+
+        Assert.Equal(calls, _store.Calls);
+    }
+
+    [Fact]
+    public async Task OnceAReadSaysWhoseSessionItIs_AHintForThatPerson_CausesACheck()
+    {
+        _store.Failure = new InvalidOperationException("the session database is down");
+        var circuit = await StartedAsync(view: true);
+        _store.Failure = null;
+        await AdvanceAsync(circuit, Min(1));
+        var reads = _store.Reads;
+
+        Hint();
+        await circuit.SettledAsync();
+
+        Assert.Equal(reads + 1, _store.Reads);
+    }
+
+    /// <summary>A check a hint starts runs on its own, not on the thread that ended the session: that is another request, or another circuit's renderer.</summary>
+    [Fact]
+    public async Task AHintedCheck_DoesNotRunOnTheContextThatRaisedIt()
+    {
+        var circuit = await StartedAsync(view: true);
+        var raiser = new SynchronizationContext();
+        var previous = SynchronizationContext.Current;
+
+        SynchronizationContext.SetSynchronizationContext(raiser);
+        try
+        {
+            Hint();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        await circuit.SettledAsync();
+
+        Assert.NotSame(raiser, _store.ReadContext);
+    }
+
     [Fact]
     public async Task AHintForAnotherPerson_ShouldCauseNoCheck()
     {
@@ -489,23 +609,76 @@ public class SessionCircuitTests
 
     // ---- failure
 
-    /// <summary>A database blip must not end anybody's circuit, however long it lasts; the next look is a minute later.</summary>
+    /// <summary>A database blip must not end anybody's circuit, however long it lasts; it is looked at again a minute later, then less and less often.</summary>
     [Fact]
-    public async Task WhenTheStoreFailsAtAWake_ShouldNotEnd_AndRetryAfterTheActivityInterval()
+    public async Task WhenTheStoreFailsAtAWake_ShouldNotEnd_AndBackOffFromTheActivityInterval()
     {
         var circuit = await StartedAsync(view: true);
         _store.Failure = new InvalidOperationException("the session database is down");
 
         await AdvanceAsync(circuit, Min(8));
+        var waits = new List<TimeSpan?> { TheTimer.LastDue };
+        for (var look = 0; look < 6; look++)
+        {
+            await AdvanceAsync(circuit, TheTimer.LastDue!.Value);
+            waits.Add(TheTimer.LastDue);
+        }
 
+        Assert.Equal([Min(1), Min(2), Min(4), Min(8), Min(16), Min(30), Min(30)], waits);
         Assert.Equal(SessionCircuitState.Watching, circuit.State);
         Assert.Empty(_audit);
-        Assert.Equal(Min(1), TheTimer.LastDue);
+    }
 
-        await AdvanceAsync(circuit, Min(60));
+    /// <summary>Once the store answers again, the back-off starts over: the next failure is looked at again after one interval.</summary>
+    [Fact]
+    public async Task AfterTheStoreRecovers_AFailureIsLookedAtAfterOneIntervalAgain()
+    {
+        var circuit = await StartedAsync(view: true);
+        _store.Failure = new InvalidOperationException("the session database is down");
+        await AdvanceAsync(circuit, Min(8));
+        await AdvanceAsync(circuit, Min(1));
+        Assert.Equal(Min(2), TheTimer.LastDue);
 
-        Assert.Equal(SessionCircuitState.Watching, circuit.State);
+        _store.Failure = null;
+        await circuit.CheckAsync();
+        _store.Failure = new InvalidOperationException("the session database is down");
+        await circuit.CheckAsync();
+
         Assert.Equal(Min(1), TheTimer.LastDue);
+    }
+
+    /// <summary>An activity interval of zero records every request, and must not make a failing store or a missing session a loop: no wait is under a second.</summary>
+    [Fact]
+    public async Task WithAZeroActivityInterval_AFailingStore_IsLookedAtNoSoonerThanASecond_AndBacksOff()
+    {
+        var logger = new CapturingLogger<SessionCircuit>();
+        _store.Failure = new InvalidOperationException("the session database is down");
+
+        var circuit = await StartedAsync(view: true, configure: o => o.ActivityInterval = TimeSpan.Zero, logger: logger);
+        var waits = new List<TimeSpan?> { TheTimer.LastDue };
+        for (var look = 0; look < 3; look++)
+        {
+            await AdvanceAsync(circuit, TheTimer.LastDue!.Value);
+            waits.Add(TheTimer.LastDue);
+        }
+
+        Assert.Equal([TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(4), TimeSpan.FromSeconds(8)], waits);
+        Assert.Equal(4, logger.Entries.Count);
+    }
+
+    [Fact]
+    public async Task WithAZeroActivityInterval_ASessionTheStoreDoesNotHave_IsLookedAtNoSoonerThanASecond()
+    {
+        var circuit = Build("missing", configure: o => o.ActivityInterval = TimeSpan.Zero);
+        await circuit.StartAsync();
+        await circuit.SettledAsync();
+        var reads = _store.Reads;
+
+        Assert.Equal(TimeSpan.FromSeconds(1), TheTimer.LastDue);
+        await AdvanceAsync(circuit, TimeSpan.FromSeconds(1));
+
+        Assert.Equal(TimeSpan.FromSeconds(2), TheTimer.LastDue);
+        Assert.Equal(reads + 1, _store.Reads);
     }
 
     [Fact]

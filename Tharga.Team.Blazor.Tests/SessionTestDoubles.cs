@@ -341,6 +341,9 @@ internal sealed class InMemorySessionStore : IUserSessionStore
     /// <summary>When set, a read does not complete until the test completes it, so a test can hold a check in flight.</summary>
     public TaskCompletionSource Gate { get; set; }
 
+    /// <summary>The synchronization context the last read started on, so a test can tell whose thread a check ran on.</summary>
+    public SynchronizationContext ReadContext { get; private set; }
+
     public List<UserSession> Started { get; } = [];
 
     public int Reads { get; private set; }
@@ -389,6 +392,7 @@ internal sealed class InMemorySessionStore : IUserSessionStore
         {
             Enter();
             Reads++;
+            ReadContext = SynchronizationContext.Current;
             session = _sessions.GetValueOrDefault(sessionId);
         }
 

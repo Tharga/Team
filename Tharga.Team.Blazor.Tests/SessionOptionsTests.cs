@@ -237,4 +237,73 @@ public class SessionOptionsTests
 
         Assert.False(scope.ServiceProvider.GetRequiredService<ISessionCircuit>().Active);
     }
+
+    // ---- the circuit's watch decides as the request check does (review of #570)
+
+    /// <summary>With the options' sessions left null, the request check applies a registered policy; the circuit's watch must too, or requests end sessions that no circuit watches.</summary>
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(null, false)]
+    [InlineData(true, false)]
+    public void TheCircuitsChecks_DecideSessionsAreOn_ExactlyAsTheEvaluatorDoes(bool? enabled, bool withPolicy)
+    {
+        var options = Microsoft.Extensions.Options.Options.Create(new ThargaBlazorOptions { Sessions = enabled == null ? null : new SessionOptions { Enabled = enabled.Value } });
+        var services = new ServiceCollection();
+        if (withPolicy) services.AddSingleton<ISessionPolicy>(new TestSessionPolicy());
+        var provider = services.BuildServiceProvider();
+        var clock = new SessionClock();
+
+        var checks = new SessionCircuitScope(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<IServiceProviderIsService>(), options);
+        var evaluator = new SessionEvaluator(new SessionCache(clock), options, clock, withPolicy ? new TestSessionPolicy() : null);
+
+        Assert.Equal(evaluator.Active, checks.Active);
+    }
+
+    [Fact]
+    public void WithNoSessionOptions_AndAPolicy_TheCircuitsChecksAreOn()
+    {
+        var provider = new ServiceCollection().AddSingleton<ISessionPolicy>(new TestSessionPolicy()).BuildServiceProvider();
+
+        var checks = new SessionCircuitScope(provider.GetRequiredService<IServiceScopeFactory>(), provider.GetRequiredService<IServiceProviderIsService>(), Microsoft.Extensions.Options.Options.Create(new ThargaBlazorOptions { Sessions = null }));
+
+        Assert.True(checks.Active);
+    }
+
+    /// <summary>
+    /// With claim revalidation off nothing registers the host's authentication state provider: the framework's provider implements it without being
+    /// registered as it. The circuit of an ended session still signs that provider out, so the page stops showing the person signed in.
+    /// </summary>
+    [Fact]
+    public async Task WithClaimRevalidationOff_AnEndedSessionsCircuit_SignsTheFrameworksProviderOut()
+    {
+        var clock = new SessionClock();
+        var store = new InMemorySessionStore();
+        store.Put(Session("s1", clock.Now) with { EndedAt = clock.Now, EndReason = SessionEndReason.SignedOut });
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+        services.AddSingleton<TimeProvider>(clock);
+        services.AddSingleton<IUserSessionStore>(store);
+        services.AddSingleton<ISessionPolicy>(new TestSessionPolicy());
+        services.AddThargaTeamBlazor(o =>
+        {
+            o.RegisterTeamService<StubTeamService, StubUserService, StubMember>();
+            o.Sessions = Options();
+            o.ClaimRevalidation.Enabled = false;
+        });
+        using var scope = services.BuildServiceProvider().CreateScope();
+        var auth = (ServerAuthenticationStateProvider)scope.ServiceProvider.GetRequiredService<AuthenticationStateProvider>();
+        auth.SetAuthenticationState(Task.FromResult(new AuthenticationState(WithSession("s1"))));
+        Assert.Null(scope.ServiceProvider.GetService<IHostEnvironmentAuthenticationStateProvider>());
+
+        var circuit = scope.ServiceProvider.GetRequiredService<SessionCircuit>();
+        await circuit.StartAsync();
+        await circuit.SettledAsync();
+
+        Assert.Equal(SessionCircuitState.Ended, circuit.State);
+        Assert.False((await auth.GetAuthenticationStateAsync()).User.Identity?.IsAuthenticated);
+        circuit.Dispose();
+    }
 }

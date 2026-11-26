@@ -12,16 +12,18 @@ namespace Tharga.Team.Blazor.Framework;
 /// </summary>
 /// <remarks>
 /// <b>Behaviour the tests hold it to.</b> Each wake reads the store afresh; checks never overlap (one in flight, at most one follow-up, and a request that
-/// arrives while one runs is never lost); a failure never ends the circuit and is retried after <see cref="SessionOptions.ActivityInterval"/>; a session the
-/// store does not have is looked at again after a doubling wait, at most <see cref="LongestRejectedWait"/>; a hint for this person causes a check and
-/// nothing else; the warning needs a view attached and is never shown to somebody whose store stamp is recent; <see cref="StayAsync"/> writes only while
-/// warned and before the idle moment; an end is audited once and stops the timer and the subscription, and signs the circuit's auth state out.
+/// arrives while one runs is never lost) and never run on the caller's thread; a failure never ends the circuit, and it and a session the store does not
+/// have are looked at again after a doubling wait, from <see cref="SessionOptions.ActivityInterval"/> but never less than <see cref="ShortestRetryWait"/>, up
+/// to <see cref="LongestRetryWait"/>; a hint for this person causes a check and nothing else; the warning needs a view attached and is never shown to
+/// somebody whose store stamp is recent; <see cref="StayAsync"/> writes only while warned and before the idle moment; an end is audited once and stops the
+/// timer and the subscription, and signs the circuit's auth state out.
 /// <para>
 /// <b>The timer is never armed further ahead than <see cref="LongestWait"/></b>, so a long max age is reached by looking again, not by a due time the
 /// system timer refuses. It is never touched once disposed.
 /// </para>
 /// <para>
-/// <b>No session id leaves it.</b> It learns the person from the session it reads, listens for that person only, and logs neither.
+/// <b>No session id leaves it.</b> It learns the person from the session it reads, listens for that person only (and to nobody before it knows who that
+/// is), and logs neither.
 /// </para>
 /// </remarks>
 internal sealed class SessionCircuit(
@@ -36,8 +38,11 @@ internal sealed class SessionCircuit(
     /// <summary>The longest the timer is armed for; a later moment is reached by waking, looking and arming again.</summary>
     internal static readonly TimeSpan LongestWait = TimeSpan.FromDays(1);
 
-    /// <summary>The longest wait before looking again for a session the store does not have; the revalidation interval is the backstop.</summary>
-    internal static readonly TimeSpan LongestRejectedWait = TimeSpan.FromMinutes(30);
+    /// <summary>The longest wait before looking again after a failure, or for a session the store does not have; the revalidation interval is the backstop.</summary>
+    internal static readonly TimeSpan LongestRetryWait = TimeSpan.FromMinutes(30);
+
+    /// <summary>The shortest wait before looking again, whatever <see cref="SessionOptions.ActivityInterval"/> says, so a store that fails fast is never read in a loop.</summary>
+    internal static readonly TimeSpan ShortestRetryWait = TimeSpan.FromSeconds(1);
 
     private static readonly AuthenticationState SignedOutState = new(new ClaimsPrincipal(new ClaimsIdentity()));
 
@@ -54,7 +59,7 @@ internal sealed class SessionCircuit(
     private bool _disposed;
     private int _views;
     private bool _asked;
-    private TimeSpan _rejectedWait;
+    private TimeSpan _retryWait;
     private string _userKey;
     private SessionDeadlines? _deadlines;
     private SessionCircuitState _state = SessionCircuitState.Watching;
@@ -76,6 +81,9 @@ internal sealed class SessionCircuit(
     public string EndedLocation => _endedLocation;
 
     private DateTime Now => timeProvider.GetUtcNow().UtcDateTime;
+
+    /// <summary>The host's provider to sign out on an end: the registered one, else the framework's own provider, which implements it without registering it.</summary>
+    private IHostEnvironmentAuthenticationStateProvider HostState => host ?? authentication as IHostEnvironmentAuthenticationStateProvider;
 
     public async Task StartAsync()
     {
@@ -212,7 +220,7 @@ internal sealed class SessionCircuit(
             _inFlight = done.Task;
         }
 
-        _ = RunChecksAsync(done);
+        _ = Task.Run(() => RunChecksAsync(done));
         return done.Task;
     }
 
@@ -284,8 +292,9 @@ internal sealed class SessionCircuit(
         catch (Exception e)
         {
             // Never an end: a database blip must not sign anybody out.
-            logger?.LogWarning(e, "The live session check failed; the circuit carries on and looks again in {Interval}.", _options.ActivityInterval);
-            Arm(_options.ActivityInterval);
+            var wait = NextRetryWait();
+            logger?.LogWarning(e, "The live session check failed; the circuit carries on and looks again in {Interval}.", wait);
+            Arm(wait);
             return;
         }
 
@@ -302,7 +311,7 @@ internal sealed class SessionCircuit(
                 break;
             default:
                 // Not there, or not the caller's: the request check refuses it; the circuit only looks again, less and less often.
-                Arm(NextRejectedWait());
+                Arm(NextRetryWait());
                 break;
         }
     }
@@ -320,12 +329,13 @@ internal sealed class SessionCircuit(
 
             _userKey = session.UserKey;
             _deadlines = deadlines;
-            _rejectedWait = TimeSpan.Zero;
+            _retryWait = TimeSpan.Zero;
 
             var warn = due && _views > 0;
-            changed = warn != (_state == SessionCircuitState.Warning);
+            var idleAt = warn ? deadlines.IdleAt : null;
+            changed = warn != (_state == SessionCircuitState.Warning) || (warn && idleAt != _idleAt);
             _state = warn ? SessionCircuitState.Warning : SessionCircuitState.Watching;
-            _idleAt = warn ? deadlines.IdleAt : null;
+            _idleAt = idleAt;
 
             if (deadlines.NextWake(due) is { } wake) ChangeTimer(wake - now);
             else ChangeTimer(Timeout.InfiniteTimeSpan);
@@ -350,7 +360,7 @@ internal sealed class SessionCircuit(
 
         try
         {
-            host?.SetAuthenticationState(Task.FromResult(SignedOutState));
+            HostState?.SetAuthenticationState(Task.FromResult(SignedOutState));
         }
         catch (Exception e)
         {
@@ -387,21 +397,19 @@ internal sealed class SessionCircuit(
         }
     }
 
-    private TimeSpan NextRejectedWait()
+    private TimeSpan NextRetryWait()
     {
         lock (_gate)
         {
-            _rejectedWait = _rejectedWait <= TimeSpan.Zero ? _options.ActivityInterval : Min(_rejectedWait + _rejectedWait, LongestRejectedWait);
-            return _rejectedWait;
+            _retryWait = _retryWait <= TimeSpan.Zero ? Max(_options.ActivityInterval, ShortestRetryWait) : Min(_retryWait + _retryWait, LongestRetryWait);
+            return _retryWait;
         }
     }
 
     private void OnSessionEnded(object sender, UserSessionEndedEventArgs e)
     {
-        if (e?.UserKey == null) return;
-
         var userKey = _userKey;
-        if (userKey != null && !string.Equals(userKey, e.UserKey, StringComparison.Ordinal)) return;
+        if (e?.UserKey == null || userKey == null || !string.Equals(userKey, e.UserKey, StringComparison.Ordinal)) return;
 
         _ = CheckAsync();
     }
