@@ -49,6 +49,11 @@ public class SupportCaseRepositoryCollection : DiskRepositoryCollectionBase<Supp
                 Unique = true,
                 Name = "TrackingToken",
                 PartialFilterExpression = Builders<SupportCaseEntity>.Filter.Type(x => x.TrackingToken, BsonType.String)
-            })
+            }),
+        // The secure-file sweep's query. The flag is stored only when set, so the sparse index holds only the cases that carry a secure
+        // file and the hourly sweep reads those rather than every case.
+        new(Builders<SupportCaseEntity>.IndexKeys.Ascending(
+                $"{nameof(SupportCaseEntity.Messages)}.{nameof(SupportMessageEntity.Attachments)}.{nameof(SupportAttachmentEntity.Secure)}"),
+            new CreateIndexOptions { Sparse = true, Name = "Messages_Attachments_Secure" })
     ];
 }

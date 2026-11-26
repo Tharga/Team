@@ -208,6 +208,9 @@ public class SupportCaseOptions
     /// <summary>How cases opened from a public form behave: whether the visitor is mailed a receipt, and what it says.</summary>
     public SupportExternalCaseOptions External { get; } = new();
 
+    /// <summary>How long files a member hands support's staff only are kept before their content is removed: 30 days unless set.</summary>
+    public SupportSecureFileOptions SecureFiles { get; } = new();
+
     /// <summary>
     /// How the assistant behaves, when the host has registered an <c>IChatClient</c> for it to use.
     /// </summary>

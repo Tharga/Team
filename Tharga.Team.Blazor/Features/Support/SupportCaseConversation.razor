@@ -38,7 +38,7 @@
     @if (AsStaff)
     {
         <SupportTranscript Messages="_messages" CaseAuthorIdentity="@Case.AuthorIdentity" AuthorOnRight="false" TimeTemplate="TimeTemplate"
-                           ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync" InReplyToMailId="@Case.InReplyToMailId"
+                           ShowDelivery="true" HasChannels="@(Case.Bindings is { Length: > 0 })" Resend="ResendAsync" RemoveSecure="RemoveSecureAsync" InReplyToMailId="@Case.InReplyToMailId"
                            TeamKey="@Case.TeamKey" CaseId="@Case.Id" Writing="Writing" AssistantProgress="@AssistantProgress" ThinkingText="@ThinkingText" />
     }
     else
@@ -70,7 +70,13 @@
     }
     <RichTextEditor Value="@_reply" ValueChanged="ReplyChanged" Label="@ReplyText" Disabled="_busy" Height="8rem" />
 
-    <SupportAttachmentPicker @bind-Files="_files" Disabled="_busy" />
+    <SupportAttachmentPicker @bind-Files="_files" AlongWith="_secureFiles" Disabled="_busy" />
+
+    @* A member may hand support a file their colleagues reading the case cannot open; support's answers never carry one. *@
+    @if (!AsStaff)
+    {
+        <SupportAttachmentPicker @bind-Files="_secureFiles" Secure="true" AlongWith="_files" Disabled="_busy" />
+    }
 
     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
         <RadzenButton Text="@ReplyText" Icon="send" Click="ReplyAsync" Disabled="@(NothingToSend || _busy)" />
@@ -186,6 +192,7 @@
     private SupportMessage[] _messages = [];
     private string _reply;
     private IReadOnlyList<SupportAttachmentUpload> _files = [];
+    private IReadOnlyList<SupportAttachmentUpload> _secureFiles = [];
     private bool _busy;
     private SupportTypingWatch _typing;
     private SupportTypingReporter _reporter;
@@ -219,7 +226,7 @@
         return Task.CompletedTask;
     }
 
-    private bool NothingToSend => RichTextEditor.IsEmpty(_reply) && _files.Count == 0;
+    private bool NothingToSend => RichTextEditor.IsEmpty(_reply) && _files.Count == 0 && _secureFiles.Count == 0;
 
     private bool WithAssistant => Case.AssistantState == SupportAssistantState.Active;
 
@@ -303,13 +310,18 @@
 
         var html = _reply ?? string.Empty;
         var files = SupportAttachmentPicker.Rewound(_files);
+        var secure = AsStaff ? [] : SupportAttachmentPicker.Rewound(_secureFiles);
         if (_reporter != null) await _reporter.SendingAsync();
 
+        // The overload with secure files only when there are some, so a host's own service written before them still takes a reply.
         await ActAsync(() => AsStaff
             ? SupportCases.AnswerCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files, _answerChoice)
-            : SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files));
+            : secure.Count > 0
+                ? SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files, secure)
+                : SupportCases.ReplyToCaseAsync(Case.TeamKey, Case.Id, string.Empty, html, files));
         _reply = null;
         _files = [];
+        _secureFiles = [];
 
         if (!AsStaff) await Written.InvokeAsync(Case.Id);
     }
@@ -352,6 +364,9 @@
     private Task RequestHumanAsync() => ActAsync(() => SupportCases.RequestHumanAsync(Case.TeamKey, Case.Id));
 
     private Task ResendAsync(SupportMessage message) => ActAsync(() => SupportCases.ResendAsync(Case.TeamKey, Case.Id, message.Sequence));
+
+    private Task RemoveSecureAsync((SupportMessage Message, SupportAttachment Attachment) file)
+        => ActAsync(() => SupportCases.RemoveSecureAttachmentAsync(Case.TeamKey, Case.Id, file.Message.Sequence, file.Attachment.Id));
 
     /// <remarks>Asked first: the team chooses who reads the case from now on, and staff are reminded the team should close it.</remarks>
     private async Task CloseAsync()

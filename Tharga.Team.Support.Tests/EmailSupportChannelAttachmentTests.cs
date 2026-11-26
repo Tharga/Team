@@ -67,6 +67,20 @@ public class EmailSupportChannelAttachmentTests
         await mail.DidNotReceive().SendAsync(Arg.Any<OutboundMail>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>The service never hands a channel a secure file; the channel does not mail one it is handed anyway.</summary>
+    [Fact]
+    public async Task ASecureFile_IsNeverMailed_EvenWhenTheChannelIsHandedOne()
+    {
+        var (channel, mail, files) = Build();
+        var ordinary = await files.SaveAsync(CaseId, Upload("report.pdf", [1, 2, 3], "application/pdf"));
+        var secure = await files.SaveAsync(CaseId, Upload("salaries.xlsx", [4], "application/octet-stream"));
+
+        var result = await channel.PostWithResultAsync(Binding(), Answer(ordinary, secure with { Secure = true, UploadedBy = "sub-1" }));
+
+        Assert.True(result.Delivered);
+        await mail.Received(1).SendAsync(Arg.Is<OutboundMail>(x => x.Attachments.Count == 1 && x.Attachments[0].FileName == "report.pdf"), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AFileOfAnotherCase_IsNotSent()
     {

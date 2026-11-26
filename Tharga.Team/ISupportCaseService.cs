@@ -50,6 +50,32 @@ public interface ISupportCaseService
     Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Appends a reply as the formatted overload does, with files for the product's support staff only in <paramref name="secureAttachments"/>:
+    /// besides them, only the member replying may open those.
+    /// </summary>
+    /// <remarks>
+    /// Authorized as a plain reply. A secure file never leaves the application and is removed after a set time; see
+    /// <see cref="SupportAttachment.Secure"/>. Both lists count together against <see cref="GetAttachmentLimitsAsync"/>.
+    /// The default replies without the secure files when there are none and otherwise throws, so a host's own implementation keeps compiling.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">The implementation does not take secure files.</exception>
+    Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, IReadOnlyList<SupportAttachmentUpload> secureAttachments, CancellationToken cancellationToken = default)
+        => secureAttachments is not { Count: > 0 }
+            ? ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, cancellationToken)
+            : throw new NotSupportedException($"'{GetType().Name}' does not take secure files.");
+
+    /// <summary>
+    /// Removes a secure file's content before its time runs out, leaving the entry saying it was removed.
+    /// </summary>
+    /// <remarks>
+    /// For the product's support staff: <see cref="SystemSupportScopes.AllManage"/>, or <see cref="SystemSupportScopes.Manage"/> for a case
+    /// no team owns. A file already removed is not an error. The default throws, so a host's own implementation keeps compiling.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">The entry carries no secure file with this id.</exception>
+    Task RemoveSecureAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(RemoveSecureAttachmentAsync)}.");
+
+    /// <summary>
     /// Answers a case from the support side. The answer counts as support's whoever writes it, so it takes the
     /// case out of the waiting count and is unread for the person who raised it until they open it.
     /// </summary>
@@ -70,6 +96,7 @@ public interface ISupportCaseService
     Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, SupportAnswerChoice choice, CancellationToken cancellationToken = default);
 
     /// <summary>Opens a file carried by one entry of a case, authorized exactly as reading its transcript, or returns null when that entry carries no attachment with this id; the caller disposes it and serves it as <see cref="SupportAttachmentContentTypes.ServedAs"/> says.</summary>
+    /// <remarks>A <see cref="SupportAttachment.Secure"/> file opens only for the product's support staff and the member who uploaded it, and returns null once its content is removed.</remarks>
     Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default);
 
     /// <summary>Reads the mail an entry arrived as, exactly as it was received (a <c>message/rfc822</c> message), authorized exactly as reading its transcript; null when the entry has no original, as everything received before originals were kept.</summary>

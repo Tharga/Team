@@ -120,6 +120,13 @@
                             @if (message.FromMe)
                             {
                                 @message.Text
+                                @foreach (var file in message.Files ?? [])
+                                {
+                                    <span class="support-panel__file" data-panel-file="@file.Id">
+                                        <RadzenIcon Icon="@(file.Secure ? "lock" : "description")" />
+                                        <span>@FileLine(file)</span>
+                                    </span>
+                                }
                             }
                             else
                             {
@@ -245,6 +252,14 @@
                         <RadzenIcon Icon="send" />
                     </button>
                 </div>
+
+                @* Files only support's staff and the member may open, on the support tab alone: the assistant is never handed a file. *@
+                @if (_support)
+                {
+                    <div class="support-panel__files" data-secure-files>
+                        <SupportAttachmentPicker @bind-Files="_secureFiles" Secure="true" Disabled="_busy" />
+                    </div>
+                }
             }
             else
             {
@@ -314,11 +329,19 @@
     [Parameter] public RenderFragment<SupportAssistantReadiness> AssistantTop { get; set; }
 
     private sealed record PanelMessage(bool FromMe, string Text, int Sequence = 0, bool ByAssistant = false, SupportAnswerRating Rating = SupportAnswerRating.None, SupportAssistantCall[] Calls = null,
-        SupportAssistantUsage Usage = null);
+        SupportAssistantUsage Usage = null, SupportAttachment[] Files = null);
+
+    /// <summary>A file of the member's own message as one line: its name and size, or that it was removed.</summary>
+    private string FileLine(SupportAttachment file)
+        => file.Withheld
+            ? file.RemovedAt != null ? _files[SupportAttachmentText.WithheldRemoved] : _files.Format(SupportAttachmentText.Withheld, SupportAttachmentSize.Format(file.Size))
+            : file.RemovedAt != null ? _files.Format(SupportAttachmentText.Removed, file.FileName) : $"{file.FileName} ({SupportAttachmentSize.Format(file.Size)})";
 
     private static readonly SupportAnswerRating[] Ratings = [SupportAnswerRating.Up, SupportAnswerRating.Down];
 
     private TextSet _text = TextSet.Empty;
+    private TextSet _files = TextSet.Empty;
+    private IReadOnlyList<SupportAttachmentUpload> _secureFiles = [];
     private SupportDisplayOptions _display = new();
     private readonly List<PanelMessage> _messages = [];
     private List<SupportCase> _earlier = [];
@@ -457,6 +480,7 @@
         _width = DefaultWidth;
         _display = SupportDisplay.Of(Services);
         _text = await TextProvider.ResolveAsync(SupportPanelText.All);
+        _files = await TextProvider.ResolveAsync(SupportAttachmentText.All);
         _availability =Services.GetService(typeof(ISupportPanelAvailability)) as ISupportPanelAvailability;
         _allowances = Services.GetService(typeof(ISupportAssistantAllowanceService)) as ISupportAssistantAllowanceService;
 
@@ -747,7 +771,7 @@
         _messages.AddRange((page?.Items ?? [])
             .Where(x => x.Kind != SupportMessageKind.System)
             .Select(x => new PanelMessage(x.Kind == SupportMessageKind.User && !x.AsSupport && x.AuthorIdentity == supportCase.AuthorIdentity, x.Body,
-                x.Sequence, x.Kind == SupportMessageKind.Assistant, x.Rating, x.AssistantCalls, x.AssistantUsage)));
+                x.Sequence, x.Kind == SupportMessageKind.Assistant, x.Rating, x.AssistantCalls, x.AssistantUsage, x.Attachments)));
 
         _withAssistant = supportCase.AssistantState == SupportAssistantState.Active;
         _conversationRating = supportCase.ConversationRating?.Rating ?? SupportAnswerRating.None;
@@ -856,6 +880,9 @@
 
         _messages.Add(new PanelMessage(true, text));
         _draft = null;
+
+        // Only ever to support: the tab is what says who the message goes to.
+        var secure = _support ? SupportAttachmentPicker.Rewound(_secureFiles) : [];
         _fitComposer = true;
         _declined = false;
         _busy = true;
@@ -872,8 +899,12 @@
 
             if (_caseId == null)
             {
-                // No subject is asked for: the service takes one from the first words, so the conversation reads as a chat.
-                var raised = await SupportCases.RaiseCaseAsync(_teamKey, null, text, _support ? SupportAssistance.None : SupportAssistance.Assistant);
+                // No subject is asked for: the service takes one from the first words, so the conversation reads as a chat. The overload with
+                // options only with secure files, so a host's own service written before them still raises a case.
+                var assistance = _support ? SupportAssistance.None : SupportAssistance.Assistant;
+                var raised = secure.Count > 0
+                    ? await SupportCases.RaiseCaseAsync(_teamKey, null, text, new SupportRaiseOptions { Assistance = assistance, SecureAttachments = [.. secure] })
+                    : await SupportCases.RaiseCaseAsync(_teamKey, null, text, assistance);
                 _caseId = raised.Id;
                 _withAssistant = raised.AssistantState == SupportAssistantState.Active;
             }
@@ -886,8 +917,11 @@
                     _withAssistant = false;
                 }
 
-                await SupportCases.ReplyToCaseAsync(_teamKey, _caseId, text);
+                if (secure.Count > 0) await SupportCases.ReplyToCaseAsync(_teamKey, _caseId, text, null, [], secure);
+                else await SupportCases.ReplyToCaseAsync(_teamKey, _caseId, text);
             }
+
+            _secureFiles = [];
 
             // Separate from the write: a model can take tens of seconds, and asking for help must not wait on one.
             if (!_support && _withAssistant)

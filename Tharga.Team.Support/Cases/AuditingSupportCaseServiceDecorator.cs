@@ -72,13 +72,15 @@ internal sealed class AuditingSupportCaseServiceDecorator(
             Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
                 metadata: Meta((SupportAuditMetadataKeys.CaseId, raised.Id), (SupportAuditMetadataKeys.CaseSubject, raised.Subject), (AuditMetadataKeys.TeamName, raised.TeamName),
                     (SupportAuditMetadataKeys.WithAssistant, Flag(raised.AssistantState == SupportAssistantState.Active)),
-                    (SupportAuditMetadataKeys.MailAddress, bound?.Address), (SupportAuditMetadataKeys.Mailbox, bound?.Mailbox)));
+                    (SupportAuditMetadataKeys.MailAddress, bound?.Address), (SupportAuditMetadataKeys.Mailbox, bound?.Mailbox),
+                    (SupportAuditMetadataKeys.SecureAttachmentCount, SecureCountOf(options?.SecureAttachments))));
 
             return raised;
         }
         catch (Exception ex)
         {
-            Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message, Meta((SupportAuditMetadataKeys.CaseSubject, subject)));
+            Log("raise", nameof(RaiseCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseSubject, subject), (SupportAuditMetadataKeys.SecureAttachmentCount, SecureCountOf(options?.SecureAttachments))));
             throw;
         }
     }
@@ -212,6 +214,45 @@ internal sealed class AuditingSupportCaseServiceDecorator(
         }
     }
 
+    /// <remarks>Audited as a reply, with how many ordinary and how many secure files it carried, and never what they were called.</remarks>
+    public async Task ReplyToCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, IReadOnlyList<SupportAttachmentUpload> secureAttachments, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.ReplyToCaseAsync(teamKey, caseId, body, bodyHtml, attachments, secureAttachments, cancellationToken);
+
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.WithAssistant, await WithAssistantAsync(teamKey, caseId)),
+                    (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments)), (SupportAuditMetadataKeys.SecureAttachmentCount, CountOf(secureAttachments))));
+        }
+        catch (Exception ex)
+        {
+            Log("reply", nameof(ReplyToCaseAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentCount, CountOf(attachments)), (SupportAuditMetadataKeys.SecureAttachmentCount, CountOf(secureAttachments))));
+            throw;
+        }
+    }
+
+    /// <remarks>Audited, refusals included: support removing what a member handed them is a decision somebody may need to account for.</remarks>
+    public async Task RemoveSecureAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            await inner.RemoveSecureAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+
+            Log("remove-secure-file", nameof(RemoveSecureAttachmentAsync), sw.ElapsedMilliseconds, true, teamKey,
+                metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentId, attachmentId)));
+        }
+        catch (Exception ex)
+        {
+            Log("remove-secure-file", nameof(RemoveSecureAttachmentAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentId, attachmentId)));
+            throw;
+        }
+    }
+
     /// <remarks>Audited as an answer, exactly as one without formatting.</remarks>
     public async Task AnswerCaseAsync(string teamKey, string caseId, string body, string bodyHtml, IReadOnlyList<SupportAttachmentUpload> attachments, CancellationToken cancellationToken = default)
     {
@@ -265,9 +306,30 @@ internal sealed class AuditingSupportCaseServiceDecorator(
     public Task<MailPreview> PreviewAnswerAsync(string teamKey, string caseId, string body, string bodyHtml, SupportAnswerChoice choice, CancellationToken cancellationToken = default)
         => inner.PreviewAnswerAsync(teamKey, caseId, body, bodyHtml, choice, cancellationToken);
 
-    /// <remarks>A read, and not audited, like every other read of a case.</remarks>
-    public Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
-        => inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+    /// <remarks>
+    /// A read, and not audited like every other read of a case, with one exception: a secure file. Who opened what a member handed
+    /// support's staff only, and who was refused it, is worth a trail; an ordinary file's opening is not.
+    /// </remarks>
+    public async Task<SupportAttachmentContent> OpenAttachmentAsync(string teamKey, string caseId, int sequence, string attachmentId, CancellationToken cancellationToken = default)
+    {
+        var sw = Stopwatch.StartNew();
+        try
+        {
+            var opened = await inner.OpenAttachmentAsync(teamKey, caseId, sequence, attachmentId, cancellationToken);
+
+            if (opened?.Attachment?.Secure == true)
+                Log("open-secure-file", nameof(OpenAttachmentAsync), sw.ElapsedMilliseconds, true, teamKey,
+                    metadata: Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentId, attachmentId)));
+
+            return opened;
+        }
+        catch (SecureAttachmentRefusedException ex)
+        {
+            Log("open-secure-file", nameof(OpenAttachmentAsync), sw.ElapsedMilliseconds, false, teamKey, ex.Message,
+                Meta((SupportAuditMetadataKeys.CaseId, caseId), (SupportAuditMetadataKeys.AttachmentId, attachmentId)));
+            throw;
+        }
+    }
 
     /// <remarks>A read, and not audited, like every other read of a case.</remarks>
     public Task<byte[]> GetMessageOriginalAsync(string teamKey, string caseId, int sequence, CancellationToken cancellationToken = default)
@@ -600,6 +662,10 @@ internal sealed class AuditingSupportCaseServiceDecorator(
 
     private static string CountOf(IReadOnlyList<SupportAttachmentUpload> attachments)
         => (attachments?.Count(x => x != null) ?? 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>The count of secure files on a raise, left out when there are none, so a raise without them reads as it always did.</summary>
+    private static string SecureCountOf(IReadOnlyList<SupportAttachmentUpload> attachments)
+        => attachments?.Any(x => x != null) == true ? CountOf(attachments) : null;
 
     private static Dictionary<string, string> Meta(params (string Key, string Value)[] pairs)
     {

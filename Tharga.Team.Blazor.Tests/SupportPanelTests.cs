@@ -730,6 +730,64 @@ public class SupportPanelTests : BunitContext
         _cases.Verify(x => x.RunAssistantAsync(TeamKey, "case-1", It.IsAny<IProgress<SupportAssistantProgress>>(), default), Times.Once);
     }
 
+    /// <summary>The tab says who the message goes to, and the assistant is never handed a file.</summary>
+    [Fact]
+    public void FilesForSupportOnly_AreOfferedOnTheSupportTab_AndNeverToTheAssistant()
+    {
+        AcceptsSecureFiles();
+        var view = Render(open: true);
+
+        Assert.Empty(view.FindAll("[data-secure-files]"));
+
+        view.Find("[data-tab='support']").Click();
+
+        view.WaitForAssertion(() => Assert.NotNull(view.Find("[data-secure-files] [data-attachment-picker='secure']")));
+    }
+
+    [Fact]
+    public void AMessageToSupport_WithAFileForSupportOnly_RaisesTheCaseWithIt()
+    {
+        AcceptsSecureFiles();
+        var raised = Case("case-1", SupportAssistantState.None);
+        Raises(raised, messages: Message(1, Question, SupportMessageKind.User));
+        _cases.Setup(x => x.RaiseCaseAsync(TeamKey, null, Question, It.IsAny<SupportRaiseOptions>(), default)).ReturnsAsync(raised);
+        var view = Render(open: true);
+
+        view.Find("[data-tab='support']").Click();
+        view.WaitForAssertion(() => view.FindComponent<Microsoft.AspNetCore.Components.Forms.InputFile>());
+        view.FindComponent<Microsoft.AspNetCore.Components.Forms.InputFile>().UploadFiles(InputFileContent.CreateFromBinary([1, 2], "salaries.xlsx", contentType: "application/octet-stream"));
+        Send(view, Question);
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question,
+            It.Is<SupportRaiseOptions>(o => o.Assistance == SupportAssistance.None && o.SecureAttachments.Length == 1 && o.SecureAttachments[0].FileName == "salaries.xlsx"), default), Times.Once));
+        _cases.Verify(x => x.RaiseCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default), Times.Never);
+    }
+
+    [Fact]
+    public void AReplyToSupport_WithAFileForSupportOnly_CarriesIt_AndTheFileIsShownWithTheMessage()
+    {
+        AcceptsSecureFiles();
+        var raised = Case("case-1", SupportAssistantState.None);
+        var stored = new SupportAttachment { Id = "s1", FileName = "salaries.xlsx", ContentType = "application/octet-stream", Size = 2, Secure = true, UploadedBy = "alice" };
+        Raises(raised, messages: [Message(1, Question, SupportMessageKind.User), Message(2, "Here it is.", SupportMessageKind.User) with { Attachments = [stored] }]);
+        var view = Render(open: true);
+        view.Find("[data-tab='support']").Click();
+        Send(view, Question);
+        view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question, SupportAssistance.None, default), Times.Once));
+
+        view.FindComponent<Microsoft.AspNetCore.Components.Forms.InputFile>().UploadFiles(InputFileContent.CreateFromBinary([1, 2], "salaries.xlsx", contentType: "application/octet-stream"));
+        Send(view, "Here it is.");
+
+        view.WaitForAssertion(() => _cases.Verify(x => x.ReplyToCaseAsync(TeamKey, "case-1", "Here it is.", null,
+            It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 0),
+            It.Is<IReadOnlyList<SupportAttachmentUpload>>(f => f.Count == 1 && f[0].FileName == "salaries.xlsx"), default), Times.Once));
+        view.WaitForAssertion(() => Assert.Contains("salaries.xlsx", view.Find("[data-panel-file='s1']").TextContent));
+    }
+
+    private void AcceptsSecureFiles()
+        => _cases.Setup(x => x.GetAttachmentLimitsAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(SupportAttachmentLimits.Default with { AcceptsSecureFiles = true, SecureKeepFor = TimeSpan.FromDays(30) });
+
     [Fact]
     public void AMessageToSupport_RaisesACaseForAPerson()
     {

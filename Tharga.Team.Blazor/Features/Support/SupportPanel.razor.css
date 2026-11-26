@@ -383,3 +383,16 @@
 .support-panel__resize:hover {
     background-color: color-mix(in srgb, var(--rz-primary) 30%, transparent);
 }
+
+.support-panel__files {
+    flex: 0 0 auto;
+    padding: 0 0.75rem 0.5rem;
+}
+
+.support-panel__file {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+}

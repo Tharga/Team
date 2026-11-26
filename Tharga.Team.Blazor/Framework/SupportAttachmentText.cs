@@ -36,6 +36,37 @@ public static class SupportAttachmentText
     /// <summary>Shown when a chosen file could not be read from the browser; <c>{0}</c> is its name.</summary>
     public static readonly TextKey Unreadable = new("team.support.attachments.unreadable", "{0} could not be read.");
 
+    /// <summary>The button that chooses files only support's staff and the member may open.</summary>
+    public static readonly TextKey AttachSecure = new("team.support.attachments.attachSecure", "Attach files for support only");
+
+    /// <summary>Names the files chosen for support only.</summary>
+    public static readonly TextKey SecureChosen = new("team.support.attachments.secureChosen", "Files for support only");
+
+    /// <summary>Says who may open files for support only, when they are kept until support removes them.</summary>
+    public static readonly TextKey SecureNote = new("team.support.attachments.secureNote", "Only support staff and you can open these files. They are never sent by mail.");
+
+    /// <summary>Says who may open files for support only and when they go; <c>{0}</c> is how many days they are kept.</summary>
+    public static readonly TextKey SecureNoteKeepFor = new("team.support.attachments.secureNoteKeepFor", "Only support staff and you can open these files. They are never sent by mail, and are removed after {0} days.");
+
+    /// <summary>Marks a file in the transcript that only support's staff and its uploader may open.</summary>
+    public static readonly TextKey SecureFile = new("team.support.attachments.secureFile", "For support only");
+
+    /// <summary>Stands for a file this reader may not see; <c>{0}</c> is its size.</summary>
+    public static readonly TextKey Withheld = new("team.support.attachments.withheld", "A file for support only ({0})");
+
+    /// <summary>Stands for a file this reader may not see whose content is gone.</summary>
+    public static readonly TextKey WithheldRemoved = new("team.support.attachments.withheldRemoved", "A file for support only, removed");
+
+    /// <summary>Stands for a file whose content was removed; <c>{0}</c> is its name.</summary>
+    public static readonly TextKey Removed = new("team.support.attachments.removed", "{0}, removed");
+
+    /// <summary>The button with which support removes a secure file before its time; <c>{0}</c> is its name.</summary>
+    public static readonly TextKey RemoveSecure = new("team.support.attachments.removeSecure", "Remove {0} now");
+
     /// <summary>Every key here, for the component building its <see cref="TextSet"/>.</summary>
-    public static readonly TextKey[] All = [Attach, Remove, Chosen, Attached, Open, Save, NotAvailable, TooMany, TooLarge, TooLargeTogether, Unreadable];
+    public static readonly TextKey[] All =
+    [
+        Attach, Remove, Chosen, Attached, Open, Save, NotAvailable, TooMany, TooLarge, TooLargeTogether, Unreadable,
+        AttachSecure, SecureChosen, SecureNote, SecureNoteKeepFor, SecureFile, Withheld, WithheldRemoved, Removed, RemoveSecure
+    ];
 }
