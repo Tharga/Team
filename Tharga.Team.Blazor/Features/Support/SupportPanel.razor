@@ -903,7 +903,7 @@
                 // options only with secure files, so a host's own service written before them still raises a case.
                 var assistance = _support ? SupportAssistance.None : SupportAssistance.Assistant;
                 var raised = secure.Count > 0
-                    ? await SupportCases.RaiseCaseAsync(_teamKey, null, text, new SupportRaiseOptions { Assistance = assistance, SecureAttachments = secure })
+                    ? await SupportCases.RaiseCaseAsync(_teamKey, null, text, new SupportRaiseOptions { Assistance = assistance, SecureAttachments = [.. secure] })
                     : await SupportCases.RaiseCaseAsync(_teamKey, null, text, assistance);
                 _caseId = raised.Id;
                 _withAssistant = raised.AssistantState == SupportAssistantState.Active;

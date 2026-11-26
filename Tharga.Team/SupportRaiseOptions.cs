@@ -27,5 +27,5 @@ public sealed record SupportRaiseOptions
     /// They never leave the application and are removed after a set time; see <see cref="SupportAttachment.Secure"/>. Each stream is read
     /// once, and the caller disposes it after the call.
     /// </remarks>
-    public IReadOnlyList<SupportAttachmentUpload> SecureAttachments { get; init; }
+    public SupportAttachmentUpload[] SecureAttachments { get; init; }
 }

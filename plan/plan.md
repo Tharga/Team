@@ -78,11 +78,16 @@
       Done: a "Files for support only" section under Attachments; a bullet in the Support README; the picker's
       secure mode in the Blazor README.
 - [~] 10. Full test suite, push the branch for testing.
+      Full suite: 16,888 tests on net10.0 and net11.0. The run caught `SupportRaiseOptions.SecureAttachments` as
+      interface-typed (contracts use arrays); now `SupportAttachmentUpload[]`. After that everything passes except
+      two known timing flakes under parallel load, each passing alone and on rerun: the Anthropic unreachable-address
+      test (seen before this work) and `SupportAssistantLimitViewTests.ATeamLimitOfNone_IsKeptAsNone_WhenEdited` on
+      net11.0 (fails without the new test class too, passes in the next full run). Push waits for approval.
 
 ## Last session
 
-2026-11-26: branch created, issue assigned, NuGet updated, plan written. Next: confirm the decisions above,
-then step 1.
+2026-11-27: steps 1-9 done and committed; full suite run. Next: push the branch on approval, the user tests it,
+then remove `plan/` and open the PR.
 
 ## README changes needed at completion
 

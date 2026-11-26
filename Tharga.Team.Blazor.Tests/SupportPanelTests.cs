@@ -759,7 +759,7 @@ public class SupportPanelTests : BunitContext
         Send(view, Question);
 
         view.WaitForAssertion(() => _cases.Verify(x => x.RaiseCaseAsync(TeamKey, null, Question,
-            It.Is<SupportRaiseOptions>(o => o.Assistance == SupportAssistance.None && o.SecureAttachments.Count == 1 && o.SecureAttachments[0].FileName == "salaries.xlsx"), default), Times.Once));
+            It.Is<SupportRaiseOptions>(o => o.Assistance == SupportAssistance.None && o.SecureAttachments.Length == 1 && o.SecureAttachments[0].FileName == "salaries.xlsx"), default), Times.Once));
         _cases.Verify(x => x.RaiseCaseAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SupportAssistance>(), default), Times.Never);
     }
 
