@@ -18,7 +18,11 @@ internal sealed class RecordingModule : IJSObjectReference
         return ValueTask.FromResult<TValue>(default);
     }
 
-    public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object[] args) => InvokeAsync<TValue>(identifier, args);
+    public ValueTask<TValue> InvokeAsync<TValue>(string identifier, CancellationToken cancellationToken, object[] args)
+    {
+        Calls.Add(identifier);
+        return ValueTask.FromResult<TValue>(default);
+    }
 
     public ValueTask DisposeAsync()
     {
