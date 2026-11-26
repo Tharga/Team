@@ -1,20 +1,15 @@
-﻿@using Microsoft.Extensions.DependencyInjection
-@using Microsoft.Extensions.Options
-@using Microsoft.JSInterop
+﻿@using Microsoft.Extensions.Options
 @using Tharga.Team
 @using Tharga.Team.Blazor.Features.Activity
 @using Tharga.Team.Blazor.Features.User
 @using Tharga.Toolkit
 @implements IDisposable
-@implements IAsyncDisposable
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IOptions<ThargaBlazorOptions> ThargaBlazorOptions;
 @inject IThargaTextProvider TextProvider
 @inject IUserService UserService
 @inject AvatarChangeNotifier AvatarChangeNotifier
-@inject IJSRuntime JsRuntime
-@inject IServiceProvider Services
 
 <CascadingAuthenticationState>
     <AuthorizeView>
@@ -43,6 +38,8 @@
             <RadzenButton Text="@_loginText" Icon="login" Click="Login" />
         </NotAuthorized>
     </AuthorizeView>
+    @* Outside the AuthorizeView, so it is there in either state: it renders nothing while sessions are not active (Tharga/Team#471). *@
+    <SessionWatch />
 </CascadingAuthenticationState>
 <div>&nbsp;</div>
 
@@ -58,12 +55,6 @@
     private string _loginText = TeamMenuText.Login.Default;
     private string _profilePath = TeamMenuNavigation.DefaultProfilePath;
     private string _teamPath = TeamMenuNavigation.DefaultTeamPath;
-    private bool _signedIn;
-
-    // The page's half of the server-side session's idle time (Tharga/Team#471).
-    private const string SessionActivityModulePath = "./_content/Tharga.Team.Blazor/session-activity.js";
-    private readonly string _activityId = Guid.NewGuid().ToString("N");
-    private IJSObjectReference _activityModule;
 
     [Parameter]
     public bool? ShowTeam { get; set; }
@@ -88,7 +79,6 @@
         if (authState.User.Identity?.IsAuthenticated ?? false)
 #pragma warning restore BL0013
         {
-            _signedIn = true;
             _email = authState.User.GetEmail();
             _user = await UserService.GetCurrentUserAsync();
             AvatarChangeNotifier.Changed += OnAvatarChanged;
@@ -115,26 +105,6 @@
     }
 
     private readonly List<(string Text, string Icon, string Href)> _menuItems = [];
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (!firstRender || !_signedIn) return;
-
-        // Only for sessions that are active: the reporter is a call a minute that does nothing for a host with no policy. Resolved optionally, because
-        // this menu renders on hosts that registered no team service, where there is no session check at all.
-        if (Services.GetService<SessionEvaluator>()?.Active != true) return;
-
-        try
-        {
-            _activityModule = await JsRuntime.InvokeAsync<IJSObjectReference>("import", SessionActivityModulePath);
-            var interval = (int)ThargaBlazorOptions.Value.Sessions.ActivityInterval.TotalMilliseconds;
-            await _activityModule.InvokeVoidAsync("watchActivity", _activityId, interval, NavigationManager.ToAbsoluteUri(SessionActivityEndpoint.Route.TrimStart('/')).ToString());
-        }
-        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
-        {
-            // Without it only requests count as activity; the session check still holds.
-        }
-    }
 
     private async Task ClickAction(RadzenProfileMenuItem args)
     {
@@ -172,21 +142,6 @@
     }
 
     public void Dispose() => AvatarChangeNotifier.Changed -= OnAvatarChanged;
-
-    public async ValueTask DisposeAsync()
-    {
-        Dispose();
-        if (_activityModule == null) return;
-
-        try
-        {
-            await _activityModule.InvokeVoidAsync("stopWatching", _activityId);
-            await _activityModule.DisposeAsync();
-        }
-        catch (Exception exception) when (exception is JSException or JSDisconnectedException)
-        {
-        }
-    }
 
     private Task Login()
     {

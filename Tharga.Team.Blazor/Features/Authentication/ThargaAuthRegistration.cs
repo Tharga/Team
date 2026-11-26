@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Identity.Web;
 
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
@@ -134,6 +135,8 @@ public static class ThargaAuthRegistration
 
         app.MapGet(options.LogoutPath, async (HttpContext context) =>
         {
+            var landing = LogoutLanding(context);
+
             // First, while the cookie still says whose session it is.
             await EndSessionAsync(context);
 
@@ -141,7 +144,7 @@ public static class ThargaAuthRegistration
             {
                 await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme);
                 await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-                context.Response.Redirect(HomePath);
+                context.Response.Redirect(landing);
                 return;
             }
 
@@ -153,8 +156,28 @@ public static class ThargaAuthRegistration
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             await context.SignOutAsync(
                 OpenIdConnectDefaults.AuthenticationScheme,
-                new AuthenticationProperties { RedirectUri = HomePath });
+                new AuthenticationProperties { RedirectUri = landing });
         });
+    }
+
+    /// <summary>
+    /// Where the browser lands after signing out: the start page, or, for <c>?reason=signedout</c> while sessions are on, <see cref="Framework.SessionOptions.EndedPath"/>
+    /// with that reason (Tharga/Team#471), so a person who signed out of the "Still here?" dialog, or a tab that follows, is told so.
+    /// </summary>
+    /// <remarks>
+    /// <b>Only that one literal is read</b>, once and exactly; any other value, a repeated parameter or anything that looks like an address leaves the landing
+    /// at the start page. The ended path itself is the host's, and only used when it is a path on this site, so this is no open redirect.
+    /// </remarks>
+    internal static string LogoutLanding(HttpContext context)
+    {
+        var reason = context.Request.Query[SessionCookieEvents.ReasonParameterName];
+        if (reason.Count != 1 || !string.Equals(reason[0], SessionCookieEvents.Code(SessionEndReason.SignedOut), StringComparison.Ordinal)) return HomePath;
+
+        var services = context.RequestServices;
+        if (services?.GetService<SessionEvaluator>()?.Active != true) return HomePath;
+
+        var endedPath = services.GetService<IOptions<ThargaBlazorOptions>>()?.Value.Sessions?.EndedPath;
+        return SessionCookieEvents.EndedLocation(endedPath, HomePath, SessionEndReason.SignedOut);
     }
 
     /// <summary>Where sign-in returns to: <paramref name="returnUrl"/> when it is a path on this site, otherwise the start page.</summary>

@@ -44,8 +44,12 @@ Not included: ending another person's sessions, a heads-up before max age, an au
   `AuthenticationStateChanged`; a view arriving inside the warning window causes one check; the last view leaving clears a warning; a failure or a
   missing session re-arms after `ActivityInterval`. The circuit is registered through a factory that resolves the auth providers optionally, so it
   resolves (inactive) where a host has no circuit; the handler via `TryAddEnumerable`.
-- [~] 7. `/logout?reason=signedout`; `LoginDisplay` renders `<SessionWatch />`; `SessionWatch.razor`; `session-activity.js`.
-- [ ] 8. Docs (implementation guide "Session limits", entry guard, READMEs), sample (ActivityInterval 20 s).
+- [x] 7. `/logout?reason=signedout`; `LoginDisplay` renders `<SessionWatch />`; `SessionWatch.razor`; `session-activity.js`. The landing is read once
+  (`LogoutLanding`), for both the federated and the local sign-out. The dialog is plain markup with Radzen typography classes and scoped CSS in the
+  theme's variables; the countdown template is split at `{0}` so the JS writes only the time. The module keeps per-id state, one lazily opened
+  `BroadcastChannel`, posts `activity` after a successful report and on "Yes", `ended` when the tab leaves; a receiving tab forwards `activity` only while
+  it is asking, `ended` always. Focus moves to "Yes" when the question opens.
+- [~] 8. Docs (implementation guide "Session limits", entry guard, READMEs), sample (ActivityInterval 20 s).
 - [ ] 9. PR "Sessions: live sign-out across instances and a 'Still here?' warning (#471)", closes #471; remove `plan/` before the PR.
 
 ## Decisions (made while writing the tests; the code must follow them)
