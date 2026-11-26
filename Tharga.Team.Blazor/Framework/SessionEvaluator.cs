@@ -89,13 +89,43 @@ internal sealed class SessionEvaluator(
     /// returns the session and limits so deadlines can be worked out. It never adopts, never records activity and never enters a team.
     /// </summary>
     /// <remarks>A failing store or policy propagates, unlike <see cref="EvaluateCircuitAsync"/>: the circuit must tell a failure from a refusal, and never ends for a failure.</remarks>
-    public Task<SessionCheck> InspectCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public async Task<SessionCheck> InspectCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
+    {
+        if (!Active || UserSessionService.SessionIdOf(principal) == null) return ValidCheck;
+
+        var session = await Sessions.GetAsync(principal, cancellationToken);
+        if (session == null) return RejectedCheck;
+        if (session.EndedAt != null) return EndedCheck(session.EndReason) with { Session = session };
+
+        var limits = await LimitsAsync(session, TeamOf(activeTeamKey), cancellationToken);
+        if (UserSessionService.Exceeded(session, limits, Now) is { } reason) return await EndAsync(principal, session, reason, cancellationToken) with { Session = session };
+
+        return new SessionCheck(SessionCheckOutcome.Valid, Session: session, Limits: limits);
+    }
 
     /// <summary>The person answered "Still here?": records activity now, whatever was recorded a moment ago, and forgets the remembered session. False when the session is not there or has ended.</summary>
-    public Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public async Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
+    {
+        var sessionId = UserSessionService.SessionIdOf(principal);
+        if (!Active || sessionId == null) return false;
+
+        var recorded = await Sessions.RecordActivityAsync(principal, TeamOf(activeTeamKey), TimeSpan.Zero, cancellationToken);
+        cache.ForgetSession(sessionId);
+
+        return recorded;
+    }
 
     /// <summary>The person chose to sign out from a live circuit: ends the session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when this call ended it.</summary>
-    public Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+    public async Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    {
+        var sessionId = UserSessionService.SessionIdOf(principal);
+        if (!Active || sessionId == null) return false;
+
+        var ended = await Sessions.SignOutAsync(principal, cancellationToken);
+        cache.ForgetSession(sessionId);
+
+        return ended;
+    }
 
     /// <summary>Records that the caller used a visible page, for the activity endpoint; the store throttles it to once per <see cref="SessionOptions.ActivityInterval"/>.</summary>
     public async Task<bool> RecordActivityAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)

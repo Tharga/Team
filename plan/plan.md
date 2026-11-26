@@ -36,9 +36,15 @@ Not included: ending another person's sessions, a heads-up before max age, an au
   sessions, or their answers for the team / every team), then invoke each handler in isolation and log a throwing one, as `SupportCaseNotifier` does.
   `InvalidateAsync` is `Notify(FromRemote = false)`. `IUserSessionNotifier` registered as the `SessionCache` itself (TryAdd, so a host's own wins).
   `ITeamEntryGuardState` remarks now point at the notifier and the relay.
-- [~] 5. `SessionEvaluator`: `SessionCheck.Session/Limits`, `InspectCircuitAsync`, `ConfirmPresenceAsync`, `SignOutAsync`.
-- [ ] 6. `SessionDeadlines`, `SessionCircuit`, `SessionCircuitHandler`, registration.
-- [ ] 7. `/logout?reason=signedout`; `LoginDisplay` renders `<SessionWatch />`; `SessionWatch.razor`; `session-activity.js`.
+- [x] 5. `SessionEvaluator`: `SessionCheck.Session/Limits`, `InspectCircuitAsync`, `ConfirmPresenceAsync`, `SignOutAsync`. Inspect reads the store
+  directly (neither reads nor fills the remembered session), ends an over-limit session through the domain service (audited once), and lets a failure
+  propagate; Confirm records with a zero interval and forgets the remembered session.
+- [x] 6. `SessionDeadlines`, `SessionCircuit`, `SessionCircuitHandler`, registration. The enum and interface moved to their own files. One `ITimer` per
+  circuit (created disarmed at start, disposed at the end); checks are single-flight with at most one follow-up; the principal is tracked through
+  `AuthenticationStateChanged`; a view arriving inside the warning window causes one check; the last view leaving clears a warning; a failure or a
+  missing session re-arms after `ActivityInterval`. The circuit is registered through a factory that resolves the auth providers optionally, so it
+  resolves (inactive) where a host has no circuit; the handler via `TryAddEnumerable`.
+- [~] 7. `/logout?reason=signedout`; `LoginDisplay` renders `<SessionWatch />`; `SessionWatch.razor`; `session-activity.js`.
 - [ ] 8. Docs (implementation guide "Session limits", entry guard, READMEs), sample (ActivityInterval 20 s).
 - [ ] 9. PR "Sessions: live sign-out across instances and a 'Still here?' warning (#471)", closes #471; remove `plan/` before the PR.
 

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -412,6 +413,10 @@ public static class ThargaBlazorRegistration
     /// configured, in whichever order they were registered. A host's <c>EventsType</c> would silently replace it, which <see cref="SessionWiringCheck"/>
     /// refuses at startup.
     /// </para>
+    /// <para>
+    /// <b>The notifier is the session cache itself</b>, so an end announced anywhere, or relayed by the host, reaches the cache that must forget it. A host's
+    /// own <see cref="IUserSessionNotifier"/>, registered first, is kept.
+    /// </para>
     /// </remarks>
     private static void RegisterSessions(IServiceCollection services, SessionOptions sessions)
     {
@@ -433,6 +438,19 @@ public static class ThargaBlazorRegistration
                 usable ? sp.GetRequiredService<UserSessionService>() : null,
                 sp.GetService<ILogger<SessionEvaluator>>());
         });
+
+        // The live watch (part 2): one per circuit, started by the circuit handler so it runs without any component, and resolvable where a host has no
+        // circuit at all, in which case it watches nothing.
+        services.TryAddScoped(sp => new SessionCircuit(
+            sp.GetRequiredService<SessionEvaluator>(),
+            sp.GetService<AuthenticationStateProvider>(),
+            sp.GetService<IHostEnvironmentAuthenticationStateProvider>(),
+            sp.GetRequiredService<IUserSessionNotifier>(),
+            sp.GetRequiredService<IOptions<ThargaBlazorOptions>>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetService<ILogger<SessionCircuit>>()));
+        services.TryAddScoped<ISessionCircuit>(sp => sp.GetRequiredService<SessionCircuit>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<CircuitHandler, SessionCircuitHandler>());
 
         services.PostConfigure<CookieAuthenticationOptions>(sessions?.CookieScheme ?? CookieAuthenticationDefaults.AuthenticationScheme, cookie =>
         {
