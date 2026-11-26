@@ -280,6 +280,12 @@ wins). Every sign-in then becomes a server-side session, checked on each request
 audited once, and the browser is told why. Idle time counts what the person does inside a circuit too. With no policy
 registered, nothing changes; cookies from before the upgrade are adopted, never signed out.
 
+An open page learns **within seconds** that its session ended, and goes to the ended page: each circuit watches its own
+session with one timer and the store as the only truth, and is told at once of an end on its instance. Before an idle
+sign-out the person is asked **"Are you still there?"** (`o.Blazor.Sessions.IdleWarning`, 1 minute by default), in every
+tab of the browser at once; somebody working is never asked. With several instances, relay `IUserSessionNotifier` and
+`ITeamEntryNotifier` over your backplane so an end anywhere reaches every instance.
+
 ```csharp
 builder.Services.AddScoped<ISessionPolicy, MySessionPolicy>();
 ```

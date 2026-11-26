@@ -49,8 +49,12 @@ Not included: ending another person's sessions, a heads-up before max age, an au
   theme's variables; the countdown template is split at `{0}` so the JS writes only the time. The module keeps per-id state, one lazily opened
   `BroadcastChannel`, posts `activity` after a successful report and on "Yes", `ended` when the tab leaves; a receiving tab forwards `activity` only while
   it is asking, `ended` always. Focus moves to "Yes" when the question opens.
-- [~] 8. Docs (implementation guide "Session limits", entry guard, READMEs), sample (ActivityInterval 20 s).
-- [ ] 9. PR "Sessions: live sign-out across instances and a 'Still here?' warning (#471)", closes #471; remove `plan/` before the PR.
+- [x] 8. Docs (implementation guide "Session limits", entry guard, READMEs), sample (ActivityInterval 20 s). Guide: live circuit check in the bullets,
+  `SessionWatch` for hosts without `LoginDisplay`, `/logout?reason=signedout`, the `IdleWarning` row, the cost line, and three subsections (Live sign-out,
+  "Still here?", Several instances with the relay snippet and what holds without one); entry guard "relay `ITeamEntryNotifier`". Both READMEs. Sample:
+  `ActivityInterval` 20 s with its reason, `SampleSessionPolicy` remark. Also: the circuit reads through a scope of its own (`SessionCircuitScope`), as
+  the claim revalidation does, so its timer thread never shares the circuit's scoped services with a render.
+- [~] 9. PR "Sessions: live sign-out across instances and a 'Still here?' warning (#471)", closes #471; remove `plan/` before the PR.
 
 ## Decisions (made while writing the tests; the code must follow them)
 
@@ -66,6 +70,16 @@ Not included: ending another person's sessions, a heads-up before max age, an au
 - `SessionWatch` loads the module and attaches only when `ISessionCircuit.Active`.
 
 ## Last session
+
+2026-11-26 (implementation): steps 3b-8 done in five commits; the whole solution is green on net10.0 and net11.0 (8542 tests each, 17084 in all, none
+failing). Next: step 9, the PR (remove `plan/` first). Open for the maintainer:
+- `IdleWarning` defaults to 1 minute, so hosts with an idle timeout of at least `2 x ActivityInterval + 1 minute` (3 minutes with the defaults) see the
+  dialog after upgrading. Shipped as a patch (4.8) on the reading that it is additive; the alternative is 4.9.
+- The dialog's "Sign out" ends the library session and lands on `EndedPath?reason=signedout` (as the tests fix), without visiting the identity provider.
+  `/logout?reason=signedout` is the way to also sign out there; the guide says to link the ended page to it. Whether the dialog should go through
+  `/logout?reason=signedout` instead is a design choice to confirm.
+
+Earlier:
 
 2026-11-26: plan written; tests and stubs committed (step 2). Next: step 3, the implementation, to turn the 129 red tests green. Stubs still to replace: `SessionCache.Notify`, `TeamEntryCache.Notify`, `SessionOptions.EffectiveIdleWarning` (and default `IdleWarning` = 1 minute), `SessionDeadlines`, `SessionEvaluator.InspectCircuitAsync/ConfirmPresenceAsync/SignOutAsync`, `UserSessionService.SignOutAsync` and the notifications, `SessionCircuit`, `SessionCircuitHandler`, the DI registration of the circuit/handler/`IUserSessionNotifier`, `/logout?reason=signedout`, `LoginDisplay`, `SessionWatch.razor`, `session-activity.js`. `ITeamEntryNotifier` is already registered and `TeamRevalidatingAuthenticationStateProvider` already takes it.
 

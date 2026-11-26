@@ -75,9 +75,11 @@ builder.AddThargaTeam(o =>
     // 30 minutes; set o.Blazor.ClaimRevalidation.Enabled = false to turn revalidation off entirely.
     o.Blazor.ClaimRevalidation.Interval = TimeSpan.FromSeconds(20);
 
-    // Where a browser whose session ended is sent, with ?reason=; see SampleSessionPolicy. The same 20-second interval is how soon an idle tab's
-    // circuit notices.
+    // Where a browser whose session ended is sent, with ?reason=; see SampleSessionPolicy. An open tab goes there by itself within seconds of the end.
     o.Blazor.Sessions.EndedPath = "/session-ended";
+    // Demo: activity is written at most every 20 seconds rather than every minute. The "Still here?" warning is never longer than the idle timeout less
+    // twice this interval, so with the Strict team's two minutes the default minute would leave no room for it; 20 seconds gives the full minute.
+    o.Blazor.Sessions.ActivityInterval = TimeSpan.FromSeconds(20);
 
     // Cross-team visibility: grant the consent roles the teams:read system scope, so a Developer sees
     // every team (not just their own) with a badge showing what each has consented to. Discovery only —
