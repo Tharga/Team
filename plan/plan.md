@@ -1,0 +1,53 @@
+# Plan: Support staff-only files (#573)
+
+## Decisions (confirmed 2026-11-26)
+
+- **Separate list, not a per-file flag.** `ReplyToCaseAsync(..., attachments, secureAttachments, ct)` and
+  `SupportRaiseOptions.SecureAttachments`. Only a member's reply and raise take them, so support's answers,
+  mail-started cases and inbound mail cannot produce one by accident.
+- **Who sees a secure file in full:** cross-team support readers and the uploader. The team's own
+  `support:read` / `support:manage` holders are the member's colleagues, so they get it withheld.
+- **Withheld keeps `Id` and `Size`**, blanks `FileName` and `ContentType`, as the issue says.
+- **Stripped in one place on the way out**: the domain removes secure files from what it hands to channels,
+  the responder and feedback sinks, so a host's own channel or responder is covered too.
+- **Fail closed on the store**: after writing, the entry is read back; if the store dropped the secure flag,
+  the files are deleted and the write is refused.
+- **Removing early takes `support:all:manage`**, the cross-team write grant.
+- **Sweep**: deletes content first (idempotent), then marks `RemovedAt` conditionally, so racing instances
+  remove once and a crash in between never leaves content behind a "removed" mark. Logged, not audited;
+  staff removal is audited.
+- **Store port defaults**: the expiry query defaults to nothing; marking removed throws rather than
+  reporting success it did not have.
+
+## Steps
+
+- [x] 0. NuGet update — AngleSharp 1.11.0, Anthropic 13.14.0; everything else held by documented rules
+      (net10.0 stays on 10.x Microsoft packages, Swashbuckle/Serilog/Roslyn/MailKit holds). 16,732 tests
+      pass (one Anthropic test flaked once under load, passes on rerun). Commit `b0bbdb6b`.
+- [~] 1. Contracts: `SupportAttachment` fields, `SupportRaiseOptions.SecureAttachments`,
+      `ISupportCaseService` reply overload and `RemoveSecureAttachmentAsync` (defaults throw),
+      `ISupportCaseStore` expiry query and conditional mark, `SupportAttachmentLocation`,
+      `SupportCaseOptions.SecureFiles`. Serialization tests.
+- [ ] 2. Domain (`SupportCaseService`): store secure uploads on reply and raise with `Secure` and
+      `UploadedBy`, read-back guard, `RemoveSecureAttachmentAsync`, strip outward. Tests.
+- [ ] 3. Authorization decorator: withhold in `GetMessagesAsync`, refuse `OpenAttachmentAsync`,
+      authorize the new overload and removal. Tests.
+- [ ] 4. Auditing decorator: new overload (with secure count), removal, secure open, refused open. Tests.
+- [ ] 5. Mail channel skips secure files itself. Test.
+- [ ] 6. Sweep, hosted service, options and registration. Tests, including two sweeps racing.
+- [ ] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
+      in-memory test store. Tests.
+- [ ] 8. Blazor: picker secure mode; transcript secure / withheld / removed and a staff remove button;
+      conversation member picker; panel support-tab attach. Texts. Render tests.
+- [ ] 9. Docs: `docs/articles/support-cases.md` (Attachments), `Tharga.Team.Support/README.md`,
+      `Tharga.Team.Blazor/README.md`.
+- [ ] 10. Full test suite, push the branch for testing.
+
+## Last session
+
+2026-11-26: branch created, issue assigned, NuGet updated, plan written. Next: confirm the decisions above,
+then step 1.
+
+## README changes needed at completion
+
+Support README and Blazor README: secure files, `SecureFiles.KeepFor`, the picker's secure mode.
