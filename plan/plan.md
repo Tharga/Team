@@ -66,9 +66,14 @@
       `KeepsSecureAttachments => true`. Due query is a raw `$elemMatch` on entry age and an unremoved secure file;
       the mark is a positional `$set` conditional on `_id` and `RemovedAt: null` at that position. New sparse index
       `Messages_Attachments_Secure`, holding only cases with a secure file. 11 tests.
-- [~] 8. Blazor: picker secure mode; transcript secure / withheld / removed and a staff remove button;
+- [x] 8. Blazor: picker secure mode; transcript secure / withheld / removed and a staff remove button;
       conversation member picker; panel support-tab attach. Texts. Render tests.
-- [ ] 9. Docs: `docs/articles/support-cases.md` (Attachments), `Tharga.Team.Support/README.md`,
+      Done. Picker `Secure` (hidden unless the limits accept secure files; note says who may open them and after how
+      many days they go) and `AlongWith` (counts the other picker's files against the shared limits). Transcript
+      `RemoveSecure` callback, passed by the staff conversation. Members and the panel's support tab call the
+      secure overloads only when there are secure files, so a host's own service keeps working. The panel shows the
+      member's own files under their message. 9 texts. 15 render tests.
+- [~] 9. Docs: `docs/articles/support-cases.md` (Attachments), `Tharga.Team.Support/README.md`,
       `Tharga.Team.Blazor/README.md`.
 - [ ] 10. Full test suite, push the branch for testing.
 

@@ -96,15 +96,47 @@
                     <div role="list" aria-label="@_files[SupportAttachmentText.Attached]" style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.25rem;" data-attachments="@message.Sequence">
                         @foreach (var attachment in listed)
                         {
+                            @* A file this reader may not see says only that it is there; one whose content is gone says so and opens nothing. *@
+                            if (attachment.Withheld)
+                            {
+                                <span role="listitem" style="display: inline-flex; align-items: center; gap: 0.25rem;" data-attachment-withheld="@attachment.Id">
+                                    <RadzenIcon Icon="lock" Style="font-size: 1rem;" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">
+                                        @(attachment.RemovedAt != null ? _files[SupportAttachmentText.WithheldRemoved] : _files.Format(SupportAttachmentText.Withheld, SupportAttachmentSize.Format(attachment.Size)))
+                                    </RadzenText>
+                                </span>
+                                continue;
+                            }
+
+                            if (attachment.RemovedAt != null)
+                            {
+                                <span role="listitem" style="display: inline-flex; align-items: center; gap: 0.25rem;" data-attachment-removed="@attachment.Id">
+                                    <RadzenIcon Icon="@(attachment.Secure ? "lock" : "description")" Style="font-size: 1rem;" />
+                                    <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);">@_files.Format(SupportAttachmentText.Removed, attachment.FileName)</RadzenText>
+                                </span>
+                                continue;
+                            }
+
                             var opens = SupportAttachmentContentTypes.OpensInBrowser(attachment.ContentType);
                             var label = _files.Format(opens ? SupportAttachmentText.Open : SupportAttachmentText.Save, attachment.FileName);
-                            <span role="listitem">
+                            <span role="listitem" style="display: inline-flex; align-items: center; gap: 0.125rem;">
+                                @if (attachment.Secure)
+                                {
+                                    <RadzenIcon Icon="lock" Style="font-size: 1rem;" title="@_files[SupportAttachmentText.SecureFile]" aria-label="@_files[SupportAttachmentText.SecureFile]" data-secure="@attachment.Id" />
+                                }
                                 <RadzenButton Icon="@(opens ? "open_in_new" : "download")" Size="ButtonSize.ExtraSmall" Variant="Variant.Text"
                                               Text="@($"{attachment.FileName} ({SupportAttachmentSize.Format(attachment.Size)})")"
                                               Disabled="@(CaseId == null || _opening.Contains(attachment.Id))"
                                               Click="@(() => OpenAttachmentAsync(message, attachment))"
                                               title="@label" aria-label="@label"
                                               data-attachment="@attachment.Id" data-opens="@(opens ? "browser" : "save")" />
+                                @if (attachment.Secure && RemoveSecure.HasDelegate)
+                                {
+                                    var removeLabel = _files.Format(SupportAttachmentText.RemoveSecure, attachment.FileName);
+                                    <RadzenButton Icon="delete" Size="ButtonSize.ExtraSmall" Variant="Variant.Text" ButtonStyle="ButtonStyle.Danger"
+                                                  Disabled="@_removing.Contains(attachment.Id)" Click="@(() => RemoveSecureAsync(message, attachment))"
+                                                  title="@removeLabel" aria-label="@removeLabel" data-remove-secure="@attachment.Id" />
+                                }
                             </span>
                         }
                     </div>
@@ -321,6 +353,28 @@
 
     /// <summary>The case the entries belong to; without it files are listed but cannot be opened.</summary>
     [Parameter] public string CaseId { get; set; }
+
+    /// <summary>
+    /// Removes a secure file's content before its time runs out. Offered only when set, so pass it only for the product's support staff,
+    /// the ones the service lets remove one.
+    /// </summary>
+    [Parameter] public EventCallback<(SupportMessage Message, SupportAttachment Attachment)> RemoveSecure { get; set; }
+
+    private readonly HashSet<string> _removing = [];
+
+    private async Task RemoveSecureAsync(SupportMessage message, SupportAttachment attachment)
+    {
+        if (!_removing.Add(attachment.Id)) return;
+
+        try
+        {
+            await RemoveSecure.InvokeAsync((message, attachment));
+        }
+        finally
+        {
+            _removing.Remove(attachment.Id);
+        }
+    }
 
     /// <summary>
     /// Rates one of the assistant's answers, with the rating chosen: the same one again takes it back as

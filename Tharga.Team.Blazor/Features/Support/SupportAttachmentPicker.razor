@@ -4,41 +4,50 @@
 @inject IServiceProvider Services
 
 @* Files to send with an answer or a message: chosen in the browser, read in at once so a later choice cannot lose
-   them, and held to the limits given, or else to the support service's. *@
+   them, and held to the limits given, or else to the support service's. In secure mode they are files for support's staff only, and the
+   picker shows nothing where the service does not take them. *@
 
-<RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-attachment-picker>
-    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
-        <label class="rz-button rz-button-sm rz-variant-flat rz-light rz-shade-default"
-               style="display: inline-flex; align-items: center; gap: 0.25rem; cursor: @(Unavailable ? "default" : "pointer"); position: relative; @(Unavailable ? "opacity: 0.6;" : "")">
-            <RadzenIcon Icon="attach_file" />
-            <span>@_text[SupportAttachmentText.Attach]</span>
-            <InputFile @key="_inputKey" OnChange="ChooseAsync" multiple disabled="@Unavailable" aria-label="@_text[SupportAttachmentText.Attach]"
-                       style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: inherit;" />
-        </label>
+@if (!Secure || _limits.AcceptsSecureFiles)
+{
+    <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem" data-attachment-picker="@(Secure ? "secure" : "ordinary")">
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" AlignItems="AlignItems.Center" Wrap="FlexWrap.Wrap">
+            <label class="rz-button rz-button-sm rz-variant-flat rz-light rz-shade-default"
+                   style="display: inline-flex; align-items: center; gap: 0.25rem; cursor: @(Unavailable ? "default" : "pointer"); position: relative; @(Unavailable ? "opacity: 0.6;" : "")">
+                <RadzenIcon Icon="@(Secure ? "lock" : "attach_file")" />
+                <span>@_text[AttachText]</span>
+                <InputFile @key="_inputKey" OnChange="ChooseAsync" multiple disabled="@Unavailable" aria-label="@_text[AttachText]"
+                           style="position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: inherit;" />
+            </label>
 
-        @if (Files is { Count: > 0 })
+            @if (Files is { Count: > 0 })
+            {
+                <div role="list" aria-label="@_text[Secure ? SupportAttachmentText.SecureChosen : SupportAttachmentText.Chosen]" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
+                    @foreach (var file in Files)
+                    {
+                        <span role="listitem" style="display: inline-flex; align-items: center; gap: 0.25rem;" data-chosen="@file.FileName">
+                            <RadzenIcon Icon="@(Secure ? "lock" : "description")" Style="font-size: 1rem;" />
+                            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@file.FileName (@SupportAttachmentSize.Format(file.Content.Length))</RadzenText>
+                            <RadzenButton Icon="close" Size="ButtonSize.ExtraSmall" Variant="Variant.Text" ButtonStyle="ButtonStyle.Light"
+                                          Disabled="@Unavailable" Click="@(() => RemoveAsync(file))"
+                                          title="@_text.Format(SupportAttachmentText.Remove, file.FileName)"
+                                          aria-label="@_text.Format(SupportAttachmentText.Remove, file.FileName)" data-remove="@file.FileName" />
+                        </span>
+                    }
+                </div>
+            }
+        </RadzenStack>
+
+        @if (Secure)
         {
-            <div role="list" aria-label="@_text[SupportAttachmentText.Chosen]" style="display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center;">
-                @foreach (var file in Files)
-                {
-                    <span role="listitem" style="display: inline-flex; align-items: center; gap: 0.25rem;" data-chosen="@file.FileName">
-                        <RadzenIcon Icon="description" Style="font-size: 1rem;" />
-                        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0">@file.FileName (@SupportAttachmentSize.Format(file.Content.Length))</RadzenText>
-                        <RadzenButton Icon="close" Size="ButtonSize.ExtraSmall" Variant="Variant.Text" ButtonStyle="ButtonStyle.Light"
-                                      Disabled="@Unavailable" Click="@(() => RemoveAsync(file))"
-                                      title="@_text.Format(SupportAttachmentText.Remove, file.FileName)"
-                                      aria-label="@_text.Format(SupportAttachmentText.Remove, file.FileName)" data-remove="@file.FileName" />
-                    </span>
-                }
-            </div>
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-text-secondary-color);" data-secure-note>@SecureNoteText</RadzenText>
+        }
+
+        @foreach (var problem in _problems)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-danger);" data-attachment-problem>@problem</RadzenText>
         }
     </RadzenStack>
-
-    @foreach (var problem in _problems)
-    {
-        <RadzenText TextStyle="TextStyle.Caption" class="rz-m-0" Style="color: var(--rz-danger);" data-attachment-problem>@problem</RadzenText>
-    }
-</RadzenStack>
+}
 
 @code {
     /// <summary>The files chosen so far, each held in memory; send them with <see cref="Rewound"/>.</summary>
@@ -53,6 +62,15 @@
     /// <summary>The limits the files are held to; when not set, the support service's limits for an answer.</summary>
     [Parameter] public SupportAttachmentLimits Limits { get; set; }
 
+    /// <summary>
+    /// Whether the files are for support's staff only: besides them, only the member sending them may open them, and they are never mailed.
+    /// Nothing is shown when the limits say the service does not take them.
+    /// </summary>
+    [Parameter] public bool Secure { get; set; }
+
+    /// <summary>Files chosen in another picker for the same message, counted with these against the limits the two share.</summary>
+    [Parameter] public IReadOnlyList<SupportAttachmentUpload> AlongWith { get; set; } = [];
+
     [Inject] private IThargaTextProvider TextProvider { get; set; }
 
     private TextSet _text = TextSet.Empty;
@@ -62,6 +80,12 @@
     private bool _reading;
 
     private bool Unavailable => Disabled || _reading;
+
+    private TextKey AttachText => Secure ? SupportAttachmentText.AttachSecure : SupportAttachmentText.Attach;
+
+    private string SecureNoteText => _limits.SecureKeepFor is { } keepFor
+        ? _text.Format(SupportAttachmentText.SecureNoteKeepFor, Math.Max(1, (int)Math.Round(keepFor.TotalDays)))
+        : _text[SupportAttachmentText.SecureNote];
 
     /// <summary>The files read from their start again, so a send that failed can be tried again with the same files.</summary>
     public static IReadOnlyList<SupportAttachmentUpload> Rewound(IReadOnlyList<SupportAttachmentUpload> files)
@@ -97,10 +121,11 @@
         try
         {
             var chosen = (Files ?? []).ToList();
+            var alongWith = (AlongWith ?? []).Where(x => x != null).ToArray();
 
             foreach (var file in e.GetMultipleFiles(Math.Max(e.FileCount, 1)))
             {
-                if (chosen.Count >= _limits.MaxCount)
+                if (chosen.Count + alongWith.Length >= _limits.MaxCount)
                 {
                     _problems.Add(_text.Format(SupportAttachmentText.TooMany, _limits.MaxCount));
                     break;
@@ -112,7 +137,7 @@
                     continue;
                 }
 
-                if (chosen.Sum(x => x.Content.Length) + file.Size > _limits.MaxTotalBytes)
+                if (chosen.Concat(alongWith).Sum(x => x.Content.Length) + file.Size > _limits.MaxTotalBytes)
                 {
                     _problems.Add(_text.Format(SupportAttachmentText.TooLargeTogether, file.Name, SupportAttachmentSize.Format(_limits.MaxTotalBytes)));
                     continue;
