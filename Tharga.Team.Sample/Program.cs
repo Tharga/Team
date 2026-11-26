@@ -77,8 +77,7 @@ builder.AddThargaTeam(o =>
 
     // Where a browser whose session ended is sent, with ?reason=; see SampleSessionPolicy. An open tab goes there by itself within seconds of the end.
     o.Blazor.Sessions.EndedPath = "/session-ended";
-    // Demo: activity is written at most every 20 seconds rather than every minute. The "Still here?" warning is never longer than the idle timeout less
-    // twice this interval, so with the Strict team's two minutes the default minute would leave no room for it; 20 seconds gives the full minute.
+    // Demo: activity at most every 20 seconds, so the Strict team's two-minute idle timeout leaves room for the "Still here?" warning (see the implementation guide).
     o.Blazor.Sessions.ActivityInterval = TimeSpan.FromSeconds(20);
 
     // Cross-team visibility: grant the consent roles the teams:read system scope, so a Developer sees

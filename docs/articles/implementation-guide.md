@@ -1414,8 +1414,9 @@ builder.Services.AddScoped<ISessionPolicy, StrictTeams>();
   rather than straight to the provider. Make that page `[AllowAnonymous]` so the person can read it before signing in again.
 - **Idle time counts what the person does**, also inside a circuit, which sends no request: `<SessionWatch />`, which `LoginDisplay` renders, loads a small
   script that reports use of the visible tab (pointer, keys, wheel) to `POST /_tharga/session/activity` at most once per `Sessions.ActivityInterval`.
-  `UseThargaTeamBlazor` maps it. The store throttles per session, so several tabs and instances cost one write a minute. A session is never ended as idle
-  on a remembered stamp: the store is read again first. **A host without `LoginDisplay` places `<SessionWatch />` once in its layout**, in an interactive
+  `UseThargaTeamBlazor` maps it. The store throttles per session, so several tabs and instances cost one write a minute. Nothing is kept in the browser:
+  the session reported is the one in the cookie the request carries. A session is never ended as idle on a remembered stamp: the store is read again first.
+  `SessionWatch` decides nothing itself: the circuit reads the store and says what to show. **A host without `LoginDisplay` places `<SessionWatch />` once in its layout**, in an interactive
   render mode (`InteractiveServer`): it needs the live circuit, and in a statically rendered page it does nothing. It renders nothing and loads nothing
   while sessions are not active, and only the first one on a circuit asks, so a second renders nothing until the first goes.
 - **One session per team, newest sign-in wins.** When `SingleSession` is set and a session enters the team, the person's older sessions there are ended
@@ -1429,7 +1430,8 @@ builder.Services.AddScoped<ISessionPolicy, StrictTeams>();
 - **Failures allow by default.** A policy or store that throws is logged and the request goes through (`Sessions.OnError = Allow`): a database blip must not
   sign everybody out. `Deny` refuses the request instead, without ending the session. A live circuit is never ended for a failure.
 - **Signing out lands on the ended page when asked to.** `/logout?reason=signedout`, where the "Still here?" dialog's *Sign out* goes, signs out exactly
-  as `/logout` does, and then lands on `Sessions.EndedPath?reason=signedout` (or the start page with the reason) instead of the start page. Only that one value is read; any other, or sessions
+  as `/logout` does (it ends the session as `signedout` first, while the cookie still says whose it is, and announces it), and then lands on
+  `Sessions.EndedPath?reason=signedout` (or the start page with the reason) instead of the start page. Only that one value is read; any other, or sessions
   off, lands where it always did, so it is no open redirect.
 - **Startup fails, naming the problem**, when a policy is registered with no `IUserSessionStore`, or when the cookie scheme sets `EventsType`, which would
   silently replace the events the check is chained into. Both only when sessions are on.
@@ -1460,17 +1462,20 @@ older session a newer sign-in ended, with its team. None names the session id. *
 per session per interval, and the policy once per session and team per window. Each open circuit adds one timer, which costs nothing between wakes, and
 one store read per wake: at the warning, at the idle or max-age moment, and when it is told to look (an end for that person, another tab's signal while it
 is asking, a view arriving inside the warning window); "Yes" is one write and two reads. While the store answers nothing polls: with no limit a circuit
-arms no timer at all, and a long max age is reached by waking at most once a day. While the store fails, a circuit looks again once per
-`ActivityInterval`; a session the store does not have (refused by the next request anyway) is looked at again after a doubling wait, from
-`ActivityInterval` up to 30 minutes. Each look runs in a short-lived scope of its own. With no policy registered the only added work is one resolve per
+arms no timer at all, and a long max age is reached by waking at most once a day. While the store fails, or does not have the session (refused by
+the next request anyway), a circuit looks again after a doubling wait, from `ActivityInterval` but never less than a second (so an `ActivityInterval` of
+`Zero` is no loop), up to 30 minutes; the wait starts over once the store answers. Each look runs in a short-lived scope of its own, off the thread that
+asked for it. With no policy registered the only added work is one resolve per
 request and per circuit.
-The sample's `SampleSessionPolicy` gives a team named *Strict* a two-minute idle timeout and one session per person, and the sample's 20-second
-`ActivityInterval` leaves room for the one-minute warning, so the *Strict* team shows the dialog.
+The sample's `SampleSessionPolicy` gives a team named *Strict* a two-minute idle timeout and one session per person. The warning is never longer than the
+idle timeout less twice `ActivityInterval`, so with the default minute two minutes would leave no room for it; the sample's 20-second `ActivityInterval`
+leaves the full one-minute warning, so the *Strict* team shows the dialog.
 
 ##### Live sign-out
 
 Every open circuit watches its own session, so a session that ends is seen **within seconds**, without a request and without waiting for the
-revalidation interval. The circuit handler starts the watch when the circuit opens, so it runs whether or not a component is on the page.
+revalidation interval. The circuit handler starts the watch when the circuit opens, so it runs whether or not a component is on the page; one watch is
+registered per circuit, and in a host with no circuit at all it resolves and watches nothing.
 
 - **The store is the only truth.** The circuit works out the next moment that matters from the stored session and the host's limits (the warning, a
   second past the idle limit, a second past the max age), on the server's clock only, and arms **one timer** for it, at most a day ahead. Each wake
@@ -1478,9 +1483,11 @@ revalidation interval. The circuit handler starts the watch when the circuit ope
 - **An end is conditional, audited once and announced once.** When the store says the session is over its limits, the circuit ends it through the same
   domain service a request does; whichever call the store says ended it audits and announces it, so two instances or two tabs leave one entry.
 - **It ends only on the store's word.** An end on this instance (a sign-out, a refused request, a newer sign-in, ending the other sessions) is announced
-  through `IUserSessionNotifier`; every circuit of that person looks at the store at once, and a circuit whose own session lasts carries on. Another tab of
-  the same browser is told over a `BroadcastChannel` and looks too. A hint never ends anything by itself.
-- **A failure never ends a circuit.** A store or policy that throws is logged and looked at again after `ActivityInterval`, however long it lasts.
+  through `IUserSessionNotifier`; every circuit of that person looks at the store at once, and a circuit whose own session lasts carries on. A circuit
+  learns whose session it watches from its first successful read, and until then listens to nobody. Another tab of the same browser is told over a
+  `BroadcastChannel` and looks too; a message carries only its kind (somebody was active, or the session ended). A hint never ends anything by itself.
+- **A failure never ends a circuit.** A store or policy that throws is logged and looked at again after a doubling wait, from `ActivityInterval` (at
+  least a second) up to 30 minutes, however long it lasts.
 - **When it ends**, the circuit stops its timer, signs its own authentication state out, and `SessionWatch` sends the browser to
   `Sessions.EndedPath?reason=...` with a full load, telling the browser's other tabs.
 
@@ -1498,12 +1505,14 @@ Before an idle sign-out, `SessionWatch` asks **"Are you still there?"** with a c
 - **"Yes, stay signed in"** records activity at once and closes the question in every tab of the browser. It writes only while the question is open and
   the idle moment has not come: an answer that arrives too late writes nothing, and never brings an ended or over-limit session back.
   While it is open, using the page is not an answer: activity reports are held, so only "Yes" keeps the session.
-- **"Sign out"** ends the session as `signedout`, audited once and announced once. With the library's own sign-in (`AddThargaAuth`), that tab then goes
-  through `/logout?reason=signedout`, so the identity provider is signed out too (with `FederatedSignOut`), which matters on a shared machine, and lands on
-  `Sessions.EndedPath?reason=signedout`; the session is already ended, so the endpoint writes nothing more. A host that signs people in by its own means
-  goes straight to the ended page. The other tabs land on `?reason=signedout` as soon as they hear of the end.
+- **"Sign out"** ends the session as `signedout`, audited once and announced once. With the library's own sign-in (`AddThargaAuth`), the tab goes to
+  `/logout?reason=signedout` with the session still running, and the endpoint ends it: the cookie still says who is signing out, which the identity
+  provider's sign-out takes its hint from, so the provider is signed out too (with `FederatedSignOut`) rather than asking which account, which matters on
+  a shared machine. It lands on `Sessions.EndedPath?reason=signedout`. A host that signs people in by its own means has the circuit end the session, and
+  the tab goes straight to the ended page. The other tabs land on `?reason=signedout` as soon as they hear of the end.
 - **No answer**: the countdown runs out, the circuit ends the session as `idle` a second later, and every tab lands on `?reason=idle`. The countdown in the
-  browser is only a display of what the server said was left; it decides nothing.
+  browser is only a display of what the server said was left, ticking only while the question is open; it decides nothing. When the server moves the idle
+  moment while the question is open (the policy now gives another timeout), the countdown starts over from what is left.
 - **Not asked**: with no view on the page (nobody to ask), with `IdleWarning` at `Zero` or clamped to nothing, or when the max age ends the session first,
   where staying would not help. The session still ends on time.
 - **Wording** comes from `SessionText` (`team.session.idle.title`, `.body`, `.countdown` with `{0}` for the time, `.stay`, `.signout`), translated through

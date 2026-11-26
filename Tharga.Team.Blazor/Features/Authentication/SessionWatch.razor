@@ -10,18 +10,7 @@
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JsRuntime
 
-@*
-    The page's half of the server-side session (Tharga/Team#471): it reports use of the page, asks "Still here?" before an idle sign-out, and sends the
-    browser to the ended page when the session ends. It decides nothing: the circuit reads the store and says what to show, the countdown only displays what
-    the server said was left, and other tabs are only told to look again.
-
-    "Sign out" goes through the library's /logout with ?reason=signedout when the library signs people in, so the identity provider is signed out too and
-    the browser still lands on the ended page; the session is already ended by then, so /logout writes nothing more. Without the library's sign-in it goes
-    straight to the ended page.
-
-    LoginDisplay renders it. A host without LoginDisplay places it once in its layout, in an interactive render mode. It renders nothing and loads nothing
-    while sessions are not active, and only the first one on a circuit asks: a second renders nothing until the first goes.
-*@
+@* The page's half of the server-side session (Tharga/Team#471); what it does and where it goes is in the implementation guide, "Still here?". *@
 
 @if (_open)
 {

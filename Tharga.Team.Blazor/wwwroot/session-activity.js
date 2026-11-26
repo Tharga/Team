@@ -1,10 +1,4 @@
-// Whether somebody is using the page, for the server-side session's idle timeout (Tharga/Team#471): a Blazor circuit sends no HTTP request while they
-// work, so the page says so. Only from the visible tab, and at most once per interval; the server throttles again per session, so several tabs cost no
-// more than one. Nothing is kept in the browser: the session is the one in the cookie the request carries.
-//
-// The tabs of one browser also tell each other, over one channel, that somebody was active or that the session ended, so a "Still here?" open in another
-// tab is looked at again on the server. A message carries only its kind, and decides nothing: the server reads the store. The countdown in the dialog is
-// a display of what the server said was left, ticking only while the dialog is open.
+// The browser half of the server-side session (Tharga/Team#471); what it reports and tells other tabs is in the implementation guide, "Session limits".
 const watching = new Map();
 const used = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'focus'];
 const activityRoute = '/_tharga/session/activity';

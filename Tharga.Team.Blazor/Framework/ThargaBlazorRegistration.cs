@@ -439,8 +439,7 @@ public static class ThargaBlazorRegistration
                 sp.GetService<ILogger<SessionEvaluator>>());
         });
 
-        // The live watch (part 2): one per circuit, started by the circuit handler so it runs without any component, and resolvable where a host has no
-        // circuit at all, in which case it watches nothing. Each check runs in a scope of its own, as the claim revalidation does.
+        // The live watch (Tharga/Team#471), one per circuit; see the implementation guide, "Live sign-out".
         services.TryAddScoped<SessionCircuitScope>();
         services.TryAddScoped(sp => new SessionCircuit(
             sp.GetRequiredService<SessionCircuitScope>(),
