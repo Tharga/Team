@@ -79,8 +79,9 @@ public enum TeamEntryOutcome
 /// <summary>Lets the host tell the library that the guard's answer for a user changed, so the change does not wait for the cache or the next revalidation.</summary>
 /// <remarks>
 /// <b>Narrow on purpose</b>: it forgets what was decided and asks the guard again, and every live circuit of that user on this instance re-evaluates at
-/// once. It does not issue or remove anything itself. On several instances call it on each, over whatever the host already uses between them, or
-/// accept that another instance catches up when its cached answer expires.
+/// once. It does not issue or remove anything itself. Call it once, on the instance where the answer changed: it is announced through
+/// <see cref="ITeamEntryNotifier"/>, and on several instances a host that relays that notifier reaches every other instance's circuits too
+/// (Tharga/Team#471). Without a relay another instance catches up when its cached answer expires.
 /// </remarks>
 public interface ITeamEntryGuardState
 {

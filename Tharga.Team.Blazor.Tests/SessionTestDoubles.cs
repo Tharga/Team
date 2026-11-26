@@ -24,6 +24,7 @@ internal static class SessionTestData
             Enabled = true,
             CacheDuration = TimeSpan.FromSeconds(30),
             ActivityInterval = TimeSpan.FromMinutes(1),
+            IdleWarning = TimeSpan.FromMinutes(1),
             EndedPath = null,
             AdoptExistingCookies = true,
             OnError = SessionErrorBehavior.Allow,
@@ -39,8 +40,8 @@ internal static class SessionTestData
     /// The domain service the evaluator reaches sessions through, over <paramref name="store"/>, auditing into <paramref name="audit"/> when given. The evaluator
     /// holds no store of its own: the ownership check and the audit-once rule are the domain's.
     /// </summary>
-    public static UserSessionService Sessions(IUserSessionStore store, TimeProvider time, List<AuditEntry> audit = null)
-        => new(store, new SessionUserService(), Mock.Of<ITeamPrincipalAccessor>(), time, auditLogger: audit == null ? null : CollectingAuditBackend.Composite(audit));
+    public static UserSessionService Sessions(IUserSessionStore store, TimeProvider time, List<AuditEntry> audit = null, IUserSessionNotifier notifier = null)
+        => new(store, new SessionUserService(), Mock.Of<ITeamPrincipalAccessor>(), time, auditLogger: audit == null ? null : CollectingAuditBackend.Composite(audit), notifier: notifier);
 
     /// <summary>A cookie principal carrying the library's session claim, as the cookie holds it after sign-in.</summary>
     public static ClaimsPrincipal WithSession(string sessionId, string subject = Subject, params Claim[] extra)
@@ -63,6 +64,7 @@ internal static class SessionTestData
         };
 }
 
+/// <summary>A fixed, movable clock whose timers fire only when <see cref="Advance"/> passes them, so a test decides exactly when a wake happens.</summary>
 internal sealed class SessionClock : TimeProvider
 {
     private DateTimeOffset _now = SessionTestData.Start;
@@ -71,7 +73,213 @@ internal sealed class SessionClock : TimeProvider
 
     public DateTime Now => _now.UtcDateTime;
 
-    public void Advance(TimeSpan by) => _now += by;
+    /// <summary>Every timer asked for, in the order created.</summary>
+    public List<ManualTimer> Timers { get; } = [];
+
+    /// <summary>Moves the clock on, then fires every armed timer that is due; a callback that re-arms its timer is not fired again until the clock moves again.</summary>
+    public void Advance(TimeSpan by)
+    {
+        _now += by;
+        foreach (var timer in Timers.ToArray())
+        {
+            timer.FireIfDue(_now);
+        }
+    }
+
+    public override ITimer CreateTimer(TimerCallback callback, object state, TimeSpan dueTime, TimeSpan period)
+    {
+        var timer = new ManualTimer(this, callback, state);
+        Timers.Add(timer);
+        timer.Change(dueTime, period);
+        return timer;
+    }
+}
+
+/// <summary>
+/// A timer that records every <see cref="Change"/> and fires, once, when its clock passes the moment it was armed for. It refuses what the system timer
+/// refuses: a due time beyond the longest it accepts, and any change once disposed.
+/// </summary>
+internal sealed class ManualTimer(SessionClock clock, TimerCallback callback, object state) : ITimer
+{
+    /// <summary>The longest due time <see cref="TimeProvider.System"/>'s timer accepts, in milliseconds.</summary>
+    public const long LongestDueMilliseconds = 4294967294;
+
+    /// <summary>Every call to <see cref="Change"/>, the creation's first.</summary>
+    public List<(TimeSpan Due, TimeSpan Period)> Changes { get; } = [];
+
+    /// <summary>When it fires next; null when it is not armed.</summary>
+    public DateTimeOffset? DueAt { get; private set; }
+
+    public bool Disposed { get; private set; }
+
+    /// <summary>How long the last <see cref="Change"/> asked to wait; null when it never did or disarmed it.</summary>
+    public TimeSpan? LastDue => Changes.Count == 0 || Changes[^1].Due == Timeout.InfiniteTimeSpan ? null : Changes[^1].Due;
+
+    public bool Change(TimeSpan dueTime, TimeSpan period)
+    {
+        ObjectDisposedException.ThrowIf(Disposed, this);
+        if (dueTime != Timeout.InfiniteTimeSpan && (dueTime < TimeSpan.Zero || dueTime.TotalMilliseconds > LongestDueMilliseconds)) throw new ArgumentOutOfRangeException(nameof(dueTime));
+
+        Changes.Add((dueTime, period));
+        DueAt = dueTime == Timeout.InfiniteTimeSpan ? null : clock.GetUtcNow() + dueTime;
+        return true;
+    }
+
+    public void FireIfDue(DateTimeOffset now)
+    {
+        if (Disposed || DueAt == null || DueAt > now) return;
+
+        DueAt = null;
+        callback(state);
+    }
+
+    public void Dispose()
+    {
+        Disposed = true;
+        DueAt = null;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        Dispose();
+        return ValueTask.CompletedTask;
+    }
+}
+
+/// <summary>A circuit the view is tested against: the state is set by the test, and every call the view makes is counted.</summary>
+internal sealed class FakeSessionCircuit : ISessionCircuit
+{
+    public bool Active { get; set; } = true;
+
+    public SessionCircuitState State { get; set; } = SessionCircuitState.Watching;
+
+    public DateTime? IdleAt { get; set; }
+
+    public TimeSpan? Remaining { get; set; }
+
+    public string EndedLocation { get; set; }
+
+    public event Action Changed;
+
+    public event Action Activated;
+
+    public int Subscribers => Changed?.GetInvocationList().Length ?? 0;
+
+    /// <summary>The listeners as they are now, for a test to call later, as a change already being raised reaches a view that has since gone.</summary>
+    public Action ChangedListeners => Changed;
+
+    public int ActivatedSubscribers => Activated?.GetInvocationList().Length ?? 0;
+
+    public int Attached { get; private set; }
+
+    /// <summary>Whether a view holds the one asking place (<see cref="TryAttach"/>).</summary>
+    public bool Asked { get; private set; }
+
+    public int Stays { get; private set; }
+
+    public int SignOuts { get; private set; }
+
+    /// <summary>When set, <see cref="SignOutAsync"/> ends nothing, as when the store could not be reached.</summary>
+    public bool SignOutLeavesTheSession { get; set; }
+
+    public int Checks { get; private set; }
+
+    /// <summary>What <see cref="StartAsync"/> does; by default it completes at once.</summary>
+    public Func<Task> OnStart { get; set; }
+
+    public int StartCalls { get; private set; }
+
+    public int Disposals { get; private set; }
+
+    public Task StartAsync()
+    {
+        StartCalls++;
+        return OnStart?.Invoke() ?? Task.CompletedTask;
+    }
+
+    public IDisposable Attach()
+    {
+        Attached++;
+        return new Detach(this);
+    }
+
+    public IDisposable TryAttach()
+    {
+        if (Asked) return null;
+
+        Asked = true;
+        var attachment = Attach();
+        return new Unask(this, attachment);
+    }
+
+    /// <summary>The watch found a session after the view arrived, as the real one does when the sign-in state is read late.</summary>
+    public void Activate()
+    {
+        Active = true;
+        Activated?.Invoke();
+    }
+
+    public Task StayAsync()
+    {
+        Stays++;
+        Set(SessionCircuitState.Watching);
+        return Task.CompletedTask;
+    }
+
+    public Task SignOutAsync()
+    {
+        SignOuts++;
+        if (SignOutLeavesTheSession) return Task.CompletedTask;
+
+        EndedLocation = "/session-ended?reason=signedout";
+        Set(SessionCircuitState.Ended);
+        return Task.CompletedTask;
+    }
+
+    public Task CheckAsync()
+    {
+        Checks++;
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Moves to <paramref name="state"/> and tells the view, as the real circuit does.</summary>
+    public void Set(SessionCircuitState state, TimeSpan? remaining = null, string endedLocation = null)
+    {
+        State = state;
+        Remaining = state == SessionCircuitState.Warning ? remaining : null;
+        IdleAt = state == SessionCircuitState.Warning ? SessionTestData.Start.UtcDateTime + (remaining ?? TimeSpan.Zero) : null;
+        if (endedLocation != null) EndedLocation = endedLocation;
+        Changed?.Invoke();
+    }
+
+    public void Dispose() => Disposals++;
+
+    private sealed class Unask(FakeSessionCircuit circuit, IDisposable attachment) : IDisposable
+    {
+        private bool _done;
+
+        public void Dispose()
+        {
+            if (_done) return;
+
+            _done = true;
+            circuit.Asked = false;
+            attachment.Dispose();
+        }
+    }
+
+    private sealed class Detach(FakeSessionCircuit circuit) : IDisposable
+    {
+        private bool _done;
+
+        public void Dispose()
+        {
+            if (_done) return;
+
+            _done = true;
+            circuit.Attached--;
+        }
+    }
 }
 
 internal sealed class CollectingAuditBackend(List<AuditEntry> entries) : IAuditLogger
@@ -138,6 +346,12 @@ internal sealed class InMemorySessionStore : IUserSessionStore
 
     public Exception Failure { get; set; }
 
+    /// <summary>When set, a read does not complete until the test completes it, so a test can hold a check in flight.</summary>
+    public TaskCompletionSource Gate { get; set; }
+
+    /// <summary>The synchronization context the last read started on, so a test can tell whose thread a check ran on.</summary>
+    public SynchronizationContext ReadContext { get; private set; }
+
     public List<UserSession> Started { get; } = [];
 
     public int Reads { get; private set; }
@@ -178,14 +392,21 @@ internal sealed class InMemorySessionStore : IUserSessionStore
         return Task.CompletedTask;
     }
 
-    public Task<UserSession> GetAsync(string sessionId, CancellationToken cancellationToken = default)
+    public async Task<UserSession> GetAsync(string sessionId, CancellationToken cancellationToken = default)
     {
+        UserSession session;
+        var gate = Gate;
         lock (_gate)
         {
             Enter();
             Reads++;
-            return Task.FromResult(_sessions.GetValueOrDefault(sessionId));
+            ReadContext = SynchronizationContext.Current;
+            session = _sessions.GetValueOrDefault(sessionId);
         }
+
+        if (gate != null) await gate.Task;
+
+        return session;
     }
 
     public Task<bool> RecordActivityAsync(string sessionId, DateTime at, string teamKey, TimeSpan minInterval, CancellationToken cancellationToken = default)
@@ -245,4 +466,16 @@ internal sealed class InMemorySessionStore : IUserSessionStore
             return Task.FromResult(new SessionTeamEntry(inTeam, false));
         }
     }
+}
+
+/// <summary>A logger that keeps what it was asked to write; Moq cannot proxy a logger of an internal type.</summary>
+internal sealed class CapturingLogger<T> : Microsoft.Extensions.Logging.ILogger<T>
+{
+    public List<(Microsoft.Extensions.Logging.LogLevel Level, Exception Exception)> Entries { get; } = [];
+
+    public IDisposable BeginScope<TState>(TState state) where TState : notnull => null;
+
+    public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+    public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception exception, Func<TState, Exception, string> formatter) => Entries.Add((logLevel, exception));
 }

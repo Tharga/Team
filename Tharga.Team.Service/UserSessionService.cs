@@ -32,7 +32,8 @@ internal sealed class UserSessionService(
     TimeProvider timeProvider,
     UserIdentityResolver identityResolver = null,
     CompositeAuditLogger auditLogger = null,
-    ILogger<UserSessionService> logger = null) : IUserSessionService
+    ILogger<UserSessionService> logger = null,
+    IUserSessionNotifier notifier = null) : IUserSessionService
 {
     /// <summary>The issuer of the session claim: the library, never the identity provider.</summary>
     internal const string ClaimIssuer = "Tharga.Team";
@@ -55,13 +56,7 @@ internal sealed class UserSessionService(
     public async Task<bool> EndCurrentAsync()
     {
         var principal = await principalAccessor.GetCurrentAsync();
-        var sessionId = SessionIdOf(principal);
-        if (sessionId == null) return false;
-
-        var ended = await store.EndAsync(sessionId, SessionEndReason.SignedOut, Now);
-        if (ended) Audit(() => AuthAuditEntries.SignOut(principal, Resolver));
-
-        return ended;
+        return await SignOutAsync(principal);
     }
 
     public async Task<int> EndOtherSessionsAsync()
@@ -73,7 +68,28 @@ internal sealed class UserSessionService(
         var user = await userService.GetCurrentUserAsync(principal, recordActivity: false);
         if (string.IsNullOrEmpty(user?.Key)) return 0;
 
-        return await store.EndOthersAsync(user.Key, sessionId, Now);
+        var ended = await store.EndOthersAsync(user.Key, sessionId, Now);
+        if (ended > 0) Announce(user.Key, SessionEndReason.Ended);
+
+        return ended;
+    }
+
+    /// <summary>
+    /// Ends the given principal's session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when this call ended it.
+    /// <see cref="EndCurrentAsync"/> is this for the ambient caller. Pass <paramref name="userKey"/> when holding the session, so the end is announced without a user lookup.
+    /// </summary>
+    internal async Task<bool> SignOutAsync(ClaimsPrincipal principal, string userKey = null, CancellationToken cancellationToken = default)
+    {
+        var sessionId = SessionIdOf(principal);
+        if (sessionId == null) return false;
+
+        var ended = await store.EndAsync(sessionId, SessionEndReason.SignedOut, Now, cancellationToken);
+        if (!ended) return false;
+
+        Audit(() => AuthAuditEntries.SignOut(principal, Resolver));
+        await AnnounceAsync(principal, userKey, SessionEndReason.SignedOut);
+
+        return true;
     }
 
     /// <summary>Starts a session with the given origin and returns the principal carrying its claim; the library's own sign-in starts <see cref="SessionOrigin.SignIn"/>.</summary>
@@ -103,16 +119,19 @@ internal sealed class UserSessionService(
            && string.Equals(session.SessionId, SessionIdOf(principal), StringComparison.Ordinal)
            && string.Equals(session.Subject, Resolver.GetSubject(principal), StringComparison.Ordinal);
 
-    /// <summary>Ends the principal's session for <paramref name="reason"/>; true, and audited, when this call ended it.</summary>
-    internal async Task<bool> EndAsync(ClaimsPrincipal principal, SessionEndReason reason, CancellationToken cancellationToken = default)
+    /// <summary>Ends the principal's session for <paramref name="reason"/>; true, and audited, when this call ended it. Pass <paramref name="userKey"/> when holding the session.</summary>
+    internal async Task<bool> EndAsync(ClaimsPrincipal principal, SessionEndReason reason, string userKey = null, CancellationToken cancellationToken = default)
     {
         var sessionId = SessionIdOf(principal);
         if (sessionId == null) return false;
 
         var ended = await store.EndAsync(sessionId, reason, Now, cancellationToken);
-        if (ended) Audit(() => AuthAuditEntries.SessionEnded(principal, reason, Resolver));
+        if (!ended) return false;
 
-        return ended;
+        Audit(() => AuthAuditEntries.SessionEnded(principal, reason, Resolver));
+        await AnnounceAsync(principal, userKey, reason);
+
+        return true;
     }
 
     /// <summary>Records that the principal used their session now, in <paramref name="teamKey"/>, unless it was recorded less than <paramref name="minInterval"/> ago.</summary>
@@ -124,9 +143,10 @@ internal sealed class UserSessionService(
 
     /// <summary>
     /// Makes the principal's session the only one of theirs in <paramref name="teamKey"/>, newest sign-in winning; audits each older session it ended, and the
-    /// principal's own when a newer one was there first.
+    /// principal's own when a newer one was there first. One notification tells the host when anything was ended, however many sessions it was. Pass
+    /// <paramref name="userKey"/> when holding the session.
     /// </summary>
-    internal async Task<SessionTeamEntry> EnterTeamExclusiveAsync(ClaimsPrincipal principal, string teamKey, CancellationToken cancellationToken = default)
+    internal async Task<SessionTeamEntry> EnterTeamExclusiveAsync(ClaimsPrincipal principal, string teamKey, string userKey = null, CancellationToken cancellationToken = default)
     {
         var sessionId = SessionIdOf(principal);
         if (sessionId == null) return new SessionTeamEntry([], false);
@@ -139,6 +159,8 @@ internal sealed class UserSessionService(
         }
 
         if (entry.CallerEnded) Audit(() => AuthAuditEntries.SessionEnded(principal, SessionEndReason.NewerSignIn, Resolver));
+
+        if (entry.CallerEnded || entry.Superseded is { Length: > 0 }) await AnnounceAsync(principal, userKey, SessionEndReason.NewerSignIn);
 
         return entry;
     }
@@ -227,6 +249,45 @@ internal sealed class UserSessionService(
         if (long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var seconds)) return DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime;
 
         return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at.UtcDateTime : null;
+    }
+
+    /// <summary>
+    /// Tells the host whose session ended, after the store and the audit, so whoever looks finds it ended. The person is <paramref name="userKey"/> when the
+    /// caller held the session, and looked up only when it did not. The end stands whatever happens here.
+    /// </summary>
+    private async Task AnnounceAsync(ClaimsPrincipal principal, string userKey, SessionEndReason reason)
+    {
+        if (notifier == null) return;
+
+        if (!string.IsNullOrEmpty(userKey))
+        {
+            Announce(userKey, reason);
+            return;
+        }
+
+        try
+        {
+            var user = await userService.GetCurrentUserAsync(principal, recordActivity: false);
+            Announce(user?.Key, reason);
+        }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "The end of a server-side session could not be announced.");
+        }
+    }
+
+    private void Announce(string userKey, SessionEndReason reason)
+    {
+        if (notifier == null || string.IsNullOrEmpty(userKey)) return;
+
+        try
+        {
+            notifier.Notify(new UserSessionEndedEventArgs { UserKey = userKey, Reason = reason });
+        }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "The end of a server-side session could not be announced.");
+        }
     }
 
     private void Audit(Func<AuditEntry> entry)

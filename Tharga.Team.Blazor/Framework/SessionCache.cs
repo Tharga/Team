@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace Tharga.Team.Blazor.Framework;
 
@@ -11,12 +12,41 @@ namespace Tharga.Team.Blazor.Framework;
 /// instance recorded activity or ended it, keeps the time it was read until, so a session that stays busy is still read again once per window and an end
 /// made elsewhere is noticed.
 /// </remarks>
-internal sealed class SessionCache(TimeProvider timeProvider)
+internal sealed class SessionCache(TimeProvider timeProvider, ILogger<SessionCache> logger = null) : IUserSessionNotifier
 {
     private const int SweepAbove = 10_000;
 
     private readonly ConcurrentDictionary<string, Entry<UserSession>> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<LimitsKey, Entry<SessionLimits>> _limits = new();
+
+    /// <inheritdoc />
+    public event EventHandler<UserSessionEndedEventArgs> SessionEnded;
+
+    /// <summary>
+    /// Forgets the remembered sessions of the person first, so a handler that looks reads the store and not the old answer, then tells every handler in turn.
+    /// A throwing handler is logged and skipped: the end stands, only the notification failed.
+    /// </summary>
+    public void Notify(UserSessionEndedEventArgs args)
+    {
+        if (args == null) return;
+
+        ForgetSessionsOf(args.UserKey);
+
+        var handlers = SessionEnded;
+        if (handlers == null) return;
+
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<UserSessionEndedEventArgs>>())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "A session-ended notification handler threw. The end stands; only the notification failed.");
+            }
+        }
+    }
 
     public bool TryGetSession(string sessionId, out UserSession session)
     {
@@ -76,6 +106,16 @@ internal sealed class SessionCache(TimeProvider timeProvider)
 
         _limits[new LimitsKey(sessionId, teamKey)] = new Entry<SessionLimits>(limits, timeProvider.GetUtcNow() + duration);
         if (_limits.Count > SweepAbove) Sweep(_limits);
+    }
+
+    private void ForgetSessionsOf(string userKey)
+    {
+        if (userKey == null) return;
+
+        foreach (var pair in _sessions.Where(x => x.Value.Value.UserKey == userKey).ToArray())
+        {
+            _sessions.TryRemove(pair.Key, out _);
+        }
     }
 
     private void Sweep<TKey, TValue>(ConcurrentDictionary<TKey, Entry<TValue>> entries)

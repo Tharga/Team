@@ -11,8 +11,9 @@ namespace Tharga.Team.Sample.Framework;
 /// <remarks>
 /// <b>It reads the team from the repository, not through <c>ITeamService</c></b>: the policy is asked while the cookie is being validated, before the request
 /// has a principal, and the authorizing service would refuse an anonymous caller. A real application decides from its own records, not from a team's name.
-/// Two minutes is short for the sample's sake: leave a tab alone and the next request, or the circuit within the revalidation interval, lands on
-/// <c>/session-ended</c>.
+/// Two minutes is short for the sample's sake: leave a tab alone and after a minute it asks "Are you still there?" (the sample's 20-second activity interval
+/// leaves room for the one-minute warning); answer nothing and every tab lands on <c>/session-ended</c> a minute later. Sign in to a Strict team in a second
+/// browser and the first one's open tabs go there at once.
 /// </remarks>
 public sealed class SampleSessionPolicy(ITeamRepository<TeamEntity, TeamMember> teams) : ISessionPolicy
 {

@@ -41,8 +41,31 @@ public class UserSessionServiceTests
         public override DateTimeOffset GetUtcNow() => now;
     }
 
-    private UserSessionService Sut(UserIdentityResolver resolver = null, string userKey = UserKey)
-        => new(_store, new FakeUserService(userKey), _accessor, new FixedTime(Now), resolver, _audit.Logger);
+    private UserSessionService Sut(UserIdentityResolver resolver = null, string userKey = UserKey, IUserSessionNotifier notifier = null)
+        => new(_store, new FakeUserService(userKey), _accessor, new FixedTime(Now), resolver, _audit.Logger, notifier: notifier);
+
+    /// <summary>A notifier that keeps what it was told, and whether the store had already ended the session and the audit was already written when it was.</summary>
+    private sealed class RecordingNotifier : IUserSessionNotifier
+    {
+        public List<UserSessionEndedEventArgs> Heard { get; } = [];
+
+        public Func<bool> Snapshot { get; set; }
+
+        public List<bool> SnapshotAtNotify { get; } = [];
+
+        public Exception Failure { get; set; }
+
+        public event EventHandler<UserSessionEndedEventArgs> SessionEnded;
+
+        public void Notify(UserSessionEndedEventArgs args)
+        {
+            if (Snapshot != null) SnapshotAtNotify.Add(Snapshot());
+            Heard.Add(args);
+            if (Failure != null) throw Failure;
+
+            SessionEnded?.Invoke(this, args);
+        }
+    }
 
     private static ClaimsPrincipal Principal(params Claim[] extra)
         => new(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, "subject-1"), new Claim(ClaimTypes.Email, "alice@example.com"), .. extra], "Test"));
@@ -228,5 +251,313 @@ public class UserSessionServiceTests
         Assert.Equal(0, await Sut().EndOtherSessionsAsync());
 
         await _store.DidNotReceiveWithAnyArgs().EndOthersAsync(default, default, default);
+    }
+
+    // ---- telling the host (Tharga/Team#471 part 2)
+
+    private static ClaimsPrincipal WithSession(string id = "s1") => Principal(new Claim(TeamClaimTypes.SessionId, id, ClaimValueTypes.String, "Tharga.Team"));
+
+    [Fact]
+    public async Task SigningOut_TellsTheHost_WhoseSessionEnded_AndWhy()
+    {
+        var notifier = new RecordingNotifier();
+        CallerIs(WithSession());
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(true);
+
+        await Sut(notifier: notifier).EndCurrentAsync();
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal((UserKey, SessionEndReason.SignedOut, false), (heard.UserKey, heard.Reason, heard.FromRemote));
+    }
+
+    /// <summary>Store first, audit second, notify last: whoever is told and looks finds the session ended, and the audit entry is there to be found.</summary>
+    [Fact]
+    public async Task TheNotification_FollowsTheStoreEnd_AndTheAudit()
+    {
+        var order = new List<string>();
+        var notifier = new RecordingNotifier { Snapshot = () => _audit.Backend.Entries.Count == 1 };
+        CallerIs(WithSession());
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            order.Add("store");
+            return true;
+        });
+        notifier.SessionEnded += (_, _) => order.Add("notify");
+
+        await Sut(notifier: notifier).EndCurrentAsync();
+
+        Assert.Equal(["store", "notify"], order);
+        Assert.Equal([true], notifier.SnapshotAtNotify);
+    }
+
+    [Fact]
+    public async Task SigningOut_OfASessionAlreadyEnded_TellsNobody()
+    {
+        var notifier = new RecordingNotifier();
+        CallerIs(WithSession());
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        await Sut(notifier: notifier).EndCurrentAsync();
+
+        Assert.Empty(notifier.Heard);
+    }
+
+    [Fact]
+    public async Task SigningOut_WithNoSessionClaim_TellsNobody()
+    {
+        var notifier = new RecordingNotifier();
+        CallerIs(Principal());
+
+        await Sut(notifier: notifier).EndCurrentAsync();
+
+        Assert.Empty(notifier.Heard);
+    }
+
+    /// <summary>A handler that fails is the host's problem: the session is ended and audited, and the call says so.</summary>
+    [Fact]
+    public async Task AThrowingNotifier_DoesNotUndoOrFailTheEnd()
+    {
+        var notifier = new RecordingNotifier { Failure = new InvalidOperationException("host handler is broken") };
+        CallerIs(WithSession());
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await Sut(notifier: notifier).EndCurrentAsync());
+        Assert.Single(_audit.Backend.Entries);
+    }
+
+    [Fact]
+    public async Task WhenTheUserCannotBeResolved_TheEndStands_AndNobodyIsTold()
+    {
+        var notifier = new RecordingNotifier();
+        CallerIs(WithSession());
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await Sut(userKey: null, notifier: notifier).EndCurrentAsync());
+
+        Assert.Empty(notifier.Heard);
+    }
+
+    [Fact]
+    public async Task TheUserIsLookedUp_WithoutRecordingActivity()
+    {
+        var users = Substitute.For<IUserService>();
+        users.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<bool>()).Returns(Task.FromResult<IUser>(null));
+        var sut = new UserSessionService(_store, users, _accessor, new FixedTime(Now), null, _audit.Logger, notifier: new RecordingNotifier());
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        await sut.SignOutAsync(WithSession());
+
+        await users.Received().GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>(), false);
+        await users.DidNotReceive().GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>(), true);
+    }
+
+    // ---- signing out a given principal (the circuit's)
+
+    [Fact]
+    public async Task SignOutAsync_EndsThePrincipalsSession_AsSignedOut_AuditedOnce_AndAnnounced()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await Sut(notifier: notifier).SignOutAsync(WithSession()));
+
+        Assert.Equal(("auth", "signout"), (Assert.Single(_audit.Backend.Entries).Feature, _audit.Backend.Entries[0].Action));
+        Assert.Equal(SessionEndReason.SignedOut, Assert.Single(notifier.Heard).Reason);
+    }
+
+    /// <summary>The circuit has no HttpContext, so the ambient caller is not asked: the principal it was given is the one whose session ends.</summary>
+    [Fact]
+    public async Task SignOutAsync_DoesNotAskTheAmbientCaller()
+    {
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        await Sut().SignOutAsync(WithSession());
+
+        await _accessor.DidNotReceive().GetCurrentAsync();
+    }
+
+    [Fact]
+    public async Task SignOutAsync_WhenAnotherEndedItFirst_IsFalse_AndSilent()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        Assert.False(await Sut(notifier: notifier).SignOutAsync(WithSession()));
+
+        Assert.Empty(_audit.Backend.Entries);
+        Assert.Empty(notifier.Heard);
+    }
+
+    [Fact]
+    public async Task SignOutAsync_WithNoSessionClaim_TouchesNothing()
+    {
+        Assert.False(await Sut().SignOutAsync(Principal()));
+
+        await _store.DidNotReceiveWithAnyArgs().EndAsync(default, default, default);
+    }
+
+    // ---- an end the library's own check makes
+
+    [Theory]
+    [InlineData(SessionEndReason.Idle)]
+    [InlineData(SessionEndReason.MaxAge)]
+    [InlineData(SessionEndReason.Ended)]
+    public async Task EndingForAReason_TellsTheHostThatReason(SessionEndReason reason)
+    {
+        var notifier = new RecordingNotifier();
+        _store.EndAsync("s1", reason, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await Sut(notifier: notifier).EndAsync(WithSession(), reason));
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal((UserKey, reason, false), (heard.UserKey, heard.Reason, heard.FromRemote));
+    }
+
+    /// <summary>Two instances refusing one request at once: only the call the store says ended it is audited, and only it announces.</summary>
+    [Fact]
+    public async Task EndingForAReason_WhenAnotherCallEndedItFirst_TellsNobody()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EndAsync("s1", SessionEndReason.Idle, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(false);
+
+        Assert.False(await Sut(notifier: notifier).EndAsync(WithSession(), SessionEndReason.Idle));
+
+        Assert.Empty(notifier.Heard);
+    }
+
+    // ---- ending the others
+
+    [Fact]
+    public async Task EndingTheOthers_WhenSomeWereEnded_TellsTheHostOnce_AsEnded()
+    {
+        var notifier = new RecordingNotifier();
+        CallerIs(WithSession("mine"));
+        _store.EndOthersAsync(UserKey, "mine", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(3);
+
+        await Sut(notifier: notifier).EndOtherSessionsAsync();
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal((UserKey, SessionEndReason.Ended), (heard.UserKey, heard.Reason));
+    }
+
+    [Fact]
+    public async Task EndingTheOthers_WhenThereWereNone_TellsNobody()
+    {
+        var notifier = new RecordingNotifier();
+        CallerIs(WithSession("mine"));
+        _store.EndOthersAsync(UserKey, "mine", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(0);
+
+        await Sut(notifier: notifier).EndOtherSessionsAsync();
+
+        Assert.Empty(notifier.Heard);
+    }
+
+    // ---- entering a team exclusively
+
+    private static UserSession Other(string id) => new() { SessionId = id, UserKey = UserKey, Subject = "subject-1", SignedInAt = Now.UtcDateTime.AddHours(-1), Origin = SessionOrigin.SignIn, LastActivityAt = Now.UtcDateTime };
+
+    [Fact]
+    public async Task EnteringATeamExclusively_WhenOlderSessionsWereEnded_TellsTheHostOnce_AsANewerSignIn()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EnterTeamExclusiveAsync("s1", "strict", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(new SessionTeamEntry([Other("old-1"), Other("old-2")], false));
+
+        await Sut(notifier: notifier).EnterTeamExclusiveAsync(WithSession(), "strict");
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal((UserKey, SessionEndReason.NewerSignIn), (heard.UserKey, heard.Reason));
+    }
+
+    [Fact]
+    public async Task EnteringATeamExclusively_WhenTheCallersOwnSessionWasEnded_TellsTheHost_AsANewerSignIn()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EnterTeamExclusiveAsync("s1", "strict", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(new SessionTeamEntry([], true));
+
+        await Sut(notifier: notifier).EnterTeamExclusiveAsync(WithSession(), "strict");
+
+        Assert.Equal(SessionEndReason.NewerSignIn, Assert.Single(notifier.Heard).Reason);
+    }
+
+    [Fact]
+    public async Task EnteringATeamExclusively_WhenNothingWasEnded_TellsNobody()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EnterTeamExclusiveAsync("s1", "strict", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(new SessionTeamEntry([], false));
+
+        await Sut(notifier: notifier).EnterTeamExclusiveAsync(WithSession(), "strict");
+
+        Assert.Empty(notifier.Heard);
+    }
+
+    [Fact]
+    public async Task EnteringATeamExclusively_WhenBothHappened_TellsTheHostOnce()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EnterTeamExclusiveAsync("s1", "strict", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(new SessionTeamEntry([Other("old")], true));
+
+        await Sut(notifier: notifier).EnterTeamExclusiveAsync(WithSession(), "strict");
+
+        Assert.Single(notifier.Heard);
+    }
+
+    // ---- the person announced, when the caller holds the session (review of #570)
+
+    private UserSessionService WithFailingUserLookup(IUserService users, IUserSessionNotifier notifier)
+    {
+        users.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<bool>()).Returns<Task<IUser>>(_ => throw new InvalidOperationException("the user store is down"));
+        return new UserSessionService(_store, users, _accessor, new FixedTime(Now), null, _audit.Logger, notifier: notifier);
+    }
+
+    /// <summary>A deleted user, or a user service that throws, must not keep an end from being announced when the caller already knows whose session it was.</summary>
+    [Fact]
+    public async Task EndingForAReason_WithTheSessionsUserKey_AnnouncesIt_WithoutLookingTheUserUp()
+    {
+        var notifier = new RecordingNotifier();
+        var users = Substitute.For<IUserService>();
+        _store.EndAsync("s1", SessionEndReason.Idle, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await WithFailingUserLookup(users, notifier).EndAsync(WithSession(), SessionEndReason.Idle, "user-from-the-session"));
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal(("user-from-the-session", SessionEndReason.Idle), (heard.UserKey, heard.Reason));
+        await users.DidNotReceiveWithAnyArgs().GetCurrentUserAsync(default, default);
+    }
+
+    [Fact]
+    public async Task SigningOut_WithTheSessionsUserKey_AnnouncesIt_ThoughTheUserLookupFails()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await WithFailingUserLookup(Substitute.For<IUserService>(), notifier).SignOutAsync(WithSession(), UserKey));
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal((UserKey, SessionEndReason.SignedOut), (heard.UserKey, heard.Reason));
+    }
+
+    [Fact]
+    public async Task EnteringATeamExclusively_WithTheSessionsUserKey_AnnouncesIt_ThoughTheUserLookupFails()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EnterTeamExclusiveAsync("s1", "strict", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(new SessionTeamEntry([Other("old")], false));
+
+        await WithFailingUserLookup(Substitute.For<IUserService>(), notifier).EnterTeamExclusiveAsync(WithSession(), "strict", UserKey);
+
+        Assert.Equal(UserKey, Assert.Single(notifier.Heard).UserKey);
+    }
+
+    /// <summary>Without a key the user is still looked up, as before; a lookup that fails is logged and the end stands, unannounced.</summary>
+    [Fact]
+    public async Task EndingForAReason_WithoutAUserKey_LooksTheUserUp_AndAFailingLookupLeavesTheEndStanding()
+    {
+        var notifier = new RecordingNotifier();
+        var users = Substitute.For<IUserService>();
+        _store.EndAsync("s1", SessionEndReason.Idle, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await WithFailingUserLookup(users, notifier).EndAsync(WithSession(), SessionEndReason.Idle));
+
+        Assert.Empty(notifier.Heard);
+        await users.Received().GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>(), false);
     }
 }

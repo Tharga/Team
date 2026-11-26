@@ -1,0 +1,34 @@
+/* "Still here?" over the whole page, in the host's Radzen theme, light or dark. */
+.session-watch-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: color-mix(in srgb, var(--rz-base-900, #000) 50%, transparent);
+}
+
+.session-watch-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    z-index: 2001;
+    width: min(28rem, calc(100vw - 2rem));
+    padding: 1.5rem;
+    transform: translate(-50%, -50%);
+    border-radius: var(--rz-border-radius, 0.5rem);
+    background: var(--rz-base-background-color, #fff);
+    color: var(--rz-text-color, inherit);
+    box-shadow: var(--rz-shadow-6, 0 0.5rem 2rem rgba(0, 0, 0, 0.3));
+}
+
+/* The deadline as read to a screen reader, once; the ticking countdown beside it is hidden from it. */
+.session-watch-deadline {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}

@@ -1346,10 +1346,12 @@ builder.Services.AddScoped<ITeamEntryGuard, RequireBankId>();
   browser to the address with `{returnUrl}` replaced by the page it was on, URL-encoded, after remembering the team as the one asked for. Put
   `<TeamEntryNotice />` in the layout (as `SuspendedTeamNotice` is) for the reason and a *Continue* button on the page itself. The return value is a path on
   your site that the library made; your step-up endpoint must still redirect to **local paths only**.
-- **When the answer changes**, tell the library: `ITeamEntryGuardState.InvalidateAsync(userKey, teamKey)`. Cached answers are forgotten and every open
-  circuit of that user **on this instance** re-evaluates at once, instead of at the next interval. On several instances call it on each over whatever you
-  already use between them, or accept that another instance catches up when its cached answer expires. A **step-up is never answered from the
-  cache**, so one completed on another instance counts on the next request wherever it lands: only an allow or a deny can be out of date.
+- **When the answer changes**, tell the library once, on the instance where it changed: `ITeamEntryGuardState.InvalidateAsync(userKey, teamKey)`.
+  Cached answers are forgotten and every open circuit of that user **on this instance** re-evaluates at once, instead of at the next interval. The change
+  is announced through `ITeamEntryNotifier`; on several instances **relay `ITeamEntryNotifier`** as [Several instances](#several-instances) shows, and the
+  other instances forget their answers and re-evaluate too. Without a relay another instance catches up when its cached answer expires. A **step-up is
+  never answered from the cache**, so one completed on another instance counts on the next request wherever it lands: only an allow or a deny can be out
+  of date.
 - **Audited**: a refusal is recorded (`team` / `entry-denied`, the team, the outcome and the reason), once per cache window per session and team, so a
   refused caller reloading the page leaves one entry and not one per request.
 - **API keys and MCP are not sessions** and stay governed by the team context middleware; a host that wants the same rule there calls its guard from its own
@@ -1404,16 +1406,19 @@ builder.Services.AddScoped<ISessionPolicy, StrictTeams>();
   expire after 30 days). The browser holds only its id, in a claim the library stamps at sign-in (`TeamClaimTypes.SessionId`, issuer `Tharga.Team`) inside
   the data-protected cookie. A claim of that type sent by the identity provider is discarded, never believed, and a claim naming someone else's session is
   refused.
-- **Checked on every request** in the cookie scheme's `OnValidatePrincipal`, before your own handler, and in every live circuit beside the disabled-user
-  check, on the [revalidation interval](#team-claim-revalidation). The team is the one the selected-team cookie names; limits only restrict, and a team switch
-  reloads the page, so the next request is checked against the new team.
+- **Checked on every request** in the cookie scheme's `OnValidatePrincipal`, before your own handler, and **live in every open circuit** (below), with
+  the [revalidation interval](#team-claim-revalidation) as a backstop beside the disabled-user check. The team is the one the selected-team cookie names;
+  limits only restrict, and a team switch reloads the page, so the next request is checked against the new team.
 - **An ended session is signed out once and audited once**, by the request that ended it, however many requests follow. When that request needs a sign-in,
   the browser is sent to `Sessions.EndedPath` (or the start page) with the reason as a code, `?reason=idle`, `maxage`, `newersignin`, `ended` or `signedout`,
   rather than straight to the provider. Make that page `[AllowAnonymous]` so the person can read it before signing in again.
-- **Idle time counts what the person does**, also inside a circuit, which sends no request: `LoginDisplay` loads a small script that reports use of the
-  visible tab (pointer, keys, wheel) to `POST /_tharga/session/activity` at most once per `Sessions.ActivityInterval`. `UseThargaTeamBlazor` maps it. The
-  store throttles per session, so several tabs and instances cost one write a minute. A session is never ended as idle on a remembered stamp: the store is
-  read again first.
+- **Idle time counts what the person does**, also inside a circuit, which sends no request: `<SessionWatch />`, which `LoginDisplay` renders, loads a small
+  script that reports use of the visible tab (pointer, keys, wheel) to `POST /_tharga/session/activity` at most once per `Sessions.ActivityInterval`.
+  `UseThargaTeamBlazor` maps it. The store throttles per session, so several tabs and instances cost one write a minute. Nothing is kept in the browser:
+  the session reported is the one in the cookie the request carries. A session is never ended as idle on a remembered stamp: the store is read again first.
+  `SessionWatch` decides nothing itself: the circuit reads the store and says what to show. **A host without `LoginDisplay` places `<SessionWatch />` once in its layout**, in an interactive
+  render mode (`InteractiveServer`): it needs the live circuit, and in a statically rendered page it does nothing. It renders nothing and loads nothing
+  while sessions are not active, and only the first one on a circuit asks, so a second renders nothing until the first goes.
 - **One session per team, newest sign-in wins.** When `SingleSession` is set and a session enters the team, the person's older sessions there are ended
   (`newersignin`); a session switching into a team where a newer one already is ends itself instead. Each end is conditional in the store, so two instances
   racing converge on the newest sign-in.
@@ -1424,6 +1429,10 @@ builder.Services.AddScoped<ISessionPolicy, StrictTeams>();
   in `Sessions.CookieScheme` if it is not `Cookies`. `IUserSessionService` also ends the current session or every other session of the caller.
 - **Failures allow by default.** A policy or store that throws is logged and the request goes through (`Sessions.OnError = Allow`): a database blip must not
   sign everybody out. `Deny` refuses the request instead, without ending the session. A live circuit is never ended for a failure.
+- **Signing out lands on the ended page when asked to.** `/logout?reason=signedout`, where the "Still here?" dialog's *Sign out* goes, signs out exactly
+  as `/logout` does (it ends the session as `signedout` first, while the cookie still says whose it is, and announces it), and then lands on
+  `Sessions.EndedPath?reason=signedout` (or the start page with the reason) instead of the start page. Only that one value is read; any other, or sessions
+  off, lands where it always did, so it is no open redirect.
 - **Startup fails, naming the problem**, when a policy is registered with no `IUserSessionStore`, or when the cookie scheme sets `EventsType`, which would
   silently replace the events the check is chained into. Both only when sessions are on.
 - **API keys and MCP** authenticate through other schemes and are never touched.
@@ -1442,6 +1451,7 @@ builder.AddThargaTeam(o =>
 | `Sessions.Enabled` | `true` | Whether a registered policy is applied. With no policy registered nothing here runs. |
 | `Sessions.CacheDuration` | 30 seconds | How long a session and its limits are remembered per instance. `Zero` reads every time; longer means a session ended elsewhere is noticed later. |
 | `Sessions.ActivityInterval` | 1 minute | How often activity is written per session, at most. An idle timeout shorter than this cannot be told from activity. |
+| `Sessions.IdleWarning` | 1 minute | How long before an idle sign-out `SessionWatch` asks "Still here?". `Zero` asks nobody. Never longer than the idle timeout less twice `ActivityInterval` (a timeout too short for that gets no warning), and nobody is asked when the max age ends the session first. |
 | `Sessions.EndedPath` | `null` | Where a browser whose session ended is sent, with `?reason=`. A path on this site only; otherwise the start page. |
 | `Sessions.AdoptExistingCookies` | `true` | Give a cookie from before sessions a session on its next request. `false` lets such a cookie through with no session and no limits until it expires. |
 | `Sessions.OnError` | `Allow` | What a failing policy or store does to a request. `Deny` refuses it without ending the session. |
@@ -1449,8 +1459,113 @@ builder.AddThargaTeam(o =>
 
 **Audited** (feature `auth`): `signout` when a person signs out, `session-ended` with the reason in `session.reason`, and `session-superseded` for an
 older session a newer sign-in ended, with its team. None names the session id. **Cost**: one store read per session per cache window, one activity write
-per session per interval, and the policy once per session and team per window. With no policy registered the only added work is one resolve per request.
-The sample's `SampleSessionPolicy` gives a team named *Strict* a two-minute idle timeout and one session per person.
+per session per interval, and the policy once per session and team per window. Each open circuit adds one timer, which costs nothing between wakes, and
+one store read per wake: at the warning, at the idle or max-age moment, and when it is told to look (an end for that person, another tab's signal while it
+is asking, a view arriving inside the warning window); "Yes" is one write and two reads. While the store answers nothing polls: with no limit a circuit
+arms no timer at all, and a long max age is reached by waking at most once a day. While the store fails, or does not have the session (refused by
+the next request anyway), a circuit looks again after a doubling wait, from `ActivityInterval` but never less than a second (so an `ActivityInterval` of
+`Zero` is no loop), up to 30 minutes; the wait starts over once the store answers. Each look runs in a short-lived scope of its own, off the thread that
+asked for it. With no policy registered the only added work is one resolve per
+request and per circuit.
+The sample's `SampleSessionPolicy` gives a team named *Strict* a two-minute idle timeout and one session per person. The warning is never longer than the
+idle timeout less twice `ActivityInterval`, so with the default minute two minutes would leave no room for it; the sample's 20-second `ActivityInterval`
+leaves the full one-minute warning, so the *Strict* team shows the dialog.
+
+##### Live sign-out
+
+Every open circuit watches its own session, so a session that ends is seen **within seconds**, without a request and without waiting for the
+revalidation interval. The circuit handler starts the watch when the circuit opens, so it runs whether or not a component is on the page; one watch is
+registered per circuit, and in a host with no circuit at all it resolves and watches nothing.
+
+- **The store is the only truth.** The circuit works out the next moment that matters from the stored session and the host's limits (the warning, a
+  second past the idle limit, a second past the max age), on the server's clock only, and arms **one timer** for it, at most a day ahead. Each wake
+  reads the store afresh; nothing polls while the store answers.
+- **An end is conditional, audited once and announced once.** When the store says the session is over its limits, the circuit ends it through the same
+  domain service a request does; whichever call the store says ended it audits and announces it, so two instances or two tabs leave one entry.
+- **It ends only on the store's word.** An end on this instance (a sign-out, a refused request, a newer sign-in, ending the other sessions) is announced
+  through `IUserSessionNotifier`; every circuit of that person looks at the store at once, and a circuit whose own session lasts carries on. A circuit
+  learns whose session it watches from its first successful read, and until then listens to nobody. Another tab of the same browser is told over a
+  `BroadcastChannel` and looks too; a message carries only its kind (somebody was active, or the session ended). A hint never ends anything by itself.
+- **A failure never ends a circuit.** A store or policy that throws is logged and looked at again after a doubling wait, from `ActivityInterval` (at
+  least a second) up to 30 minutes, however long it lasts.
+- **When it ends**, the circuit stops its timer, signs its own authentication state out, and `SessionWatch` sends the browser to
+  `Sessions.EndedPath?reason=...` with a full load, telling the browser's other tabs.
+
+`IUserSessionNotifier` is public: a host can listen to it (`SessionEnded`, with the person's key and the reason, never the session id), and relays it on
+several instances. Subscribe in `OnInitialized` and unsubscribe in `Dispose`; handlers run on the thread that ended the session. **Listen to it, do not
+replace it**: the notifiers are the toolkit's own caches, which forget what they remembered before anybody is told, so registering an
+`IUserSessionNotifier` or `ITeamEntryNotifier` of your own fails startup, naming it.
+
+##### "Still here?"
+
+Before an idle sign-out, `SessionWatch` asks **"Are you still there?"** with a countdown, `Sessions.IdleWarning` ahead (1 minute by default).
+
+- **Somebody working is never asked.** The question is put only when the store's activity stamp says the session is about to go idle, which use of any
+  tab, on any instance, moves.
+- **"Yes, stay signed in"** records activity at once and closes the question in every tab of the browser. It writes only while the question is open and
+  the idle moment has not come: an answer that arrives too late writes nothing, and never brings an ended or over-limit session back.
+  While it is open, using the page is not an answer: activity reports are held, so only "Yes" keeps the session.
+- **"Sign out"** ends the session as `signedout`, audited once and announced once. With the library's own sign-in (`AddThargaAuth`), the tab goes to
+  `/logout?reason=signedout` with the session still running, and the endpoint ends it: the cookie still says who is signing out, which the identity
+  provider's sign-out takes its hint from, so the provider is signed out too (with `FederatedSignOut`) rather than asking which account, which matters on
+  a shared machine. It lands on `Sessions.EndedPath?reason=signedout`. A host that signs people in by its own means has the circuit end the session, and
+  the tab goes straight to the ended page. The other tabs land on `?reason=signedout` as soon as they hear of the end.
+- **No answer**: the countdown runs out, the circuit ends the session as `idle` a second later, and every tab lands on `?reason=idle`. The countdown in the
+  browser is only a display of what the server said was left, ticking only while the question is open; it decides nothing. When the server moves the idle
+  moment while the question is open (the policy now gives another timeout), the countdown starts over from what is left.
+- **Not asked**: with no view on the page (nobody to ask), with `IdleWarning` at `Zero` or clamped to nothing, or when the max age ends the session first,
+  where staying would not help. The session still ends on time.
+- **Wording** comes from `SessionText` (`team.session.idle.title`, `.body`, `.countdown` with `{0}` for the time, `.stay`, `.signout`), translated through
+  your `IThargaTextProvider` like every other string. The dialog's elements carry `data-session-watch-*` attributes for styling and tests.
+
+##### Several instances
+
+A notification reaches the instance it was raised on. With one instance there is nothing to do. With several, **relay both notifiers** over whatever your
+instances already share (a SignalR backplane, Redis, a service bus): publish what is raised here, and hand what arrives from the others back with
+`FromRemote` set. A relayed notification is never published again, so nothing echoes.
+
+```csharp
+public sealed class SessionRelay(IUserSessionNotifier sessions, ITeamEntryNotifier entries, IMyBackplane backplane) : IHostedService
+{
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        sessions.SessionEnded += OnSessionEnded;
+        entries.Invalidated += OnInvalidated;
+        backplane.OnSessionEnded(m => sessions.Notify(new UserSessionEndedEventArgs { UserKey = m.UserKey, Reason = m.Reason, FromRemote = true }));
+        backplane.OnEntryInvalidated(m => entries.Notify(new TeamEntryInvalidatedEventArgs { UserKey = m.UserKey, TeamKey = m.TeamKey, FromRemote = true }));
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken)
+    {
+        sessions.SessionEnded -= OnSessionEnded;
+        entries.Invalidated -= OnInvalidated;
+        return Task.CompletedTask;
+    }
+
+    // Only what happened here; what arrived from another instance is not passed on again.
+    private void OnSessionEnded(object sender, UserSessionEndedEventArgs e)
+    {
+        if (!e.FromRemote) backplane.PublishSessionEnded(e.UserKey, e.Reason);
+    }
+
+    private void OnInvalidated(object sender, TeamEntryInvalidatedEventArgs e)
+    {
+        if (!e.FromRemote) backplane.PublishEntryInvalidated(e.UserKey, e.TeamKey);
+    }
+}
+
+builder.Services.AddHostedService<SessionRelay>();
+```
+
+A message carries the person's key and the reason (or the team), and **never a session id**. If your backplane delivers a message back to the instance
+that sent it, drop it there by origin; a duplicate only causes one extra store read. On receipt the instance forgets what it remembered about that person
+before anybody is told, so the next request and every circuit read the store.
+
+**What holds without a relay:** idle and max-age ends (each circuit's own timer reads the store), the "Still here?" question and its answer across the tabs
+of one browser, and the next request on any instance, which reads the store once its cache window has passed. What waits is an end made on another
+instance from **another browser** (a sign-out elsewhere, a newer sign-in, ending the other sessions): an open circuit here sees it at its next wake or the
+revalidation interval, whichever is first, and a guard's changed answer when the cached answer expires.
 
 ### Verification
 

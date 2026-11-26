@@ -80,4 +80,69 @@ public class UserSessionContractTests
         Assert.Equal(["Ended", "Idle", "MaxAge", "NewerSignIn", "SignedOut"], Enum.GetNames<SessionEndReason>().Order());
         Assert.Equal(["Adopted", "Host", "SignIn"], Enum.GetNames<SessionOrigin>().Order());
     }
+
+    // ---- the notifications (Tharga/Team#471 part 2): they cross a host's backplane, so they serialize by construction
+
+    [Fact]
+    public void TheEndNotification_SurvivesAJsonRoundTrip()
+    {
+        var args = new UserSessionEndedEventArgs { UserKey = "user-1", Reason = SessionEndReason.NewerSignIn, FromRemote = true };
+
+        var read = JsonSerializer.Deserialize<UserSessionEndedEventArgs>(JsonSerializer.Serialize(args));
+
+        Assert.NotNull(read);
+        Assert.Equal(("user-1", SessionEndReason.NewerSignIn, true), (read.UserKey, read.Reason, read.FromRemote));
+    }
+
+    [Fact]
+    public void TheEndNotification_IsNotRemote_UntilARelaySaysSo()
+    {
+        var args = new UserSessionEndedEventArgs { UserKey = "user-1", Reason = SessionEndReason.Idle };
+
+        Assert.False(args.FromRemote);
+        Assert.False(JsonSerializer.Deserialize<UserSessionEndedEventArgs>("{\"UserKey\":\"u\",\"Reason\":2}").FromRemote);
+    }
+
+    /// <summary>It names the person and why. A session id is the credential's key and must not travel to listeners, or over a backplane.</summary>
+    [Fact]
+    public void TheEndNotification_CarriesNoSession()
+    {
+        var args = new UserSessionEndedEventArgs { UserKey = "user-1", Reason = SessionEndReason.Idle };
+
+        var members = typeof(UserSessionEndedEventArgs).GetProperties().Select(x => x.Name).Order().ToArray();
+        var json = JsonSerializer.SerializeToElement(args).EnumerateObject().Select(x => x.Name).Order().ToArray();
+
+        Assert.Equal(["FromRemote", "Reason", "UserKey"], members);
+        Assert.Equal(["FromRemote", "Reason", "UserKey"], json);
+    }
+
+    [Fact]
+    public void TheEndNotification_CannotBeBuiltWithoutThePersonOrTheReason()
+    {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<UserSessionEndedEventArgs>("{\"Reason\":1}"));
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<UserSessionEndedEventArgs>("{\"UserKey\":\"u\"}"));
+    }
+
+    [Theory]
+    [InlineData("acme")]
+    [InlineData(null)]
+    public void TheEntryNotification_SurvivesAJsonRoundTrip_WithOrWithoutATeam(string team)
+    {
+        var args = new TeamEntryInvalidatedEventArgs { UserKey = "user-1", TeamKey = team, FromRemote = true };
+
+        var read = JsonSerializer.Deserialize<TeamEntryInvalidatedEventArgs>(JsonSerializer.Serialize(args));
+
+        Assert.NotNull(read);
+        Assert.Equal(("user-1", team, true), (read.UserKey, read.TeamKey, read.FromRemote));
+    }
+
+    [Fact]
+    public void TheEntryNotification_NamesNoTeamUnlessOneWasForgotten_AndIsNotRemoteUntilARelaySaysSo()
+    {
+        var args = new TeamEntryInvalidatedEventArgs { UserKey = "user-1" };
+
+        Assert.Null(args.TeamKey);
+        Assert.False(args.FromRemote);
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<TeamEntryInvalidatedEventArgs>("{\"TeamKey\":\"acme\"}"));
+    }
 }

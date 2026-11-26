@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
+using Microsoft.Extensions.Logging;
 using Tharga.Team;
 
 namespace Tharga.Team.Blazor.Framework;
@@ -16,7 +17,7 @@ namespace Tharga.Team.Blazor.Framework;
 /// evaluator never answers a step-up from here: the caller completes it on whichever instance takes the callback.
 /// </para>
 /// </remarks>
-internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuardState
+internal sealed class TeamEntryCache(TimeProvider timeProvider, ILogger<TeamEntryCache> logger = null) : ITeamEntryGuardState, ITeamEntryNotifier
 {
     private readonly ConcurrentDictionary<Key, Entry> _entries = new();
 
@@ -47,14 +48,37 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuar
         if (_entries.Count > 10_000) Sweep();
     }
 
+    /// <summary>
+    /// Forgets the person's remembered answers (for the one team, or every team) first, so a circuit that re-evaluates because of it asks the guard again,
+    /// then tells every handler in turn. A throwing handler is logged and skipped.
+    /// </summary>
+    public void Notify(TeamEntryInvalidatedEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(args?.UserKey)) return;
+
+        Forget(args.UserKey, args.TeamKey);
+
+        var handlers = Invalidated;
+        if (handlers == null) return;
+
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<TeamEntryInvalidatedEventArgs>>())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "A team-entry notification handler threw. The answers are forgotten; only the notification failed.");
+            }
+        }
+    }
+
     public Task InvalidateAsync(string userKey, string teamKey = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(userKey)) return Task.CompletedTask;
 
-        foreach (var key in _entries.Keys.Where(x => x.User == userKey && (teamKey == null || x.Team == teamKey)).ToArray())
-            _entries.TryRemove(key, out _);
-
-        Invalidated?.Invoke(this, new TeamEntryInvalidatedEventArgs(userKey, teamKey));
+        Notify(new TeamEntryInvalidatedEventArgs { UserKey = userKey, TeamKey = teamKey });
 
         return Task.CompletedTask;
     }
@@ -77,6 +101,14 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuar
             string.Join(',', (principal?.FindAll("amr") ?? []).Select(x => x.Value).Order(StringComparer.Ordinal)));
     }
 
+    private void Forget(string userKey, string teamKey)
+    {
+        foreach (var key in _entries.Keys.Where(x => x.User == userKey && (teamKey == null || x.Team == teamKey)).ToArray())
+        {
+            _entries.TryRemove(key, out _);
+        }
+    }
+
     private void Sweep()
     {
         var now = timeProvider.GetUtcNow();
@@ -86,13 +118,4 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuar
     private readonly record struct Key(string User, string Session, string Team);
 
     private readonly record struct Entry(TeamEntryDecision Decision, DateTimeOffset Expires);
-}
-
-/// <summary>The answers for a user were forgotten.</summary>
-internal sealed class TeamEntryInvalidatedEventArgs(string userKey, string teamKey) : EventArgs
-{
-    public string UserKey { get; } = userKey;
-
-    /// <summary>The team only that team's answers were forgotten for, or null for every team.</summary>
-    public string TeamKey { get; } = teamKey;
 }

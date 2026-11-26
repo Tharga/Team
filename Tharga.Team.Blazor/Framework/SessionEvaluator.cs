@@ -22,7 +22,12 @@ internal enum SessionCheckOutcome
 }
 
 /// <summary>What the session check decided, with the principal to carry on with when it adopted a cookie, and why when the session is ended.</summary>
-internal sealed record SessionCheck(SessionCheckOutcome Outcome, ClaimsPrincipal Principal = null, SessionEndReason? Reason = null);
+/// <param name="Outcome">What was decided.</param>
+/// <param name="Principal">The principal to carry on with when a cookie was adopted.</param>
+/// <param name="Reason">Why the session ended, when it did.</param>
+/// <param name="Session">The session as read, when the check read one; what a live circuit works out its deadlines from.</param>
+/// <param name="Limits">The host's limits for the session's team, when the check looked them up.</param>
+internal sealed record SessionCheck(SessionCheckOutcome Outcome, ClaimsPrincipal Principal = null, SessionEndReason? Reason = null, UserSession Session = null, SessionLimits Limits = null);
 
 /// <summary>
 /// Checks the caller's server-side session against the host's <see cref="ISessionPolicy"/>, per request and per live circuit (Tharga/Team#471). Shaped like
@@ -49,7 +54,7 @@ internal sealed class SessionEvaluator(
     TimeProvider timeProvider,
     ISessionPolicy policy = null,
     UserSessionService sessions = null,
-    ILogger<SessionEvaluator> logger = null)
+    ILogger<SessionEvaluator> logger = null) : ICircuitSessionChecks
 {
     private static readonly SessionCheck ValidCheck = new(SessionCheckOutcome.Valid);
     private static readonly SessionCheck RejectedCheck = new(SessionCheckOutcome.Rejected);
@@ -78,6 +83,61 @@ internal sealed class SessionEvaluator(
     /// </summary>
     public Task<SessionCheck> EvaluateCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
         => UserSessionService.SessionIdOf(principal) == null ? Task.FromResult(ValidCheck) : CheckAsync(principal, null, activeTeamKey, false, cancellationToken);
+
+    /// <summary>
+    /// Looks at the session of a live circuit for its own timer: always read fresh from the store (never the remembered one), ends it when over its limits, and
+    /// returns the session and limits so deadlines can be worked out. It never adopts, never records activity and never enters a team.
+    /// </summary>
+    /// <remarks>A failing store or policy propagates, unlike <see cref="EvaluateCircuitAsync"/>: the circuit must tell a failure from a refusal, and never ends for a failure.</remarks>
+    public async Task<SessionCheck> InspectCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
+    {
+        if (!Active || UserSessionService.SessionIdOf(principal) == null) return ValidCheck;
+
+        var session = await Sessions.GetAsync(principal, cancellationToken);
+        if (session == null) return RejectedCheck;
+        if (session.EndedAt != null) return EndedCheck(session.EndReason) with { Session = session };
+
+        var limits = await LimitsAsync(session, TeamOf(activeTeamKey), cancellationToken);
+        if (UserSessionService.Exceeded(session, limits, Now) is { } reason) return await EndAsync(principal, session, reason, cancellationToken) with { Session = session };
+
+        return new SessionCheck(SessionCheckOutcome.Valid, Session: session, Limits: limits);
+    }
+
+    /// <summary>
+    /// The person answered "Still here?": records activity now, whatever was recorded a moment ago, and forgets the remembered session. False when the session
+    /// is not there, has ended, or is already over a limit: an answer that came too late never brings a session back.
+    /// </summary>
+    public async Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
+    {
+        var sessionId = UserSessionService.SessionIdOf(principal);
+        if (!Active || sessionId == null) return false;
+
+        var team = TeamOf(activeTeamKey);
+        var session = await Sessions.GetAsync(principal, cancellationToken);
+        if (session == null || session.EndedAt != null) return false;
+        if (UserSessionService.Exceeded(session, await LimitsAsync(session, team, cancellationToken), Now) != null) return false;
+
+        var recorded = await Sessions.RecordActivityAsync(principal, team, TimeSpan.Zero, cancellationToken);
+        cache.ForgetSession(sessionId);
+
+        return recorded;
+    }
+
+    /// <summary>
+    /// The person chose to sign out from a live circuit: ends the session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when
+    /// this call ended it. The person announced is <paramref name="userKey"/>, else the remembered session's, else looked up.
+    /// </summary>
+    public async Task<bool> SignOutAsync(ClaimsPrincipal principal, string userKey = null, CancellationToken cancellationToken = default)
+    {
+        var sessionId = UserSessionService.SessionIdOf(principal);
+        if (!Active || sessionId == null) return false;
+
+        userKey ??= cache.TryGetSession(sessionId, out var cached) && Sessions.Owns(principal, cached) ? cached.UserKey : null;
+        var ended = await Sessions.SignOutAsync(principal, userKey, cancellationToken);
+        cache.ForgetSession(sessionId);
+
+        return ended;
+    }
 
     /// <summary>Records that the caller used a visible page, for the activity endpoint; the store throttles it to once per <see cref="SessionOptions.ActivityInterval"/>.</summary>
     public async Task<bool> RecordActivityAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
@@ -134,7 +194,7 @@ internal sealed class SessionEvaluator(
 
         if (request && limits.SingleSession && team != null && !string.Equals(session.ActiveTeamKey, team, StringComparison.Ordinal))
         {
-            var entry = await Sessions.EnterTeamExclusiveAsync(principal, team, cancellationToken);
+            var entry = await Sessions.EnterTeamExclusiveAsync(principal, team, session.UserKey, cancellationToken);
 
             // Read afresh next time: the store now says which team it is in, and whether a racing entry elsewhere ended it.
             cache.ForgetSession(session.SessionId);
@@ -178,7 +238,7 @@ internal sealed class SessionEvaluator(
     /// <remarks>Only the call the store says ended it is audited, by the domain service; another that lost the race reports the reason the store kept.</remarks>
     private async Task<SessionCheck> EndAsync(ClaimsPrincipal principal, UserSession session, SessionEndReason reason, CancellationToken cancellationToken)
     {
-        if (await Sessions.EndAsync(principal, reason, cancellationToken))
+        if (await Sessions.EndAsync(principal, reason, session.UserKey, cancellationToken))
         {
             cache.UpdateSession(session with { EndedAt = Now, EndReason = reason });
             return EndedCheck(reason);

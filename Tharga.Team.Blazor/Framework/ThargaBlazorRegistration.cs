@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -308,6 +309,7 @@ public static class ThargaBlazorRegistration
             services.TryAddSingleton(TimeProvider.System);
             services.TryAddSingleton<TeamEntryCache>();
             services.TryAddSingleton<ITeamEntryGuardState>(sp => sp.GetRequiredService<TeamEntryCache>());
+            services.TryAddSingleton<ITeamEntryNotifier>(sp => sp.GetRequiredService<TeamEntryCache>());
             services.TryAddScoped<TeamEntryEvaluator>();
             RegisterSessions(services, o.Sessions);
             services.TryAddScoped<TeamMembershipClaimsBuilder>();
@@ -411,10 +413,15 @@ public static class ThargaBlazorRegistration
     /// configured, in whichever order they were registered. A host's <c>EventsType</c> would silently replace it, which <see cref="SessionWiringCheck"/>
     /// refuses at startup.
     /// </para>
+    /// <para>
+    /// <b>The notifier is the session cache itself</b>, so an end announced anywhere, or relayed by the host, reaches the cache that must forget it. A host's
+    /// own <see cref="IUserSessionNotifier"/> or <see cref="ITeamEntryNotifier"/> is refused at startup by <see cref="SessionNotifierWiringCheck"/>.
+    /// </para>
     /// </remarks>
     private static void RegisterSessions(IServiceCollection services, SessionOptions sessions)
     {
         services.TryAddSingleton<SessionCache>();
+        services.TryAddSingleton<IUserSessionNotifier>(sp => sp.GetRequiredService<SessionCache>());
         services.TryAddScoped<UserSessionService>();
         services.TryAddScoped<IUserSessionService>(sp => sp.GetRequiredService<UserSessionService>());
         services.TryAddScoped(sp =>
@@ -431,6 +438,20 @@ public static class ThargaBlazorRegistration
                 usable ? sp.GetRequiredService<UserSessionService>() : null,
                 sp.GetService<ILogger<SessionEvaluator>>());
         });
+
+        // The live watch (Tharga/Team#471), one per circuit; see the implementation guide, "Live sign-out".
+        services.TryAddScoped<SessionCircuitScope>();
+        services.TryAddScoped(sp => new SessionCircuit(
+            sp.GetRequiredService<SessionCircuitScope>(),
+            sp.GetService<AuthenticationStateProvider>(),
+            sp.GetService<IHostEnvironmentAuthenticationStateProvider>(),
+            sp.GetRequiredService<IUserSessionNotifier>(),
+            sp.GetRequiredService<IOptions<ThargaBlazorOptions>>(),
+            sp.GetRequiredService<TimeProvider>(),
+            sp.GetService<ILogger<SessionCircuit>>()));
+        services.TryAddScoped<ISessionCircuit>(sp => sp.GetRequiredService<SessionCircuit>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<CircuitHandler, SessionCircuitHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SessionNotifierWiringCheck>());
 
         services.PostConfigure<CookieAuthenticationOptions>(sessions?.CookieScheme ?? CookieAuthenticationDefaults.AuthenticationScheme, cookie =>
         {

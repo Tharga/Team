@@ -38,6 +38,21 @@ public class GranularPathRenderTests : BunitContext
     }
 
     /// <summary>
+    /// The sign-in menu places the session watch outside its <c>AuthorizeView</c> (Tharga/Team#471), so it is there signed out as well as signed in; with no
+    /// session policy it renders nothing.
+    /// </summary>
+    [Fact]
+    public void LoginDisplay_RendersTheSessionWatch_EvenSignedOut()
+    {
+        RegisterGranularPath();
+
+        var view = Render<LoginDisplay>();
+
+        var watch = view.FindComponent<Tharga.Team.Blazor.Features.Authentication.SessionWatch>();
+        Assert.Empty(watch.Markup.Trim());
+    }
+
+    /// <summary>
     /// Registers what a host following the documented "Advanced: Step-by-step setup" registers: the
     /// granular entry point, plus the collaborators the host supplies itself.
     /// </summary>

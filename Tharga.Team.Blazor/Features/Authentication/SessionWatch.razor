@@ -1,0 +1,289 @@
+@using Microsoft.AspNetCore.WebUtilities
+@using Microsoft.Extensions.DependencyInjection
+@using Microsoft.Extensions.Options
+@using Microsoft.JSInterop
+@using Tharga.Team.Blazor.Framework
+@implements IAsyncDisposable
+@inject IServiceProvider Services
+@inject IThargaTextProvider TextProvider
+@inject IOptions<ThargaBlazorOptions> ThargaBlazorOptions
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JsRuntime
+
+@* The page's half of the server-side session (Tharga/Team#471); what it does and where it goes is in the implementation guide, "Still here?". *@
+
+@if (_open)
+{
+    var (before, after) = CountdownParts();
+    <div class="session-watch-overlay" data-session-watch-overlay></div>
+    <div class="session-watch-dialog" role="alertdialog" aria-modal="true" aria-labelledby="@TitleId" aria-describedby="@($"{BodyId} {DeadlineId}")"
+         data-session-watch-dialog @ref="_dialog">
+        <h2 class="rz-text-h6 rz-mb-2" id="@TitleId" data-session-watch-title>@_text[SessionText.Title]</h2>
+        <p class="rz-text-body1 rz-mb-2" id="@BodyId" data-session-watch-body>@_text[SessionText.Body]</p>
+        @* Read once, when the question opens; the ticking copy below is hidden from screen readers so it does not announce every second. *@
+        <p class="session-watch-deadline" id="@DeadlineId">@before@_time@after</p>
+        <p class="rz-text-body2 rz-mb-4" aria-hidden="true" data-session-watch-countdown>@before<strong data-session-watch-time>@_time</strong>@after</p>
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+            <RadzenButton Text="@_text[SessionText.SignOut]" ButtonStyle="ButtonStyle.Light" Click="SignOutAsync" data-session-watch-signout />
+            <RadzenButton Text="@_text[SessionText.Stay]" ButtonStyle="ButtonStyle.Primary" Click="StayAsync" data-session-watch-stay />
+        </RadzenStack>
+    </div>
+}
+
+@code {
+    private const string ModulePath = "./_content/Tharga.Team.Blazor/session-activity.js";
+    private const string Placeholder = "{0}";
+    private const string ActivityKind = "activity";
+    private const string EndedKind = "ended";
+
+    private readonly string _id = Guid.NewGuid().ToString("N");
+    private ISessionCircuit _circuit;
+    private IDisposable _attachment;
+    private IJSObjectReference _module;
+    private DotNetObjectReference<SessionWatch> _self;
+    private ElementReference _dialog;
+    private TextSet _text = TextSet.Empty;
+    private bool _rendered;
+    private bool _open;
+    private bool _left;
+    private bool _disposed;
+    private DateTime? _shownIdleAt;
+    private string _time;
+
+    private string TitleId => $"{_id}-title";
+
+    private string BodyId => $"{_id}-body";
+
+    private string DeadlineId => $"{_id}-deadline";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Resolved optionally: this renders in hosts that registered no session watch at all.
+        _circuit = Services.GetService<ISessionCircuit>();
+        if (_circuit == null) return;
+
+        // Listening before asking whether it is active, so a watch that finds its session a moment later is not missed.
+        _circuit.Activated += OnActivated;
+        _circuit.Changed += OnChanged;
+        await TakeOverAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _circuit == null) return;
+
+        _rendered = true;
+        await LoadAsync();
+
+        // The warning arrived before the browser half was loaded: the dialog is open, but nothing in the browser was started for it.
+        if (_open) await StartAskingAsync(_circuit.Remaining ?? TimeSpan.Zero);
+        await ApplyAsync();
+    }
+
+    /// <summary>Another tab of this browser says somebody was active or the session ended. A hint: the circuit looks at the store, which decides.</summary>
+    [JSInvokable]
+    public async Task OnPeerSignal(string kind)
+    {
+        if (_attachment == null || kind is not (ActivityKind or EndedKind)) return;
+
+        await _circuit.CheckAsync();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        if (_circuit != null)
+        {
+            _circuit.Activated -= OnActivated;
+            _circuit.Changed -= OnChanged;
+        }
+
+        try
+        {
+            if (_module != null)
+            {
+                if (_open) await CallAsync("stopCountdown", _id);
+                await CallAsync("stopWatching", _id);
+                await ReleaseAsync(_module);
+                _module = null;
+            }
+        }
+        finally
+        {
+            _attachment?.Dispose();
+            _attachment = null;
+            _self?.Dispose();
+            _self = null;
+        }
+    }
+
+    private void OnActivated() => _ = InvokeAsync(RefreshAsync);
+
+    private void OnChanged() => _ = InvokeAsync(RefreshAsync);
+
+    private async Task RefreshAsync()
+    {
+        await TakeOverAsync();
+        await LoadAsync();
+        await ApplyAsync();
+    }
+
+    /// <summary>Becomes the circuit's one asking view, once there is a session to watch and no other view asks.</summary>
+    private async Task TakeOverAsync()
+    {
+        if (_disposed || _attachment != null || _left || _circuit?.Active != true) return;
+
+        _attachment = _circuit.TryAttach();
+        if (_attachment == null) return;
+
+        _text = await TextProvider.ResolveAsync(SessionText.All);
+    }
+
+    /// <summary>Loads the browser half once the page is interactive and this view asks.</summary>
+    private async Task LoadAsync()
+    {
+        if (!_rendered || _attachment == null || _module != null) return;
+
+        try
+        {
+            var module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            if (_disposed || _module != null)
+            {
+                await ReleaseAsync(module);
+                return;
+            }
+
+            _module = module;
+            _self = DotNetObjectReference.Create(this);
+            var interval = (int)(ThargaBlazorOptions.Value.Sessions ?? new SessionOptions()).ActivityInterval.TotalMilliseconds;
+            await _module.InvokeVoidAsync("watchActivity", _id, interval, NavigationManager.ToAbsoluteUri(SessionActivityEndpoint.Route.TrimStart('/')).ToString(), _self);
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+            // Without it only requests count as activity and other tabs are not told; the session still ends on time.
+        }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (_disposed || _attachment == null || _left) return;
+
+        switch (_circuit.State)
+        {
+            case SessionCircuitState.Ended:
+                await LeaveAsync(_circuit.EndedLocation ?? NavigationManager.BaseUri);
+                break;
+            case SessionCircuitState.Warning when !_open || _circuit.IdleAt != _shownIdleAt:
+                await OpenAsync(_circuit.Remaining ?? TimeSpan.Zero);
+                break;
+            case SessionCircuitState.Watching when _open:
+                await CloseAsync();
+                break;
+        }
+    }
+
+    /// <summary>Opens the question, or starts its countdown over when the server moved the idle moment while it was open.</summary>
+    private async Task OpenAsync(TimeSpan remaining)
+    {
+        _open = true;
+        _shownIdleAt = _circuit.IdleAt;
+        _time = Format(remaining);
+        StateHasChanged();
+
+        await StartAskingAsync(remaining);
+    }
+
+    private async Task StartAskingAsync(TimeSpan remaining)
+    {
+        await CallAsync("holdActivity", _id, true);
+        await CallAsync("startCountdown", _id, (int)Math.Max(0, remaining.TotalMilliseconds), _dialog);
+    }
+
+    private async Task CloseAsync()
+    {
+        _open = false;
+        _shownIdleAt = null;
+        StateHasChanged();
+
+        await CallAsync("stopCountdown", _id);
+        await CallAsync("holdActivity", _id, false);
+    }
+
+    /// <summary>Leaves the page with a full load; <paramref name="ended"/> tells the browser's other tabs, which is only true once the store says so.</summary>
+    private async Task LeaveAsync(string location, bool ended = true)
+    {
+        _left = true;
+        if (_open)
+        {
+            _open = false;
+            StateHasChanged();
+            await CallAsync("stopCountdown", _id);
+        }
+
+        if (ended) await CallAsync("announce", _id, EndedKind);
+        NavigationManager.NavigateTo(location, forceLoad: true);
+    }
+
+    private async Task StayAsync()
+    {
+        await _circuit.StayAsync();
+        await CallAsync("announce", _id, ActivityKind);
+        await ApplyAsync();
+    }
+
+    /// <summary>
+    /// With the library's sign-in, the browser goes to its <c>/logout?reason=signedout</c> with the session still running, so the endpoint ends and announces it
+    /// while the cookie still says who is signing out, which the identity provider's sign-out needs. Otherwise the circuit ends it, and the tab goes to the ended page.
+    /// </summary>
+    private async Task SignOutAsync()
+    {
+        var auth = Services.GetService<ThargaAuthOptions>();
+        if (!string.IsNullOrEmpty(auth?.LogoutPath))
+        {
+            await LeaveAsync(QueryHelpers.AddQueryString(auth.LogoutPath, SessionCookieEvents.ReasonParameterName, SessionCookieEvents.Code(SessionEndReason.SignedOut)), ended: false);
+            return;
+        }
+
+        await _circuit.SignOutAsync();
+        await ApplyAsync();
+    }
+
+    private static async Task ReleaseAsync(IJSObjectReference module)
+    {
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    private async Task CallAsync(string identifier, params object[] args)
+    {
+        if (_module == null) return;
+
+        try
+        {
+            await _module.InvokeVoidAsync(identifier, args);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+            // The dialog still works without the browser half; the server decides regardless.
+        }
+    }
+
+    private (string Before, string After) CountdownParts()
+    {
+        var template = _text[SessionText.Countdown];
+        var at = template.IndexOf(Placeholder, StringComparison.Ordinal);
+
+        return at < 0 ? ($"{template} ", string.Empty) : (template[..at], template[(at + Placeholder.Length)..]);
+    }
+
+    private static string Format(TimeSpan remaining)
+    {
+        var seconds = (int)Math.Ceiling(Math.Max(0, remaining.TotalSeconds));
+        return $"{seconds / 60}:{seconds % 60:00}";
+    }
+}
