@@ -123,13 +123,17 @@ internal sealed class SessionEvaluator(
         return recorded;
     }
 
-    /// <summary>The person chose to sign out from a live circuit: ends the session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when this call ended it.</summary>
-    public async Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// The person chose to sign out from a live circuit: ends the session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when
+    /// this call ended it. The person announced is <paramref name="userKey"/>, else the remembered session's, else looked up.
+    /// </summary>
+    public async Task<bool> SignOutAsync(ClaimsPrincipal principal, string userKey = null, CancellationToken cancellationToken = default)
     {
         var sessionId = UserSessionService.SessionIdOf(principal);
         if (!Active || sessionId == null) return false;
 
-        var ended = await Sessions.SignOutAsync(principal, cancellationToken);
+        userKey ??= cache.TryGetSession(sessionId, out var cached) && Sessions.Owns(principal, cached) ? cached.UserKey : null;
+        var ended = await Sessions.SignOutAsync(principal, userKey, cancellationToken);
         cache.ForgetSession(sessionId);
 
         return ended;
@@ -190,7 +194,7 @@ internal sealed class SessionEvaluator(
 
         if (request && limits.SingleSession && team != null && !string.Equals(session.ActiveTeamKey, team, StringComparison.Ordinal))
         {
-            var entry = await Sessions.EnterTeamExclusiveAsync(principal, team, cancellationToken);
+            var entry = await Sessions.EnterTeamExclusiveAsync(principal, team, session.UserKey, cancellationToken);
 
             // Read afresh next time: the store now says which team it is in, and whether a racing entry elsewhere ended it.
             cache.ForgetSession(session.SessionId);
@@ -234,7 +238,7 @@ internal sealed class SessionEvaluator(
     /// <remarks>Only the call the store says ended it is audited, by the domain service; another that lost the race reports the reason the store kept.</remarks>
     private async Task<SessionCheck> EndAsync(ClaimsPrincipal principal, UserSession session, SessionEndReason reason, CancellationToken cancellationToken)
     {
-        if (await Sessions.EndAsync(principal, reason, cancellationToken))
+        if (await Sessions.EndAsync(principal, reason, session.UserKey, cancellationToken))
         {
             cache.UpdateSession(session with { EndedAt = Now, EndReason = reason });
             return EndedCheck(reason);

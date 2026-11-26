@@ -180,7 +180,7 @@ internal sealed class SessionCircuit(
         bool ended;
         try
         {
-            ended = await checks.SignOutAsync(await PrincipalAsync());
+            ended = await checks.SignOutAsync(await PrincipalAsync(), _userKey);
         }
         catch (Exception e)
         {

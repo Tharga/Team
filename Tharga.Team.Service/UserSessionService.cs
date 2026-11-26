@@ -74,8 +74,11 @@ internal sealed class UserSessionService(
         return ended;
     }
 
-    /// <summary>Ends the given principal's session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when this call ended it. <see cref="EndCurrentAsync"/> is this for the ambient caller.</summary>
-    internal async Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Ends the given principal's session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when this call ended it.
+    /// <see cref="EndCurrentAsync"/> is this for the ambient caller. Pass <paramref name="userKey"/> when holding the session, so the end is announced without a user lookup.
+    /// </summary>
+    internal async Task<bool> SignOutAsync(ClaimsPrincipal principal, string userKey = null, CancellationToken cancellationToken = default)
     {
         var sessionId = SessionIdOf(principal);
         if (sessionId == null) return false;
@@ -84,7 +87,7 @@ internal sealed class UserSessionService(
         if (!ended) return false;
 
         Audit(() => AuthAuditEntries.SignOut(principal, Resolver));
-        await AnnounceAsync(principal, SessionEndReason.SignedOut);
+        await AnnounceAsync(principal, userKey, SessionEndReason.SignedOut);
 
         return true;
     }
@@ -116,8 +119,8 @@ internal sealed class UserSessionService(
            && string.Equals(session.SessionId, SessionIdOf(principal), StringComparison.Ordinal)
            && string.Equals(session.Subject, Resolver.GetSubject(principal), StringComparison.Ordinal);
 
-    /// <summary>Ends the principal's session for <paramref name="reason"/>; true, and audited, when this call ended it.</summary>
-    internal async Task<bool> EndAsync(ClaimsPrincipal principal, SessionEndReason reason, CancellationToken cancellationToken = default)
+    /// <summary>Ends the principal's session for <paramref name="reason"/>; true, and audited, when this call ended it. Pass <paramref name="userKey"/> when holding the session.</summary>
+    internal async Task<bool> EndAsync(ClaimsPrincipal principal, SessionEndReason reason, string userKey = null, CancellationToken cancellationToken = default)
     {
         var sessionId = SessionIdOf(principal);
         if (sessionId == null) return false;
@@ -126,7 +129,7 @@ internal sealed class UserSessionService(
         if (!ended) return false;
 
         Audit(() => AuthAuditEntries.SessionEnded(principal, reason, Resolver));
-        await AnnounceAsync(principal, reason);
+        await AnnounceAsync(principal, userKey, reason);
 
         return true;
     }
@@ -140,9 +143,10 @@ internal sealed class UserSessionService(
 
     /// <summary>
     /// Makes the principal's session the only one of theirs in <paramref name="teamKey"/>, newest sign-in winning; audits each older session it ended, and the
-    /// principal's own when a newer one was there first. One notification tells the host when anything was ended, however many sessions it was.
+    /// principal's own when a newer one was there first. One notification tells the host when anything was ended, however many sessions it was. Pass
+    /// <paramref name="userKey"/> when holding the session.
     /// </summary>
-    internal async Task<SessionTeamEntry> EnterTeamExclusiveAsync(ClaimsPrincipal principal, string teamKey, CancellationToken cancellationToken = default)
+    internal async Task<SessionTeamEntry> EnterTeamExclusiveAsync(ClaimsPrincipal principal, string teamKey, string userKey = null, CancellationToken cancellationToken = default)
     {
         var sessionId = SessionIdOf(principal);
         if (sessionId == null) return new SessionTeamEntry([], false);
@@ -156,7 +160,7 @@ internal sealed class UserSessionService(
 
         if (entry.CallerEnded) Audit(() => AuthAuditEntries.SessionEnded(principal, SessionEndReason.NewerSignIn, Resolver));
 
-        if (entry.CallerEnded || entry.Superseded is { Length: > 0 }) await AnnounceAsync(principal, SessionEndReason.NewerSignIn);
+        if (entry.CallerEnded || entry.Superseded is { Length: > 0 }) await AnnounceAsync(principal, userKey, SessionEndReason.NewerSignIn);
 
         return entry;
     }
@@ -247,10 +251,19 @@ internal sealed class UserSessionService(
         return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var at) ? at.UtcDateTime : null;
     }
 
-    /// <summary>Tells the host whose session ended, after the store and the audit, so whoever looks finds it ended. The end stands whatever happens here.</summary>
-    private async Task AnnounceAsync(ClaimsPrincipal principal, SessionEndReason reason)
+    /// <summary>
+    /// Tells the host whose session ended, after the store and the audit, so whoever looks finds it ended. The person is <paramref name="userKey"/> when the
+    /// caller held the session, and looked up only when it did not. The end stands whatever happens here.
+    /// </summary>
+    private async Task AnnounceAsync(ClaimsPrincipal principal, string userKey, SessionEndReason reason)
     {
         if (notifier == null) return;
+
+        if (!string.IsNullOrEmpty(userKey))
+        {
+            Announce(userKey, reason);
+            return;
+        }
 
         try
         {

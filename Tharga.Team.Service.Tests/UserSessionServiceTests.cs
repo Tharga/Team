@@ -500,4 +500,64 @@ public class UserSessionServiceTests
 
         Assert.Single(notifier.Heard);
     }
+
+    // ---- the person announced, when the caller holds the session (review of #570)
+
+    private UserSessionService WithFailingUserLookup(IUserService users, IUserSessionNotifier notifier)
+    {
+        users.GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>(), Arg.Any<bool>()).Returns<Task<IUser>>(_ => throw new InvalidOperationException("the user store is down"));
+        return new UserSessionService(_store, users, _accessor, new FixedTime(Now), null, _audit.Logger, notifier: notifier);
+    }
+
+    /// <summary>A deleted user, or a user service that throws, must not keep an end from being announced when the caller already knows whose session it was.</summary>
+    [Fact]
+    public async Task EndingForAReason_WithTheSessionsUserKey_AnnouncesIt_WithoutLookingTheUserUp()
+    {
+        var notifier = new RecordingNotifier();
+        var users = Substitute.For<IUserService>();
+        _store.EndAsync("s1", SessionEndReason.Idle, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await WithFailingUserLookup(users, notifier).EndAsync(WithSession(), SessionEndReason.Idle, "user-from-the-session"));
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal(("user-from-the-session", SessionEndReason.Idle), (heard.UserKey, heard.Reason));
+        await users.DidNotReceiveWithAnyArgs().GetCurrentUserAsync(default, default);
+    }
+
+    [Fact]
+    public async Task SigningOut_WithTheSessionsUserKey_AnnouncesIt_ThoughTheUserLookupFails()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EndAsync("s1", SessionEndReason.SignedOut, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await WithFailingUserLookup(Substitute.For<IUserService>(), notifier).SignOutAsync(WithSession(), UserKey));
+
+        var heard = Assert.Single(notifier.Heard);
+        Assert.Equal((UserKey, SessionEndReason.SignedOut), (heard.UserKey, heard.Reason));
+    }
+
+    [Fact]
+    public async Task EnteringATeamExclusively_WithTheSessionsUserKey_AnnouncesIt_ThoughTheUserLookupFails()
+    {
+        var notifier = new RecordingNotifier();
+        _store.EnterTeamExclusiveAsync("s1", "strict", Now.UtcDateTime, Arg.Any<CancellationToken>()).Returns(new SessionTeamEntry([Other("old")], false));
+
+        await WithFailingUserLookup(Substitute.For<IUserService>(), notifier).EnterTeamExclusiveAsync(WithSession(), "strict", UserKey);
+
+        Assert.Equal(UserKey, Assert.Single(notifier.Heard).UserKey);
+    }
+
+    /// <summary>Without a key the user is still looked up, as before; a lookup that fails is logged and the end stands, unannounced.</summary>
+    [Fact]
+    public async Task EndingForAReason_WithoutAUserKey_LooksTheUserUp_AndAFailingLookupLeavesTheEndStanding()
+    {
+        var notifier = new RecordingNotifier();
+        var users = Substitute.For<IUserService>();
+        _store.EndAsync("s1", SessionEndReason.Idle, Arg.Any<DateTime>(), Arg.Any<CancellationToken>()).Returns(true);
+
+        Assert.True(await WithFailingUserLookup(users, notifier).EndAsync(WithSession(), SessionEndReason.Idle));
+
+        Assert.Empty(notifier.Heard);
+        await users.Received().GetCurrentUserAsync(Arg.Any<ClaimsPrincipal>(), false);
+    }
 }

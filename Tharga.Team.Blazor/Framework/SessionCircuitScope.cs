@@ -22,8 +22,8 @@ internal sealed class SessionCircuitScope(IServiceScopeFactory scopeFactory, ISe
     public Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
         => RunAsync(x => x.ConfirmPresenceAsync(principal, activeTeamKey, cancellationToken));
 
-    public Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
-        => RunAsync(x => x.SignOutAsync(principal, cancellationToken));
+    public Task<bool> SignOutAsync(ClaimsPrincipal principal, string userKey = null, CancellationToken cancellationToken = default)
+        => RunAsync(x => x.SignOutAsync(principal, userKey, cancellationToken));
 
     private async Task<T> RunAsync<T>(Func<SessionEvaluator, Task<T>> check)
     {

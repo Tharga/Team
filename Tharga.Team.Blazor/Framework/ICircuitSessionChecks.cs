@@ -17,6 +17,6 @@ internal interface ICircuitSessionChecks
     /// <summary>Records that the person answered "Still here?"; false when the session is not there, has ended or is already past a limit.</summary>
     Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default);
 
-    /// <summary>Ends the session as signed out; true when this call ended it.</summary>
-    Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default);
+    /// <summary>Ends the session as signed out; true when this call ended it. <paramref name="userKey"/>, when the caller knows it from the session it read, is announced without looking the user up.</summary>
+    Task<bool> SignOutAsync(ClaimsPrincipal principal, string userKey = null, CancellationToken cancellationToken = default);
 }
