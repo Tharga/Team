@@ -33,3 +33,12 @@ export function stopWatching(id) {
     document.removeEventListener('visibilitychange', report);
     watching.delete(id);
 }
+
+// Stubs: the "Still here?" coordination lands with the implementation (Tharga/Team#471).
+export function holdActivity(id, held) { }
+
+export function announce(id, kind) { }
+
+export function startCountdown(id, remainingMs, selector) { }
+
+export function stopCountdown(id) { }

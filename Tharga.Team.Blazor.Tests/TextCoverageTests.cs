@@ -42,6 +42,7 @@ public class TextCoverageTests
         "Features/Support/SupportTranscript.razor",
         "Features/Team/TeamSelector.razor",
         "Features/Authentication/LoginDisplay.razor",
+        "Features/Authentication/SessionWatch.razor",
         "Features/User/UsersView.razor",
         "Features/Audit/AuditLogView.razor",
         "Features/User/AssignOwnerDialog.razor",
@@ -301,6 +302,19 @@ public class TextCoverageTests
         Assert.All(UserNoticeText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(SupportMailText.All, key => Assert.Contains(all, k => k.Key == key.Key));
         Assert.All(PostmasterViewText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(SessionText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+        Assert.All(TeamEntryText.All, key => Assert.Contains(all, k => k.Key == key.Key));
+    }
+
+    /// <summary>The five strings of the "Still here?" dialog, with the keys a translator is given (Tharga/Team#471).</summary>
+    [Fact]
+    public void TheSessionDialogsKeys_AreTheFiveTheDesignNames()
+    {
+        Assert.Equal(
+            ["team.session.idle.body", "team.session.idle.countdown", "team.session.idle.signout", "team.session.idle.stay", "team.session.idle.title"],
+            SessionText.All.Select(x => x.Key).Order(StringComparer.Ordinal).ToArray());
+        Assert.All(SessionText.All, key => Assert.False(string.IsNullOrWhiteSpace(key.Default)));
+        Assert.Contains("{0}", SessionText.Countdown.Default);
     }
 
     public static TheoryData<string> MigratedComponents()

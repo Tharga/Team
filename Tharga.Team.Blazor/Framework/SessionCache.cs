@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 
 namespace Tharga.Team.Blazor.Framework;
 
@@ -11,12 +12,18 @@ namespace Tharga.Team.Blazor.Framework;
 /// instance recorded activity or ended it, keeps the time it was read until, so a session that stays busy is still read again once per window and an end
 /// made elsewhere is noticed.
 /// </remarks>
-internal sealed class SessionCache(TimeProvider timeProvider)
+internal sealed class SessionCache(TimeProvider timeProvider, ILogger<SessionCache> logger = null) : IUserSessionNotifier
 {
     private const int SweepAbove = 10_000;
 
     private readonly ConcurrentDictionary<string, Entry<UserSession>> _sessions = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<LimitsKey, Entry<SessionLimits>> _limits = new();
+
+    /// <inheritdoc />
+    public event EventHandler<UserSessionEndedEventArgs> SessionEnded;
+
+    /// <inheritdoc />
+    public void Notify(UserSessionEndedEventArgs args) => throw new NotImplementedException();
 
     public bool TryGetSession(string sessionId, out UserSession session)
     {

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Claims;
+using Microsoft.Extensions.Logging;
 using Tharga.Team;
 
 namespace Tharga.Team.Blazor.Framework;
@@ -16,7 +17,7 @@ namespace Tharga.Team.Blazor.Framework;
 /// evaluator never answers a step-up from here: the caller completes it on whichever instance takes the callback.
 /// </para>
 /// </remarks>
-internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuardState
+internal sealed class TeamEntryCache(TimeProvider timeProvider, ILogger<TeamEntryCache> logger = null) : ITeamEntryGuardState, ITeamEntryNotifier
 {
     private readonly ConcurrentDictionary<Key, Entry> _entries = new();
 
@@ -47,6 +48,9 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuar
         if (_entries.Count > 10_000) Sweep();
     }
 
+    /// <inheritdoc />
+    public void Notify(TeamEntryInvalidatedEventArgs args) => throw new NotImplementedException();
+
     public Task InvalidateAsync(string userKey, string teamKey = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(userKey)) return Task.CompletedTask;
@@ -54,7 +58,7 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuar
         foreach (var key in _entries.Keys.Where(x => x.User == userKey && (teamKey == null || x.Team == teamKey)).ToArray())
             _entries.TryRemove(key, out _);
 
-        Invalidated?.Invoke(this, new TeamEntryInvalidatedEventArgs(userKey, teamKey));
+        Invalidated?.Invoke(this, new TeamEntryInvalidatedEventArgs { UserKey = userKey, TeamKey = teamKey });
 
         return Task.CompletedTask;
     }
@@ -86,13 +90,4 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider) : ITeamEntryGuar
     private readonly record struct Key(string User, string Session, string Team);
 
     private readonly record struct Entry(TeamEntryDecision Decision, DateTimeOffset Expires);
-}
-
-/// <summary>The answers for a user were forgotten.</summary>
-internal sealed class TeamEntryInvalidatedEventArgs(string userKey, string teamKey) : EventArgs
-{
-    public string UserKey { get; } = userKey;
-
-    /// <summary>The team only that team's answers were forgotten for, or null for every team.</summary>
-    public string TeamKey { get; } = teamKey;
 }

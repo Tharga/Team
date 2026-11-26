@@ -308,6 +308,7 @@ public static class ThargaBlazorRegistration
             services.TryAddSingleton(TimeProvider.System);
             services.TryAddSingleton<TeamEntryCache>();
             services.TryAddSingleton<ITeamEntryGuardState>(sp => sp.GetRequiredService<TeamEntryCache>());
+            services.TryAddSingleton<ITeamEntryNotifier>(sp => sp.GetRequiredService<TeamEntryCache>());
             services.TryAddScoped<TeamEntryEvaluator>();
             RegisterSessions(services, o.Sessions);
             services.TryAddScoped<TeamMembershipClaimsBuilder>();

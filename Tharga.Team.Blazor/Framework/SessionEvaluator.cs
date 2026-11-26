@@ -22,7 +22,12 @@ internal enum SessionCheckOutcome
 }
 
 /// <summary>What the session check decided, with the principal to carry on with when it adopted a cookie, and why when the session is ended.</summary>
-internal sealed record SessionCheck(SessionCheckOutcome Outcome, ClaimsPrincipal Principal = null, SessionEndReason? Reason = null);
+/// <param name="Outcome">What was decided.</param>
+/// <param name="Principal">The principal to carry on with when a cookie was adopted.</param>
+/// <param name="Reason">Why the session ended, when it did.</param>
+/// <param name="Session">The session as read, when the check read one; what a live circuit works out its deadlines from.</param>
+/// <param name="Limits">The host's limits for the session's team, when the check looked them up.</param>
+internal sealed record SessionCheck(SessionCheckOutcome Outcome, ClaimsPrincipal Principal = null, SessionEndReason? Reason = null, UserSession Session = null, SessionLimits Limits = null);
 
 /// <summary>
 /// Checks the caller's server-side session against the host's <see cref="ISessionPolicy"/>, per request and per live circuit (Tharga/Team#471). Shaped like
@@ -78,6 +83,19 @@ internal sealed class SessionEvaluator(
     /// </summary>
     public Task<SessionCheck> EvaluateCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
         => UserSessionService.SessionIdOf(principal) == null ? Task.FromResult(ValidCheck) : CheckAsync(principal, null, activeTeamKey, false, cancellationToken);
+
+    /// <summary>
+    /// Looks at the session of a live circuit for its own timer: always read fresh from the store (never the remembered one), ends it when over its limits, and
+    /// returns the session and limits so deadlines can be worked out. It never adopts, never records activity and never enters a team.
+    /// </summary>
+    /// <remarks>A failing store or policy propagates, unlike <see cref="EvaluateCircuitAsync"/>: the circuit must tell a failure from a refusal, and never ends for a failure.</remarks>
+    public Task<SessionCheck> InspectCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    /// <summary>The person answered "Still here?": records activity now, whatever was recorded a moment ago, and forgets the remembered session. False when the session is not there or has ended.</summary>
+    public Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default) => throw new NotImplementedException();
+
+    /// <summary>The person chose to sign out from a live circuit: ends the session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when this call ended it.</summary>
+    public Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     /// <summary>Records that the caller used a visible page, for the activity endpoint; the store throttles it to once per <see cref="SessionOptions.ActivityInterval"/>.</summary>
     public async Task<bool> RecordActivityAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)

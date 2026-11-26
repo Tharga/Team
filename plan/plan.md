@@ -28,8 +28,8 @@ Not included: ending another person's sessions, a heads-up before max age, an au
 ## Steps
 
 - [x] 1. Plan (this file).
-- [~] 2. Tests first, with stubs so both target frameworks compile (public API with docs, internal types throwing NotImplementedException, empty `SessionWatch.razor`, JS exports as no-ops).
-- [ ] 3. `UserSessionService`: notifier, `SignOutAsync(principal)`, notify only when this call ended something.
+- [x] 2. Tests first, with stubs so both target frameworks compile (public API with docs, internal types throwing NotImplementedException, stub `SessionWatch.razor`, JS exports as no-ops). Whole solution on net10.0 and net11.0: 8542 tests each, 129 fail as intended on each (SessionCircuit 54, UserSessionService 14, SessionOptions 14, SessionWatch render 14, UserSessionNotifier 11, TeamEntryNotifier 10, SessionCircuitHandler 5, SessionActivityScript 4, SessionLogout 3); nothing else fails.
+- [ ] 3b. `UserSessionService`: notifier, `SignOutAsync(principal)`, notify only when this call ended something.
 - [ ] 4. `SessionCache` / `TeamEntryCache` as notifiers; the revalidating provider subscribes to `ITeamEntryNotifier`.
 - [ ] 5. `SessionEvaluator`: `SessionCheck.Session/Limits`, `InspectCircuitAsync`, `ConfirmPresenceAsync`, `SignOutAsync`.
 - [ ] 6. `SessionDeadlines`, `SessionCircuit`, `SessionCircuitHandler`, registration.
@@ -52,6 +52,6 @@ Not included: ending another person's sessions, a heads-up before max age, an au
 
 ## Last session
 
-2026-11-26: plan written; tests-first commit in progress.
+2026-11-26: plan written; tests and stubs committed (step 2). Next: step 3, the implementation, to turn the 129 red tests green. Stubs still to replace: `SessionCache.Notify`, `TeamEntryCache.Notify`, `SessionOptions.EffectiveIdleWarning` (and default `IdleWarning` = 1 minute), `SessionDeadlines`, `SessionEvaluator.InspectCircuitAsync/ConfirmPresenceAsync/SignOutAsync`, `UserSessionService.SignOutAsync` and the notifications, `SessionCircuit`, `SessionCircuitHandler`, the DI registration of the circuit/handler/`IUserSessionNotifier`, `/logout?reason=signedout`, `LoginDisplay`, `SessionWatch.razor`, `session-activity.js`. `ITeamEntryNotifier` is already registered and `TeamRevalidatingAuthenticationStateProvider` already takes it.
 
 README changes needed when complete: `Tharga.Team.Blazor` README (SessionWatch, IdleWarning), root README if it lists the options.

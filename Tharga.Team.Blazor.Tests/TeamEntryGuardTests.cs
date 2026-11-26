@@ -267,6 +267,76 @@ public class TeamEntryGuardTests
         _guard.Verify(x => x.CheckAsync(It.IsAny<ClaimsPrincipal>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Exactly(4));
     }
 
+    /// <summary>The announcement is the public notifier's (Tharga/Team#471), not a private event: a host can listen, and relay it to its other instances.</summary>
+    [Fact]
+    public async Task Invalidating_AnnouncesThroughThePublicNotifier_AsNotRemote()
+    {
+        ITeamEntryNotifier notifier = _cache;
+        var heard = new List<TeamEntryInvalidatedEventArgs>();
+        notifier.Invalidated += (_, e) => heard.Add(e);
+
+        await _cache.InvalidateAsync(UserKey, TeamKey);
+
+        var seen = Assert.Single(heard);
+        Assert.Equal((UserKey, TeamKey, false), (seen.UserKey, seen.TeamKey, seen.FromRemote));
+    }
+
+    /// <summary>Invalidating for nobody is not an announcement.</summary>
+    [Fact]
+    public async Task Invalidating_ForNoUser_AnnouncesNothing()
+    {
+        var heard = 0;
+        _cache.Invalidated += (_, _) => heard++;
+
+        await _cache.InvalidateAsync(" ");
+
+        Assert.Equal(0, heard);
+    }
+
+    private sealed class CountingNotifier : ITeamEntryNotifier
+    {
+        private EventHandler<TeamEntryInvalidatedEventArgs> _invalidated;
+
+        public int Subscribers => _invalidated?.GetInvocationList().Length ?? 0;
+
+        public event EventHandler<TeamEntryInvalidatedEventArgs> Invalidated
+        {
+            add => _invalidated += value;
+            remove => _invalidated -= value;
+        }
+
+        public void Notify(TeamEntryInvalidatedEventArgs args) => _invalidated?.Invoke(this, args);
+    }
+
+    /// <summary>The circuit's claims are brought up to date when the guard's answer changes, from the notifier rather than from the cache: a relayed change reaches it too.</summary>
+    [Fact]
+    public void TheRevalidatingProvider_ListensToTheNotifier_AndStopsWhenDisposed()
+    {
+        var notifier = new CountingNotifier();
+        var provider = new TeamRevalidatingAuthenticationStateProvider(
+            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new ThargaBlazorOptions()),
+            notifier);
+
+        Assert.Equal(1, notifier.Subscribers);
+
+        ((IDisposable)provider).Dispose();
+
+        Assert.Equal(0, notifier.Subscribers);
+    }
+
+    [Fact]
+    public void TheRevalidatingProvider_WorksWithNoNotifier()
+    {
+        var provider = new TeamRevalidatingAuthenticationStateProvider(
+            Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance,
+            new ServiceCollection().BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
+            Options.Create(new ThargaBlazorOptions()));
+
+        Assert.Null(Record.Exception(() => ((IDisposable)provider).Dispose()));
+    }
+
     // ---- the audit
 
     [Fact]

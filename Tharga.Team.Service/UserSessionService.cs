@@ -32,7 +32,8 @@ internal sealed class UserSessionService(
     TimeProvider timeProvider,
     UserIdentityResolver identityResolver = null,
     CompositeAuditLogger auditLogger = null,
-    ILogger<UserSessionService> logger = null) : IUserSessionService
+    ILogger<UserSessionService> logger = null,
+    IUserSessionNotifier notifier = null) : IUserSessionService
 {
     /// <summary>The issuer of the session claim: the library, never the identity provider.</summary>
     internal const string ClaimIssuer = "Tharga.Team";
@@ -75,6 +76,9 @@ internal sealed class UserSessionService(
 
         return await store.EndOthersAsync(user.Key, sessionId, Now);
     }
+
+    /// <summary>Ends the given principal's session as <see cref="SessionEndReason.SignedOut"/>, audited and announced once; true when this call ended it. <see cref="EndCurrentAsync"/> is this for the ambient caller.</summary>
+    internal Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default) => throw new NotImplementedException();
 
     /// <summary>Starts a session with the given origin and returns the principal carrying its claim; the library's own sign-in starts <see cref="SessionOrigin.SignIn"/>.</summary>
     internal async Task<ClaimsPrincipal> StartAsync(ClaimsPrincipal principal, SessionOrigin origin, CancellationToken cancellationToken = default)

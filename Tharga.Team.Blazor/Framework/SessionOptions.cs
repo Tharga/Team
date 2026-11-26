@@ -27,6 +27,16 @@ public sealed class SessionOptions
     public TimeSpan ActivityInterval { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
+    /// How long before an idle sign-out the person is asked "Still here?", by <c>SessionWatch</c>. Default 1 minute. <see cref="TimeSpan.Zero"/> asks nobody.
+    /// Never longer than the idle timeout less twice <see cref="ActivityInterval"/>, so that somebody who answers always has time to be heard; a timeout too short
+    /// for that gets no warning. Somebody who is working is never asked.
+    /// </summary>
+    public TimeSpan IdleWarning { get; set; }
+
+    /// <summary>The warning that applies to <paramref name="idleTimeout"/>: <see cref="IdleWarning"/> clamped to the idle timeout less twice <see cref="ActivityInterval"/>; zero when there is none.</summary>
+    internal TimeSpan EffectiveIdleWarning(TimeSpan idleTimeout) => throw new NotImplementedException();
+
+    /// <summary>
     /// Where a browser whose session ended is sent when the request needs a sign-in, with the reason as a code in <c>?reason=</c> (<c>idle</c>,
     /// <c>maxage</c>, <c>newersignin</c>, <c>ended</c>, <c>signedout</c>). Null, the default, sends it to the start page. Only a path on this site is
     /// used; anything else falls back to the start page. The page should allow anonymous access, so the person can read it before signing in again.

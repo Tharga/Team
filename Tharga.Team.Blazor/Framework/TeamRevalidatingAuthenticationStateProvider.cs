@@ -23,18 +23,18 @@ internal sealed class TeamRevalidatingAuthenticationStateProvider : Revalidating
         ILoggerFactory loggerFactory,
         IServiceScopeFactory scopeFactory,
         IOptions<ThargaBlazorOptions> options,
-        TeamEntryCache entryCache = null)
+        ITeamEntryNotifier entryNotifier = null)
         : base(loggerFactory)
     {
         _scopeFactory = scopeFactory;
         _interval = options.Value.ClaimRevalidation.Interval;
-        _entryCache = entryCache;
+        _entryNotifier = entryNotifier;
 
         // The host tells the library a guard's answer changed: this circuit re-evaluates at once, not at the next interval.
-        if (_entryCache != null) _entryCache.Invalidated += OnEntryInvalidated;
+        if (_entryNotifier != null) _entryNotifier.Invalidated += OnEntryInvalidated;
     }
 
-    private readonly TeamEntryCache _entryCache;
+    private readonly ITeamEntryNotifier _entryNotifier;
 
     /// <summary>
     /// Brings this circuit's team claims up to date now, when the answer that changed is for its own user. Never throws: it runs on whatever thread told the
@@ -66,7 +66,7 @@ internal sealed class TeamRevalidatingAuthenticationStateProvider : Revalidating
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && _entryCache != null) _entryCache.Invalidated -= OnEntryInvalidated;
+        if (disposing && _entryNotifier != null) _entryNotifier.Invalidated -= OnEntryInvalidated;
 
         base.Dispose(disposing);
     }
