@@ -13,7 +13,7 @@ const kinds = ['activity', 'ended'];
 let channel = null;
 
 function openChannel() {
-    if (channel || typeof BroadcastChannel === 'undefined') return channel;
+    if (channel || watching.size === 0 || typeof BroadcastChannel === 'undefined') return channel;
 
     channel = new BroadcastChannel(channelName);
     channel.onmessage = event => {
@@ -30,6 +30,13 @@ function openChannel() {
     return channel;
 }
 
+function closeChannelWhenIdle() {
+    if (!channel || watching.size > 0) return;
+
+    channel.close();
+    channel = null;
+}
+
 function post(kind) {
     const open = openChannel();
     if (open && kinds.includes(kind)) open.postMessage({ kind });
@@ -44,7 +51,7 @@ export function watchActivity(id, intervalMs, url, dotnet) {
     stopWatching(id);
 
     const target = url || activityRoute;
-    const state = { dotnet, held: false, asking: false, countdown: null, last: Date.now(), report: null };
+    const state = { dotnet, held: false, asking: false, countdown: null, trap: null, dialog: null, last: Date.now(), report: null };
     state.report = () => {
         if (state.held || document.visibilityState !== 'visible') return;
 
@@ -71,6 +78,7 @@ export function stopWatching(id) {
     used.forEach(name => window.removeEventListener(name, state.report));
     document.removeEventListener('visibilitychange', state.report);
     watching.delete(id);
+    closeChannelWhenIdle();
 }
 
 // While the question is open, using the page is not an answer: only "Yes" is.
@@ -86,28 +94,43 @@ export function announce(id, kind) {
     post(kind);
 }
 
-export function startCountdown(id, remainingMs, selector) {
+// The dialog is this instance's own element: the time and the buttons are looked up inside it, never across the page.
+export function startCountdown(id, remainingMs, dialog) {
     const state = watching.get(id);
     if (!state) return;
 
     stopCountdown(id);
     state.asking = true;
+    if (!dialog || typeof dialog.querySelector !== 'function') return;
 
+    const time = dialog.querySelector('[data-session-watch-time]');
     const end = performance.now() + Math.max(0, remainingMs || 0);
     const tick = () => {
         const left = Math.max(0, end - performance.now());
-        const element = document.querySelector(selector);
-        if (element) element.textContent = format(left);
+        if (time) time.textContent = format(left);
 
         state.countdown = left > 0 ? setTimeout(tick, left % 1000 || 1000) : null;
     };
 
     tick();
 
-    // The question is asked of the keyboard too: focus moves to the answer that keeps the person signed in.
-    const countdown = document.querySelector(selector);
-    const dialog = countdown && countdown.closest('[role="alertdialog"]');
-    const stay = dialog && dialog.querySelector('[data-session-watch-stay]');
+    // A modal question keeps the keyboard: Tab and Shift+Tab go round its answers, and the one that keeps the person signed in has the focus first.
+    const answers = () => Array.from(dialog.querySelectorAll('button')).filter(button => !button.disabled);
+    state.dialog = dialog;
+    state.trap = event => {
+        if (event.key !== 'Tab') return;
+
+        const buttons = answers();
+        if (buttons.length === 0) return;
+
+        const at = buttons.indexOf(document.activeElement);
+        const next = event.shiftKey ? (at <= 0 ? buttons.length - 1 : at - 1) : (at === -1 || at === buttons.length - 1 ? 0 : at + 1);
+        buttons[next].focus();
+        event.preventDefault();
+    };
+    dialog.addEventListener('keydown', state.trap);
+
+    const stay = dialog.querySelector('[data-session-watch-stay]');
     if (stay) stay.focus();
 }
 
@@ -118,4 +141,7 @@ export function stopCountdown(id) {
     state.asking = false;
     if (state.countdown) clearTimeout(state.countdown);
     state.countdown = null;
+    if (state.dialog && state.trap) state.dialog.removeEventListener('keydown', state.trap);
+    state.dialog = null;
+    state.trap = null;
 }

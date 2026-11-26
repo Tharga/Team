@@ -19,3 +19,16 @@
     color: var(--rz-text-color, inherit);
     box-shadow: var(--rz-shadow-6, 0 0.5rem 2rem rgba(0, 0, 0, 0.3));
 }
+
+/* The deadline as read to a screen reader, once; the ticking countdown beside it is hidden from it. */
+.session-watch-deadline {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}

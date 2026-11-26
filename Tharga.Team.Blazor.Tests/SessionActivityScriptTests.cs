@@ -121,27 +121,46 @@ public class SessionActivityScriptTests
 
     /// <summary>The sign-in menu no longer loads the module: the watch component does, so a host without the menu can place it alone.</summary>
     [Fact]
-    public void TheSignInMenu_NoLongerLoadsTheModule_ButPlacesTheWatchAfterItsAuthorizeView()
+    public void TheSignInMenu_NoLongerLoadsTheModuleItself()
     {
         var razor = Read("Features/Authentication/LoginDisplay.razor");
 
         Assert.DoesNotContain("session-activity.js", razor);
         Assert.DoesNotContain("watchActivity", razor);
-        Assert.Contains("<SessionWatch />", razor);
-        Assert.True(razor.IndexOf("<SessionWatch />", StringComparison.Ordinal) > razor.IndexOf("</AuthorizeView>", StringComparison.Ordinal), "The watch belongs after the AuthorizeView, so it is there for both states.");
+        // That it renders the watch, signed in or not, is held by rendering it: GranularPathRenderTests.
     }
 
+    /// <summary>What the script calls back is the method the watch exposes to it, under that name: the link between the two halves, checked on both.</summary>
     [Fact]
-    public void TheWatch_LoadsTheModule_ForSessionsThatAreActive_AndIsToldByPeers()
+    public void ThePeersSignal_ReachesTheWatchsInvokableMethod()
     {
-        var razor = Read("Features/Authentication/SessionWatch.razor");
+        var method = typeof(Tharga.Team.Blazor.Features.Authentication.SessionWatch).GetMethod("OnPeerSignal");
 
-        Assert.Contains("session-activity.js", razor);
-        // Only when sessions are active: the reporter is a call a minute that does nothing for a host with no policy.
-        Assert.Contains(".Active", razor);
-        Assert.Contains("[JSInvokable]", razor);
-        Assert.Contains("OnPeerSignal", razor);
-        Assert.Contains("alertdialog", razor);
-        Assert.Contains("aria-modal", razor);
+        Assert.NotNull(method);
+        Assert.NotNull(method.GetCustomAttributes(typeof(Microsoft.JSInterop.JSInvokableAttribute), false).SingleOrDefault());
+        Assert.Contains($"'{method.Name}'", Read("wwwroot/session-activity.js"));
+    }
+
+    /// <summary>The channel is opened for the watches and closed when the last one stops, so a page that leaves keeps nothing open.</summary>
+    [Fact]
+    public void TheChannel_IsClosedWhenNoWatchRemains()
+    {
+        var script = Read("wwwroot/session-activity.js");
+
+        Assert.Contains("channel.close()", script);
+        Assert.Contains("watching.size", script);
+    }
+
+    /// <summary>Two watches on a page cannot reach each other's elements: the countdown and the focus are looked up in the dialog given, never across the page.</summary>
+    [Fact]
+    public void TheCountdown_LooksOnlyInsideItsOwnDialog_AndKeepsTheKeyboardThere()
+    {
+        var script = Read("wwwroot/session-activity.js");
+
+        Assert.DoesNotContain("document.querySelector", script);
+        Assert.Contains("dialog.querySelector", script);
+        Assert.Contains("'Tab'", script);
+        Assert.Contains("shiftKey", script);
+        Assert.Contains("removeEventListener('keydown'", script);
     }
 }

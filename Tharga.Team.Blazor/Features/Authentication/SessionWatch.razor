@@ -19,17 +19,21 @@
     the browser still lands on the ended page; the session is already ended by then, so /logout writes nothing more. Without the library's sign-in it goes
     straight to the ended page.
 
-    LoginDisplay renders it. A host without LoginDisplay places it once in its layout; it renders nothing and loads nothing while sessions are not active.
+    LoginDisplay renders it. A host without LoginDisplay places it once in its layout, in an interactive render mode. It renders nothing and loads nothing
+    while sessions are not active, and only the first one on a circuit asks: a second renders nothing until the first goes.
 *@
 
 @if (_open)
 {
     var (before, after) = CountdownParts();
     <div class="session-watch-overlay" data-session-watch-overlay></div>
-    <div class="session-watch-dialog" role="alertdialog" aria-modal="true" aria-labelledby="@TitleId" aria-describedby="@BodyId" data-session-watch-dialog>
+    <div class="session-watch-dialog" role="alertdialog" aria-modal="true" aria-labelledby="@TitleId" aria-describedby="@($"{BodyId} {DeadlineId}")"
+         data-session-watch-dialog @ref="_dialog">
         <h2 class="rz-text-h6 rz-mb-2" id="@TitleId" data-session-watch-title>@_text[SessionText.Title]</h2>
         <p class="rz-text-body1 rz-mb-2" id="@BodyId" data-session-watch-body>@_text[SessionText.Body]</p>
-        <p class="rz-text-body2 rz-mb-4" aria-live="polite" data-session-watch-countdown>@before<strong data-session-watch-time>@_time</strong>@after</p>
+        @* Read once, when the question opens; the ticking copy below is hidden from screen readers so it does not announce every second. *@
+        <p class="session-watch-deadline" id="@DeadlineId">@before@_time@after</p>
+        <p class="rz-text-body2 rz-mb-4" aria-hidden="true" data-session-watch-countdown>@before<strong data-session-watch-time>@_time</strong>@after</p>
         <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
             <RadzenButton Text="@_text[SessionText.SignOut]" ButtonStyle="ButtonStyle.Light" Click="SignOutAsync" data-session-watch-signout />
             <RadzenButton Text="@_text[SessionText.Stay]" ButtonStyle="ButtonStyle.Primary" Click="StayAsync" data-session-watch-stay />
@@ -39,7 +43,6 @@
 
 @code {
     private const string ModulePath = "./_content/Tharga.Team.Blazor/session-activity.js";
-    private const string TimeSelector = "[data-session-watch-time]";
     private const string Placeholder = "{0}";
     private const string ActivityKind = "activity";
     private const string EndedKind = "ended";
@@ -49,7 +52,9 @@
     private IDisposable _attachment;
     private IJSObjectReference _module;
     private DotNetObjectReference<SessionWatch> _self;
+    private ElementReference _dialog;
     private TextSet _text = TextSet.Empty;
+    private bool _rendered;
     private bool _open;
     private bool _left;
     private bool _signingOut;
@@ -59,34 +64,26 @@
 
     private string BodyId => $"{_id}-body";
 
+    private string DeadlineId => $"{_id}-deadline";
+
     protected override async Task OnInitializedAsync()
     {
         // Resolved optionally: this renders in hosts that registered no session watch at all.
-        var circuit = Services.GetService<ISessionCircuit>();
-        if (circuit?.Active != true) return;
+        _circuit = Services.GetService<ISessionCircuit>();
+        if (_circuit == null) return;
 
-        _circuit = circuit;
-        _text = await TextProvider.ResolveAsync(SessionText.All);
+        // Listening before asking whether it is active, so a watch that finds its session a moment later is not missed.
+        _circuit.Activated += OnActivated;
         _circuit.Changed += OnChanged;
-        _attachment = _circuit.Attach();
+        await TakeOverAsync();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender || _circuit == null) return;
 
-        try
-        {
-            _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
-            _self = DotNetObjectReference.Create(this);
-            var interval = (int)(ThargaBlazorOptions.Value.Sessions ?? new SessionOptions()).ActivityInterval.TotalMilliseconds;
-            await _module.InvokeVoidAsync("watchActivity", _id, interval, NavigationManager.ToAbsoluteUri(SessionActivityEndpoint.Route.TrimStart('/')).ToString(), _self);
-        }
-        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
-        {
-            // Without it only requests count as activity and other tabs are not told; the session still ends on time.
-        }
-
+        _rendered = true;
+        await LoadAsync();
         await ApplyAsync();
     }
 
@@ -94,16 +91,18 @@
     [JSInvokable]
     public async Task OnPeerSignal(string kind)
     {
-        if (_circuit == null || kind is not (ActivityKind or EndedKind)) return;
+        if (_attachment == null || kind is not (ActivityKind or EndedKind)) return;
 
         await _circuit.CheckAsync();
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_circuit != null) _circuit.Changed -= OnChanged;
-        _attachment?.Dispose();
-        _attachment = null;
+        if (_circuit != null)
+        {
+            _circuit.Activated -= OnActivated;
+            _circuit.Changed -= OnChanged;
+        }
 
         if (_module != null)
         {
@@ -121,14 +120,54 @@
             _module = null;
         }
 
+        _attachment?.Dispose();
+        _attachment = null;
         _self?.Dispose();
     }
 
-    private void OnChanged() => _ = InvokeAsync(ApplyAsync);
+    private void OnActivated() => _ = InvokeAsync(RefreshAsync);
+
+    private void OnChanged() => _ = InvokeAsync(RefreshAsync);
+
+    private async Task RefreshAsync()
+    {
+        await TakeOverAsync();
+        await LoadAsync();
+        await ApplyAsync();
+    }
+
+    /// <summary>Becomes the circuit's one asking view, once there is a session to watch and no other view asks.</summary>
+    private async Task TakeOverAsync()
+    {
+        if (_attachment != null || _left || _circuit?.Active != true) return;
+
+        _attachment = _circuit.TryAttach();
+        if (_attachment == null) return;
+
+        _text = await TextProvider.ResolveAsync(SessionText.All);
+    }
+
+    /// <summary>Loads the browser half once the page is interactive and this view asks.</summary>
+    private async Task LoadAsync()
+    {
+        if (!_rendered || _attachment == null || _module != null) return;
+
+        try
+        {
+            _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            _self = DotNetObjectReference.Create(this);
+            var interval = (int)(ThargaBlazorOptions.Value.Sessions ?? new SessionOptions()).ActivityInterval.TotalMilliseconds;
+            await _module.InvokeVoidAsync("watchActivity", _id, interval, NavigationManager.ToAbsoluteUri(SessionActivityEndpoint.Route.TrimStart('/')).ToString(), _self);
+        }
+        catch (Exception exception) when (exception is JSException or InvalidOperationException or JSDisconnectedException)
+        {
+            // Without it only requests count as activity and other tabs are not told; the session still ends on time.
+        }
+    }
 
     private async Task ApplyAsync()
     {
-        if (_circuit == null || _left) return;
+        if (_attachment == null || _left) return;
 
         switch (_circuit.State)
         {
@@ -151,7 +190,7 @@
         StateHasChanged();
 
         await CallAsync("holdActivity", _id, true);
-        await CallAsync("startCountdown", _id, (int)Math.Max(0, remaining.TotalMilliseconds), TimeSelector);
+        await CallAsync("startCountdown", _id, (int)Math.Max(0, remaining.TotalMilliseconds), _dialog);
     }
 
     private async Task CloseAsync()

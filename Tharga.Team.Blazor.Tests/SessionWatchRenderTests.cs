@@ -1,6 +1,8 @@
 using Bunit;
 using Bunit.TestDoubles;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
+using Microsoft.AspNetCore.Components.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Radzen;
 using Tharga.Team.Blazor.Features.Authentication;
@@ -316,5 +318,100 @@ public class SessionWatchRenderTests : BunitContext
         Assert.True(Calls("stopCountdown") >= 1);
         Assert.Equal(0, _circuit.Attached);
         Assert.Equal(0, _circuit.Subscribers);
+        Assert.Equal(0, _circuit.ActivatedSubscribers);
+        Assert.False(_circuit.Asked);
+    }
+
+    // ---- a session found after the view arrived (review M2)
+
+    [Fact]
+    public async Task ASessionFoundAfterTheViewArrived_IsWatchedThen()
+    {
+        _circuit.Active = false;
+        var view = Watch();
+        Assert.Equal(0, _circuit.Attached);
+        Assert.Empty(JSInterop.Invocations);
+
+        await view.InvokeAsync(_circuit.Activate);
+
+        Assert.Equal(1, _circuit.Attached);
+        Assert.Equal(1, Calls("watchActivity"));
+    }
+
+    /// <summary>The real circuit, whose sign-in state completes only after the view has rendered: the view still attaches and loads the browser half.</summary>
+    [Fact]
+    public async Task WithASignInStateReadLate_TheRealCircuitIsWatchedOnceItIsRead()
+    {
+        using var context = new BunitContext();
+        var clock = new SessionClock();
+        var store = new InMemorySessionStore();
+        store.Put(SessionTestData.Session("s1", clock.Now));
+        var cache = new SessionCache(clock);
+        var options = SessionTestData.Options();
+        var policy = new TestSessionPolicy { Default = new SessionLimits { IdleTimeout = TimeSpan.FromMinutes(10) } };
+        var evaluator = new SessionEvaluator(cache, SessionTestData.Wrap(options), clock, policy, SessionTestData.Sessions(store, clock, notifier: cache));
+        var auth = new ServerAuthenticationStateProvider();
+        var state = new TaskCompletionSource<AuthenticationState>();
+        auth.SetAuthenticationState(state.Task);
+        var circuit = new SessionCircuit(evaluator, auth, auth, cache, SessionTestData.Wrap(options), clock);
+        context.Services.AddSingleton<ISessionCircuit>(circuit);
+        context.Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        context.Services.AddSingleton(SessionTestData.Wrap(options));
+        context.Services.AddRadzenComponents();
+        var module = context.JSInterop.SetupModule(ModulePath);
+        module.Mode = JSRuntimeMode.Loose;
+
+        var view = context.Render<SessionWatch>();
+        var start = circuit.StartAsync();
+        Assert.Empty(module.Invocations);
+
+        state.SetResult(new AuthenticationState(SessionTestData.WithSession("s1")));
+        await start;
+        await circuit.SettledAsync();
+
+        view.WaitForAssertion(() => Assert.Single(module.Invocations, x => x.Identifier == "watchActivity"));
+        circuit.Dispose();
+    }
+
+    // ---- one dialog per circuit, its own elements, and what a screen reader hears (review M7)
+
+    [Fact]
+    public void ASecondWatchOnTheCircuit_LoadsNothing_AndShowsNoSecondDialog()
+    {
+        var first = Watch();
+        var second = Render<SessionWatch>();
+
+        Warn(first);
+
+        Assert.Equal(1, _circuit.Attached);
+        Assert.Equal(1, Calls("watchActivity"));
+        Assert.Empty(second.FindAll("[data-session-watch-dialog]"));
+    }
+
+    [Fact]
+    public void TheCountdown_IsGivenTheDialogsOwnElement_NotASelectorForThePage()
+    {
+        var view = Watch();
+
+        Warn(view);
+
+        Assert.IsType<ElementReference>(LastCall("startCountdown")[2]);
+    }
+
+    [Fact]
+    public void TheTickingCountdown_IsHiddenFromScreenReaders_AndTheDeadlineIsReadOnce()
+    {
+        var view = Watch();
+
+        Warn(view);
+
+        var countdown = view.Find("[data-session-watch-countdown]");
+        Assert.Equal("true", countdown.GetAttribute("aria-hidden"));
+        Assert.Null(countdown.GetAttribute("aria-live"));
+
+        var described = view.Find("[data-session-watch-dialog]").GetAttribute("aria-describedby").Split(' ');
+        Assert.Equal(2, described.Length);
+        Assert.Equal(SessionText.Body.Default, view.Find($"[id='{described[0]}']").TextContent.Trim());
+        Assert.Contains("1:30", view.Find($"[id='{described[1]}']").TextContent);
     }
 }
