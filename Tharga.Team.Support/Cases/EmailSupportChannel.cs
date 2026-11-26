@@ -297,10 +297,14 @@ internal sealed class EmailSupportChannel(
     /// <b>All or nothing.</b> An answer that says "see the attached" and arrives without it misleads the person
     /// reading it, so a file that cannot be read keeps the whole answer back as not delivered, with the reason,
     /// where support can see it and send it again.
+    /// <para>
+    /// <b>A secure file is never mailed.</b> The service hands a channel none, and this skips any it is handed anyway: it is for support's
+    /// staff on the site, and a mail is a copy of it nobody can take back.
+    /// </para>
     /// </remarks>
     private async Task<(IReadOnlyList<MailAttachment> Files, string Missing)> FilesOfAsync(SupportCase supportCase, SupportMessage message, CancellationToken cancellationToken)
     {
-        if (message.Attachments is not { Length: > 0 } attachments) return ([], null);
+        if ((message.Attachments ?? []).Where(x => !x.Secure).ToArray() is not { Length: > 0 } attachments) return ([], null);
         if (attachmentStore == null) return (null, "The answer carries files, and no attachment store is registered to read them from.");
         if (supportCase == null) return (null, "The answer carries files, and its case could not be found to read them from.");
 

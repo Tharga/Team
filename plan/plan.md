@@ -53,8 +53,9 @@
       `support.message.secureAttachments` and `support.attachment.id`, never a name. A refused secure open is told
       apart by an internal `SecureAttachmentRefusedException : UnauthorizedAccessException`, so ordinary reads stay
       unaudited. Opening an ordinary file is still not audited. 6 tests in `SupportSecureFileAuditTests`.
-- [~] 5. Mail channel skips secure files itself. Test.
-- [ ] 6. Sweep, hosted service, options and registration. Tests, including two sweeps racing.
+- [x] 5. Mail channel skips secure files itself. Test.
+      Done in `FilesOfAsync`. Slack never carried files, so nothing to change there.
+- [~] 6. Sweep, hosted service, options and registration. Tests, including two sweeps racing.
 - [ ] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
       in-memory test store. Tests.
 - [ ] 8. Blazor: picker secure mode; transcript secure / withheld / removed and a staff remove button;
