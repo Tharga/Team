@@ -1534,11 +1534,56 @@ service accepts.
 your application runs in its origin, so only PDF, PNG, JPEG, GIF, WebP and plain text may open in the browser;
 everything else is served as `application/octet-stream` and saved. The transcript does exactly this.
 
-Reading a file is not audited; a reply or answer records how many files it carried
+Reading an ordinary file is not audited; a reply or answer records how many files it carried
 (`support.message.attachments`), never their names. Purging a team removes its files first.
 
 `SupportAttachmentPicker` is the file chooser the answer boxes use: `Files`/`FilesChanged`, `Disabled`, and
 `Limits` (the support service's when not set).
+
+### Files for support only
+
+A member can hand support a file their colleagues reading the same case cannot open: a screenshot with customer
+data, an export, a contract. Only the product's support staff and the member who uploaded it see what it is or
+open it. The file never leaves the application, and its content is removed after a set time.
+
+```csharp
+// A reply with ordinary files beside secure ones.
+await cases.ReplyToCaseAsync(teamKey, caseId, "The export is attached.", null, [], [secureUpload]);
+
+// A new case carrying secure files on its first entry.
+await cases.RaiseCaseAsync(teamKey, null, "See the file.", new SupportRaiseOptions { SecureAttachments = [secureUpload] });
+```
+
+- **Who sees it whole:** cross-team support (`support:all:read` / `support:all:manage`), the unassigned queue's
+  staff for a case with no team, and the member who uploaded it (`SupportAttachment.UploadedBy`). Everyone else
+  reading the case, **the team's own `support:read` / `support:manage` holders included**, gets it with
+  `Withheld = true`, its name and type blank and only its id and size kept, and `OpenAttachmentAsync` refuses them.
+  This is decided once, in the authorizing decorator, so the UI, REST and MCP agree.
+- **It never leaves.** It is not attached to mail, not posted to Slack or any channel of your own, and not given to
+  the assistant: the service strips secure files from everything it hands outward, and the mail channel skips any
+  it is handed anyway.
+- **Only a member's reply or a new case carries one.** Support's answers, mail-started cases and inbound mail
+  cannot. Both lists on a reply count together against the attachment limits.
+- **Removed after `SupportCaseOptions.SecureFiles.KeepFor`** (30 days; `TimeSpan.Zero` keeps them until support
+  removes them and runs no sweep). A hosted sweep (`SweepInterval`, one hour; `SweepBatchSize`, 100) deletes the
+  content and sets `RemovedAt`, so the entry still says a file was there. It is safe on several instances at once:
+  each removal is recorded once. Cross-team support (`support:all:manage`) may remove one earlier with
+  `RemoveSecureAttachmentAsync`; the uploader and the team's own readers may not.
+- **Audited:** opening a secure file and a refused opening (`open-secure-file`), and removing one
+  (`remove-secure-file`), with `support.attachment.id`, never the name. A reply or raise records how many it
+  carried (`support.message.secureAttachments`). The sweep is logged, not audited.
+- **Fail closed on the store.** `ISupportCaseStore.KeepsSecureAttachments` must be true, or secure files are
+  refused before anything is written: a store that drops the flag would turn the file into an ordinary one.
+  The toolkit's MongoDB store keeps them. A store of your own sets it once it maps `Secure`, `UploadedBy` and
+  `RemovedAt` and implements `GetSecureAttachmentsDueAsync` and `TryMarkAttachmentRemovedAsync`. After writing,
+  the entry is read back, and if the flag was lost anyway the content is removed and the upload refused.
+- **`GetAttachmentLimitsAsync()`** says whether secure files are taken (`AcceptsSecureFiles`) and how long they
+  are kept (`SecureKeepFor`), so a component offers them only where they work.
+
+In Blazor, `SupportAttachmentPicker` has a secure mode (`Secure="true"`, with `AlongWith` for the files chosen in
+the ordinary picker beside it); it shows nothing where the service does not take secure files. `SupportCaseConversation`
+offers it to members, `SupportPanel` on its support tab only, and the transcript shows secure, withheld and removed
+files distinctly, with a remove button for support staff.
 
 ### The original of a mail
 

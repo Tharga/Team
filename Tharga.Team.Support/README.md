@@ -170,6 +170,11 @@ is comes from `ISupportSenderDirectory`, which `Tharga.Team.MongoDB` registers.
   answered from the mailbox it came in through, and staff see which address that was.
 - **Files** — a mail's attachments, inline images and forwarded mail are kept through `ISupportAttachmentStore`
   (GridFS by default), answers and replies carry files, and a file opens under the case's own read rules.
+- **Files for support only** — a member's reply or new case can carry files only the product's support staff and
+  the uploader may open; colleagues see that a file is there, never what it is. They are never mailed, posted to a
+  channel or given to the assistant, opening and removing one is audited, and a sweep removes their content after
+  `o.SecureFiles.KeepFor` (30 days). Nothing to set up with the MongoDB store; a store of your own opts in with
+  `ISupportCaseStore.KeepsSecureAttachments`.
 - **Formatting** — answers are written in a small rich-text editor, a mail's HTML is kept, and everything goes
   through one sanitizer on the way in and at every render; a formatted answer is mailed as HTML beside the text.
 - **The thread** — an answer carries the whole conversation and every message id is recorded, so a reply to any

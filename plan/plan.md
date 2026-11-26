@@ -73,9 +73,11 @@
       `RemoveSecure` callback, passed by the staff conversation. Members and the panel's support tab call the
       secure overloads only when there are secure files, so a host's own service keeps working. The panel shows the
       member's own files under their message. 9 texts. 15 render tests.
-- [~] 9. Docs: `docs/articles/support-cases.md` (Attachments), `Tharga.Team.Support/README.md`,
+- [x] 9. Docs: `docs/articles/support-cases.md` (Attachments), `Tharga.Team.Support/README.md`,
       `Tharga.Team.Blazor/README.md`.
-- [ ] 10. Full test suite, push the branch for testing.
+      Done: a "Files for support only" section under Attachments; a bullet in the Support README; the picker's
+      secure mode in the Blazor README.
+- [~] 10. Full test suite, push the branch for testing.
 
 ## Last session
 
