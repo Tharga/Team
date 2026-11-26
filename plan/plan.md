@@ -71,6 +71,18 @@ Not included: ending another person's sessions, a heads-up before max age, an au
 
 ## Last session
 
+2026-11-26 (review fixes, findings from origin/master...HEAD, nothing Critical):
+- I1 single-flight: stopping and clearing `_checking` are one critical section; pinned by a two-thread test that failed 3/3 against the old loop.
+- I2 timer: never armed more than a day ahead (`LongestWait`), never changed once disposed; `ManualTimer` now refuses what the system timer refuses.
+- M1 a late "Yes" writes nothing (circuit refuses at/after `IdleAt`; `ConfirmPresenceAsync` reads and checks `Exceeded` first).
+- M2 `ISessionCircuit.Activated`; the view subscribes first and takes over when the session is found late. M3 `SessionCircuitScope` creates a scope
+  per check through the new `ICircuitSessionChecks` (the evaluator implements it, so tests pass one directly). M4 subscriptions made under the gate.
+- M5 `SessionNotifierWiringCheck` refuses a host's own `IUserSessionNotifier` / `ITeamEntryNotifier` at startup (replaces "a host's own is kept").
+- M6 a Rejected session backs off 1, 2, 4 ... 30 min; failures stay at `ActivityInterval`. M7 `TryAttach` (one asking view per circuit; the last view
+  leaving raises `Changed`), the dialog element passed to the JS, focus trap, channel closed with the last watch, countdown `aria-hidden` and the
+  deadline read once via `aria-describedby`. M9/M10 source-substring checks replaced by a reflection check and a `LoginDisplay` render; guide updated.
+- M8 left as is (agreed).
+
 2026-11-26 (implementation): steps 3b-8 done in five commits; the whole solution is green on net10.0 and net11.0 (8542 tests each, 17084 in all, none
 failing). Next: step 9, the PR (remove `plan/` first). Open for the maintainer:
 - `IdleWarning` defaults to 1 minute, so hosts with an idle timeout of at least `2 x ActivityInterval + 1 minute` (3 minutes with the defaults) see the

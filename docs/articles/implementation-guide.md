@@ -1415,8 +1415,9 @@ builder.Services.AddScoped<ISessionPolicy, StrictTeams>();
 - **Idle time counts what the person does**, also inside a circuit, which sends no request: `<SessionWatch />`, which `LoginDisplay` renders, loads a small
   script that reports use of the visible tab (pointer, keys, wheel) to `POST /_tharga/session/activity` at most once per `Sessions.ActivityInterval`.
   `UseThargaTeamBlazor` maps it. The store throttles per session, so several tabs and instances cost one write a minute. A session is never ended as idle
-  on a remembered stamp: the store is read again first. **A host without `LoginDisplay` places `<SessionWatch />` once in its layout**; it renders nothing
-  and loads nothing while sessions are not active.
+  on a remembered stamp: the store is read again first. **A host without `LoginDisplay` places `<SessionWatch />` once in its layout**, in an interactive
+  render mode (`InteractiveServer`): it needs the live circuit, and in a statically rendered page it does nothing. It renders nothing and loads nothing
+  while sessions are not active, and only the first one on a circuit asks, so a second renders nothing until the first goes.
 - **One session per team, newest sign-in wins.** When `SingleSession` is set and a session enters the team, the person's older sessions there are ended
   (`newersignin`); a session switching into a team where a newer one already is ends itself instead. Each end is conditional in the store, so two instances
   racing converge on the newest sign-in.
@@ -1458,8 +1459,11 @@ builder.AddThargaTeam(o =>
 older session a newer sign-in ended, with its team. None names the session id. **Cost**: one store read per session per cache window, one activity write
 per session per interval, and the policy once per session and team per window. Each open circuit adds one timer, which costs nothing between wakes, and
 one store read per wake: at the warning, at the idle or max-age moment, and when it is told to look (an end for that person, another tab's signal while it
-is asking, a view arriving inside the warning window); "Yes" is one write. Nothing polls: with no limit a circuit arms no timer at all, and a failure
-is retried once per `ActivityInterval`. With no policy registered the only added work is one resolve per request and per circuit.
+is asking, a view arriving inside the warning window); "Yes" is one write and two reads. While the store answers nothing polls: with no limit a circuit
+arms no timer at all, and a long max age is reached by waking at most once a day. While the store fails, a circuit looks again once per
+`ActivityInterval`; a session the store does not have (refused by the next request anyway) is looked at again after a doubling wait, from
+`ActivityInterval` up to 30 minutes. Each look runs in a short-lived scope of its own. With no policy registered the only added work is one resolve per
+request and per circuit.
 The sample's `SampleSessionPolicy` gives a team named *Strict* a two-minute idle timeout and one session per person, and the sample's 20-second
 `ActivityInterval` leaves room for the one-minute warning, so the *Strict* team shows the dialog.
 
@@ -1469,8 +1473,8 @@ Every open circuit watches its own session, so a session that ends is seen **wit
 revalidation interval. The circuit handler starts the watch when the circuit opens, so it runs whether or not a component is on the page.
 
 - **The store is the only truth.** The circuit works out the next moment that matters from the stored session and the host's limits (the warning, a
-  second past the idle limit, a second past the max age), on the server's clock only, and arms **one timer** for it. Each wake reads the store afresh;
-  nothing polls.
+  second past the idle limit, a second past the max age), on the server's clock only, and arms **one timer** for it, at most a day ahead. Each wake
+  reads the store afresh; nothing polls while the store answers.
 - **An end is conditional, audited once and announced once.** When the store says the session is over its limits, the circuit ends it through the same
   domain service a request does; whichever call the store says ended it audits and announces it, so two instances or two tabs leave one entry.
 - **It ends only on the store's word.** An end on this instance (a sign-out, a refused request, a newer sign-in, ending the other sessions) is announced
@@ -1481,7 +1485,9 @@ revalidation interval. The circuit handler starts the watch when the circuit ope
   `Sessions.EndedPath?reason=...` with a full load, telling the browser's other tabs.
 
 `IUserSessionNotifier` is public: a host can listen to it (`SessionEnded`, with the person's key and the reason, never the session id), and relays it on
-several instances. Subscribe in `OnInitialized` and unsubscribe in `Dispose`; handlers run on the thread that ended the session.
+several instances. Subscribe in `OnInitialized` and unsubscribe in `Dispose`; handlers run on the thread that ended the session. **Listen to it, do not
+replace it**: the notifiers are the toolkit's own caches, which forget what they remembered before anybody is told, so registering an
+`IUserSessionNotifier` or `ITeamEntryNotifier` of your own fails startup, naming it.
 
 ##### "Still here?"
 
@@ -1489,7 +1495,8 @@ Before an idle sign-out, `SessionWatch` asks **"Are you still there?"** with a c
 
 - **Somebody working is never asked.** The question is put only when the store's activity stamp says the session is about to go idle, which use of any
   tab, on any instance, moves.
-- **"Yes, stay signed in"** records activity at once and closes the question in every tab of the browser. It writes only while the question is open.
+- **"Yes, stay signed in"** records activity at once and closes the question in every tab of the browser. It writes only while the question is open and
+  the idle moment has not come: an answer that arrives too late writes nothing, and never brings an ended or over-limit session back.
   While it is open, using the page is not an answer: activity reports are held, so only "Yes" keeps the session.
 - **"Sign out"** ends the session as `signedout`, audited once and announced once. With the library's own sign-in (`AddThargaAuth`), that tab then goes
   through `/logout?reason=signedout`, so the identity provider is signed out too (with `FederatedSignOut`), which matters on a shared machine, and lands on
