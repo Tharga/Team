@@ -183,6 +183,70 @@ public class SessionWatchRenderTests : BunitContext
         Assert.True(navigation.History.First().Options.ForceLoad);
     }
 
+    /// <summary>
+    /// With the library's own sign-in, "Sign out" goes through <c>/logout?reason=signedout</c>, so the identity provider is signed out too on a shared machine,
+    /// and the browser still lands on the ended page. The session is already ended by the circuit, so the endpoint writes nothing more.
+    /// </summary>
+    [Fact]
+    public void SignOut_WithTheLibrarysSignIn_GoesThroughLogoutWithTheReason()
+    {
+        Services.AddSingleton(new ThargaAuthOptions());
+        var view = Watch();
+        Warn(view);
+
+        view.Find("[data-session-watch-signout]").Click();
+
+        var navigation = Navigation;
+        view.WaitForState(() => navigation.History.Count > 0);
+        Assert.Equal(1, _circuit.SignOuts);
+        Assert.Equal("http://localhost/logout?reason=signedout", navigation.Uri);
+        Assert.True(navigation.History.First().Options.ForceLoad);
+        Assert.Single(navigation.History);
+    }
+
+    [Fact]
+    public void SignOut_WithTheLibrarysSignIn_FollowsItsLogoutPath()
+    {
+        Services.AddSingleton(new ThargaAuthOptions { LogoutPath = "/account/sign-out" });
+        var view = Watch();
+        Warn(view);
+
+        view.Find("[data-session-watch-signout]").Click();
+
+        var navigation = Navigation;
+        view.WaitForState(() => navigation.History.Count > 0);
+        Assert.Equal("http://localhost/account/sign-out?reason=signedout", navigation.Uri);
+    }
+
+    /// <summary>A host that signs people in by its own means has no <c>/logout</c> of the library's: the tab goes straight to the ended page.</summary>
+    [Fact]
+    public void SignOut_WithoutIt_GoesToTheEndedPath()
+    {
+        var view = Watch();
+        Warn(view);
+
+        view.Find("[data-session-watch-signout]").Click();
+
+        var navigation = Navigation;
+        view.WaitForState(() => navigation.History.Count > 0);
+        Assert.Equal("http://localhost/session-ended?reason=signedout", navigation.Uri);
+        Assert.True(navigation.History.First().Options.ForceLoad);
+    }
+
+    /// <summary>Only the person's own choice goes through the sign-out: a session that ends any other way lands on the ended page, sign-in or not.</summary>
+    [Fact]
+    public void WhenTheSessionEndsOtherwise_WithTheLibrarysSignIn_TheTabStillGoesToTheEndedLocation()
+    {
+        Services.AddSingleton(new ThargaAuthOptions());
+        var view = Watch();
+
+        _circuit.Set(SessionCircuitState.Ended, endedLocation: "/session-ended?reason=idle");
+
+        var navigation = Navigation;
+        view.WaitForState(() => navigation.History.Count > 0);
+        Assert.Equal("http://localhost/session-ended?reason=idle", navigation.Uri);
+    }
+
     [Fact]
     public void WhenTheSessionEnds_TheTabGoesToTheEndedLocation_AndTellsOtherTabs()
     {

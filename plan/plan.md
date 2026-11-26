@@ -75,9 +75,10 @@ Not included: ending another person's sessions, a heads-up before max age, an au
 failing). Next: step 9, the PR (remove `plan/` first). Open for the maintainer:
 - `IdleWarning` defaults to 1 minute, so hosts with an idle timeout of at least `2 x ActivityInterval + 1 minute` (3 minutes with the defaults) see the
   dialog after upgrading. Shipped as a patch (4.8) on the reading that it is additive; the alternative is 4.9.
-- The dialog's "Sign out" ends the library session and lands on `EndedPath?reason=signedout` (as the tests fix), without visiting the identity provider.
-  `/logout?reason=signedout` is the way to also sign out there; the guide says to link the ended page to it. Whether the dialog should go through
-  `/logout?reason=signedout` instead is a design choice to confirm.
+- Decided 2026-11-26 (coordinator, per spec T2b §3.11): the dialog's "Sign out" goes through `/logout?reason=signedout` when the library's sign-in is
+  registered (`ThargaAuthOptions`), so the identity provider is signed out too; without it, straight to the ended location. The circuit still ends the
+  session (SignedOut, audited and announced once); `/logout` finds it ended and writes nothing more. Pinned by `SessionWatchRenderTests` and
+  `SessionLogoutTests`.
 
 Earlier:
 

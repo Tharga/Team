@@ -212,6 +212,21 @@ public class SessionLogoutTests
         Assert.Equal("/", context.Response.Headers.Location);
     }
 
+    /// <summary>
+    /// The "Still here?" dialog ends the session itself, then sends the browser here: the endpoint finds nothing left to end, and still signs out of the
+    /// provider and lands on the ended page.
+    /// </summary>
+    [Fact]
+    public async Task Logout_WhenTheDialogAlreadyEndedTheSession_StillSignsOutOfTheProvider_AndLandsOnTheEndedPage()
+    {
+        _sessions.Setup(x => x.EndCurrentAsync()).ReturnsAsync(false);
+
+        var (_, auth) = await LogoutAsync(withPolicy: true, query: "?reason=signedout", endedPath: "/session-ended");
+
+        Assert.Equal([CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme], auth.SignOuts);
+        Assert.Equal("/session-ended?reason=signedout", auth.Properties[OpenIdConnectDefaults.AuthenticationScheme].RedirectUri);
+    }
+
     /// <summary>The reason changes where the browser lands and nothing else: both halves are still signed out, the provider last.</summary>
     [Fact]
     public async Task Logout_WithTheSignedOutReason_StillSignsOutBothSchemes_TheProviderLast()

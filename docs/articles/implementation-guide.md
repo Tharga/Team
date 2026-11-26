@@ -1427,8 +1427,8 @@ builder.Services.AddScoped<ISessionPolicy, StrictTeams>();
   in `Sessions.CookieScheme` if it is not `Cookies`. `IUserSessionService` also ends the current session or every other session of the caller.
 - **Failures allow by default.** A policy or store that throws is logged and the request goes through (`Sessions.OnError = Allow`): a database blip must not
   sign everybody out. `Deny` refuses the request instead, without ending the session. A live circuit is never ended for a failure.
-- **Signing out lands on the ended page when asked to.** `/logout?reason=signedout` signs out exactly as `/logout` does, and then lands on
-  `Sessions.EndedPath?reason=signedout` (or the start page with the reason) instead of the start page. Only that one value is read; any other, or sessions
+- **Signing out lands on the ended page when asked to.** `/logout?reason=signedout`, where the "Still here?" dialog's *Sign out* goes, signs out exactly
+  as `/logout` does, and then lands on `Sessions.EndedPath?reason=signedout` (or the start page with the reason) instead of the start page. Only that one value is read; any other, or sessions
   off, lands where it always did, so it is no open redirect.
 - **Startup fails, naming the problem**, when a policy is registered with no `IUserSessionStore`, or when the cookie scheme sets `EventsType`, which would
   silently replace the events the check is chained into. Both only when sessions are on.
@@ -1491,8 +1491,10 @@ Before an idle sign-out, `SessionWatch` asks **"Are you still there?"** with a c
   tab, on any instance, moves.
 - **"Yes, stay signed in"** records activity at once and closes the question in every tab of the browser. It writes only while the question is open.
   While it is open, using the page is not an answer: activity reports are held, so only "Yes" keeps the session.
-- **"Sign out"** ends the session as `signedout`, audited once, and lands every tab on `Sessions.EndedPath?reason=signedout`. Like an idle end it does not
-  visit the identity provider; to sign out there too, link the ended page to `/logout?reason=signedout`, which returns to the same page.
+- **"Sign out"** ends the session as `signedout`, audited once and announced once. With the library's own sign-in (`AddThargaAuth`), that tab then goes
+  through `/logout?reason=signedout`, so the identity provider is signed out too (with `FederatedSignOut`), which matters on a shared machine, and lands on
+  `Sessions.EndedPath?reason=signedout`; the session is already ended, so the endpoint writes nothing more. A host that signs people in by its own means
+  goes straight to the ended page. The other tabs land on `?reason=signedout` as soon as they hear of the end.
 - **No answer**: the countdown runs out, the circuit ends the session as `idle` a second later, and every tab lands on `?reason=idle`. The countdown in the
   browser is only a display of what the server said was left; it decides nothing.
 - **Not asked**: with no view on the page (nobody to ask), with `IdleWarning` at `Zero` or clamped to nothing, or when the max age ends the session first,

@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.WebUtilities
 @using Microsoft.Extensions.DependencyInjection
 @using Microsoft.Extensions.Options
 @using Microsoft.JSInterop
@@ -13,6 +14,10 @@
     The page's half of the server-side session (Tharga/Team#471): it reports use of the page, asks "Still here?" before an idle sign-out, and sends the
     browser to the ended page when the session ends. It decides nothing: the circuit reads the store and says what to show, the countdown only displays what
     the server said was left, and other tabs are only told to look again.
+
+    "Sign out" goes through the library's /logout with ?reason=signedout when the library signs people in, so the identity provider is signed out too and
+    the browser still lands on the ended page; the session is already ended by then, so /logout writes nothing more. Without the library's sign-in it goes
+    straight to the ended page.
 
     LoginDisplay renders it. A host without LoginDisplay places it once in its layout; it renders nothing and loads nothing while sessions are not active.
 *@
@@ -47,6 +52,7 @@
     private TextSet _text = TextSet.Empty;
     private bool _open;
     private bool _left;
+    private bool _signingOut;
     private string _time;
 
     private string TitleId => $"{_id}-title";
@@ -168,7 +174,19 @@
         }
 
         await CallAsync("announce", _id, EndedKind);
-        NavigationManager.NavigateTo(_circuit.EndedLocation ?? NavigationManager.BaseUri, forceLoad: true);
+        NavigationManager.NavigateTo(LeavingTo(), forceLoad: true);
+    }
+
+    /// <summary>Where the browser goes once the session ended: through the library's sign-out when the person chose to sign out here, otherwise the ended page.</summary>
+    private string LeavingTo()
+    {
+        var auth = _signingOut ? Services.GetService<ThargaAuthOptions>() : null;
+        if (auth != null && !string.IsNullOrEmpty(auth.LogoutPath))
+        {
+            return QueryHelpers.AddQueryString(auth.LogoutPath, SessionCookieEvents.ReasonParameterName, SessionCookieEvents.Code(SessionEndReason.SignedOut));
+        }
+
+        return _circuit.EndedLocation ?? NavigationManager.BaseUri;
     }
 
     private async Task StayAsync()
@@ -180,7 +198,11 @@
 
     private async Task SignOutAsync()
     {
+        _signingOut = true;
         await _circuit.SignOutAsync();
+
+        // Not ended (the store could not be reached): a later end is not one the person chose here.
+        if (_circuit.State != SessionCircuitState.Ended) _signingOut = false;
         await ApplyAsync();
     }
 
