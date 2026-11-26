@@ -1,20 +1,33 @@
+using System.Security.Claims;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Tharga.Team.Blazor.Framework;
 
 /// <summary>
-/// The services a circuit's session watch reads the store and the host's policy through, in a scope of its own for the life of the circuit
-/// (Tharga/Team#471).
+/// A circuit's session checks, each in a scope of its own, created when the check runs and disposed when it is done (Tharga/Team#471), as the claim
+/// revalidation does.
 /// </summary>
 /// <remarks>
-/// <b>Not the circuit's own scope</b>, for the reason the claim revalidation gives: the watch wakes on a timer thread, and must not share the circuit's scoped
-/// services (a host's policy, its user service) with a render in flight. Disposed with the circuit's scope.
+/// <b>Not the circuit's own scope</b>: the watch wakes on a timer thread, and must not share the circuit's scoped services (a host's policy, its user service)
+/// with a render in flight. Whether sessions are on is read from the registrations and options, so asking costs no scope.
 /// </remarks>
-internal sealed class SessionCircuitScope(IServiceScopeFactory scopeFactory) : IDisposable
+internal sealed class SessionCircuitScope(IServiceScopeFactory scopeFactory, IServiceProviderIsService registered, IOptions<ThargaBlazorOptions> options) : ICircuitSessionChecks
 {
-    private readonly IServiceScope _scope = scopeFactory.CreateScope();
+    public bool Active => options.Value.Sessions?.Enabled == true && registered.IsService(typeof(ISessionPolicy));
 
-    public SessionEvaluator Evaluator => _scope.ServiceProvider.GetRequiredService<SessionEvaluator>();
+    public Task<SessionCheck> InspectCircuitAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
+        => RunAsync(x => x.InspectCircuitAsync(principal, activeTeamKey, cancellationToken));
 
-    public void Dispose() => _scope.Dispose();
+    public Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
+        => RunAsync(x => x.ConfirmPresenceAsync(principal, activeTeamKey, cancellationToken));
+
+    public Task<bool> SignOutAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+        => RunAsync(x => x.SignOutAsync(principal, cancellationToken));
+
+    private async Task<T> RunAsync<T>(Func<SessionEvaluator, Task<T>> check)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        return await check(scope.ServiceProvider.GetRequiredService<SessionEvaluator>());
+    }
 }

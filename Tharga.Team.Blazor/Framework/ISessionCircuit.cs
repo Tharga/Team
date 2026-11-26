@@ -17,8 +17,14 @@ internal interface ISessionCircuit : IDisposable
     /// <summary>Once <see cref="SessionCircuitState.Ended"/>, where the browser goes (<see cref="SessionCookieEvents.EndedLocation(string, string, SessionEndReason)"/>); otherwise null.</summary>
     string EndedLocation { get; }
 
-    /// <summary>Raised when <see cref="State"/> changes. Runs on whichever thread changed it: a view marshals before it touches its own state.</summary>
+    /// <summary>
+    /// Raised when <see cref="State"/> changes, and when the last view leaves, so another can take over. Runs on whichever thread changed it: a view marshals
+    /// before it touches its own state.
+    /// </summary>
     event Action Changed;
+
+    /// <summary>Raised once, when the watch has started and found a session to watch, so a view that arrived first knows <see cref="Active"/> is now true.</summary>
+    event Action Activated;
 
     /// <summary>Starts watching; fire and forget from the circuit handler, so it runs without any component. Never throws.</summary>
     Task StartAsync();
@@ -26,7 +32,10 @@ internal interface ISessionCircuit : IDisposable
     /// <summary>A view is on screen and can ask the question. Dispose the result when it goes. Without a view nobody is warned.</summary>
     IDisposable Attach();
 
-    /// <summary>The person said they are still here. Writes only while <see cref="SessionCircuitState.Warning"/>.</summary>
+    /// <summary>Like <see cref="Attach"/>, for the one view of a circuit that asks; null when another view already does, so a page never shows two dialogs.</summary>
+    IDisposable TryAttach();
+
+    /// <summary>The person said they are still here. Writes only while <see cref="SessionCircuitState.Warning"/> and before the idle moment.</summary>
     Task StayAsync();
 
     /// <summary>The person chose to sign out: ends the session as signed out, once.</summary>

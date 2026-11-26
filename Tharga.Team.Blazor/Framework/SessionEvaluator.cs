@@ -54,7 +54,7 @@ internal sealed class SessionEvaluator(
     TimeProvider timeProvider,
     ISessionPolicy policy = null,
     UserSessionService sessions = null,
-    ILogger<SessionEvaluator> logger = null)
+    ILogger<SessionEvaluator> logger = null) : ICircuitSessionChecks
 {
     private static readonly SessionCheck ValidCheck = new(SessionCheckOutcome.Valid);
     private static readonly SessionCheck RejectedCheck = new(SessionCheckOutcome.Rejected);
@@ -103,13 +103,21 @@ internal sealed class SessionEvaluator(
         return new SessionCheck(SessionCheckOutcome.Valid, Session: session, Limits: limits);
     }
 
-    /// <summary>The person answered "Still here?": records activity now, whatever was recorded a moment ago, and forgets the remembered session. False when the session is not there or has ended.</summary>
+    /// <summary>
+    /// The person answered "Still here?": records activity now, whatever was recorded a moment ago, and forgets the remembered session. False when the session
+    /// is not there, has ended, or is already over a limit: an answer that came too late never brings a session back.
+    /// </summary>
     public async Task<bool> ConfirmPresenceAsync(ClaimsPrincipal principal, string activeTeamKey, CancellationToken cancellationToken = default)
     {
         var sessionId = UserSessionService.SessionIdOf(principal);
         if (!Active || sessionId == null) return false;
 
-        var recorded = await Sessions.RecordActivityAsync(principal, TeamOf(activeTeamKey), TimeSpan.Zero, cancellationToken);
+        var team = TeamOf(activeTeamKey);
+        var session = await Sessions.GetAsync(principal, cancellationToken);
+        if (session == null || session.EndedAt != null) return false;
+        if (UserSessionService.Exceeded(session, await LimitsAsync(session, team, cancellationToken), Now) != null) return false;
+
+        var recorded = await Sessions.RecordActivityAsync(principal, team, TimeSpan.Zero, cancellationToken);
         cache.ForgetSession(sessionId);
 
         return recorded;

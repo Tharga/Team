@@ -11,16 +11,21 @@ namespace Tharga.Team.Blazor.Framework;
 /// One circuit's watch over its server-side session (Tharga/Team#471): one timer, armed to the next moment that matters, and the store as the only truth.
 /// </summary>
 /// <remarks>
-/// <b>Behaviour the tests hold it to.</b> Each wake reads the store afresh; checks never overlap (one in flight, at most one follow-up); a failure never ends the
-/// circuit and is retried after <see cref="SessionOptions.ActivityInterval"/>; a hint for this person causes a check and nothing else; the warning needs a
-/// view attached and is never shown to somebody whose store stamp is recent; <see cref="StayAsync"/> writes only while warned; an end is audited once and
-/// stops the timer and the subscription, and signs the circuit's auth state out.
+/// <b>Behaviour the tests hold it to.</b> Each wake reads the store afresh; checks never overlap (one in flight, at most one follow-up, and a request that
+/// arrives while one runs is never lost); a failure never ends the circuit and is retried after <see cref="SessionOptions.ActivityInterval"/>; a session the
+/// store does not have is looked at again after a doubling wait, at most <see cref="LongestRejectedWait"/>; a hint for this person causes a check and
+/// nothing else; the warning needs a view attached and is never shown to somebody whose store stamp is recent; <see cref="StayAsync"/> writes only while
+/// warned and before the idle moment; an end is audited once and stops the timer and the subscription, and signs the circuit's auth state out.
+/// <para>
+/// <b>The timer is never armed further ahead than <see cref="LongestWait"/></b>, so a long max age is reached by looking again, not by a due time the
+/// system timer refuses. It is never touched once disposed.
+/// </para>
 /// <para>
 /// <b>No session id leaves it.</b> It learns the person from the session it reads, listens for that person only, and logs neither.
 /// </para>
 /// </remarks>
 internal sealed class SessionCircuit(
-    SessionEvaluator evaluator,
+    ICircuitSessionChecks checks,
     AuthenticationStateProvider authentication,
     IHostEnvironmentAuthenticationStateProvider host,
     IUserSessionNotifier notifier,
@@ -28,6 +33,12 @@ internal sealed class SessionCircuit(
     TimeProvider timeProvider,
     ILogger<SessionCircuit> logger = null) : ISessionCircuit
 {
+    /// <summary>The longest the timer is armed for; a later moment is reached by waking, looking and arming again.</summary>
+    internal static readonly TimeSpan LongestWait = TimeSpan.FromDays(1);
+
+    /// <summary>The longest wait before looking again for a session the store does not have; the revalidation interval is the backstop.</summary>
+    internal static readonly TimeSpan LongestRejectedWait = TimeSpan.FromMinutes(30);
+
     private static readonly AuthenticationState SignedOutState = new(new ClaimsPrincipal(new ClaimsIdentity()));
 
     private readonly object _gate = new();
@@ -42,6 +53,8 @@ internal sealed class SessionCircuit(
     private bool _ended;
     private bool _disposed;
     private int _views;
+    private bool _asked;
+    private TimeSpan _rejectedWait;
     private string _userKey;
     private SessionDeadlines? _deadlines;
     private SessionCircuitState _state = SessionCircuitState.Watching;
@@ -49,6 +62,8 @@ internal sealed class SessionCircuit(
     private string _endedLocation;
 
     public event Action Changed;
+
+    public event Action Activated;
 
     public bool Active => _active;
 
@@ -67,29 +82,37 @@ internal sealed class SessionCircuit(
         lock (_gate)
         {
             if (_started || _disposed) return;
+
             _started = true;
         }
 
         try
         {
-            if (!evaluator.Active || authentication == null) return;
-
-            authentication.AuthenticationStateChanged += OnAuthenticationStateChanged;
-            if (UserSessionService.SessionIdOf(await PrincipalAsync()) == null)
-            {
-                authentication.AuthenticationStateChanged -= OnAuthenticationStateChanged;
-                return;
-            }
+            if (!checks.Active || authentication == null) return;
 
             lock (_gate)
             {
                 if (_disposed) return;
 
-                _active = true;
-                _timer = timeProvider.CreateTimer(_ => CheckAsync(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+                authentication.AuthenticationStateChanged += OnAuthenticationStateChanged;
             }
 
-            notifier.SessionEnded += OnSessionEnded;
+            var principal = await PrincipalAsync();
+
+            lock (_gate)
+            {
+                if (_disposed || UserSessionService.SessionIdOf(principal) == null)
+                {
+                    authentication.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+                    return;
+                }
+
+                _active = true;
+                _timer = timeProvider.CreateTimer(_ => CheckAsync(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+                notifier.SessionEnded += OnSessionEnded;
+            }
+
+            Raise(Activated);
             await CheckAsync();
         }
         catch (Exception e)
@@ -114,17 +137,29 @@ internal sealed class SessionCircuit(
         return new Attachment(this);
     }
 
+    public IDisposable TryAttach()
+    {
+        lock (_gate)
+        {
+            if (_asked) return null;
+
+            _asked = true;
+        }
+
+        return new Asker(this, Attach());
+    }
+
     public async Task StayAsync()
     {
         lock (_gate)
         {
-            if (_state != SessionCircuitState.Warning || _ended || _disposed) return;
+            if (_state != SessionCircuitState.Warning || _ended || _disposed || _idleAt <= Now) return;
         }
 
         try
         {
             var principal = await PrincipalAsync();
-            await evaluator.ConfirmPresenceAsync(principal, TeamOf(principal));
+            await checks.ConfirmPresenceAsync(principal, TeamOf(principal));
         }
         catch (Exception e)
         {
@@ -145,7 +180,7 @@ internal sealed class SessionCircuit(
         bool ended;
         try
         {
-            ended = await evaluator.SignOutAsync(await PrincipalAsync());
+            ended = await checks.SignOutAsync(await PrincipalAsync());
         }
         catch (Exception e)
         {
@@ -198,9 +233,8 @@ internal sealed class SessionCircuit(
 
             _disposed = true;
             _timer?.Dispose();
+            Unsubscribe();
         }
-
-        Unsubscribe();
     }
 
     private async Task RunChecksAsync(TaskCompletionSource done)
@@ -211,9 +245,14 @@ internal sealed class SessionCircuit(
             {
                 await LookAsync();
 
+                // Deciding to stop and saying so is one step: a request that arrives in between must find the check either running or stopped.
                 lock (_gate)
                 {
-                    if (!_again || _ended || _disposed) break;
+                    if (!_again || _ended || _disposed)
+                    {
+                        _checking = false;
+                        break;
+                    }
 
                     _again = false;
                 }
@@ -221,15 +260,15 @@ internal sealed class SessionCircuit(
         }
         catch (Exception e)
         {
-            logger?.LogWarning(e, "The live session check failed unexpectedly; the circuit carries on.");
-        }
-        finally
-        {
             lock (_gate)
             {
                 _checking = false;
             }
 
+            logger?.LogWarning(e, "The live session check failed unexpectedly; the circuit carries on.");
+        }
+        finally
+        {
             done.TrySetResult();
         }
     }
@@ -240,7 +279,7 @@ internal sealed class SessionCircuit(
         try
         {
             var principal = await PrincipalAsync();
-            check = await evaluator.InspectCircuitAsync(principal, TeamOf(principal));
+            check = await checks.InspectCircuitAsync(principal, TeamOf(principal));
         }
         catch (Exception e)
         {
@@ -262,8 +301,8 @@ internal sealed class SessionCircuit(
                 Disarm();
                 break;
             default:
-                // Not there, or not the caller's: the request check refuses it; the circuit only looks again.
-                Arm(_options.ActivityInterval);
+                // Not there, or not the caller's: the request check refuses it; the circuit only looks again, less and less often.
+                Arm(NextRejectedWait());
                 break;
         }
     }
@@ -281,16 +320,18 @@ internal sealed class SessionCircuit(
 
             _userKey = session.UserKey;
             _deadlines = deadlines;
+            _rejectedWait = TimeSpan.Zero;
 
             var warn = due && _views > 0;
             changed = warn != (_state == SessionCircuitState.Warning);
             _state = warn ? SessionCircuitState.Warning : SessionCircuitState.Watching;
             _idleAt = warn ? deadlines.IdleAt : null;
 
-            ArmAt(deadlines.NextWake(due), now);
+            if (deadlines.NextWake(due) is { } wake) ChangeTimer(wake - now);
+            else ChangeTimer(Timeout.InfiniteTimeSpan);
         }
 
-        if (changed) RaiseChanged();
+        if (changed) Raise(Changed);
     }
 
     private void End(SessionEndReason reason)
@@ -304,9 +345,8 @@ internal sealed class SessionCircuit(
             _idleAt = null;
             _endedLocation = SessionCookieEvents.EndedLocation(_options.EndedPath, ThargaAuthRegistration.HomePath, reason);
             _timer?.Dispose();
+            Unsubscribe();
         }
-
-        Unsubscribe();
 
         try
         {
@@ -317,7 +357,7 @@ internal sealed class SessionCircuit(
             logger?.LogWarning(e, "The ended session's circuit could not be signed out; the next request is refused regardless.");
         }
 
-        RaiseChanged();
+        Raise(Changed);
     }
 
     private void Detach()
@@ -327,16 +367,33 @@ internal sealed class SessionCircuit(
         {
             if (_views > 0) _views--;
 
-            // Nobody left to ask: the session still ends on time.
-            changed = _views == 0 && _state == SessionCircuitState.Warning;
-            if (changed)
+            // Nobody left to ask: the session still ends on time, and another view may take over.
+            changed = _views == 0 && !_ended && !_disposed;
+            if (changed && _state == SessionCircuitState.Warning)
             {
                 _state = SessionCircuitState.Watching;
                 _idleAt = null;
             }
         }
 
-        if (changed) RaiseChanged();
+        if (changed) Raise(Changed);
+    }
+
+    private void Unasked()
+    {
+        lock (_gate)
+        {
+            _asked = false;
+        }
+    }
+
+    private TimeSpan NextRejectedWait()
+    {
+        lock (_gate)
+        {
+            _rejectedWait = _rejectedWait <= TimeSpan.Zero ? _options.ActivityInterval : Min(_rejectedWait + _rejectedWait, LongestRejectedWait);
+            return _rejectedWait;
+        }
     }
 
     private void OnSessionEnded(object sender, UserSessionEndedEventArgs e)
@@ -353,6 +410,7 @@ internal sealed class SessionCircuit(
 
     private async Task<ClaimsPrincipal> PrincipalAsync() => (await (_authenticationState ?? authentication.GetAuthenticationStateAsync())).User;
 
+    /// <summary>Called under the gate.</summary>
     private void Unsubscribe()
     {
         notifier.SessionEnded -= OnSessionEnded;
@@ -363,31 +421,22 @@ internal sealed class SessionCircuit(
     {
         lock (_gate)
         {
-            if (_ended || _disposed) return;
-
-            _timer?.Change(Max(due, TimeSpan.Zero), Timeout.InfiniteTimeSpan);
+            ChangeTimer(due);
         }
     }
 
-    private void ArmAt(DateTime? at, DateTime now)
+    private void Disarm() => Arm(Timeout.InfiniteTimeSpan);
+
+    /// <summary>Called under the gate; never touches a timer that is gone, and never arms further ahead than <see cref="LongestWait"/>.</summary>
+    private void ChangeTimer(TimeSpan due)
     {
-        if (at is { } moment) _timer?.Change(Max(moment - now, TimeSpan.Zero), Timeout.InfiniteTimeSpan);
-        else Disarm();
+        if (_ended || _disposed || _timer == null) return;
+
+        _timer.Change(due == Timeout.InfiniteTimeSpan ? due : Min(Max(due, TimeSpan.Zero), LongestWait), Timeout.InfiniteTimeSpan);
     }
 
-    private void Disarm()
+    private void Raise(Action handlers)
     {
-        lock (_gate)
-        {
-            if (_ended || _disposed) return;
-
-            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        }
-    }
-
-    private void RaiseChanged()
-    {
-        var handlers = Changed;
         if (handlers == null) return;
 
         foreach (var handler in handlers.GetInvocationList().Cast<Action>())
@@ -398,7 +447,7 @@ internal sealed class SessionCircuit(
             }
             catch (Exception e)
             {
-                logger?.LogWarning(e, "A session watch view threw when told the state changed.");
+                logger?.LogWarning(e, "A session watch view threw when told the circuit changed.");
             }
         }
     }
@@ -407,6 +456,8 @@ internal sealed class SessionCircuit(
 
     private static TimeSpan Max(TimeSpan a, TimeSpan b) => a > b ? a : b;
 
+    private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
+
     private sealed class Attachment(SessionCircuit circuit) : IDisposable
     {
         private int _detached;
@@ -414,6 +465,19 @@ internal sealed class SessionCircuit(
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _detached, 1) == 0) circuit.Detach();
+        }
+    }
+
+    private sealed class Asker(SessionCircuit circuit, IDisposable attachment) : IDisposable
+    {
+        private int _gone;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _gone, 1) != 0) return;
+
+            circuit.Unasked();
+            attachment.Dispose();
         }
     }
 }

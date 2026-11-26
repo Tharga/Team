@@ -95,9 +95,15 @@ internal sealed class SessionClock : TimeProvider
     }
 }
 
-/// <summary>A timer that records every <see cref="Change"/> and fires, once, when its clock passes the moment it was armed for.</summary>
+/// <summary>
+/// A timer that records every <see cref="Change"/> and fires, once, when its clock passes the moment it was armed for. It refuses what the system timer
+/// refuses: a due time beyond the longest it accepts, and any change once disposed.
+/// </summary>
 internal sealed class ManualTimer(SessionClock clock, TimerCallback callback, object state) : ITimer
 {
+    /// <summary>The longest due time <see cref="TimeProvider.System"/>'s timer accepts, in milliseconds.</summary>
+    public const long LongestDueMilliseconds = 4294967294;
+
     /// <summary>Every call to <see cref="Change"/>, the creation's first.</summary>
     public List<(TimeSpan Due, TimeSpan Period)> Changes { get; } = [];
 
@@ -111,7 +117,8 @@ internal sealed class ManualTimer(SessionClock clock, TimerCallback callback, ob
 
     public bool Change(TimeSpan dueTime, TimeSpan period)
     {
-        if (Disposed) return false;
+        ObjectDisposedException.ThrowIf(Disposed, this);
+        if (dueTime != Timeout.InfiniteTimeSpan && (dueTime < TimeSpan.Zero || dueTime.TotalMilliseconds > LongestDueMilliseconds)) throw new ArgumentOutOfRangeException(nameof(dueTime));
 
         Changes.Add((dueTime, period));
         DueAt = dueTime == Timeout.InfiniteTimeSpan ? null : clock.GetUtcNow() + dueTime;
@@ -154,9 +161,16 @@ internal sealed class FakeSessionCircuit : ISessionCircuit
 
     public event Action Changed;
 
+    public event Action Activated;
+
     public int Subscribers => Changed?.GetInvocationList().Length ?? 0;
 
+    public int ActivatedSubscribers => Activated?.GetInvocationList().Length ?? 0;
+
     public int Attached { get; private set; }
+
+    /// <summary>Whether a view holds the one asking place (<see cref="TryAttach"/>).</summary>
+    public bool Asked { get; private set; }
 
     public int Stays { get; private set; }
 
@@ -181,6 +195,22 @@ internal sealed class FakeSessionCircuit : ISessionCircuit
     {
         Attached++;
         return new Detach(this);
+    }
+
+    public IDisposable TryAttach()
+    {
+        if (Asked) return null;
+
+        Asked = true;
+        var attachment = Attach();
+        return new Unask(this, attachment);
+    }
+
+    /// <summary>The watch found a session after the view arrived, as the real one does when the sign-in state is read late.</summary>
+    public void Activate()
+    {
+        Active = true;
+        Activated?.Invoke();
     }
 
     public Task StayAsync()
@@ -215,6 +245,20 @@ internal sealed class FakeSessionCircuit : ISessionCircuit
     }
 
     public void Dispose() => Disposals++;
+
+    private sealed class Unask(FakeSessionCircuit circuit, IDisposable attachment) : IDisposable
+    {
+        private bool _done;
+
+        public void Dispose()
+        {
+            if (_done) return;
+
+            _done = true;
+            circuit.Asked = false;
+            attachment.Dispose();
+        }
+    }
 
     private sealed class Detach(FakeSessionCircuit circuit) : IDisposable
     {
