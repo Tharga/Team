@@ -302,6 +302,36 @@ public interface ISupportCaseStore
         => Task.FromResult(false);
 
     /// <summary>
+    /// Secure files, across every team, carried by entries written before <paramref name="sentBefore"/> whose content is not yet
+    /// removed: the ones the secure-file sweep removes.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not team-scoped, because a sweep has no caller and no team</b>, as <see cref="GetCasesForInactivityCloseAsync"/>.
+    /// <para>
+    /// <b>Defaults to nothing</b>, so a store written before secure files existed keeps compiling; its secure files are then kept until
+    /// support removes them.
+    /// </para>
+    /// </remarks>
+    /// <param name="sentBefore">Files on entries written before this moment are due.</param>
+    /// <param name="limit">Most files to return, so one sweep cannot load an unbounded set.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    Task<SupportAttachmentLocation[]> GetSecureAttachmentsDueAsync(DateTime sentBefore, int limit, CancellationToken cancellationToken = default)
+        => Task.FromResult<SupportAttachmentLocation[]>([]);
+
+    /// <summary>
+    /// Records on one entry's file that its content was removed, but only if it is not recorded yet. Returns whether this call recorded it.
+    /// </summary>
+    /// <remarks>
+    /// <b>The condition is the point</b>, as for <see cref="TryCloseForInactivityAsync"/>: two instances removing the same file both get
+    /// here, and exactly one records it. Not team-scoped, for the sweep.
+    /// <para>
+    /// <b>Defaults to throwing</b>, not to reporting it recorded: a removal nobody wrote down would show the file as still there.
+    /// </para>
+    /// </remarks>
+    Task<bool> TryMarkAttachmentRemovedAsync(string caseId, int sequence, string attachmentId, DateTime removedAt, CancellationToken cancellationToken = default)
+        => throw new NotSupportedException($"'{GetType().Name}' does not implement {nameof(TryMarkAttachmentRemovedAsync)}, so secure files cannot be removed.");
+
+    /// <summary>
     /// The case projected onto a given channel identifier, or <c>null</c> if no case is bound to it.
     /// </summary>
     /// <remarks>

@@ -24,11 +24,16 @@
 - [x] 0. NuGet update — AngleSharp 1.11.0, Anthropic 13.14.0; everything else held by documented rules
       (net10.0 stays on 10.x Microsoft packages, Swashbuckle/Serilog/Roslyn/MailKit holds). 16,732 tests
       pass (one Anthropic test flaked once under load, passes on rerun). Commit `b0bbdb6b`.
-- [~] 1. Contracts: `SupportAttachment` fields, `SupportRaiseOptions.SecureAttachments`,
+- [x] 1. Contracts: `SupportAttachment` fields, `SupportRaiseOptions.SecureAttachments`,
       `ISupportCaseService` reply overload and `RemoveSecureAttachmentAsync` (defaults throw),
       `ISupportCaseStore` expiry query and conditional mark, `SupportAttachmentLocation`,
       `SupportCaseOptions.SecureFiles`. Serialization tests.
-- [ ] 2. Domain (`SupportCaseService`): store secure uploads on reply and raise with `Secure` and
+      Done. The overload's default replies without secure files when there are none, so a component can call it on a
+      host's own service. Store: `GetSecureAttachmentsDueAsync(sentBefore, limit)` (default []) and
+      `TryMarkAttachmentRemovedAsync(caseId, sequence, attachmentId, removedAt)` (default throws). Added
+      `SupportAttachmentLimits.SecureKeepFor` so the picker can say how long files are kept. `SecureFiles` is a
+      `SupportSecureFileOptions` section (`KeepFor` 30 days, zero keeps them; `SweepInterval`; `SweepBatchSize`).
+- [~] 2. Domain (`SupportCaseService`): store secure uploads on reply and raise with `Secure` and
       `UploadedBy`, read-back guard, `RemoveSecureAttachmentAsync`, strip outward. Tests.
 - [ ] 3. Authorization decorator: withhold in `GetMessagesAsync`, refuse `OpenAttachmentAsync`,
       authorize the new overload and removal. Tests.

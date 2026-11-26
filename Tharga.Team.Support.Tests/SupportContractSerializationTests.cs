@@ -123,6 +123,51 @@ public class SupportContractSerializationTests
     }
 
     [Fact]
+    public void SupportAttachmentLimits_RoundTrip_WithHowLongSecureFilesAreKept()
+    {
+        var limits = SupportAttachmentLimits.Default with { SecureKeepFor = TimeSpan.FromDays(30) };
+
+        Assert.Equal(limits, RoundTrip(limits));
+    }
+
+    [Fact]
+    public void ASecureAttachment_RoundTrips_WithItsUploaderAndRemoval()
+    {
+        var attachment = new SupportAttachment
+        {
+            Id = "a1",
+            FileName = "export.csv",
+            ContentType = "text/csv",
+            Size = 512,
+            Secure = true,
+            UploadedBy = "sub-1",
+            RemovedAt = new DateTime(2026, 11, 26, 8, 0, 0, DateTimeKind.Utc)
+        };
+
+        Assert.Equal(attachment, RoundTrip(attachment));
+    }
+
+    /// <summary>A withheld file is what a colleague is sent, so it must cross a wire as withheld, with nothing it hides.</summary>
+    [Fact]
+    public void AWithheldAttachment_RoundTrips_Blank()
+    {
+        var attachment = new SupportAttachment { Id = "a1", FileName = string.Empty, ContentType = string.Empty, Size = 512, Secure = true, Withheld = true };
+
+        var restored = RoundTrip(attachment);
+
+        Assert.Equal(attachment, restored);
+        Assert.Null(restored.RemovedAt);
+    }
+
+    [Fact]
+    public void SupportAttachmentLocation_RoundTrips()
+    {
+        var location = new SupportAttachmentLocation { TeamKey = "acme", CaseId = "c1", Sequence = 3, AttachmentId = "a1" };
+
+        Assert.Equal(location, RoundTrip(location));
+    }
+
+    [Fact]
     public void SupportMessage_RoundTrips_WithNoSource()
     {
         var message = new SupportMessage

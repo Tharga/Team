@@ -12,6 +12,9 @@ public record SupportAttachmentLimits
     /// <summary>The most files one message may carry.</summary>
     public required int MaxCount { get; init; }
 
+    /// <summary>How long a secure file is kept before its content is removed, so a component can say so; null when it is kept until support removes it.</summary>
+    public TimeSpan? SecureKeepFor { get; init; }
+
     /// <summary>25 MB a file, 50 MB a message and 20 files.</summary>
     public static SupportAttachmentLimits Default { get; } = new()
     {

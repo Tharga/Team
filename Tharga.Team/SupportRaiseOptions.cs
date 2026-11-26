@@ -18,4 +18,14 @@ public sealed record SupportRaiseOptions
 
     /// <summary>The name of the support mailbox answers are sent from; null for the primary one. Only meaningful with <see cref="MailAddress"/>.</summary>
     public string Mailbox { get; init; }
+
+    /// <summary>
+    /// Files for the product's support staff only, carried by the case's first entry: besides them, only the member raising the case may
+    /// open them. Null or empty for none.
+    /// </summary>
+    /// <remarks>
+    /// They never leave the application and are removed after a set time; see <see cref="SupportAttachment.Secure"/>. Each stream is read
+    /// once, and the caller disposes it after the call.
+    /// </remarks>
+    public IReadOnlyList<SupportAttachmentUpload> SecureAttachments { get; init; }
 }
