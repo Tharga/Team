@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.JSInterop;
 using Radzen;
 using Tharga.Team.Blazor.Features.Authentication;
 using Tharga.Team.Blazor.Framework;
@@ -50,6 +51,18 @@ public class SessionWatchRenderTests : BunitContext
     }
 
     private static void WaitForClosed(IRenderedComponent<SessionWatch> view) => view.WaitForState(() => view.FindAll("[data-session-watch-dialog]").Count == 0);
+
+    /// <summary>A context of its own, whose browser is <paramref name="browser"/>, so the test decides when the module loads and what it is.</summary>
+    private static BunitContext Isolated(ControlledJsRuntime browser)
+    {
+        var context = new BunitContext();
+        context.Services.AddSingleton<IJSRuntime>(browser);
+        context.Services.AddSingleton<ISessionCircuit>(new FakeSessionCircuit());
+        context.Services.AddSingleton<IThargaTextProvider, DefaultThargaTextProvider>();
+        context.Services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new ThargaBlazorOptions { Sessions = SessionTestData.Options() }));
+        context.Services.AddRadzenComponents();
+        return context;
+    }
 
     // ---- nothing to show
 
@@ -186,11 +199,12 @@ public class SessionWatchRenderTests : BunitContext
     }
 
     /// <summary>
-    /// With the library's own sign-in, "Sign out" goes through <c>/logout?reason=signedout</c>, so the identity provider is signed out too on a shared machine,
-    /// and the browser still lands on the ended page. The session is already ended by the circuit, so the endpoint writes nothing more.
+    /// With the library's own sign-in, "Sign out" goes through <c>/logout?reason=signedout</c> with the session still running: the endpoint ends and announces
+    /// it while the cookie still says who is signing out, which the identity provider's sign-out needs on a shared machine, and lands on the ended page. The
+    /// circuit ends nothing first, and the other tabs are not told of an end that has not happened yet.
     /// </summary>
     [Fact]
-    public void SignOut_WithTheLibrarysSignIn_GoesThroughLogoutWithTheReason()
+    public void SignOut_WithTheLibrarysSignIn_GoesThroughLogoutWithTheReason_WithoutEndingTheSessionFirst()
     {
         Services.AddSingleton(new ThargaAuthOptions());
         var view = Watch();
@@ -200,10 +214,12 @@ public class SessionWatchRenderTests : BunitContext
 
         var navigation = Navigation;
         view.WaitForState(() => navigation.History.Count > 0);
-        Assert.Equal(1, _circuit.SignOuts);
+        Assert.Equal(0, _circuit.SignOuts);
         Assert.Equal("http://localhost/logout?reason=signedout", navigation.Uri);
         Assert.True(navigation.History.First().Options.ForceLoad);
         Assert.Single(navigation.History);
+        Assert.Equal(0, Calls("announce"));
+        Assert.Equal(1, Calls("stopCountdown"));
     }
 
     [Fact]
@@ -220,9 +236,9 @@ public class SessionWatchRenderTests : BunitContext
         Assert.Equal("http://localhost/account/sign-out?reason=signedout", navigation.Uri);
     }
 
-    /// <summary>A host that signs people in by its own means has no <c>/logout</c> of the library's: the tab goes straight to the ended page.</summary>
+    /// <summary>A host that signs people in by its own means has no <c>/logout</c> of the library's: the circuit ends the session, and the tab goes straight to the ended page.</summary>
     [Fact]
-    public void SignOut_WithoutIt_GoesToTheEndedPath()
+    public void SignOut_WithoutIt_EndsTheSessionInTheCircuit_AndGoesToTheEndedPath()
     {
         var view = Watch();
         Warn(view);
@@ -231,8 +247,25 @@ public class SessionWatchRenderTests : BunitContext
 
         var navigation = Navigation;
         view.WaitForState(() => navigation.History.Count > 0);
+        Assert.Equal(1, _circuit.SignOuts);
         Assert.Equal("http://localhost/session-ended?reason=signedout", navigation.Uri);
         Assert.True(navigation.History.First().Options.ForceLoad);
+        Assert.Equal("ended", LastCall("announce")[1]);
+    }
+
+    /// <summary>Without the library's sign-in, a sign-out the store could not take leaves the question open: nothing ended, so nothing navigates.</summary>
+    [Fact]
+    public void SignOut_WithoutIt_WhenTheCircuitCouldNotEndTheSession_StaysOnThePage()
+    {
+        _circuit.SignOutLeavesTheSession = true;
+        var view = Watch();
+        Warn(view);
+
+        view.Find("[data-session-watch-signout]").Click();
+
+        Assert.Equal(1, _circuit.SignOuts);
+        Assert.Empty(Navigation.History);
+        Assert.Single(view.FindAll("[data-session-watch-dialog]"));
     }
 
     /// <summary>Only the person's own choice goes through the sign-out: a session that ends any other way lands on the ended page, sign-in or not.</summary>
@@ -263,6 +296,32 @@ public class SessionWatchRenderTests : BunitContext
         Assert.Equal(1, Calls("announce"));
         Assert.Equal("ended", LastCall("announce")[1]);
         Assert.Empty(view.FindAll("[data-session-watch-dialog]"));
+    }
+
+    /// <summary>The server moved the idle moment while the question was open: the countdown starts over from what is left now, not from the old moment.</summary>
+    [Fact]
+    public void WhenTheIdleMomentMovesWhileAsking_TheCountdownStartsOver()
+    {
+        var view = Watch();
+        Warn(view, seconds: 90);
+
+        _circuit.Set(SessionCircuitState.Warning, TimeSpan.FromSeconds(150));
+        view.WaitForState(() => Calls("startCountdown") == 2);
+
+        Assert.Equal(150_000, Convert.ToInt32(LastCall("startCountdown")[1]));
+        Assert.Contains("2:30", Text(view, "[data-session-watch-countdown]"));
+        Assert.Single(view.FindAll("[data-session-watch-dialog]"));
+    }
+
+    [Fact]
+    public void WhenTheWarningIsSaidAgainUnchanged_TheCountdownIsNotStartedAgain()
+    {
+        var view = Watch();
+        Warn(view, seconds: 90);
+
+        _circuit.Set(SessionCircuitState.Warning, TimeSpan.FromSeconds(90));
+
+        Assert.Equal(1, Calls("startCountdown"));
     }
 
     [Fact]
@@ -320,6 +379,91 @@ public class SessionWatchRenderTests : BunitContext
         Assert.Equal(0, _circuit.Subscribers);
         Assert.Equal(0, _circuit.ActivatedSubscribers);
         Assert.False(_circuit.Asked);
+    }
+
+    /// <summary>An import still pending when the view goes completes into nothing: no browser listeners, no reference back to a disposed view.</summary>
+    [Fact]
+    public async Task DisposedWhileTheModuleIsLoading_TheModuleIsReleased_AndNothingIsWatched()
+    {
+        var browser = new ControlledJsRuntime();
+        using var context = Isolated(browser);
+        var module = new RecordingModule();
+        var circuit = (FakeSessionCircuit)context.Services.GetRequiredService<ISessionCircuit>();
+        var view = context.Render<SessionWatch>();
+        Assert.Equal(1, circuit.Attached);
+
+        await context.DisposeComponentsAsync();
+        browser.Import.SetResult(module);
+        view.WaitForAssertion(() => Assert.True(module.Disposed));
+
+        Assert.Empty(module.Calls);
+        Assert.True(module.Disposed);
+        Assert.Equal(0, circuit.Attached);
+    }
+
+    /// <summary>A change already being raised when the view went, and reaching it after, never attaches it again, loads the browser half or opens its dialog.</summary>
+    [Fact]
+    public async Task AChangeThatArrivesAfterDisposal_DoesNotAttachTheViewAgain()
+    {
+        var view = Watch();
+        view.WaitForAssertion(() => Assert.Equal(1, Calls("watchActivity")));
+        var inFlight = _circuit.ChangedListeners;
+
+        await DisposeComponentsAsync();
+        _circuit.Set(SessionCircuitState.Warning, TimeSpan.FromSeconds(90));
+        await view.InvokeAsync(inFlight);
+        await view.InvokeAsync(() => { });
+
+        Assert.Equal(0, _circuit.Attached);
+        Assert.False(_circuit.Asked);
+        Assert.Equal(1, Calls("watchActivity"));
+        Assert.Equal(0, Calls("startCountdown"));
+        Assert.Equal(0, Calls("holdActivity"));
+    }
+
+    /// <summary>A browser half that times out while being released does not keep the view's place: another view can still take over.</summary>
+    [Theory]
+    [InlineData(typeof(TaskCanceledException))]
+    [InlineData(typeof(ObjectDisposedException))]
+    [InlineData(typeof(JSDisconnectedException))]
+    public async Task WhenReleasingTheModuleFails_TheViewStillLetsGoOfTheCircuit(Type failure)
+    {
+        var browser = new ControlledJsRuntime();
+        using var context = Isolated(browser);
+        var module = new RecordingModule { DisposeFailure = (Exception)Activator.CreateInstance(failure, "the browser went away") };
+        browser.Import.SetResult(module);
+        var circuit = (FakeSessionCircuit)context.Services.GetRequiredService<ISessionCircuit>();
+        var view = context.Render<SessionWatch>();
+        view.WaitForAssertion(() => Assert.Contains("watchActivity", module.Calls));
+
+        var exception = await Record.ExceptionAsync(() => context.DisposeComponentsAsync());
+
+        Assert.Null(exception);
+        Assert.Equal(0, circuit.Attached);
+        Assert.False(circuit.Asked);
+    }
+
+    /// <summary>
+    /// On a server circuit the first after-render arrives only when the browser acknowledges the render, so the warning can be shown before the browser half
+    /// is loaded. Once it is, the countdown, the held activity and the focus are started for the question already open.
+    /// </summary>
+    [Fact]
+    public async Task AWarningShownBeforeTheBrowserHalfLoaded_IsStartedOnceItLoads()
+    {
+        var view = Render<LateAfterRenderWatch>();
+        Assert.Empty(_module.Invocations);
+
+        await view.InvokeAsync(() => _circuit.Set(SessionCircuitState.Warning, TimeSpan.FromSeconds(90)));
+        view.WaitForState(() => view.FindAll("[data-session-watch-dialog]").Count == 1);
+        Assert.Equal(0, Calls("startCountdown"));
+
+        await view.InvokeAsync(view.Instance.AcknowledgeFirstRenderAsync);
+
+        Assert.Equal(1, Calls("watchActivity"));
+        Assert.Equal(1, Calls("startCountdown"));
+        Assert.Equal(90_000, Convert.ToInt32(LastCall("startCountdown")[1]));
+        Assert.IsType<ElementReference>(LastCall("startCountdown")[2]);
+        Assert.Equal(true, LastCall("holdActivity")[1]);
     }
 
     // ---- a session found after the view arrived (review M2)

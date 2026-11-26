@@ -165,6 +165,9 @@ internal sealed class FakeSessionCircuit : ISessionCircuit
 
     public int Subscribers => Changed?.GetInvocationList().Length ?? 0;
 
+    /// <summary>The listeners as they are now, for a test to call later, as a change already being raised reaches a view that has since gone.</summary>
+    public Action ChangedListeners => Changed;
+
     public int ActivatedSubscribers => Activated?.GetInvocationList().Length ?? 0;
 
     public int Attached { get; private set; }
@@ -175,6 +178,9 @@ internal sealed class FakeSessionCircuit : ISessionCircuit
     public int Stays { get; private set; }
 
     public int SignOuts { get; private set; }
+
+    /// <summary>When set, <see cref="SignOutAsync"/> ends nothing, as when the store could not be reached.</summary>
+    public bool SignOutLeavesTheSession { get; set; }
 
     public int Checks { get; private set; }
 
@@ -223,6 +229,8 @@ internal sealed class FakeSessionCircuit : ISessionCircuit
     public Task SignOutAsync()
     {
         SignOuts++;
+        if (SignOutLeavesTheSession) return Task.CompletedTask;
+
         EndedLocation = "/session-ended?reason=signedout";
         Set(SessionCircuitState.Ended);
         return Task.CompletedTask;

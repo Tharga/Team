@@ -44,9 +44,13 @@ public class SessionLogoutTests
         /// <summary>The properties each scheme was signed out with; a federated sign-out's <c>RedirectUri</c> is where the provider sends the browser back to.</summary>
         public Dictionary<string, AuthenticationProperties> Properties { get; } = [];
 
+        /// <summary>Who the request said was signing out when the provider was signed out of; what Microsoft.Identity.Web takes its sign-out hint from.</summary>
+        public ClaimsPrincipal UserAtProviderSignOut { get; private set; }
+
         public Task SignOutAsync(HttpContext context, string scheme, AuthenticationProperties properties)
         {
             SignOuts.Add(scheme);
+            if (scheme == OpenIdConnectDefaults.AuthenticationScheme) UserAtProviderSignOut = context.User;
             Properties[scheme] = properties;
             order.Add($"signout:{scheme}");
             if (scheme == OpenIdConnectDefaults.AuthenticationScheme)
@@ -212,12 +216,9 @@ public class SessionLogoutTests
         Assert.Equal("/", context.Response.Headers.Location);
     }
 
-    /// <summary>
-    /// The "Still here?" dialog ends the session itself, then sends the browser here: the endpoint finds nothing left to end, and still signs out of the
-    /// provider and lands on the ended page.
-    /// </summary>
+    /// <summary>A session already ended elsewhere (another tab signed out first): the endpoint finds nothing left to end, and still signs out of the provider and lands on the ended page.</summary>
     [Fact]
-    public async Task Logout_WhenTheDialogAlreadyEndedTheSession_StillSignsOutOfTheProvider_AndLandsOnTheEndedPage()
+    public async Task Logout_WhenTheSessionWasAlreadyEnded_StillSignsOutOfTheProvider_AndLandsOnTheEndedPage()
     {
         _sessions.Setup(x => x.EndCurrentAsync()).ReturnsAsync(false);
 
@@ -235,5 +236,54 @@ public class SessionLogoutTests
 
         Assert.Equal([CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme], auth.SignOuts);
         Assert.Equal(EndSessionUrl, context.Response.Headers.Location);
+    }
+
+    // ---- the dialog's "Sign out" with the library's sign-in: the session still running when the browser arrives (review of #570)
+
+    /// <summary>
+    /// The dialog sends the browser here without ending the session first, so the cookie is still valid when the request arrives: the endpoint ends the
+    /// session as signed out, announces it to the person's other circuits, and signs out of the provider with the person still signed in on the request,
+    /// which is what the provider's sign-out hint is taken from. Nothing is mocked between the endpoint and the store.
+    /// </summary>
+    [Fact]
+    public async Task Logout_FromTheDialog_WithTheCookieStillValid_EndsAndAnnouncesTheSession_AndSignsOutOfTheProviderAsThePerson()
+    {
+        var builder = WebApplication.CreateBuilder();
+        using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(ValidAzureAdConfig))) builder.Configuration.AddJsonStream(stream);
+        builder.AddThargaAuth();
+        var app = builder.Build();
+        app.UseThargaAuth();
+        var endpoint = ((IEndpointRouteBuilder)app).DataSources.SelectMany(x => x.Endpoints).OfType<RouteEndpoint>().Single(x => x.RoutePattern.RawText == "/logout");
+
+        var clock = new SessionClock();
+        var store = new InMemorySessionStore();
+        store.Put(Session("s1", clock.Now));
+        var cache = new SessionCache(clock);
+        var heard = new List<UserSessionEndedEventArgs>();
+        cache.SessionEnded += (_, e) => heard.Add(e);
+        var accessor = new HttpContextAccessor();
+        var options = Options(o => o.EndedPath = "/session-ended");
+        var evaluator = new SessionEvaluator(cache, Wrap(options), clock, new TestSessionPolicy(), Sessions(store, clock, notifier: cache));
+        var auth = new RecordingAuthenticationService(_order);
+        var services = new ServiceCollection();
+        services.AddSingleton<IAuthenticationService>(auth);
+        services.AddSingleton<IUserSessionService>(new Tharga.Team.Service.UserSessionService(store, new SessionUserService(), new Tharga.Team.Service.HttpContextTeamPrincipalAccessor(accessor), clock, notifier: cache));
+        services.AddSingleton(evaluator);
+        services.AddSingleton(Wrap(options));
+
+        var person = WithSession("s1");
+        var context = new DefaultHttpContext { RequestServices = services.BuildServiceProvider(), User = person, Request = { QueryString = new QueryString("?reason=signedout") } };
+        accessor.HttpContext = context;
+        Assert.Equal(SessionCheckOutcome.Valid, (await evaluator.EvaluateAsync(person, null, null)).Outcome);
+
+        await endpoint.RequestDelegate(context);
+
+        Assert.Equal(SessionEndReason.SignedOut, store.Get("s1").EndReason);
+        var announced = Assert.Single(heard);
+        Assert.Equal((UserKey, SessionEndReason.SignedOut), (announced.UserKey, announced.Reason));
+        Assert.Same(person, auth.UserAtProviderSignOut);
+        Assert.True(auth.UserAtProviderSignOut.Identity?.IsAuthenticated);
+        Assert.Equal([CookieAuthenticationDefaults.AuthenticationScheme, OpenIdConnectDefaults.AuthenticationScheme], auth.SignOuts);
+        Assert.Equal("/session-ended?reason=signedout", auth.Properties[OpenIdConnectDefaults.AuthenticationScheme].RedirectUri);
     }
 }

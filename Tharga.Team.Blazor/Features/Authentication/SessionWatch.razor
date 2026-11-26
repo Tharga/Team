@@ -57,7 +57,8 @@
     private bool _rendered;
     private bool _open;
     private bool _left;
-    private bool _signingOut;
+    private bool _disposed;
+    private DateTime? _shownIdleAt;
     private string _time;
 
     private string TitleId => $"{_id}-title";
@@ -84,6 +85,9 @@
 
         _rendered = true;
         await LoadAsync();
+
+        // The warning arrived before the browser half was loaded: the dialog is open, but nothing in the browser was started for it.
+        if (_open) await StartAskingAsync(_circuit.Remaining ?? TimeSpan.Zero);
         await ApplyAsync();
     }
 
@@ -98,31 +102,30 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         if (_circuit != null)
         {
             _circuit.Activated -= OnActivated;
             _circuit.Changed -= OnChanged;
         }
 
-        if (_module != null)
+        try
         {
-            if (_open) await CallAsync("stopCountdown", _id);
-            await CallAsync("stopWatching", _id);
-
-            try
+            if (_module != null)
             {
-                await _module.DisposeAsync();
+                if (_open) await CallAsync("stopCountdown", _id);
+                await CallAsync("stopWatching", _id);
+                await ReleaseAsync(_module);
+                _module = null;
             }
-            catch (Exception exception) when (exception is JSException or JSDisconnectedException)
-            {
-            }
-
-            _module = null;
         }
-
-        _attachment?.Dispose();
-        _attachment = null;
-        _self?.Dispose();
+        finally
+        {
+            _attachment?.Dispose();
+            _attachment = null;
+            _self?.Dispose();
+            _self = null;
+        }
     }
 
     private void OnActivated() => _ = InvokeAsync(RefreshAsync);
@@ -139,7 +142,7 @@
     /// <summary>Becomes the circuit's one asking view, once there is a session to watch and no other view asks.</summary>
     private async Task TakeOverAsync()
     {
-        if (_attachment != null || _left || _circuit?.Active != true) return;
+        if (_disposed || _attachment != null || _left || _circuit?.Active != true) return;
 
         _attachment = _circuit.TryAttach();
         if (_attachment == null) return;
@@ -154,7 +157,14 @@
 
         try
         {
-            _module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            var module = await JsRuntime.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            if (_disposed || _module != null)
+            {
+                await ReleaseAsync(module);
+                return;
+            }
+
+            _module = module;
             _self = DotNetObjectReference.Create(this);
             var interval = (int)(ThargaBlazorOptions.Value.Sessions ?? new SessionOptions()).ActivityInterval.TotalMilliseconds;
             await _module.InvokeVoidAsync("watchActivity", _id, interval, NavigationManager.ToAbsoluteUri(SessionActivityEndpoint.Route.TrimStart('/')).ToString(), _self);
@@ -167,14 +177,14 @@
 
     private async Task ApplyAsync()
     {
-        if (_attachment == null || _left) return;
+        if (_disposed || _attachment == null || _left) return;
 
         switch (_circuit.State)
         {
             case SessionCircuitState.Ended:
-                await LeaveAsync();
+                await LeaveAsync(_circuit.EndedLocation ?? NavigationManager.BaseUri);
                 break;
-            case SessionCircuitState.Warning when !_open:
+            case SessionCircuitState.Warning when !_open || _circuit.IdleAt != _shownIdleAt:
                 await OpenAsync(_circuit.Remaining ?? TimeSpan.Zero);
                 break;
             case SessionCircuitState.Watching when _open:
@@ -183,12 +193,19 @@
         }
     }
 
+    /// <summary>Opens the question, or starts its countdown over when the server moved the idle moment while it was open.</summary>
     private async Task OpenAsync(TimeSpan remaining)
     {
         _open = true;
+        _shownIdleAt = _circuit.IdleAt;
         _time = Format(remaining);
         StateHasChanged();
 
+        await StartAskingAsync(remaining);
+    }
+
+    private async Task StartAskingAsync(TimeSpan remaining)
+    {
         await CallAsync("holdActivity", _id, true);
         await CallAsync("startCountdown", _id, (int)Math.Max(0, remaining.TotalMilliseconds), _dialog);
     }
@@ -196,13 +213,15 @@
     private async Task CloseAsync()
     {
         _open = false;
+        _shownIdleAt = null;
         StateHasChanged();
 
         await CallAsync("stopCountdown", _id);
         await CallAsync("holdActivity", _id, false);
     }
 
-    private async Task LeaveAsync()
+    /// <summary>Leaves the page with a full load; <paramref name="ended"/> tells the browser's other tabs, which is only true once the store says so.</summary>
+    private async Task LeaveAsync(string location, bool ended = true)
     {
         _left = true;
         if (_open)
@@ -212,20 +231,8 @@
             await CallAsync("stopCountdown", _id);
         }
 
-        await CallAsync("announce", _id, EndedKind);
-        NavigationManager.NavigateTo(LeavingTo(), forceLoad: true);
-    }
-
-    /// <summary>Where the browser goes once the session ended: through the library's sign-out when the person chose to sign out here, otherwise the ended page.</summary>
-    private string LeavingTo()
-    {
-        var auth = _signingOut ? Services.GetService<ThargaAuthOptions>() : null;
-        if (auth != null && !string.IsNullOrEmpty(auth.LogoutPath))
-        {
-            return QueryHelpers.AddQueryString(auth.LogoutPath, SessionCookieEvents.ReasonParameterName, SessionCookieEvents.Code(SessionEndReason.SignedOut));
-        }
-
-        return _circuit.EndedLocation ?? NavigationManager.BaseUri;
+        if (ended) await CallAsync("announce", _id, EndedKind);
+        NavigationManager.NavigateTo(location, forceLoad: true);
     }
 
     private async Task StayAsync()
@@ -235,14 +242,32 @@
         await ApplyAsync();
     }
 
+    /// <summary>
+    /// With the library's sign-in, the browser goes to its <c>/logout?reason=signedout</c> with the session still running, so the endpoint ends and announces it
+    /// while the cookie still says who is signing out, which the identity provider's sign-out needs. Otherwise the circuit ends it, and the tab goes to the ended page.
+    /// </summary>
     private async Task SignOutAsync()
     {
-        _signingOut = true;
-        await _circuit.SignOutAsync();
+        var auth = Services.GetService<ThargaAuthOptions>();
+        if (!string.IsNullOrEmpty(auth?.LogoutPath))
+        {
+            await LeaveAsync(QueryHelpers.AddQueryString(auth.LogoutPath, SessionCookieEvents.ReasonParameterName, SessionCookieEvents.Code(SessionEndReason.SignedOut)), ended: false);
+            return;
+        }
 
-        // Not ended (the store could not be reached): a later end is not one the person chose here.
-        if (_circuit.State != SessionCircuitState.Ended) _signingOut = false;
+        await _circuit.SignOutAsync();
         await ApplyAsync();
+    }
+
+    private static async Task ReleaseAsync(IJSObjectReference module)
+    {
+        try
+        {
+            await module.DisposeAsync();
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
     }
 
     private async Task CallAsync(string identifier, params object[] args)
