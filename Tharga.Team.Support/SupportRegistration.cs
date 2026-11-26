@@ -236,6 +236,7 @@ public static class SupportRegistration
             o.AssistantDefaultVisibility = caseOptions.AssistantDefaultVisibility;
             o.StaffCloseAfter = caseOptions.StaffCloseAfter;
             CopySettable(caseOptions.Answers, o.Answers);
+            CopySettable(caseOptions.SecureFiles, o.SecureFiles);
         });
 
         // Projected onto its own options type for the same reason the Slack section is: the mail transport
@@ -289,6 +290,13 @@ public static class SupportRegistration
         {
             services.TryAddScoped<SupportCaseInactivitySweep>();
             services.AddSingleton<IHostedService, SupportCaseInactivityService>();
+        }
+
+        // The same for secure files: zero keeps them until support removes them, and runs nothing.
+        if (caseOptions.SecureFiles.KeepFor > TimeSpan.Zero)
+        {
+            services.TryAddScoped<SupportSecureFileSweep>();
+            services.AddSingleton<IHostedService, SupportSecureFileSweepService>();
         }
 
         // Only when a channel is configured. Without it the case service resolves no channel at all, which
@@ -458,7 +466,8 @@ public static class SupportRegistration
                 sp.GetService<ISupportAssistantAllowanceSource>(),
                 sp.GetService<ISupportAssistantGate>(),
                 sp.GetServices<ISupportAssistantRefusalSink>(),
-                sp.GetRequiredService<SupportRefusalAnnouncements>()),
+                sp.GetRequiredService<SupportRefusalAnnouncements>(),
+                caseOptions.SecureFiles.KeepFor),
                 sp.GetRequiredService<TeamAuthorizer>(),
                 caseOptions.Visibility,
                 caseOptions.StaffCloseAfter,

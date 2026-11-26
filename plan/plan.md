@@ -55,8 +55,12 @@
       unaudited. Opening an ordinary file is still not audited. 6 tests in `SupportSecureFileAuditTests`.
 - [x] 5. Mail channel skips secure files itself. Test.
       Done in `FilesOfAsync`. Slack never carried files, so nothing to change there.
-- [~] 6. Sweep, hosted service, options and registration. Tests, including two sweeps racing.
-- [ ] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
+- [x] 6. Sweep, hosted service, options and registration. Tests, including two sweeps racing.
+      Done. `SupportSecureFileSweep` + `SupportSecureFileSweepService`, registered only when `KeepFor > 0`; options
+      copied with `CopySettable`; the service gets `KeepFor` for the limits. One file that cannot be removed is
+      logged and skipped, still due next pass. Announces `AttachmentRemoved`. 13 tests in
+      `SupportSecureFileSweepTests`. In-memory test store got the two members (step 7's test-store part).
+- [~] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
       in-memory test store. Tests.
 - [ ] 8. Blazor: picker secure mode; transcript secure / withheld / removed and a staff remove button;
       conversation member picker; panel support-tab attach. Texts. Render tests.

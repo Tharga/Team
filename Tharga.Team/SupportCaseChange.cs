@@ -40,6 +40,6 @@ public enum SupportCaseChange
     /// <summary>The person the assistant answered rated the conversation as a whole, or took the rating back.</summary>
     ConversationRated,
 
-    /// <summary>Support removed a secure file's content before its time ran out; the entry now says it was removed.</summary>
+    /// <summary>A secure file's content was removed, by support or because its time ran out; the entry now says so.</summary>
     AttachmentRemoved
 }

@@ -46,9 +46,18 @@ internal sealed class InMemorySupportAttachmentStore : ISupportAttachmentStore
             : new SupportAttachmentContent { Attachment = found.Attachment, Content = new MemoryStream(found.Content, false) });
     }
 
+    /// <summary>Files whose id matches throw when deleted, as a store that is down would.</summary>
+    public Func<string, bool> DeleteFailsFor { get; set; } = _ => false;
+
+    /// <remarks>Locked, so two sweeps racing in parallel delete against it safely.</remarks>
     public Task DeleteAsync(string caseId, string attachmentId, CancellationToken cancellationToken = default)
     {
-        if (_files.RemoveAll(x => x.CaseId == caseId && x.Attachment.Id == attachmentId) > 0) Deleted.Add(attachmentId);
+        if (DeleteFailsFor(attachmentId)) throw new IOException("The store is down.");
+
+        lock (_files)
+        {
+            if (_files.RemoveAll(x => x.CaseId == caseId && x.Attachment.Id == attachmentId) > 0) Deleted.Add(attachmentId);
+        }
 
         return Task.CompletedTask;
     }
