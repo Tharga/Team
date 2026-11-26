@@ -219,6 +219,10 @@ internal sealed class SessionCircuit(
                 }
             }
         }
+        catch (Exception e)
+        {
+            logger?.LogWarning(e, "The live session check failed unexpectedly; the circuit carries on.");
+        }
         finally
         {
             lock (_gate)
@@ -371,7 +375,15 @@ internal sealed class SessionCircuit(
         else Disarm();
     }
 
-    private void Disarm() => _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+    private void Disarm()
+    {
+        lock (_gate)
+        {
+            if (_ended || _disposed) return;
+
+            _timer?.Change(Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
+        }
+    }
 
     private void RaiseChanged()
     {
