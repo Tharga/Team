@@ -416,6 +416,7 @@ public static class ThargaBlazorRegistration
     private static void RegisterSessions(IServiceCollection services, SessionOptions sessions)
     {
         services.TryAddSingleton<SessionCache>();
+        services.TryAddSingleton<IUserSessionNotifier>(sp => sp.GetRequiredService<SessionCache>());
         services.TryAddScoped<UserSessionService>();
         services.TryAddScoped<IUserSessionService>(sp => sp.GetRequiredService<UserSessionService>());
         services.TryAddScoped(sp =>

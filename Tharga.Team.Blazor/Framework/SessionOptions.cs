@@ -31,10 +31,16 @@ public sealed class SessionOptions
     /// Never longer than the idle timeout less twice <see cref="ActivityInterval"/>, so that somebody who answers always has time to be heard; a timeout too short
     /// for that gets no warning. Somebody who is working is never asked.
     /// </summary>
-    public TimeSpan IdleWarning { get; set; }
+    public TimeSpan IdleWarning { get; set; } = TimeSpan.FromMinutes(1);
 
     /// <summary>The warning that applies to <paramref name="idleTimeout"/>: <see cref="IdleWarning"/> clamped to the idle timeout less twice <see cref="ActivityInterval"/>; zero when there is none.</summary>
-    internal TimeSpan EffectiveIdleWarning(TimeSpan idleTimeout) => throw new NotImplementedException();
+    internal TimeSpan EffectiveIdleWarning(TimeSpan idleTimeout)
+    {
+        var longest = idleTimeout - ActivityInterval - ActivityInterval;
+        var warning = IdleWarning < longest ? IdleWarning : longest;
+
+        return warning > TimeSpan.Zero ? warning : TimeSpan.Zero;
+    }
 
     /// <summary>
     /// Where a browser whose session ended is sent when the request needs a sign-in, with the reason as a code in <c>?reason=</c> (<c>idle</c>,

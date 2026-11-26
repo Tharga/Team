@@ -22,8 +22,31 @@ internal sealed class SessionCache(TimeProvider timeProvider, ILogger<SessionCac
     /// <inheritdoc />
     public event EventHandler<UserSessionEndedEventArgs> SessionEnded;
 
-    /// <inheritdoc />
-    public void Notify(UserSessionEndedEventArgs args) => throw new NotImplementedException();
+    /// <summary>
+    /// Forgets the remembered sessions of the person first, so a handler that looks reads the store and not the old answer, then tells every handler in turn.
+    /// A throwing handler is logged and skipped: the end stands, only the notification failed.
+    /// </summary>
+    public void Notify(UserSessionEndedEventArgs args)
+    {
+        if (args == null) return;
+
+        ForgetSessionsOf(args.UserKey);
+
+        var handlers = SessionEnded;
+        if (handlers == null) return;
+
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<UserSessionEndedEventArgs>>())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "A session-ended notification handler threw. The end stands; only the notification failed.");
+            }
+        }
+    }
 
     public bool TryGetSession(string sessionId, out UserSession session)
     {
@@ -83,6 +106,16 @@ internal sealed class SessionCache(TimeProvider timeProvider, ILogger<SessionCac
 
         _limits[new LimitsKey(sessionId, teamKey)] = new Entry<SessionLimits>(limits, timeProvider.GetUtcNow() + duration);
         if (_limits.Count > SweepAbove) Sweep(_limits);
+    }
+
+    private void ForgetSessionsOf(string userKey)
+    {
+        if (userKey == null) return;
+
+        foreach (var pair in _sessions.Where(x => x.Value.Value.UserKey == userKey).ToArray())
+        {
+            _sessions.TryRemove(pair.Key, out _);
+        }
     }
 
     private void Sweep<TKey, TValue>(ConcurrentDictionary<TKey, Entry<TValue>> entries)

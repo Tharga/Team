@@ -29,9 +29,14 @@ Not included: ending another person's sessions, a heads-up before max age, an au
 
 - [x] 1. Plan (this file).
 - [x] 2. Tests first, with stubs so both target frameworks compile (public API with docs, internal types throwing NotImplementedException, stub `SessionWatch.razor`, JS exports as no-ops). Whole solution on net10.0 and net11.0: 8542 tests each, 129 fail as intended on each (SessionCircuit 54, UserSessionService 14, SessionOptions 14, SessionWatch render 14, UserSessionNotifier 11, TeamEntryNotifier 10, SessionCircuitHandler 5, SessionActivityScript 4, SessionLogout 3); nothing else fails.
-- [ ] 3b. `UserSessionService`: notifier, `SignOutAsync(principal)`, notify only when this call ended something.
-- [ ] 4. `SessionCache` / `TeamEntryCache` as notifiers; the revalidating provider subscribes to `ITeamEntryNotifier`.
-- [ ] 5. `SessionEvaluator`: `SessionCheck.Session/Limits`, `InspectCircuitAsync`, `ConfirmPresenceAsync`, `SignOutAsync`.
+- [x] 3b. `UserSessionService`: notifier, `SignOutAsync(principal)`, notify only when this call ended something. Store end, then audit, then one
+  notification; the user key is looked up without recording activity, and a lookup or handler failure is logged and never undoes the end.
+  `EndCurrentAsync` is `SignOutAsync` for the ambient caller.
+- [x] 4. `SessionCache` / `TeamEntryCache` as notifiers; the revalidating provider subscribes to `ITeamEntryNotifier`. Both forget first (the person's
+  sessions, or their answers for the team / every team), then invoke each handler in isolation and log a throwing one, as `SupportCaseNotifier` does.
+  `InvalidateAsync` is `Notify(FromRemote = false)`. `IUserSessionNotifier` registered as the `SessionCache` itself (TryAdd, so a host's own wins).
+  `ITeamEntryGuardState` remarks now point at the notifier and the relay.
+- [~] 5. `SessionEvaluator`: `SessionCheck.Session/Limits`, `InspectCircuitAsync`, `ConfirmPresenceAsync`, `SignOutAsync`.
 - [ ] 6. `SessionDeadlines`, `SessionCircuit`, `SessionCircuitHandler`, registration.
 - [ ] 7. `/logout?reason=signedout`; `LoginDisplay` renders `<SessionWatch />`; `SessionWatch.razor`; `session-activity.js`.
 - [ ] 8. Docs (implementation guide "Session limits", entry guard, READMEs), sample (ActivityInterval 20 s).

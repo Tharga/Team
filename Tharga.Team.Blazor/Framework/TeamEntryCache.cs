@@ -48,17 +48,37 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider, ILogger<TeamEntr
         if (_entries.Count > 10_000) Sweep();
     }
 
-    /// <inheritdoc />
-    public void Notify(TeamEntryInvalidatedEventArgs args) => throw new NotImplementedException();
+    /// <summary>
+    /// Forgets the person's remembered answers (for the one team, or every team) first, so a circuit that re-evaluates because of it asks the guard again,
+    /// then tells every handler in turn. A throwing handler is logged and skipped.
+    /// </summary>
+    public void Notify(TeamEntryInvalidatedEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(args?.UserKey)) return;
+
+        Forget(args.UserKey, args.TeamKey);
+
+        var handlers = Invalidated;
+        if (handlers == null) return;
+
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<TeamEntryInvalidatedEventArgs>>())
+        {
+            try
+            {
+                handler(this, args);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "A team-entry notification handler threw. The answers are forgotten; only the notification failed.");
+            }
+        }
+    }
 
     public Task InvalidateAsync(string userKey, string teamKey = null, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(userKey)) return Task.CompletedTask;
 
-        foreach (var key in _entries.Keys.Where(x => x.User == userKey && (teamKey == null || x.Team == teamKey)).ToArray())
-            _entries.TryRemove(key, out _);
-
-        Invalidated?.Invoke(this, new TeamEntryInvalidatedEventArgs { UserKey = userKey, TeamKey = teamKey });
+        Notify(new TeamEntryInvalidatedEventArgs { UserKey = userKey, TeamKey = teamKey });
 
         return Task.CompletedTask;
     }
@@ -79,6 +99,14 @@ internal sealed class TeamEntryCache(TimeProvider timeProvider, ILogger<TeamEntr
             principal?.FindFirst("auth_time")?.Value,
             principal?.FindFirst("idp")?.Value,
             string.Join(',', (principal?.FindAll("amr") ?? []).Select(x => x.Value).Order(StringComparer.Ordinal)));
+    }
+
+    private void Forget(string userKey, string teamKey)
+    {
+        foreach (var key in _entries.Keys.Where(x => x.User == userKey && (teamKey == null || x.Team == teamKey)).ToArray())
+        {
+            _entries.TryRemove(key, out _);
+        }
     }
 
     private void Sweep()
