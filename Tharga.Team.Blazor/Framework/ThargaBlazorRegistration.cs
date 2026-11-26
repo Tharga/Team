@@ -415,7 +415,7 @@ public static class ThargaBlazorRegistration
     /// </para>
     /// <para>
     /// <b>The notifier is the session cache itself</b>, so an end announced anywhere, or relayed by the host, reaches the cache that must forget it. A host's
-    /// own <see cref="IUserSessionNotifier"/>, registered first, is kept.
+    /// own <see cref="IUserSessionNotifier"/> or <see cref="ITeamEntryNotifier"/> is refused at startup by <see cref="SessionNotifierWiringCheck"/>.
     /// </para>
     /// </remarks>
     private static void RegisterSessions(IServiceCollection services, SessionOptions sessions)
@@ -452,6 +452,7 @@ public static class ThargaBlazorRegistration
             sp.GetService<ILogger<SessionCircuit>>()));
         services.TryAddScoped<ISessionCircuit>(sp => sp.GetRequiredService<SessionCircuit>());
         services.TryAddEnumerable(ServiceDescriptor.Scoped<CircuitHandler, SessionCircuitHandler>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, SessionNotifierWiringCheck>());
 
         services.PostConfigure<CookieAuthenticationOptions>(sessions?.CookieScheme ?? CookieAuthenticationDefaults.AuthenticationScheme, cookie =>
         {

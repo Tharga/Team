@@ -27,6 +27,7 @@ public class BackgroundWorkerTeamAccessTests
         ["TeamServiceCompletenessCheck"] = "At start-up it only checks which service facets are registered, and logs.",
         ["UserServiceCompletenessCheck"] = "At start-up it only checks which optional services are registered, and logs.",
         ["SessionWiringCheck"] = "At start-up it only checks that the session policy, store and cookie events are wired, from registrations and options.",
+        ["SessionNotifierWiringCheck"] = "At start-up it only resolves the two notifiers and the caches to check they are the same instances.",
         ["ScopeOverrideCheck"] = "At start-up it checks configured scope overrides against the scope registry, in memory.",
         ["UnregisteredRoleScopeCheck"] = "At start-up it checks the role registry against the scope registry, in memory.",
         ["OutboundMailPolicyReport"] = "At start-up it logs what the outbound mail policy is configured to do, from configuration.",

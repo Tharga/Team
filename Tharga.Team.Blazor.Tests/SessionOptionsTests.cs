@@ -151,14 +151,58 @@ public class SessionOptionsTests
         Assert.Same(provider.GetRequiredService<TeamEntryCache>(), provider.GetRequiredService<ITeamEntryNotifier>());
     }
 
+    private static Task StartNotifierCheckAsync(IServiceProvider provider)
+        => provider.GetServices<Microsoft.Extensions.Hosting.IHostedService>().OfType<SessionNotifierWiringCheck>().Single().StartAsync(CancellationToken.None);
+
+    /// <summary>
+    /// A notifier of the host's own would disconnect the caches: nothing would forget, and the circuits would listen to a notifier the toolkit never raises.
+    /// It is refused at startup, naming it, rather than replaced silently, whichever order it was registered in.
+    /// </summary>
     [Fact]
-    public void AHostsOwnNotifier_IsNotReplaced()
+    public async Task AHostsOwnSessionNotifier_IsRefusedAtStartup_NamingIt()
     {
         var own = new Moq.Mock<IUserSessionNotifier>().Object;
-
         var provider = Host(s => s.AddSingleton(own)).BuildServiceProvider();
 
-        Assert.Same(own, provider.GetRequiredService<IUserSessionNotifier>());
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotifierCheckAsync(provider));
+
+        Assert.Contains(nameof(IUserSessionNotifier), exception.Message);
+    }
+
+    [Fact]
+    public async Task AHostsOwnSessionNotifier_RegisteredFirst_IsRefusedToo()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(new Moq.Mock<IUserSessionNotifier>().Object);
+        services.AddLogging();
+        services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStateProvider>();
+        services.AddScoped<IHostEnvironmentAuthenticationStateProvider>(sp => (ServerAuthenticationStateProvider)sp.GetRequiredService<AuthenticationStateProvider>());
+        services.AddThargaTeamBlazor(o =>
+        {
+            o.RegisterTeamService<StubTeamService, StubUserService, StubMember>();
+            o.Sessions = Options();
+        });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotifierCheckAsync(services.BuildServiceProvider()));
+    }
+
+    [Fact]
+    public async Task AHostsOwnTeamEntryNotifier_IsRefusedAtStartup_NamingIt()
+    {
+        var own = new Moq.Mock<ITeamEntryNotifier>().Object;
+        var provider = Host(s => s.AddSingleton(own)).BuildServiceProvider();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => StartNotifierCheckAsync(provider));
+
+        Assert.Contains(nameof(ITeamEntryNotifier), exception.Message);
+    }
+
+    [Fact]
+    public async Task TheToolkitsOwnNotifiers_PassTheCheck()
+    {
+        var provider = Host().BuildServiceProvider();
+
+        Assert.Null(await Record.ExceptionAsync(() => StartNotifierCheckAsync(provider)));
     }
 
     [Fact]
