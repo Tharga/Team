@@ -48,8 +48,12 @@
       Withheld blanks name, type and `UploadedBy`; keeps id, size, `RemovedAt`. Opening checks the opened file's flag
       and disposes it before refusing. Removal: `support:all:manage`, or `support:unassigned:manage` with no team;
       the uploader may not. 13 tests in `SupportSecureFileAuthorizationTests`.
-- [~] 4. Auditing decorator: new overload (with secure count), removal, secure open, refused open. Tests.
-- [ ] 5. Mail channel skips secure files itself. Test.
+- [x] 4. Auditing decorator: new overload (with secure count), removal, secure open, refused open. Tests.
+      Done. Actions `open-secure-file` (success and refused) and `remove-secure-file`; keys
+      `support.message.secureAttachments` and `support.attachment.id`, never a name. A refused secure open is told
+      apart by an internal `SecureAttachmentRefusedException : UnauthorizedAccessException`, so ordinary reads stay
+      unaudited. Opening an ordinary file is still not audited. 6 tests in `SupportSecureFileAuditTests`.
+- [~] 5. Mail channel skips secure files itself. Test.
 - [ ] 6. Sweep, hosted service, options and registration. Tests, including two sweeps racing.
 - [ ] 7. MongoDB: entity fields (BSON representation asserted), mapping, expiry query, conditional mark;
       in-memory test store. Tests.

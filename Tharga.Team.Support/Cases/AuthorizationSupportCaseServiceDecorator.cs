@@ -202,7 +202,7 @@ internal sealed class AuthorizationSupportCaseServiceDecorator(
 
         await opened.DisposeAsync();
 
-        throw new UnauthorizedAccessException(
+        throw new SecureAttachmentRefusedException(
             $"Only the product's support staff and the member who uploaded it may open secure file '{attachmentId}' of support case '{caseId}'.");
     }
 

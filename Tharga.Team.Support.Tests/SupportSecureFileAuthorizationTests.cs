@@ -68,7 +68,7 @@ public class SupportSecureFileAuthorizationTests
         Assert.Null(file.UploadedBy);
         Assert.Equal(attachmentId, file.Id);
         Assert.Equal(3, file.Size);
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => bob.OpenAttachmentAsync(TeamA, caseId, 2, attachmentId));
+        await Assert.ThrowsAnyAsync<UnauthorizedAccessException>(() => bob.OpenAttachmentAsync(TeamA, caseId, 2, attachmentId));
     }
 
     [Fact]

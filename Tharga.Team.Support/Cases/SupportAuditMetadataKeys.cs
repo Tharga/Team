@@ -27,6 +27,12 @@ public static class SupportAuditMetadataKeys
     /// <summary>How many files a reply or answer carried; their names are kept out, as bodies are.</summary>
     public const string AttachmentCount = "support.message.attachments";
 
+    /// <summary>How many files for support's staff only a reply or a raise carried; their names are kept out, as bodies are.</summary>
+    public const string SecureAttachmentCount = "support.message.secureAttachments";
+
+    /// <summary>The id of the secure file an entry is about, when it was opened, refused or removed; never its name.</summary>
+    public const string AttachmentId = "support.attachment.id";
+
     /// <summary>
     /// On a raise or a reply: <c>true</c> while the assistant has the conversation, <c>false</c> once a person does.
     /// </summary>
