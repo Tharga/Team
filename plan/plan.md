@@ -48,10 +48,13 @@
       Done: implementation guide "Who an entry is attributed to" (the order callers are found in, and a table
       row); access-simulation article points at the shared caller; one clause on the Blazor README's Audit line.
 - [~] 5. Full test suite, push the branch for testing.
+      Full suite: 17,404 tests on net10.0 and net11.0, all pass. No new warnings. Push waits for approval.
 
 ## Last session
 
-2026-11-27: branch created, issue assigned, plan written. Next: confirm the decisions above, then step 0.
+2026-11-27: steps 0-4 done and committed; full suite green. Next: push on approval, the user tests it in a
+Blazor Server host (invite from a page, check the audit log and the Slack/notification text), then remove
+`plan/` and open the PR.
 
 ## README changes needed at completion
 
