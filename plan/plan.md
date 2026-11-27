@@ -33,9 +33,13 @@
       Done: `AuditCircuitCaller` (internal) carries a per-circuit `Holder` (principal + identity resolver),
       refreshed per activity, cleared on close. `BuildEntry`: authenticated request, else an authenticated
       circuit principal (with its resolver), else the declared actor. 11 tests in `AuditCircuitCallerTests`.
-- [~] 2. Blazor: one always-registered circuit handler publishes it; simulation enricher reads it; the old
+- [x] 2. Blazor: one always-registered circuit handler publishes it; simulation enricher reads it; the old
       accessor and handler go. Tests, including continuations and circuit close.
-- [ ] 3. The issue's case end to end: team decorator in a circuit records the inviter, and the `team:invite`
+      Done: `AuditCallerCircuitHandler` (scoped, `Order = int.MinValue`, registered with `TryAddEnumerable` beside
+      `BlazorTeamPrincipalAccessor` in the `RegisterTeamService` block). `AccessSimulationPrincipalAccessor` and
+      `AccessSimulationCircuitHandler` removed; the enricher reads `AuditCircuitCaller`. 10 handler tests; the
+      simulation tests moved onto the shared caller.
+- [~] 3. The issue's case end to end: team decorator in a circuit records the inviter, and the `team:invite`
       notification names them. Test.
 - [ ] 4. Docs: audit article (circuit callers), Blazor README if it mentions audit in circuits.
 - [ ] 5. Full test suite, push the branch for testing.

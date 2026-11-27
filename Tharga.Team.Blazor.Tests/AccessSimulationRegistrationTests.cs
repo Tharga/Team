@@ -78,47 +78,28 @@ public class AccessSimulationRegistrationTests
     }
 
     /// <summary>
-    /// The container has to hand the enricher the accessor, or the circuit path is dead code: the
-    /// parameter is optional so that a host registering the enricher alone still resolves, which is
-    /// exactly what would let the fix silently not apply. Tharga/Team#220.
+    /// Resolved from the container as a host gets it, the enricher reads the caller a circuit activity publishes, so the circuit path
+    /// is live without any further registration. Tharga/Team#220, now through the shared caller of Tharga/Team#572.
     /// </summary>
     [Fact]
-    public void TheEnricherIsGivenTheCircuitPrincipalAccessor()
+    public void TheEnricher_ReadsTheCircuitCaller_AsResolvedFromTheContainer()
     {
         var services = new ServiceCollection();
         services.AddHttpContextAccessor();
-        services.AddSingleton<AccessSimulationPrincipalAccessor>();
         services.AddSingleton<IAuditEnricher, AccessSimulationAuditEnricher>();
 
-        var provider = services.BuildServiceProvider();
-        var enricher = provider.GetServices<IAuditEnricher>().OfType<AccessSimulationAuditEnricher>().Single();
-        var principals = provider.GetRequiredService<AccessSimulationPrincipalAccessor>();
+        var enricher = services.BuildServiceProvider().GetServices<IAuditEnricher>().OfType<AccessSimulationAuditEnricher>().Single();
 
         var metadata = new Dictionary<string, string>();
         var simulation = new AccessSimulation { Kind = AccessSimulationKind.Scopes, Label = "Demo", Scopes = [] };
+        var holder = new AuditCircuitCaller.Holder();
+        holder.Update(new ClaimsPrincipal(new ClaimsIdentity([new Claim(AccessSimulationCookie.ClaimType, AccessSimulationCookie.Write(simulation))], "Test")), null);
 
-        using (principals.Push(new ClaimsPrincipal(new ClaimsIdentity(
-            [new Claim(AccessSimulationCookie.ClaimType, AccessSimulationCookie.Write(simulation))], "Test"))))
+        using (AuditCircuitCaller.Use(holder))
         {
-            enricher.Enrich(
-                new AuditEntry { Timestamp = DateTime.UtcNow, EventType = AuditEventType.ServiceCall, Action = "probe" },
-                metadata);
+            enricher.Enrich(new AuditEntry { Timestamp = DateTime.UtcNow, EventType = AuditEventType.ServiceCall, Action = "probe" }, metadata);
         }
 
         Assert.Equal("true", metadata[AccessSimulationMetadataKeys.Active]);
-    }
-
-    /// <summary>
-    /// The self-check for the test above: without the accessor in the container the enricher still
-    /// resolves — so the assertion there is about injection happening, not about the type existing.
-    /// </summary>
-    [Fact]
-    public void TheEnricherStillResolvesWithoutTheAccessor()
-    {
-        var services = new ServiceCollection();
-        services.AddHttpContextAccessor();
-        services.AddSingleton<IAuditEnricher, AccessSimulationAuditEnricher>();
-
-        Assert.Single(services.BuildServiceProvider().GetServices<IAuditEnricher>().OfType<AccessSimulationAuditEnricher>());
     }
 }
