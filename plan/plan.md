@@ -39,9 +39,12 @@
       `BlazorTeamPrincipalAccessor` in the `RegisterTeamService` block). `AccessSimulationPrincipalAccessor` and
       `AccessSimulationCircuitHandler` removed; the enricher reads `AuditCircuitCaller`. 10 handler tests; the
       simulation tests moved onto the shared caller.
-- [~] 3. The issue's case end to end: team decorator in a circuit records the inviter, and the `team:invite`
+- [x] 3. The issue's case end to end: team decorator in a circuit records the inviter, and the `team:invite`
       notification names them. Test.
-- [ ] 4. Docs: audit article (circuit callers), Blazor README if it mentions audit in circuits.
+      Done in `AuditCallerCircuitHandlerTests`: no HttpContext, invite made after the handler's first await,
+      outside the activity as the framework runs it; the entry names Ada and the default route reads
+      "Ada invited *new@example.com* ...".
+- [~] 4. Docs: audit article (circuit callers), Blazor README if it mentions audit in circuits.
 - [ ] 5. Full test suite, push the branch for testing.
 
 ## Last session

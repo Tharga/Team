@@ -1,10 +1,14 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Server.Circuits;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Moq;
 using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Service;
 using Tharga.Team.Service.Audit;
+using Tharga.Team.Support.Notifications;
 
 namespace Tharga.Team.Blazor.Tests;
 
@@ -173,6 +177,53 @@ public class AuditCallerCircuitHandlerTests
 
         Assert.Single(handlers);
         Assert.Equal(ServiceLifetime.Scoped, handlers[0].Lifetime);
+    }
+
+    /// <summary>
+    /// The issue's own case: a member invited from a Blazor Server page, with no HttpContext anywhere and the invite made after the handler's
+    /// first await, is audited with the person who invited, and the default <c>team:invite</c> notification names them.
+    /// </summary>
+    [Fact]
+    public async Task AnInviteFromAPage_IsAuditedWithTheInviter_AndTheNotificationNamesThem()
+    {
+        var team = new Mock<ITeamService>();
+        team.Setup(x => x.AddMemberAsync("acme", It.IsAny<InviteUserModel>())).Returns(Task.CompletedTask);
+        var sink = new CollectingAuditLogger();
+        var decorator = new AuditingTeamServiceDecorator(team.Object, new CompositeAuditLogger([sink], Options.Create(new AuditOptions())), new HttpContextAccessor());
+        var handler = new AuditCallerCircuitHandler(new StateProvider(Person("Ada")));
+        Task click = null;
+
+        await handler.CreateInboundActivityHandler(_ =>
+        {
+            click = InviteAfterAwaitAsync(decorator);
+            return Task.CompletedTask;
+        })(null);
+        await click;
+
+        var entry = sink.Entries.Single(x => x.Action == "invite");
+        Assert.Equal("Ada", entry.CallerIdentity);
+        Assert.Equal(AuditCallerType.User, entry.CallerType);
+        var notification = Assert.Single(new NotificationRouter(Options.Create(new NotificationOptions { DefaultChannel = "#teams" })).Route(entry));
+        Assert.StartsWith("Ada invited *new@example.com*", notification.Text);
+        Assert.DoesNotContain("unknown caller", notification.Text);
+    }
+
+    private static async Task InviteAfterAwaitAsync(ITeamService teams)
+    {
+        await Task.Yield();
+        await teams.AddMemberAsync("acme", new InviteUserModel { Email = "new@example.com" });
+    }
+
+    private sealed class CollectingAuditLogger : IAuditLogger
+    {
+        public List<AuditEntry> Entries { get; } = [];
+
+        public void Log(AuditEntry entry)
+        {
+            lock (Entries) Entries.Add(entry);
+        }
+
+        public Task<AuditQueryResult> QueryAsync(AuditQuery query) => Task.FromResult(new AuditQueryResult());
     }
 
     private static async Task<AuditEntry> WriteAfterAsync(Task later)
