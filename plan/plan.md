@@ -44,8 +44,10 @@
       Done in `AuditCallerCircuitHandlerTests`: no HttpContext, invite made after the handler's first await,
       outside the activity as the framework runs it; the entry names Ada and the default route reads
       "Ada invited *new@example.com* ...".
-- [~] 4. Docs: audit article (circuit callers), Blazor README if it mentions audit in circuits.
-- [ ] 5. Full test suite, push the branch for testing.
+- [x] 4. Docs: audit article (circuit callers), Blazor README if it mentions audit in circuits.
+      Done: implementation guide "Who an entry is attributed to" (the order callers are found in, and a table
+      row); access-simulation article points at the shared caller; one clause on the Blazor README's Audit line.
+- [~] 5. Full test suite, push the branch for testing.
 
 ## Last session
 

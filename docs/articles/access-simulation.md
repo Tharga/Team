@@ -279,10 +279,10 @@ action was refused, or performed at a level below the one they hold:
 | `simulation.target` | The member's name; for `Composed`, the parts joined with ` + ` — e.g. `Viewer + Editor + reports:export` |
 
 **This covers entries written from an interactive component**, not only from a controller. A circuit has no
-`HttpContext` to read the caller from, so the toolkit publishes the circuit's principal for the length of
-each inbound activity and the enricher reads the simulation from there — the same claim the HTTP path
-reads, so the two cannot disagree about what was in force. No host wiring: enabling simulation registers
-it.
+`HttpContext` to read the caller from, so the toolkit publishes the circuit's principal for each inbound
+activity, the same one the entry is attributed to, and the enricher reads the simulation from there — the
+same claim the HTTP path reads, so the two cannot disagree about what was in force. No host wiring:
+`AddThargaTeamBlazor` publishes the principal, and enabling simulation registers the enricher.
 
 ## How it works
 
