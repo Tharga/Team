@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Tharga.Team.Service.Audit;
 
 /// <summary>
-/// Shared helper for building audit entries from HTTP context.
+/// Shared helper for building audit entries, with the caller from the HTTP request, else the Blazor Server circuit activity, else a declared actor.
 /// Used by both ScopeProxy and audit decorators.
 /// </summary>
 internal static class AuditHelper
@@ -75,7 +75,12 @@ internal static class AuditHelper
         string targetKind = null,
         string targetKey = null)
     {
-        var user = httpContextAccessor?.HttpContext?.User;
+        // An authenticated request names the caller; without one, the Blazor Server circuit activity on this flow does (Tharga/Team#572).
+        var request = httpContextAccessor?.HttpContext?.User;
+        var circuit = request?.Identity?.IsAuthenticated == true ? null : AuditCircuitCaller.Current;
+        if (circuit?.Principal?.Identity?.IsAuthenticated != true) circuit = null;
+
+        var user = circuit?.Principal ?? request;
         var identity = user?.Identity;
 
         var callerSource = identity?.AuthenticationType switch
@@ -132,7 +137,7 @@ internal static class AuditHelper
             CallerKeyId = user?.FindFirst(TeamClaimTypes.ApiKeyId)?.Value,
             // Deliberately no fallback chain: this is the subject or nothing, which is what makes it
             // exact-matchable. CallerIdentity stays the human-readable one.
-            CallerUserIdentity = IdentityResolverFor(httpContextAccessor).GetSubject(user),
+            CallerUserIdentity = (circuit?.Resolver ?? IdentityResolverFor(httpContextAccessor)).GetSubject(user),
             // Both or neither: a kind without a key (or the reverse) names nothing a filter could match.
             TargetKind = hasTarget ? targetKind : null,
             TargetKey = hasTarget ? targetKey : null,

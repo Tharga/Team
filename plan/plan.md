@@ -1,6 +1,6 @@
 # Plan: audit entries name the caller inside a Blazor Server circuit (#572)
 
-## Decisions (to confirm)
+## Decisions (confirmed 2026-11-27)
 
 - **Fix it once, in `AuditHelper.BuildEntry`, not only in the team decorator.** The issue suggests giving the
   team decorator the principal accessor the proxies use. That would fix only that decorator: the API key and
@@ -26,11 +26,14 @@
 
 ## Steps
 
-- [ ] 0. NuGet check: SkiaSharp and SkiaSharp.NativeAssets.Linux.NoDependencies 4.157.0 → 4.158.0 in
-      Tharga.Team.Images (both targets) is the only update not under a recorded hold; apply it as its own
-      `chore(deps): nuget update` commit.
-- [ ] 1. Service: internal circuit-caller ambient; `BuildEntry` falls back to it. Tests.
-- [ ] 2. Blazor: one always-registered circuit handler publishes it; simulation enricher reads it; the old
+- [x] 0. NuGet check: SkiaSharp and SkiaSharp.NativeAssets.Linux.NoDependencies 4.157.0 → 4.158.0 in
+      Tharga.Team.Images (both targets) is the only update not under a recorded hold. Done as its own
+      `chore(deps): nuget update` commit; Images tests pass.
+- [x] 1. Service: internal circuit-caller ambient; `BuildEntry` falls back to it. Tests.
+      Done: `AuditCircuitCaller` (internal) carries a per-circuit `Holder` (principal + identity resolver),
+      refreshed per activity, cleared on close. `BuildEntry`: authenticated request, else an authenticated
+      circuit principal (with its resolver), else the declared actor. 11 tests in `AuditCircuitCallerTests`.
+- [~] 2. Blazor: one always-registered circuit handler publishes it; simulation enricher reads it; the old
       accessor and handler go. Tests, including continuations and circuit close.
 - [ ] 3. The issue's case end to end: team decorator in a circuit records the inviter, and the `team:invite`
       notification names them. Test.
