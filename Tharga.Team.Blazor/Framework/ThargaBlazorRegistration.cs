@@ -110,10 +110,6 @@ public static class ThargaBlazorRegistration
             if (o.Simulation.Enabled)
             {
                 services.AddSingleton<Tharga.Team.Service.Audit.IAuditEnricher, Features.Simulation.AccessSimulationAuditEnricher>();
-
-                // Reaches the singleton enricher from a circuit, where there is no HttpContext to read.
-                services.AddSingleton<Features.Simulation.AccessSimulationPrincipalAccessor>();
-                services.AddScoped<Microsoft.AspNetCore.Components.Server.Circuits.CircuitHandler, Features.Simulation.AccessSimulationCircuitHandler>();
             }
 
             services.AddScoped(o._teamService);
@@ -318,6 +314,9 @@ public static class ThargaBlazorRegistration
             // Make scope/access-level proxies resolve the caller from the circuit too (not just HttpContext),
             // so [RequireScope]/[RequireAccessLevel] enforce in interactive Blazor Server as well as on the API.
             services.Replace(ServiceDescriptor.Scoped<ITeamPrincipalAccessor, BlazorTeamPrincipalAccessor>());
+
+            // Audit entries written in a circuit name the person behind each activity, as the proxies above already resolve them (Tharga/Team#572).
+            services.TryAddEnumerable(ServiceDescriptor.Scoped<CircuitHandler, AuditCallerCircuitHandler>());
 
             // Custom claims enricher — runs before member lookup and consent evaluation
             if (o._claimsEnricher != null)

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http;
 using Moq;
 using Tharga.Team.Blazor.Features.Simulation;
+using Tharga.Team.Blazor.Framework;
 using Tharga.Team.Service.Audit;
 
 namespace Tharga.Team.Blazor.Tests;
@@ -66,10 +67,12 @@ public class AccessSimulationInCircuitTests
             => Task.FromResult(new AuthenticationState(user));
     }
 
-    private sealed class FailingAuthenticationStateProvider : AuthenticationStateProvider
+    /// <summary>The caller a circuit activity publishes, as <see cref="AuditCallerCircuitHandler"/> does.</summary>
+    private static IDisposable InCircuit(ClaimsPrincipal principal)
     {
-        public override Task<AuthenticationState> GetAuthenticationStateAsync()
-            => throw new InvalidOperationException("no authentication state here");
+        var holder = new AuditCircuitCaller.Holder();
+        holder.Update(principal, null);
+        return AuditCircuitCaller.Use(holder);
     }
 
     // --- the enricher's fallback ---
@@ -77,12 +80,11 @@ public class AccessSimulationInCircuitTests
     [Fact]
     public void WithNoHttpContext_TheCircuitPrincipalIsRead()
     {
-        var principals = new AccessSimulationPrincipalAccessor();
         var metadata = new Dictionary<string, string>();
 
-        using (principals.Push(PrincipalWith(AccessSimulationCookie.Write(Simulation("Bob")))))
+        using (InCircuit(PrincipalWith(AccessSimulationCookie.Write(Simulation("Bob")))))
         {
-            new AccessSimulationAuditEnricher(NoHttpContext(), principals).Enrich(Entry(), metadata);
+            new AccessSimulationAuditEnricher(NoHttpContext()).Enrich(Entry(), metadata);
         }
 
         Assert.Equal("true", metadata[AccessSimulationMetadataKeys.Active]);
@@ -97,13 +99,11 @@ public class AccessSimulationInCircuitTests
     [Fact]
     public void AnHttpContextIsPreferredOverTheCircuitPrincipal()
     {
-        var principals = new AccessSimulationPrincipalAccessor();
         var metadata = new Dictionary<string, string>();
 
-        using (principals.Push(PrincipalWith(AccessSimulationCookie.Write(Simulation("Circuit")))))
+        using (InCircuit(PrincipalWith(AccessSimulationCookie.Write(Simulation("Circuit")))))
         {
-            new AccessSimulationAuditEnricher(HttpContextWith(AccessSimulationCookie.Write(Simulation("Http"))), principals)
-                .Enrich(Entry(), metadata);
+            new AccessSimulationAuditEnricher(HttpContextWith(AccessSimulationCookie.Write(Simulation("Http")))).Enrich(Entry(), metadata);
         }
 
         Assert.Equal("Http", metadata[AccessSimulationMetadataKeys.Target]);
@@ -114,7 +114,7 @@ public class AccessSimulationInCircuitTests
     {
         var metadata = new Dictionary<string, string>();
 
-        new AccessSimulationAuditEnricher(NoHttpContext(), new AccessSimulationPrincipalAccessor()).Enrich(Entry(), metadata);
+        new AccessSimulationAuditEnricher(NoHttpContext()).Enrich(Entry(), metadata);
 
         Assert.Empty(metadata);
     }
@@ -123,124 +123,28 @@ public class AccessSimulationInCircuitTests
     [Fact]
     public void AMalformedSimulationOnTheCircuitPath_AddsNothingAndDoesNotThrow()
     {
-        var principals = new AccessSimulationPrincipalAccessor();
         var metadata = new Dictionary<string, string>();
 
-        using (principals.Push(PrincipalWith("not-base64!!")))
+        using (InCircuit(PrincipalWith("not-base64!!")))
         {
-            new AccessSimulationAuditEnricher(NoHttpContext(), principals).Enrich(Entry(), metadata);
+            new AccessSimulationAuditEnricher(NoHttpContext()).Enrich(Entry(), metadata);
         }
 
         Assert.Empty(metadata);
     }
 
-    // --- publishing the principal for the length of an inbound activity ---
-
-    [Fact]
-    public async Task AnInboundActivity_PublishesTheCircuitPrincipal()
-    {
-        var principals = new AccessSimulationPrincipalAccessor();
-        var user = PrincipalWith(AccessSimulationCookie.Write(Simulation("Bob")));
-        var handler = new AccessSimulationCircuitHandler(new FakeAuthenticationStateProvider(user), principals);
-
-        ClaimsPrincipal seen = null;
-        var activity = handler.CreateInboundActivityHandler(_ =>
-        {
-            seen = principals.Current;
-            return Task.CompletedTask;
-        });
-
-        await activity(null);
-
-        Assert.Same(user, seen);
-    }
-
-    [Fact]
-    public async Task TheCircuitPrincipalIsReleasedWhenTheActivityEnds()
-    {
-        var principals = new AccessSimulationPrincipalAccessor();
-        var handler = new AccessSimulationCircuitHandler(
-            new FakeAuthenticationStateProvider(PrincipalWith(null)), principals);
-
-        await handler.CreateInboundActivityHandler(_ => Task.CompletedTask)(null);
-
-        Assert.Null(principals.Current);
-    }
-
-    /// <summary>
-    /// A leaked principal would attribute one caller's simulation to the next activity on the same flow,
-    /// so the release has to survive the activity throwing.
-    /// </summary>
-    [Fact]
-    public async Task TheCircuitPrincipalIsReleasedWhenTheActivityThrows()
-    {
-        var principals = new AccessSimulationPrincipalAccessor();
-        var handler = new AccessSimulationCircuitHandler(
-            new FakeAuthenticationStateProvider(PrincipalWith(null)), principals);
-
-        var activity = handler.CreateInboundActivityHandler(_ => throw new InvalidOperationException("boom"));
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() => activity(null));
-        Assert.Null(principals.Current);
-    }
-
-    /// <summary>
-    /// Recording context must never be the reason an interaction fails. Without the guard, every inbound
-    /// activity in the circuit would now depend on a provider the feature only wants to read.
-    /// </summary>
-    [Fact]
-    public async Task AFailingAuthenticationStateProvider_DoesNotBreakTheActivity()
-    {
-        var principals = new AccessSimulationPrincipalAccessor();
-        var handler = new AccessSimulationCircuitHandler(new FailingAuthenticationStateProvider(), principals);
-
-        var ran = false;
-        await handler.CreateInboundActivityHandler(_ =>
-        {
-            ran = true;
-            return Task.CompletedTask;
-        })(null);
-
-        Assert.True(ran);
-    }
-
-    /// <summary>
-    /// Restores rather than clears, for the same reason <see cref="AuditContextAccessor"/> does: a nested
-    /// scope must hand back to its parent instead of dropping what the outer one was carrying.
-    /// </summary>
-    [Fact]
-    public void ANestedScopeRestoresTheOuterPrincipal()
-    {
-        var principals = new AccessSimulationPrincipalAccessor();
-        var outer = PrincipalWith(AccessSimulationCookie.Write(Simulation("Outer")));
-        var inner = PrincipalWith(AccessSimulationCookie.Write(Simulation("Inner")));
-
-        using (principals.Push(outer))
-        {
-            using (principals.Push(inner))
-            {
-                Assert.Same(inner, principals.Current);
-            }
-
-            Assert.Same(outer, principals.Current);
-        }
-
-        Assert.Null(principals.Current);
-    }
-
     // --- the acceptance criterion, end to end ---
 
     /// <summary>
-    /// The whole point of the issue: an entry written by a component during a demo says a simulation was
-    /// active. Everything above tests one half; this is the two halves joined, with no HttpContext anywhere.
+    /// The whole point of Tharga/Team#220: an entry written by a component during a demo says a simulation was
+    /// active. The circuit handler publishing the caller and the enricher reading it, joined, with no HttpContext anywhere.
     /// </summary>
     [Fact]
     public async Task AnEntryWrittenDuringACircuitActivity_RecordsTheSimulation()
     {
-        var principals = new AccessSimulationPrincipalAccessor();
         var user = PrincipalWith(AccessSimulationCookie.Write(Simulation("Bob")));
-        var handler = new AccessSimulationCircuitHandler(new FakeAuthenticationStateProvider(user), principals);
-        var enricher = new AccessSimulationAuditEnricher(NoHttpContext(), principals);
+        var handler = new AuditCallerCircuitHandler(new FakeAuthenticationStateProvider(user));
+        var enricher = new AccessSimulationAuditEnricher(NoHttpContext());
 
         var entry = Entry();
         var metadata = new Dictionary<string, string>();
@@ -263,10 +167,8 @@ public class AccessSimulationInCircuitTests
     [Fact]
     public async Task AnEntryWrittenOutsideASimulation_RecordsNothing()
     {
-        var principals = new AccessSimulationPrincipalAccessor();
-        var handler = new AccessSimulationCircuitHandler(
-            new FakeAuthenticationStateProvider(PrincipalWith(null)), principals);
-        var enricher = new AccessSimulationAuditEnricher(NoHttpContext(), principals);
+        var handler = new AuditCallerCircuitHandler(new FakeAuthenticationStateProvider(PrincipalWith(null)));
+        var enricher = new AccessSimulationAuditEnricher(NoHttpContext());
 
         var metadata = new Dictionary<string, string>();
 

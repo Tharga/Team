@@ -3527,6 +3527,15 @@ Three fields describe the actor, and they answer different questions:
 
 Use `CallerUserIdentity` to correlate rows to one person; `CallerIdentity` is for reading.
 
+**The caller is found in this order:** an authenticated request; otherwise, inside an interactive Blazor Server
+circuit, the person behind the circuit activity that wrote the entry; otherwise a declared background actor
+(below); otherwise nobody. A circuit has no `HttpContext` after its first request, so `AddThargaTeamBlazor`
+publishes the circuit's principal for each inbound activity (a click, a navigation, a JS callback, the first
+render), and every audit writer reads it: the team, API key and icon settings decorators, and everything
+written through `IAuditEntryFactory`, support and mail included. It reaches the awaits of a handler that run
+after the activity returns, and is cleared when the circuit closes, so work that outlives the circuit names
+nobody. Nothing to wire. Until 4.9.0 such entries named no caller, and notifications said "an unknown caller".
+
 ### What an entry was done to
 
 The fields above say **who acted**. Two more say **what it was done to**, so "who deleted this user?" and "who changed this person's access?" are queries rather than a scan of `Metadata`:
@@ -3555,6 +3564,7 @@ The fields above say **who acted**. Two more say **what it was done to**, so "wh
 |---|---|---|
 | API-key request | `ApiKey` | `Api` |
 | Cookie / federated sign-in | `User` | `Web` |
+| Interactive Blazor Server page, signed in | `User` | `Web` |
 | Authenticated, unrecognised scheme | `User` | `Unknown` |
 | Anonymous request | `Unknown` | `Unknown` |
 | Declared background actor | `System` | `Background` |

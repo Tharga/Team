@@ -3,8 +3,8 @@ using Microsoft.AspNetCore.Http;
 namespace Tharga.Team.Service.Audit;
 
 /// <summary>
-/// Builds an audit entry with the caller already resolved — an HTTP principal when there is one, the
-/// declared <see cref="AuditActor"/> when there is not.
+/// Builds an audit entry with the caller already resolved — an HTTP principal when there is one, else the
+/// person behind the interactive Blazor Server circuit activity, else the declared <see cref="AuditActor"/>.
 /// </summary>
 /// <remarks>
 /// Without this, a consumer writing its own entry constructs <see cref="AuditEntry"/> by hand and passes
